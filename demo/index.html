@@ -11,7 +11,17 @@
       <h1>Chikyu Earth <span>地球</span></h1>
       <p class="tag">A line-drawn globe that turns at the Earth's own rate, centred on where you are.</p>
 
-      <chikyu-earth id="globe" size="420" style="line"></chikyu-earth>
+      <div id="globe" class="globe-view" tabindex="0" role="group" aria-label="Earth view">
+        <chikyu-earth id="earth" size="420" style="line"></chikyu-earth>
+      </div>
+      <kazoku-view-controls
+        id="view-controls"
+        for="globe"
+        address
+        tilt-max="90"
+        speed="0.004178"
+        autoplay
+      ></kazoku-view-controls>
 
       <div class="controls">
         <div class="group" role="group" aria-label="Line style">

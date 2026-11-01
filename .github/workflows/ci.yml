@@ -41,6 +41,6 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: The demo, played in Chromium at a phone's width and a desk's
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - name: The demo, played in Chromium and WebKit at a phone's width and a desk's
         run: pnpm test:demo

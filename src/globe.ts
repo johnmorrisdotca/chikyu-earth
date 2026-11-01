@@ -3,6 +3,7 @@
 import { geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
 import { COUNTRIES } from "./data/countries.ts";
 import { cleanStyle, STYLES } from "./styles.ts";
+import { projectionView } from "./view.ts";
 import type { GlobeOptions, Rotation } from "./types.ts";
 
 const SPHERE = { type: "Sphere" } as const;
@@ -11,11 +12,13 @@ const SPHERE = { type: "Sphere" } as const;
 export function globe(options: GlobeOptions = {}): string {
   const size = options.size ?? 320;
   const style = STYLES[cleanStyle(options.style)];
-  const rotation: Rotation = options.rotation ?? [0, 0];
+  const view = options.view
+    ? projectionView(options.centre ?? { lon: 0, lat: 0 }, size, options.view)
+    : { rotation: (options.rotation ?? [0, 0]) as Rotation, scale: size / 2 - 1, translate: [size / 2, size / 2] as [number, number] };
   const projection = geoOrthographic()
-    .rotate(rotation)
-    .translate([size / 2, size / 2])
-    .scale(size / 2 - 1)
+    .rotate(view.rotation)
+    .translate(view.translate)
+    .scale(view.scale)
     .precision(0.5);
   const path = geoPath(projection);
   const horizon = path(SPHERE) ?? "";

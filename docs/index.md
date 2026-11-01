@@ -1,7 +1,14 @@
 # Chikyu Earth — docs
 
 - **The element** — `<chikyu-earth>` and its attributes are in the [README](../README.md#the-element).
-- **Drawing a string** — `globe(options)` returns the SVG. Options: `size`, `rotation`, `style`, `graticule`.
+- **Drawing a string** — `globe(options)` returns the SVG. Options: `size`, `rotation`, `style`, `graticule`,
+  or `centre` and `view` for the shared controls' camera.
+- **The shared view** — `src/view.ts` maps `{ yaw, tilt, zoom, panX, panY }` to d3-geo. If the home centre is
+  `(lon, lat)`, the rotation is `[-lon + yaw, -lat - tilt]`, the scale is the base scale times `zoom`, and the
+  translation is the view's middle plus `(panX, panY)`. `HOME_VIEW` is yaw and tilt zero, 1x and no pan, so kazoku's
+  Front returns to the home centre and Fit returns to 1x. The demo uses `<kazoku-view-controls>` with
+  `speed="0.004178"` and `autoplay` for the Earth's rate; it redraws intermediate Auto-turn frames once a second
+  and other settled views immediately.
 - **The turn** — `src/rotate.ts` holds the Earth's rate. `SIDEREAL_DAY_MS` is one sidereal day
   (86,164,090.5 ms); `spinAt(ms)` is degrees turned; `centreRotation(point)` centres a place;
   `rotationAt(centre, now, start)` is a globe that started centred and keeps turning. The tilt is held and only

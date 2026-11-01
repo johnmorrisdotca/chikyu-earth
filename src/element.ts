@@ -1,11 +1,9 @@
-// <chikyu-earth>: the globe as a web component. It opens centred on where you are (the `center` attribute wins over
-// geolocation), and turns at the Earth's own rate. Importing this file registers the element once.
+// <chikyu-earth>: the globe as a web component. A shared view controller supplies its yaw, tilt, zoom and pan;
+// it opens centred on where you are (the `center` attribute wins over geolocation). Importing registers it once.
 import { globe } from "./globe.ts";
-import { centreRotation, rotationAt } from "./rotate.ts";
 import { cleanStyle } from "./styles.ts";
-import type { GeoPoint, Rotation } from "./types.ts";
-
-const TICK_MS = 1000;
+import { HOME_VIEW } from "./view.ts";
+import type { GeoPoint, GlobeView } from "./types.ts";
 
 const readCentre = (value: string | null): GeoPoint | null => {
   if (!value) return null;
@@ -16,30 +14,31 @@ const readCentre = (value: string | null): GeoPoint | null => {
 };
 
 export class ChikyuEarth extends HTMLElement {
-  static observedAttributes = ["center", "style", "size", "graticule", "rotate"];
+  static observedAttributes = ["center", "style", "size", "graticule"];
 
   #centre: GeoPoint = { lon: 0, lat: 0 };
-  #start = Date.now();
-  #timer: ReturnType<typeof setInterval> | undefined;
+  #view: GlobeView = { ...HOME_VIEW };
+  #drawn: GlobeView = { ...HOME_VIEW };
 
   connectedCallback(): void {
-    this.#start = Date.now();
     this.#centre = readCentre(this.getAttribute("center")) ?? { lon: 0, lat: 0 };
     this.#render();
     this.#locate();
-    this.#timer = setInterval(() => this.#render(), TICK_MS);
-  }
-
-  disconnectedCallback(): void {
-    if (this.#timer !== undefined) clearInterval(this.#timer);
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
-    if (name === "center") {
-      this.#centre = readCentre(value) ?? { lon: 0, lat: 0 };
-      this.#start = Date.now();
-    }
+    if (name === "center") this.#centre = readCentre(value) ?? { lon: 0, lat: 0 };
     if (this.isConnected) this.#render();
+  }
+
+  /**
+   * Apply a shared controller's camera. Every event updates the state; `final: false` makes only the cheap
+   * relative transform, and `final: true` redraws the orthographic projection.
+   */
+  setView(view: GlobeView, final = true): void {
+    this.#view = { ...view };
+    if (final) this.#render();
+    else this.#transform();
   }
 
   #locate(): void {
@@ -48,7 +47,6 @@ export class ChikyuEarth extends HTMLElement {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         this.#centre = { lon: position.coords.longitude, lat: position.coords.latitude };
-        this.#start = Date.now();
         this.#render();
       },
       () => {},
@@ -56,17 +54,23 @@ export class ChikyuEarth extends HTMLElement {
     );
   }
 
-  #rotation(): Rotation {
-    if (this.getAttribute("rotate") === "off") return centreRotation(this.#centre);
-    return rotationAt(this.#centre, Date.now(), this.#start);
+  #transform(): void {
+    const svg = this.shadowRoot?.querySelector("svg");
+    if (!svg) return;
+    const zoom = this.#view.zoom / this.#drawn.zoom;
+    const x = this.#view.panX - this.#drawn.panX;
+    const y = this.#view.panY - this.#drawn.panY;
+    svg.style.transformOrigin = "50% 50%";
+    svg.style.transform = zoom === 1 && x === 0 && y === 0 ? "" : `translate(${x}px, ${y}px) scale(${zoom})`;
   }
 
   #render(): void {
     const size = Number(this.getAttribute("size")) || 320;
     const style = cleanStyle(this.getAttribute("style"));
-    const svg = globe({ size, style, rotation: this.#rotation(), graticule: this.hasAttribute("graticule") });
+    const svg = globe({ size, style, centre: this.#centre, view: this.#view, graticule: this.hasAttribute("graticule") });
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = svg;
+    root.innerHTML = `<style>:host{display:block}svg{display:block;width:100%;height:auto}</style>${svg}`;
+    this.#drawn = { ...this.#view };
   }
 }
 

@@ -17,17 +17,28 @@ npm install @johnmorrisdotca/chikyu-earth
 
 ```html
 <script type="module">
+  import "@johnmorrisdotca/kazoku-ui/view-controls/define";
   import "@johnmorrisdotca/chikyu-earth/element";
 </script>
 
-<chikyu-earth size="420"></chikyu-earth>
+<div id="globe" tabindex="0">
+  <chikyu-earth size="420"></chikyu-earth>
+</div>
+<kazoku-view-controls id="controls" for="globe" address tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+
+<script type="module">
+  const earth = document.querySelector("chikyu-earth");
+  document.getElementById("controls").addEventListener("kazoku-viewchange", (event) => {
+    earth.setView(event.detail, event.detail.final);
+  });
+</script>
 ```
 
 The globe appears, centred on the reader (the browser asks for their location; until they answer, and if they
-decline, it starts on the Greenwich meridian). It then turns at the Earth's own rate: one sidereal day —
-23 h 56 min 4.0905 s — per revolution, so it keeps real time.
+decline, it starts on the Greenwich meridian). The shared control bar turns, tips, zooms and pans it. Auto-turn
+moves at the Earth's own rate: `0.004178` degrees a second, one sidereal day — 23 h 56 min 4.0905 s — per revolution.
 
-Centre it yourself instead, and it still turns:
+Centre it yourself instead:
 
 ```html
 <chikyu-earth center="139.7,35.7" style="thick" graticule></chikyu-earth>
@@ -55,7 +66,12 @@ The rotation is the pair d3-geo's `rotate` takes: `[-longitude, -latitude]` cent
 | `center` | `"longitude,latitude"` to centre on. Wins over geolocation. | the reader's location, else `0,0` |
 | `style` | `line` or `thick`. | `line` |
 | `graticule` | Draw a light graticule under the countries. | off |
-| `rotate` | `off` holds the globe still on its centre. | turns at the Earth's rate |
+
+`setView(view, final = true)` applies a shared controller's `{ yaw, tilt, zoom, panX, panY }`. Every call updates
+the state; pass `final: false` for the cheap relative transform during a gesture and `final: true` for the full
+projection redraw. `projectionView(centre, size, view)` is the same mapping as a pure function: yaw is added to the
+home longitude, tilt is subtracted from its latitude, zoom multiplies the scale, and pan offsets the translation.
+Front is therefore the home centre; Fit is 1x with no pan.
 
 ## The data
 
@@ -75,4 +91,4 @@ To refresh the outlines after a Natural Earth or kuni update, run `pnpm countrie
 ## The rest
 
 [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/](docs/index.md) · [NOTICE.md](NOTICE.md) ·
-[CHANGELOG.md](CHANGELOG.md) · MIT licence. Projection by d3-geo, the one runtime dependency.
+[CHANGELOG.md](CHANGELOG.md) · MIT licence. Projection by d3-geo; shared view controls by kazoku-ui.

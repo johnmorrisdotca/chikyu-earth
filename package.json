@@ -1,6 +1,6 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. Country codes and names come from kuni; the outlines are Natural Earth's, drawn with d3-geo. SVG, no canvas.",
   "keywords": [
     "earth",

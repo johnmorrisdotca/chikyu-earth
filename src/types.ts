@@ -10,6 +10,15 @@ export interface CountryProps {
   alpha2: string | null;
 }
 
+/** What a shared view controller tells the globe: its turn, tip, zoom and pan. */
+export interface GlobeView {
+  yaw: number;
+  tilt: number;
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
 /** A point on the globe, in degrees. */
 export interface GeoPoint {
   lon: number;
@@ -25,6 +34,9 @@ export interface GlobeOptions {
   size?: number;
   /** The turn, as [lambda, phi]. Default [0, 0]: the Greenwich meridian facing you, on the equator. */
   rotation?: Rotation;
+  /** A home centre and shared view state. When `view` is given it takes precedence over `rotation`. */
+  centre?: GeoPoint;
+  view?: GlobeView;
   /** "line" (the default) or "thick". */
   style?: StyleName;
   /** Draw a light graticule under the countries. Default false. */

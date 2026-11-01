@@ -19,7 +19,12 @@ Each outline's English name, Japanese name and ISO 3166-1 alpha-2 code come from
 
 The orthographic projection, the spherical clipping and the SVG path generation are **d3-geo**
 (https://github.com/d3/d3-geo), by Mike Bostock, under the ISC licence (see `LICENSES/d3-geo.txt`).
-d3-geo is the package's one runtime dependency.
+d3-geo is the package's projection dependency.
+
+## Shared view controls
+
+The turn, tilt, zoom, pan and touch controls are **kazoku-ui** (https://github.com/johnmorrisdotca/kazoku-ui),
+also by John Morris, under the MIT licence. The package has no third-party dependencies of its own.
 
 ## Marks
 

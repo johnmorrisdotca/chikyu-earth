@@ -5,6 +5,10 @@
   --muted: #8fa1b8;
   --line: #22304a;
   --accent: #6cd0ff;
+  --kazoku-ink: #d7e0ec;
+  --kazoku-surface: #101a2b;
+  --kazoku-line: #22304a;
+  --kazoku-accent: #6cd0ff;
 }
 
 * { box-sizing: border-box; }
@@ -15,20 +19,31 @@ body {
   background: radial-gradient(1200px 700px at 50% -10%, #0e1830, var(--bg));
   color: var(--ink);
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  display: grid;
-  place-items: center;
+  display: block;
   padding: 32px 16px;
 }
 
-main { width: min(560px, 100%); text-align: center; }
+main { width: min(560px, 100%); margin: 0 auto; text-align: center; }
 
 h1 { font-size: 28px; letter-spacing: 0.02em; margin: 0 0 4px; }
 h1 span { color: var(--muted); font-size: 20px; }
 .tag { color: var(--muted); margin: 0 0 24px; }
 
-chikyu-earth { display: block; width: 420px; max-width: 100%; margin: 0 auto; }
-chikyu-earth::part(svg) { width: 100%; height: auto; }
-chikyu-earth svg { width: 100%; height: auto; }
+.globe-view {
+  width: 420px;
+  max-width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  border-radius: 12px;
+}
+.globe-view[data-grab="1"] { cursor: grabbing; }
+.globe-view:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+chikyu-earth { display: block; width: 100%; aspect-ratio: 1; }
+chikyu-earth svg { display: block; width: 100%; height: 100%; }
+kazoku-view-controls { margin-top: 8px; }
 
 .controls {
   display: flex;
@@ -36,7 +51,7 @@ chikyu-earth svg { width: 100%; height: auto; }
   gap: 12px;
   justify-content: center;
   align-items: center;
-  margin: 24px 0 16px;
+  margin: 16px 0 12px;
 }
 
 .group { display: inline-flex; gap: 0; }

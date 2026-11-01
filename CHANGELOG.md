@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0
+
+The globe now uses the family's shared view controls.
+
+- `<kazoku-view-controls>` supplies turn, tilt, Auto-turn, Front, zoom, pan and touch gestures; the custom Rotate ¼
+  button and the element's private rotation timer are gone.
+- `projectionView()` maps yaw and tilt to the orthographic rotation, zoom to its scale and pan to its translation,
+  always relative to the reader's home centre. `<chikyu-earth>.setView()` applies that state.
+- Auto-turn runs at `0.004178` degrees a second, the Earth's own sidereal rate, and keeps running through zoom,
+  pan, Fit and Front. Reduced motion is respected by kazoku-ui.
+- Browser tests now cover Chromium and WebKit at desk and phone sizes, including drag, pinch, zoom, Fit and the
+  continuing Earth-rate turn.
+
 ## 0.1.0
 
 The first scaffold, and the first working globe.
