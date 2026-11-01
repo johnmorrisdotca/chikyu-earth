@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chikyu Earth 地球</title>
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Chikyu Earth <span>地球</span></h1>
+      <p class="tag">A line-drawn globe that turns at the Earth's own rate, centred on where you are.</p>
+
+      <chikyu-earth id="globe" size="420" style="line"></chikyu-earth>
+
+      <div class="controls">
+        <div class="group" role="group" aria-label="Line style">
+          <button type="button" data-style="line" class="on">Line</button>
+          <button type="button" data-style="thick">Thick</button>
+        </div>
+        <button type="button" id="grat" aria-pressed="false">Graticule</button>
+        <button type="button" id="locate">Centre on me</button>
+      </div>
+
+      <p class="note">Outlines: Natural Earth (public domain). Country names and codes: kuni. Projection: d3-geo.</p>
+    </main>
+    <script type="module" src="demo.js"></script>
+  </body>
+</html>

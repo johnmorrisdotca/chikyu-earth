@@ -1,0 +1,110 @@
+{
+  "name": "@johnmorrisdotca/chikyu-earth",
+  "version": "0.1.0",
+  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. Country codes and names come from kuni; the outlines are Natural Earth's, drawn with d3-geo. SVG, no canvas.",
+  "keywords": [
+    "earth",
+    "globe",
+    "world",
+    "countries",
+    "country-outlines",
+    "orthographic",
+    "projection",
+    "geography",
+    "maps",
+    "svg",
+    "line-drawing",
+    "rotation",
+    "sidereal",
+    "real-time",
+    "geolocation",
+    "web-component",
+    "custom-element",
+    "d3-geo",
+    "natural-earth",
+    "typescript"
+  ],
+  "homepage": "https://johnmorrisdotca.github.io/chikyu-earth/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnmorrisdotca/chikyu-earth.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johnmorrisdotca/chikyu-earth/issues"
+  },
+  "author": "John Morris",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "./dist/element.js",
+    "./src/element.ts"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./element": {
+      "types": "./dist/element.d.ts",
+      "import": "./dist/element.js",
+      "default": "./dist/element.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "LICENSES",
+    "NOTICE.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "countries": "node scripts/make-countries.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.check.json && tsc -p tsconfig.tools.json && tsc -p tsconfig.demo.json",
+    "test": "node --test test/*.test.ts",
+    "test:package": "pnpm build && node scripts/check-package.ts",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && node scripts/check-package.ts",
+    "prepublishOnly": "pnpm check",
+    "site": "pnpm build && node scripts/site.ts",
+    "dev": "pnpm site && node scripts/dev.ts",
+    "test:demo": "pnpm site && playwright test"
+  },
+  "dependencies": {
+    "d3-geo": "^3.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@johnmorrisdotca/kuni": "1.4.0",
+    "@playwright/test": "1.64.0",
+    "@types/d3-geo": "^3.1.0",
+    "@types/geojson": "^7946.0.14",
+    "@types/node": "^24.0.0",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.0.0",
+    "topojson-client": "^3.1.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.0.0",
+    "world-atlas": "^2.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
