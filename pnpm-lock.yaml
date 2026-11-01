@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@johnmorrisdotca/kazoku-ui':
+        specifier: ^0.1.0
+        version: 0.1.0
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1
@@ -270,6 +273,10 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@johnmorrisdotca/kazoku-ui@0.1.0':
+    resolution: {integrity: sha512-YbaqEAv6/wJIy6X0vPIPotSFNBnv/v+PdJdRLMk1VH7aacqvaKSvzqITBRA8lEZKo6UnKoBVNsl2gTpjOmiAKA==}
+    engines: {node: '>=22'}
 
   '@johnmorrisdotca/kuni@1.4.0':
     resolution: {integrity: sha512-rMal4ngyC4yKmhBZMCrbUolUivAFpqe/tdamJ8Y2qoCtZXdIeCNiwS/HWRcdRgK5yhKMQMZw243saoJx0bJUyQ==}
@@ -875,6 +882,8 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@johnmorrisdotca/kazoku-ui@0.1.0': {}
 
   '@johnmorrisdotca/kuni@1.4.0': {}
 
