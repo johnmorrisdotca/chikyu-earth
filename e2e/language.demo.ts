@@ -25,13 +25,17 @@ async function shownWords(page: Page): Promise<string[]> {
 test("in Japanese no control or name of the space view is left in English", async ({ page }) => {
   await open(page, "ja");
   const words = await shownWords(page);
-  expect(words.length).toBeGreaterThan(25);
-  const english = words.filter((word) => /[A-Za-z]{2,}/.test(word));
+  expect(words.length).toBeGreaterThan(28);
+  // Names and units that are the same in both languages: the ISS, Starlink, CelesTrak, SGP4 and kilometres.
+  const english = words.filter((word) => /[A-Za-z]{2,}/.test(word.replace(/\b(ISS|Starlink|CelesTrak|SGP4|km)\b/g, "")));
   expect(english, "words still in English").toEqual([]);
   await expect(page.getByRole("group", { name: "見る天体" })).toBeVisible();
   await page.getByRole("group", { name: "見る天体" }).getByRole("button", { name: "木星", exact: true }).click();
   await expect(page.locator("#body-info")).toContainText("木星: 半径 69,911 km");
   await expect(page.locator("#body-info")).not.toContainText("radius");
+  await page.getByRole("button", { name: "ISS", exact: true }).click();
+  await expect(page.locator("#sat-info")).toContainText("高さ");
+  await expect(page.locator("#sat-info")).not.toContainText("up,");
   await page.getByRole("button", { name: "本当の縮尺" }).click();
   await expect(page.locator("#scale-note")).toBeHidden();
 });

@@ -144,6 +144,11 @@ await step("node", () => {
   if (!/^\d+ 177$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-satellites", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "satellites.mjs")], { cwd: usage, encoding: "utf8" }).trim();
+  if (!/^ISS \(ZARYA\): \d+ km up, 7\.\d\d km\/s$/.test(out)) throw new Error(`unexpected output: ${out}`);
+});
+
 await step("typescript", () => {
   writeFileSync(join(examples("typescript"), "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "esnext", moduleResolution: "bundler", strict: true, noEmit: true, lib: ["es2023", "dom", "dom.iterable"], types: [], skipLibCheck: true }, include: ["index.ts"] }));
   sh(process.execPath, [require.resolve("typescript/bin/tsc"), "-p", join(examples("typescript"), "tsconfig.json")], usage);
@@ -244,6 +249,22 @@ await step("react", () => viteApp("react"));
 await step("vue", async () => viteApp("vue", [(await import("@vitejs/plugin-vue")).default()]));
 await step("svelte", async () => viteApp("svelte", [(await import("@sveltejs/vite-plugin-svelte")).svelte()]));
 
+await step("satellites", async () => {
+  // The space view with a satellite on it, built by Vite from the package as npm packs it (three, astronomy-engine and satellite.js are the peers): it must come up live and place the satellite.
+  const out = join(usage, "out", "satellites");
+  await viteBuild({ root: examples("satellites"), logLevel: "warn", build: { outDir: out, emptyOutDir: true }, base: "./", configFile: false });
+  await opened(browser, async (page) => {
+    await serve(page, "https://app.test", out);
+    await page.route("https://app.test/textures/**", (route) => {
+      const file = join(installed, "dist", "textures", new URL(route.request().url()).pathname.slice("/textures/".length));
+      return existsSync(file) ? route.fulfill({ body: readFileSync(file), contentType: "image/webp" }) : route.fulfill({ status: 404, body: "" });
+    });
+    await page.goto("https://app.test/");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => (Reflect.get(document.querySelector("chikyu-space")!, "stats") as { satellites: { placed: number } }).satellites.placed === 1, undefined, { timeout: 20_000 });
+  });
+});
+
 await step("react-ssr", async () => {
   const script = join(usage, "ssr-react.tsx");
   writeFileSync(script, `import { renderToString } from "react-dom/server";\nimport { ChikyuEarth } from "./examples/react/ChikyuEarth";\nconst html = renderToString(<ChikyuEarth />);\nif (!html.includes("<chikyu-earth")) throw new Error("no element in " + html);\nconsole.log(html);\n`);
@@ -305,6 +326,9 @@ const FILES: Record<string, string[]> = {
   "angular/chikyu-earth.component.ts": ["docs/guides/frameworks.md", "docs/guides/ja/frameworks.md"],
   "typescript/index.ts": ["docs/guides/typescript-and-node.md", "docs/guides/ja/typescript-and-node.md"],
   "node/server.mjs": ["docs/guides/typescript-and-node.md", "docs/guides/ja/typescript-and-node.md"],
+  "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
 };
 const normal = (text: string) => text.replace(/\r\n/g, "\n").trim();
 for (const [file, places] of everything ? Object.entries(FILES) : []) {

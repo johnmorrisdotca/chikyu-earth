@@ -19,6 +19,9 @@ export type ThreeParts = {
   [Name in
     | "Texture" | "BufferGeometry" | "BufferAttribute" | "ShaderMaterial" | "Group" | "Mesh" | "Scene" | "OrthographicCamera" | "PerspectiveCamera" | "Vector3" | "WebGLRenderer"
     | "RepeatWrapping" | "ClampToEdgeWrapping" | "LinearMipmapLinearFilter" | "LinearFilter" | "BackSide" | "DoubleSide" | "LineLoop" | "LineBasicMaterial" | "Color"]: (typeof THREE)[Name];
+} & {
+  /** Only the satellites use it, so a loader that hands over a subset of three.js without it still draws everything else. */
+  Points?: typeof THREE.Points;
 };
 
 /** Milliseconds a lower texture size must be enough before the larger one is let go. */

@@ -6,7 +6,10 @@ import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
+import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
+import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt } from "./ephemeris.ts";
+import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
 import { placeAround, placeMoon, placeSun, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type SpaceModel } from "./scene.ts";
 
@@ -81,9 +84,14 @@ export type SpaceState = "loading" | "live" | "unavailable" | "lost" | "idle";
  */
 export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system";
 
+type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+
 const RAD = Math.PI / 180;
 /** The Earth's own turn, degrees a second. */
 const EARTH_RATE = 360 / 86_164.0905;
+/** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
+const SATELLITE_RATE = 360 / (88 * 60);
+const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
 const REAL_TIME_TICK_MS = 60_000;
 
 const readCentre = (value: string | null): GeoPoint | null => {
@@ -127,6 +135,7 @@ export class ChikyuSpace extends HTMLElement {
   #last = 0;
   #pool = new Map<BodyName, HTMLElement>();
   #places: Record<BodyName, BodyPlace | null> | undefined;
+  #chosenLabel: HTMLElement | undefined;
   #names: Partial<Record<BodyName, string>> = {};
   #hint = "choose to look at it";
   #tiers: Record<string, number> = {};
@@ -140,11 +149,12 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.labels = this.getAttribute("labels") !== "off";
     this.#model.orbits = this.getAttribute("orbits") !== "off";
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
+    this.#model.speed = this.#speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}</style><div id="stage"></div><div id="labels" aria-hidden="true"></div>`;
+    root.innerHTML = `<style>:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}</style><div id="stage"></div><div id="labels" aria-hidden="true"></div>`;
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#pool.clear();
@@ -168,6 +178,8 @@ export class ChikyuSpace extends HTMLElement {
         this.#tiers[layer] = width;
       },
       onLabels: (places) => this.#placeLabels(places),
+      onSelected: (place) => this.#placeChosen(place),
+      onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       ...(painter ? { painter } : {}),
     });
     this.#view = taken.renderer.view(this.#stage, item, { still: null });
@@ -233,6 +245,7 @@ export class ChikyuSpace extends HTMLElement {
   }
   set speed(value: number) {
     this.#speed = Number.isFinite(value) ? value : 1;
+    this.#model.speed = this.#speed;
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
     this.#last = performance.now();
     this.#schedule();
@@ -282,6 +295,69 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
+  // --- satellites ---------------------------------------------------------------------------------------------------------------------------------
+  /**
+   * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds. Giving the name of a group
+   * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations).
+   * The groups are placed by SGP4 about once a second and interpolated between, and are hidden while the clock runs faster than `MAX_SATELLITE_SPEED`.
+   *
+   * @param group - The group's name, for `showSatellites`, `selectSatellite` and the events.
+   * @param satellites - The group, or `null` to remove it.
+   * @param style - How to draw it.
+   */
+  setSatellites(group: string, satellites: Satellites | null, style: Partial<SatelliteStyle> = {}): void {
+    const groups = this.#model.satellites.groups;
+    if (satellites === null) {
+      groups.delete(group);
+      if (this.#model.satellites.selected?.group === group) this.#model.satellites.selected = null;
+    } else {
+      const was = groups.get(group);
+      groups.set(group, {
+        satellites,
+        color: style.color ?? was?.color ?? SATELLITE_COLORS[groups.size % SATELLITE_COLORS.length]!,
+        size: style.size ?? was?.size ?? 3,
+        orbits: (style.orbits ?? was?.orbits ?? false) && satellites.count <= MAX_ORBIT_GROUP,
+        visible: was?.visible ?? true,
+      });
+    }
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+  }
+
+  /** Show or hide a group without losing it. */
+  showSatellites(group: string, on: boolean): void {
+    const found = this.#model.satellites.groups.get(group);
+    if (!found || found.visible === on) return;
+    found.visible = on;
+    this.#schedule();
+    this.#gate?.request();
+  }
+
+  /** The groups now set, with how many satellites each holds and whether it is shown. */
+  get satelliteGroups(): { name: string; count: number; visible: boolean }[] {
+    return [...this.#model.satellites.groups].map(([name, group]) => ({ name, count: group.satellites.count, visible: group.visible }));
+  }
+
+  /** Mark one satellite: a larger ring round it, its orbit drawn, and its name beside it. `null` lets it go. */
+  selectSatellite(ref: SatelliteRef | null): void {
+    const found = ref ? this.#model.satellites.groups.get(ref.group) : undefined;
+    this.#model.satellites.selected = ref && found && ref.index >= 0 && ref.index < found.satellites.count ? { group: ref.group, index: ref.index } : null;
+    if (this.#chosenLabel) this.#chosenLabel.hidden = true;
+    this.#gate?.request();
+  }
+
+  /** The satellite marked by `selectSatellite` or by a press on it, if any. */
+  get selectedSatellite(): SatelliteRef | null {
+    const chosen = this.#model.satellites.selected;
+    return chosen ? { ...chosen } : null;
+  }
+
+  /** Facts about one satellite at the moment shown (name, number, element age, height, speed, period); undefined if it cannot be placed then. */
+  satelliteInfo(ref: SatelliteRef): SatelliteInfo | undefined {
+    return this.#model.satellites.groups.get(ref.group)?.satellites.info(ref.index, this.#model.time);
+  }
+
   /** The words shown beside each body, for a page in another language (`{ Mars: "火星" }`). A body left out keeps its English name. */
   get bodyNames(): Partial<Record<BodyName, string>> {
     return { ...this.#names };
@@ -324,7 +400,18 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /** What the element is doing, for a page or a test. */
-  get stats(): { state: SpaceState; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; tiers: Record<string, number>; distance: number; assets: { entries: number; refs: number }; time: number; lookups: number } {
+  get stats(): {
+    state: SpaceState;
+    draws: number;
+    contexts: number;
+    canvas: { width: number; height: number; pixels: number };
+    tiers: Record<string, number>;
+    distance: number;
+    assets: { entries: number; refs: number };
+    time: number;
+    lookups: number;
+    satellites: SatelliteStats;
+  } {
     const stats = this.#taken?.renderer.stats;
     return {
       state: this.#state,
@@ -336,7 +423,21 @@ export class ChikyuSpace extends HTMLElement {
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
       time: this.#model.time,
       lookups: this.#model.lookups,
+      satellites: this.#satelliteStats(),
     };
+  }
+
+  #satelliteStats(): SatelliteStats {
+    const drawn = this.#model.satellites.drawn;
+    let propagations = 0;
+    let lastBatchMs = 0;
+    let maxBatchMs = 0;
+    for (const group of this.#model.satellites.groups.values()) {
+      propagations += group.satellites.propagations;
+      lastBatchMs = Math.max(lastBatchMs, group.satellites.timing.lastBatchMs);
+      maxBatchMs = Math.max(maxBatchMs, group.satellites.timing.maxBatchMs);
+    }
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, tooFast: drawn.tooFast, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
   }
 
   // --- the game clock ----------------------------------------------------------------------------------------------------------------------------
@@ -346,16 +447,24 @@ export class ChikyuSpace extends HTMLElement {
     return Number.isFinite(value) ? value : 1;
   }
 
-  /** While time runs, draw as often as it shows: real time once a minute; faster time as often as the Earth's turn moves a pixel (1 to 30 times a second). */
+  /** Is anything on show that moves faster than the Earth turns: a group of satellites the clock is slow enough to place? */
+  #satellitesMoving(): boolean {
+    if (Math.abs(this.#speed) > MAX_SATELLITE_SPEED) return false;
+    for (const group of this.#model.satellites.groups.values()) if (group.visible && group.satellites.count > 0) return true;
+    return false;
+  }
+
+  /** While time runs, draw as often as it shows: real time once a minute; faster time as often as the Earth's turn moves a pixel (1 to 30 times a second). Satellites go round in 90 minutes, so with a group on show real time draws once a second, and 1 a second is all a reader who asked for reduced motion gets. */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
     if (!this.isConnected || this.#speed === 0) return;
-    const realTime = this.#speed === 1 && this.#mode === "now";
+    const satellites = this.#satellitesMoving();
     const radius = this.#model.drawn?.radiusPx ?? 200;
-    const pixelsPerSecond = EARTH_RATE * RAD * Math.abs(this.#speed) * radius;
-    const perSecond = Math.min(30, Math.max(1, pixelsPerSecond));
-    const wait = realTime || this.#speed === 1 ? REAL_TIME_TICK_MS : 1000 / perSecond;
+    const pixelsPerSecond = (satellites ? SATELLITE_RATE : EARTH_RATE) * RAD * Math.abs(this.#speed) * radius;
+    let perSecond = Math.min(30, Math.max(1, pixelsPerSecond));
+    if (satellites && matchMedia("(prefers-reduced-motion: reduce)").matches) perSecond = 1;
+    const wait = !satellites && this.#speed === 1 ? REAL_TIME_TICK_MS : 1000 / perSecond;
     this.#timer = setTimeout(this.#tick, wait);
   }
 
@@ -397,6 +506,25 @@ export class ChikyuSpace extends HTMLElement {
     }
   }
 
+  #placeChosen(place: { x: number; y: number } | null): void {
+    const box = this.#labelBox;
+    if (!box) return;
+    if (!place) {
+      if (this.#chosenLabel) this.#chosenLabel.hidden = true;
+      return;
+    }
+    const chosen = this.#model.satellites.selected;
+    const name = chosen ? this.satelliteInfo(chosen)?.name : undefined;
+    if (!this.#chosenLabel) {
+      this.#chosenLabel = box.ownerDocument.createElement("div");
+      this.#chosenLabel.className = "sp-sat";
+      box.append(this.#chosenLabel);
+    }
+    if (this.#chosenLabel.textContent !== (name ?? "")) this.#chosenLabel.textContent = name ?? "";
+    this.#chosenLabel.hidden = !name;
+    this.#chosenLabel.style.transform = `translate(${Math.round(place.x + 10)}px,${Math.round(place.y - 8)}px)`;
+  }
+
   #nameLabel(button: HTMLElement, name: BodyName): void {
     const text = this.#names[name] ?? name;
     button.textContent = text;
@@ -413,10 +541,16 @@ export class ChikyuSpace extends HTMLElement {
     window.addEventListener("pointerup", this.#up, { capture: true, once: true });
   };
   #up = (event: PointerEvent): void => {
-    if (Math.hypot(event.clientX - this.#downX, event.clientY - this.#downY) > 6 || !this.#places) return;
+    if (Math.hypot(event.clientX - this.#downX, event.clientY - this.#downY) > 6) return;
     const rect = this.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+    const satellite = this.#model.pick?.(x, y, 12);
+    if (satellite) {
+      this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite) }, bubbles: true, composed: true }));
+      return;
+    }
+    if (!this.#places) return;
     let best: BodyName | undefined;
     let bestD = Infinity;
     for (const name of BODY_NAMES) {

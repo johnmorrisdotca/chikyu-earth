@@ -25,6 +25,7 @@ await rm(at("site/kazoku-parts.src.js"));
 await cp(at("demo/demo.css"), at("site/demo.css"));
 await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
+await cp(at("demo/celestrak-snapshot.json"), at("site/celestrak-snapshot.json"));
 await writeFile(at("site/index.html"), renderIndex(), "utf8");
 await writeFile(at("site/embed.html"), renderEmbed(), "utf8");
-console.log("site built: index.html, embed.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/");
+console.log("site built: index.html, embed.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, celestrak-snapshot.json");

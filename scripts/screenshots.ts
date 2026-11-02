@@ -22,6 +22,8 @@ try {
     ["space-moon", { width: 1280, height: 900 }, "?look=space&time=2026-11-02T14:00Z&speed=0&center=-100,40", "Moon"],
     ["space-solar", { width: 1280, height: 900 }, "?look=space&time=2026-11-02T14:00Z&speed=0&center=-100,40", "Solar system"],
     ["space-true", { width: 1280, height: 900 }, "?look=space&time=2026-11-02T14:00Z&speed=0&center=-100,40&scale=true", "Moon"],
+    ["space-sat-starlink", { width: 1280, height: 900 }, "?look=space&time=2026-11-02T14:00Z&speed=0&center=-100,40&sats=stations,starlink"],
+    ["space-sat-iss", { width: 1280, height: 900 }, "?look=space&time=2026-11-03T07:30Z&speed=0&center=25,-31&sats=stations&sat=25544"],
     ["realistic-night", { width: 1280, height: 900 }, "?look=realistic&time=2026-11-02T22:00Z&center=10,45&zoom=1.4"],
   ];
   for (const [name, viewport, query, jump] of shots) {
@@ -34,6 +36,7 @@ try {
     } else if (name.startsWith("space")) {
       await page.waitForSelector("chikyu-space[data-state=live]");
       if (jump) await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: jump, exact: true }).click();
+      if (name === "space-sat-iss") await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ zoom: 1.7 }, true, "shot"));
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(2500);
     } else if (name === "markers-flat") {

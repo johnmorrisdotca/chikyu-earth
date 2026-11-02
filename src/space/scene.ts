@@ -8,6 +8,8 @@ import { createTextureSet, type ThreeParts } from "../realistic/textures.ts";
 import type { Layer } from "../realistic/tiers.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
+import type { SatelliteRef } from "../satellites/types.ts";
+import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 
 type Three = ThreeParts;
 const RAD = Math.PI / 180;
@@ -65,6 +67,12 @@ export interface SpaceModel {
   drawn: { frame: Frame; distance: number; radiusPx: number } | null;
   /** How many times astronomy-engine has been asked for a frame. */
   lookups: number;
+  /** Game seconds a second (the clock's speed). */
+  speed: number;
+  /** The satellites shown, the one chosen, and what the last draw did with them. */
+  satellites: SatelliteState;
+  /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
+  pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   ratio(): number;
 }
 
@@ -80,6 +88,9 @@ export const newSpaceModel = (): SpaceModel => ({
   focus: "Earth",
   drawn: null,
   lookups: 0,
+  speed: 1,
+  satellites: newSatelliteState(),
+  pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
@@ -135,6 +146,10 @@ export interface SpaceDeps {
   onTier?: (layer: Layer, width: number) => void;
   /** Where each body is on the screen, in CSS pixels in the box, or null when it is behind the camera. Called at each draw. */
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
+  /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
+  onSelected?: (place: { x: number; y: number } | null) => void;
+  /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
+  onSatellitesError?: (error: unknown) => void;
   /** How the Sun and the planets are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
   painter?: BodyPainter;
 }
@@ -278,6 +293,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         planets.set(name, { drawing, orbit, positions, samples: [], epoch: Number.NaN });
       }
 
+      let layer: SatelliteLayer | undefined;
+      let selectedShown = false;
       const camera = new three.PerspectiveCamera(FOV, width / Math.max(1, height), 0.05, 1000);
       const target = new three.Vector3();
       const projected = new three.Vector3();
@@ -349,6 +366,17 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
           }
 
+          if (!layer && model.satellites.groups.size > 0) {
+            try {
+              layer = createSatelliteLayer(three, scene, model.satellites, model.ratio);
+            } catch (error) {
+              model.satellites.groups.clear();
+              deps.onSatellitesError?.(error);
+            }
+          }
+          layer?.update(model.time, model.speed);
+          model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
+
           // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says
           const focus = model.focus;
           const focusRadius = radiusOf(focus);
@@ -389,12 +417,19 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
             deps.onLabels(places);
           }
+          if (layer && deps.onSelected) {
+            const at = model.satellites.selected ? layer.place(camera, size) : null;
+            if (at || selectedShown) deps.onSelected(at);
+            selectedShown = at !== null;
+          }
           return false;
         },
         resize(w, h) {
           size = { width: w, height: h };
         },
         dispose() {
+          layer?.dispose();
+          model.pick = null;
           textures.dispose();
           sunDrawing.dispose();
           for (const p of planets.values()) {

@@ -135,6 +135,20 @@ computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/spa
 
 <p align="center"><img alt="The solar system on 2 November 2026 in the compressed scale: orbits round the Sun, the planets named" src="docs/images/space-solar.png" width="420"></p>
 
+## Satellites
+
+The ISS, a space station or thousands of Starlink satellites at the places SGP4 puts them for the date and time shown, on `<chikyu-space>`: a group is one draw call however many it holds, press one to get its name, height and speed, and its orbit is drawn. Chikyu fetches nothing: your page passes in orbital elements (CelesTrak's JSON, within its usage policy), and satellite.js (MIT, an optional peer) does the maths about once a second, with every frame between interpolated. A group is hidden while the clock runs faster than 60 times real time. The guide has the rules for getting elements and the budget, each line tested: [satellites guide](docs/guides/satellites.md), [docs/satellites.md](docs/satellites.md).
+
+<p align="center"><img alt="The ISS, ringed, over South Africa on 3 November 2026, with its orbit and the stations' orbits" src="docs/images/space-sat-iss.png" width="420"></p>
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, type ElementSet } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const elements: ElementSet[] = await (await fetch("/my-celestrak-copy.json")).json();
+document.querySelector("chikyu-space")!.setSatellites("stations", createSatellites(elements), { orbits: true });
+```
+
 ## Markers
 
 Mark any place at `[lon, lat]` with a label, colour or icon, in groups you can show or hide, on either look. Chikyu ships no places; yours move with the globe, fade on the far side, make room

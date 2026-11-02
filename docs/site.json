@@ -44,6 +44,11 @@
       "en": "The <chikyu-space> element",
       "ja": "<chikyu-space> 要素",
       "platform": "browser"
+    },
+    "./satellites": {
+      "en": "Satellites: orbital elements in, positions out",
+      "ja": "人工衛星: 軌道要素から位置を計算",
+      "platform": "node"
     }
   }
 }

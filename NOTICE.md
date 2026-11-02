@@ -44,6 +44,17 @@ item to: NASA's Scientific Visualization Studio" (Visualizer Ernie Wright, USRA;
 `<chikyu-space>` computes positions with **astronomy-engine** (https://github.com/cosinekitty/astronomy, MIT, copyright Don Cross), the page's own optional peer dependency: this package does not
 bundle or ship it. The planets are drawn as plain colours, from no picture.
 
+## Satellites
+
+`<chikyu-space>` draws satellites from orbital elements that **your page** passes in; this package fetches and ships none. SGP4 is run by **satellite.js** (https://github.com/shashwatak/satellite-js, MIT, by
+Shashwat Kandadai and contributors), the page's own optional peer dependency: this package does not bundle or ship it.
+
+The demo's file `demo/celestrak-snapshot.json` (the demo site only, not the npm package) holds element sets from **CelesTrak** (https://celestrak.org, T.S. Kelso), which serves the U.S. Space Force's
+18th Space Defense Squadron's general-perturbation (GP) data and, for Starlink, SpaceX's own supplemental elements. It is one download of the `stations` list and one of the `starlink` list on 2026-11-02
+(about 17:07 UTC), within CelesTrak's usage policy (https://celestrak.org/usage-policy.php, read 2026-11-02: one download per update per list, nothing fetched at a visitor's request), with every fifth Starlink satellite
+kept (2,232 of 11,156), as numbers only. CelesTrak states no licence or credit rule for the data; it is credited on the demo page, and the demo shows the age of the elements. The tier is "grey" in John's
+terms: a snapshot with credit, never a live fetch. Space-Track's data are not used: its user agreement does not let an account holder pass the data on.
+
 ## Sun position
 
 `src/realistic/sun.ts` uses the low-precision solar position formulas of NOAA's solar calculator (https://gml.noaa.gov/grad/solcalc/, after Jean Meeus,

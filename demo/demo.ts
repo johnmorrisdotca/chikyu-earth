@@ -8,6 +8,7 @@ import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { WORDS } from "./words.js";
 import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
+import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
 
@@ -29,6 +30,9 @@ if (flat && controls && stage) {
   const speedControls = document.querySelector<HTMLElement>("#speed-controls");
   const spaceControls = document.querySelector<HTMLElement>("#space-controls");
   const scaleNote = document.querySelector<HTMLElement>("#scale-note");
+  const satControls = document.querySelector<HTMLElement>("#sat-controls");
+  const satInfo = document.querySelector<HTMLElement>("#sat-info");
+  const satNote = document.querySelector<HTMLElement>("#sat-note");
   const placesBox = document.querySelector<HTMLElement>("#places");
   const pickedNote = document.querySelector<HTMLElement>("#picked");
   let space: ChikyuSpace | null = null;
@@ -102,7 +106,7 @@ if (flat && controls && stage) {
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
-    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo]) if (box) box.hidden = true;
+    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote]) if (box) box.hidden = true;
     if (placesBox) placesBox.hidden = false;
     if (pickedNote) pickedNote.hidden = false;
   }
@@ -138,6 +142,90 @@ if (flat && controls && stage) {
   }
   for (const button of bodyButtons) button.addEventListener("click", () => lookAtBody((button.dataset["body"] ?? "Earth") as BodyName));
 
+  // --- satellites: CelesTrak's element sets of one day, in a small file of this site's own, made into groups the first time one is asked for ---------------------------------
+  interface Snapshot {
+    retrieved: string;
+    fields: string[];
+    groups: Record<string, (string | number)[][]>;
+  }
+  const GROUP_STYLE = { stations: { color: "#ffd54f", size: 6, orbits: true }, starlink: { color: "#7fd4ff", size: 2.5, orbits: false } } as const;
+  const GROUP_ALL = 11156;
+  const MAX_AGE_DAYS = 14;
+  let snapshot: Promise<Snapshot> | null = null;
+  const made = new Map<string, Satellites>();
+  const shownGroups = new Set((address.get("sats") ?? "").split(",").filter((name) => name in GROUP_STYLE));
+  const satButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-sat-group]")];
+
+  const loadSnapshot = (): Promise<Snapshot> => (snapshot ??= fetch("celestrak-snapshot.json").then((response) => (response.ok ? (response.json() as Promise<Snapshot>) : Promise.reject(new Error(String(response.status))))));
+  async function groupOf(name: keyof typeof GROUP_STYLE): Promise<Satellites> {
+    const found = made.get(name);
+    if (found) return found;
+    const [{ createSatellites }, data] = await Promise.all([import("../src/satellites/index.ts"), loadSnapshot()]);
+    const sets = data.groups[name]!.map((row) => Object.fromEntries(data.fields.map((field, index) => [field, row[index]])) as never);
+    const group = createSatellites(sets, { maxAgeDays: MAX_AGE_DAYS });
+    made.set(name, group);
+    Reflect.set(globalThis, "chikyuSatellites", { createSatellites, groups: made });
+    return group;
+  }
+  const ageText = (days: number): string => (Math.abs(days) < 2 ? say("satAgeHours", { n: Math.round(Math.abs(days) * 24) }) : say("satAgeDays", { n: Math.round(Math.abs(days)) }));
+  const describeSatellite = (info: SatelliteInfo): string => say("satFact", { name: info.name, altitude: Math.round(info.altitudeKm), speed: info.speedKmS.toFixed(2), period: Math.round(info.periodMinutes), age: ageText(info.ageDays) });
+  const showSatellite = (ref: SatelliteRef | null): void => {
+    space?.selectSatellite(ref);
+    const info = ref && space ? space.satelliteInfo(ref) : undefined;
+    if (satInfo) {
+      satInfo.hidden = !info;
+      satInfo.textContent = info ? describeSatellite(info) : "";
+    }
+    address.set("sat", info ? String(info.noradId) : null);
+  };
+  const noteSatellites = async (): Promise<void> => {
+    if (!satNote) return;
+    const data = await loadSnapshot();
+    satNote.hidden = false;
+    satNote.textContent = say("satNote", { date: new Date(data.retrieved).toLocaleDateString(say("locale"), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }), stations: data.groups["stations"]!.length, starlink: data.groups["starlink"]!.length.toLocaleString(say("locale")), all: GROUP_ALL.toLocaleString(say("locale")), limit: 60 });
+  };
+  /** Show or hide one group on the space view; the first time, make it. The elements are a day's snapshot: if that is too old for the date shown, show the day it was downloaded instead. */
+  async function toggleGroup(name: keyof typeof GROUP_STYLE, on: boolean): Promise<void> {
+    if (!space) return;
+    const button = satButtons.find((b) => b.dataset["satGroup"] === name);
+    button?.setAttribute("aria-pressed", String(on));
+    if (on) shownGroups.add(name);
+    else shownGroups.delete(name);
+    address.set("sats", shownGroups.size ? [...shownGroups].join(",") : null);
+    if (!on) {
+      space.showSatellites(name, false);
+      return;
+    }
+    try {
+      const group = await groupOf(name);
+      const data = await loadSnapshot();
+      const retrieved = Date.parse(data.retrieved);
+      if (Math.abs(space.time - retrieved) > MAX_AGE_DAYS * 86_400_000 && address.get("time") === null) {
+        space.time = retrieved;
+        if (when) when.value = localValue(retrieved);
+        now?.setAttribute("aria-pressed", "false");
+        notice(say("satOld", { days: Math.round(Math.abs(Date.now() - retrieved) / 86_400_000), date: data.retrieved.slice(0, 10) }));
+      }
+      if (!space.satelliteGroups.some((one) => one.name === name)) space.setSatellites(name, group, GROUP_STYLE[name]);
+      else space.showSatellites(name, true);
+      void noteSatellites();
+    } catch {
+      notice(say("satLoadFail"));
+      button?.setAttribute("aria-pressed", "false");
+      shownGroups.delete(name);
+    }
+  }
+  for (const button of satButtons) button.addEventListener("click", () => void toggleGroup(button.dataset["satGroup"] as keyof typeof GROUP_STYLE, button.getAttribute("aria-pressed") !== "true"));
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-sat-find]")) {
+    button.addEventListener("click", async () => {
+      if (!space) return;
+      const noradId = Number(button.dataset["satFind"]);
+      await toggleGroup("stations", true);
+      const index = (await groupOf("stations")).sets.findIndex((set) => set.NORAD_CAT_ID === noradId);
+      if (index >= 0) showSatellite({ group: "stations", index });
+    });
+  }
+
   async function enterSpace(): Promise<boolean> {
     const [{ setThreeLoader }] = await Promise.all([import("../src/space/element.ts")]);
     setThreeLoader(() => import("./three-subset.ts"));
@@ -161,6 +249,8 @@ if (flat && controls && stage) {
         void setLook("line");
       });
       element.addEventListener("chikyu-body-click", (e) => lookAtBody((e as CustomEvent<BodyInfo>).detail.name, (e as CustomEvent<BodyInfo>).detail));
+      element.addEventListener("chikyu-satellite-click", (e) => showSatellite((e as CustomEvent<SatelliteRef>).detail));
+      element.addEventListener("chikyu-satellites-unavailable", () => notice(say("satLoadFail")));
       element.addEventListener("chikyu-time", (e) => {
         const ms = (e as CustomEvent<{ time: number }>).detail.time;
         if (when && document.activeElement !== when) when.value = localValue(ms);
@@ -178,8 +268,17 @@ if (flat && controls && stage) {
       element.setView(state());
     }
     if (realControls) realControls.hidden = true;
-    for (const box of [timeControls, speedControls, spaceControls]) if (box) box.hidden = false;
+    for (const box of [timeControls, speedControls, spaceControls, satControls]) if (box) box.hidden = false;
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
+    for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
+    for (const name of shownGroups) void toggleGroup(name as keyof typeof GROUP_STYLE, true);
+    const wanted = Number(address.get("sat"));
+    if (wanted) {
+      void toggleGroup("stations", true).then(async () => {
+        const index = (await groupOf("stations")).sets.findIndex((set) => set.NORAD_CAT_ID === wanted);
+        if (index >= 0) showSatellite({ group: "stations", index });
+      });
+    }
     if (placesBox) placesBox.hidden = true;
     if (pickedNote) pickedNote.hidden = true;
     return true;

@@ -1,7 +1,7 @@
 ---
 title: Upgrading
 section: upgrading
-order: 10
+order: 11
 description: What changed between versions and what to do about it. The package is 0.x: read this before a minor version.
 ---
 

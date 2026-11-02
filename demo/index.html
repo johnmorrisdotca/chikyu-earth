@@ -100,6 +100,20 @@
             <button type="button" class="fam-button" id="orbits" aria-pressed="true" data-say="orbits">Orbits</button>
             <button type="button" class="fam-button" id="labels" aria-pressed="true" data-say="names">Names</button>
           </div>
+          <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are now: the space stations, and a share of the Starlink satellites. Press one to see how high and fast it goes and its orbit." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。宇宙ステーションと、Starlink の一部です。衛星を押すと、高さと速さ、軌道がわかります。">
+            <span class="fam-label" data-say="satellites">Satellites</span>
+            <div class="group fam-seg">
+              <button type="button" data-sat-group="stations" aria-pressed="false" data-say="sat_stations">Stations</button>
+              <button type="button" data-sat-group="starlink" aria-pressed="false" data-say="sat_starlink">Starlink</button>
+            </div>
+            <span class="fam-label" data-say="satFind">Find</span>
+            <div class="group fam-seg" role="group" aria-label="Find" data-say-label="satFind">
+              <button type="button" data-sat-find="25544" data-say="sat_iss">ISS</button>
+              <button type="button" data-sat-find="48274" data-say="sat_css">Tiangong</button>
+            </div>
+          </div>
+          <p class="fam-fine" id="sat-info" role="status" hidden></p>
+          <p class="fam-fine" id="sat-note" hidden></p>
           <p class="fam-fine" id="body-info" role="status" hidden></p>
           <p class="fam-fine" id="scale-note" hidden data-say="scaleNote">Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
           <p class="fam-fine" id="status" role="status" hidden></p>
@@ -122,7 +136,7 @@
         </div>
       </section>
 
-      <p class="fam-fine credits"><span data-say="credits">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain). Details in</span> <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">NOTICE.md</a></p>
+      <p class="fam-fine credits"><span data-say="credits">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain). Satellites: orbital elements from CelesTrak (celestrak.org), positions by SGP4 (satellite.js, MIT). Details in</span> <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">NOTICE.md</a></p>
 
       <!--family:unreviewed-->
       <!--family:footer-->

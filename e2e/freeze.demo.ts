@@ -10,13 +10,16 @@ test.beforeEach(({ browserName }, info) => {
 test.describe.configure({ mode: "serial" });
 
 const NOON = "2026-06-21T12:00Z";
-const LOOKS = ["realistic", "space"] as const;
-const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space" } as const;
+// "satellites" is the space view with the stations and 2,000 Starlink satellites on show.
+const LOOKS = ["realistic", "space", "satellites"] as const;
+const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", satellites: "chikyu-space" } as const;
 
 async function open(page: Page, look: (typeof LOOKS)[number], query = ""): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
-  await page.goto(`/chikyu-earth/?look=${look}&time=${NOON}&center=10,20${look === "space" ? "&speed=0" : ""}${query}`);
+  const space = look === "space" || look === "satellites";
+  await page.goto(`/chikyu-earth/?look=${space ? "space" : look}&time=${look === "satellites" ? "2026-11-02T18:00Z" : NOON}&center=10,20${space ? "&speed=0" : ""}${look === "satellites" ? "&sats=stations,starlink" : ""}${query}`);
   await page.locator(`${ELEMENT[look]}[data-state=live]`).waitFor({ timeout: 60_000 });
+  if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
   await page.waitForTimeout(800);
 }
@@ -118,7 +121,8 @@ for (const look of LOOKS) {
 
 test("changing the look over and over gives back what it took: GPU objects stay flat in the one context, and the line look lets the context go", async ({ page }) => {
   await page.addInitScript(COUNT_SCRIPT);
-  await page.goto(`/chikyu-earth/?time=${NOON}&center=10,20`);
+  // a moment near the satellites' elements, so every orbit is drawn and counted
+  await page.goto(`/chikyu-earth/?time=2026-11-02T18:00Z&center=10,20`);
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
   const settled: number[] = [];
@@ -128,13 +132,20 @@ test("changing the look over and over gives back what it took: GPU objects stay 
     await page.waitForTimeout(500);
     await look("Space");
     await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
-    await page.waitForTimeout(500);
+    for (const name of ["Stations", "Starlink"]) {
+      const button = page.getByRole("button", { name, exact: true });
+      if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
+    }
+    await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
+    // the satellites are drawn at least once (their buffers are made by the first draw) before the objects are counted
+    await page.waitForTimeout(1500);
     const counted = await readCounts(page);
     settled.push(gpuObjects(counted));
     expect(counted.contexts, "one WebGL context for the page, however the look changes").toBe(1);
   }
   console.log(`live GPU objects after each round: ${settled.join(", ")}`);
-  expect(settled[5]!, "no more GPU objects after six rounds than after the first, give or take three.js's own fixtures").toBeLessThanOrEqual(settled[0]! + 8);
+  // The first round only warms the page up (the first shaders and the satellites' first draw come after the first count in software drawing), so the baseline is the second.
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after six rounds than after the second, give or take three.js's own fixtures").toBeLessThanOrEqual(settled[1]! + 8);
 
   await look("Thick");
   await expect(page.locator("chikyu-space")).toHaveCount(0);

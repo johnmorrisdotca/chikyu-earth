@@ -15,6 +15,7 @@ export {
   Mesh,
   OrthographicCamera,
   PerspectiveCamera,
+  Points,
   RepeatWrapping,
   Scene,
   ShaderMaterial,

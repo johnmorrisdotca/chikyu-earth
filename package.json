@@ -1,7 +1,7 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
   "version": "0.7.0",
-  "description": "Chikyu Earth 地球 — A line-drawn globe for the web: country outlines that turn at the Earth's own rate, centred on where you are, with an optional realistic Earth from space (three.js), the Sun, Moon and planets, and markers for any place. A web component and an SVG string.",
+  "description": "Chikyu Earth 地球 — A line-drawn globe for the web: country outlines that turn at the Earth's own rate, centred on where you are, with an optional realistic Earth from space (three.js), the Sun, Moon and planets, satellites on their orbits, and markers for any place. A web component and an SVG string.",
   "keywords": [
     "earth",
     "globe",
@@ -31,7 +31,13 @@
     "solar-system",
     "moon",
     "planets",
-    "ephemeris"
+    "ephemeris",
+    "satellites",
+    "sgp4",
+    "orbits",
+    "iss",
+    "starlink",
+    "celestrak"
   ],
   "homepage": "https://johnmorrisdotca.github.io/chikyu-earth/",
   "repository": {
@@ -91,6 +97,11 @@
       "import": "./dist/space/element.js",
       "default": "./dist/space/element.js"
     },
+    "./satellites": {
+      "types": "./dist/satellites/index.d.ts",
+      "import": "./dist/satellites/index.js",
+      "default": "./dist/satellites/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -134,7 +145,8 @@
   "peerDependencies": {
     "@johnmorrisdotca/kazoku-ui": ">=0.9.0",
     "three": ">=0.160.0",
-    "astronomy-engine": ">=2.1.0"
+    "astronomy-engine": ">=2.1.0",
+    "satellite.js": ">=6.0.0"
   },
   "peerDependenciesMeta": {
     "@johnmorrisdotca/kazoku-ui": {
@@ -144,6 +156,9 @@
       "optional": true
     },
     "astronomy-engine": {
+      "optional": true
+    },
+    "satellite.js": {
       "optional": true
     }
   },
@@ -171,6 +186,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "rxjs": "^7.8.2",
+    "satellite.js": "6.0.2",
     "svelte": "^5.57.3",
     "three": "0.186.1",
     "typescript": "^5.9.0",

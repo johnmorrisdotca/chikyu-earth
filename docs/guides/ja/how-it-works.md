@@ -1,7 +1,7 @@
 ---
 title: 軽さを保つしくみ
 section: explanation
-order: 8
+order: 9
 description: 地球儀が何を、いつ描くか。ページのプロセッサーを無駄に使わないための制限を説明します。
 ---
 

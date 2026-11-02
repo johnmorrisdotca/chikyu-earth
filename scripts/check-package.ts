@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -33,3 +33,11 @@ const moon = space.frameAt(Date.UTC(2026, 10, 2, 12)).moon;
 const au = Math.hypot(...moon);
 if (au < 0.0023 || au > 0.0029) throw new Error("frameAt is off");
 console.log("space ok");
+
+const satellites = await import(new URL("../dist/satellites/index.js", import.meta.url).href);
+const station = satellites.createSatellites([
+  { OBJECT_NAME: "ISS (ZARYA)", EPOCH: "2026-11-02T10:25:21", MEAN_MOTION: 15.49150046, ECCENTRICITY: 0.0007139, INCLINATION: 51.6332, RA_OF_ASC_NODE: 335.9757, ARG_OF_PERICENTER: 339.3739, MEAN_ANOMALY: 20.6961, NORAD_CAT_ID: 25544, BSTAR: 0.00012, MEAN_MOTION_DOT: 0.0001, MEAN_MOTION_DDOT: 0 },
+]);
+const height = station.info(0, Date.UTC(2026, 10, 2, 12))?.altitudeKm ?? 0;
+if (station.count !== 1 || height < 380 || height > 470) throw new Error(`createSatellites is off: ${height} km`);
+console.log("satellites ok");

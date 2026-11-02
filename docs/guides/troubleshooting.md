@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting and questions
 section: troubleshooting
-order: 9
+order: 10
 description: Why nothing appears, why the browser asks for the location, and the errors people meet in frameworks and on servers.
 ---
 

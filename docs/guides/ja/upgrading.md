@@ -1,7 +1,7 @@
 ---
 title: アップグレード
 section: upgrading
-order: 10
+order: 11
 description: バージョンごとの変更点と、必要な対応です。パッケージは 0.x なので、マイナーバージョンの前にここを読んでください。
 ---
 
