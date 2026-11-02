@@ -140,7 +140,8 @@ computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/spa
 Mark any place at `[lon, lat]` with a label, colour or icon, in groups you can show or hide, on either look. Chikyu ships no places; yours move with the globe, fade on the far side, make room
 for their labels, gather into clusters when crowded, and fire hover, click and keyboard events with your own data. One canvas pass for thousands, a pool of 24 buttons for the labels. [docs/markers.md](docs/markers.md).
 
-```ts
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/element";
 import { attachMarkers } from "@johnmorrisdotca/chikyu-earth/markers";
 
 const markers = attachMarkers(document.querySelector("chikyu-earth")!);
@@ -158,12 +159,14 @@ rotate or drag controls.
 <kazoku-view-controls id="controls" for="globe" address controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
 ```
 
-```ts
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/element";
 import "@johnmorrisdotca/kazoku-ui/view-controls/define";
+import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 
-const earth = document.querySelector("chikyu-earth");
-document.getElementById("controls").addEventListener("kazoku-viewchange", (event) => {
-  const { yaw, tilt, zoom, panX, panY, final } = event.detail;
+const earth = document.querySelector("chikyu-earth")!;
+document.getElementById("controls")!.addEventListener("kazoku-viewchange", (event) => {
+  const { yaw, tilt, zoom, panX, panY, final } = (event as CustomEvent<ViewChangeDetail>).detail;
   earth.setView({ yaw, tilt, zoom, panX, panY }, final);
 });
 ```
@@ -193,7 +196,7 @@ The rotation is the pair d3-geo's `rotate` takes: `[-longitude, -latitude]` cent
 | --- | --- | --- |
 | `size` | Width and height of the square SVG, in pixels. | `320` |
 | `center` | `"longitude,latitude"` to centre on. Wins over geolocation. | the reader's location, else `0,0` |
-| `style` | `line` or `thick`. | `line` |
+| `look` | `line` or `thick`. (`style` is the older name for it: a framework reads `style` as CSS, so use `look` there.) | `line` |
 | `graticule` | Draw a light graticule under the countries. | off |
 
 `setView(view, final = true)` applies a shared controller's `{ yaw, tilt, zoom, panX, panY }`. Every call updates

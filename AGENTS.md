@@ -42,7 +42,7 @@ This repo is one of the family of John Morris's npm packages. The rules every pa
 | Board | `modules` (see the one-home table in spx-stats `docs/package-work.md`) |
 | Title prefix and `--area` | `chikyu-earth` |
 | Ports | 8200 to 8299: 8200 the demo and dev, 8201 the tests, 8202 the picture scripts, 8203 and up anything else |
-| Checks before a push | `pnpm check`, `pnpm test:demo` |
+| Checks before a push | `pnpm check`, `pnpm test:demo`, `pnpm test:usage` (every way to use the package, and the README) |
 | Release | `release.yml` → `reusable-release.yml`; trusted publisher entry: `release.yml` |
 | Hand-off project | `chikyu-earth` |
 
@@ -52,6 +52,16 @@ A line-drawn globe (SVG) and, as optional entry points, a 3D Earth. Outlines are
 come from kuni. Imagery only from licence-clean sources (NASA public domain), each credited in `NOTICE.md`. Performance is a hard
 requirement: draw only on demand, one WebGL context through kazoku-ui's shared renderer, capped canvas and textures, everything
 disposed. `CONTRIBUTING.md` has the rules and commands.
+
+## The published parts (every package of the family has all of these)
+
+A package is not released without them; `pnpm check` and CI fail when one is missing.
+
+- **A demo on GitHub Pages** (`pages.yml`), the repository's homepage and in `package.json`, linked from the README; **an embed page** (`demo/embed.html`).
+- **A documentation site**: TSDoc with an `@example` on every export, guides in `docs/guides/` and their Japanese twins in `docs/guides/ja/` (one language to a page), `docs/site.json`.
+- **The family files**, unedited: `scripts/family-template.mjs`, `scripts/family-readme.mjs`, `demo/family.css`, `scripts/docs-site.mjs`, `e2e/docs-site.demo.mjs`. The header has the kazoku-ui language picker and theme switch.
+- **Usage, tested**: README and guides for a script tag (jsDelivr, unpkg), an ES module, Vite and webpack, React, Vue, Svelte, Angular, an iframe, TypeScript and Node, each example in `examples/` built or run (`pnpm test:usage`) and held word for word by the guides.
+- A new export brings its TSDoc and `@example` in the same commit, a new guide brings its Japanese twin, and a new example is listed in `scripts/check-usage.ts`.
 
 ## Work in progress
 

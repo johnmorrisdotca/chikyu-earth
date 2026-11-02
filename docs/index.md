@@ -1,5 +1,7 @@
 # Chikyu Earth — docs
 
+The documentation site, with every export's page, the guides in English and Japanese and search, is at <https://johnmorrisdotca.github.io/chikyu-earth/docs/>. Its guides are the files in [guides/](guides/getting-started.md) (Japanese: [guides/ja/](guides/ja/getting-started.md)). The pages below are the feature notes.
+
 - **The Earth from space** — [realistic.md](realistic.md): `<chikyu-earth-realistic>`, its pictures, the Sun, the budget and how each part of it is tested.
 - **The space view** — [space.md](space.md): `<chikyu-space>`, the Sun, the Moon and the planets, both scales, time, and the budget. [satellite-sources.md](satellite-sources.md) is the research on satellite and launch data (no code).
 - **Markers** — [markers.md](markers.md): `attachMarkers(element)`, groups, clusters, labels, events and the budget.

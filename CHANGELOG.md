@@ -19,6 +19,18 @@ The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, un
 - **Research, no code** ([docs/satellite-sources.md](docs/satellite-sources.md), MODULES-85): CelesTrak (grey), Space-Track (red for a package), the r/SpaceX API (archived, offline), Launch Library 2 (grey), Wikipedia and Wikidata
   (green) for launches; the recommendation is a satellite view that takes elements the page supplies. John chooses before MODULES-86 and MODULES-87 start.
 
+### The family's published parts: demo, embed, docs and usage
+
+Chikyu Earth now has what every package of the family has, and it was missing from 0.3.0 to 0.5.0.
+
+- **Demo on GitHub Pages**, set as the repository's and the package's homepage: <https://johnmorrisdotca.github.io/chikyu-earth/>, with the family header (the kazoku-ui language picker, English and Japanese, and theme switch, the table cloths and the Help switch), light and dark, and the family footer. `pnpm site` builds it, and the Pages workflow publishes it on every push to `main`.
+- **An embed page**, `embed.html`, for an `<iframe>` with no script of your own: `?look=line|thick|realistic`, `center`, `graticule`, `turn=0|1|auto`, `time`, `clouds`, `lights`. Still by default, no controls, no location prompt; it draws only when something changes and nothing while hidden. Tested in Chromium and WebKit, and on the realistic look: one WebGL context, canvas inside its budget, nothing drawn at rest.
+- **A documentation site** at `/docs/`: a page for every export (from its TSDoc, with an example that is run when the site is built), ten guides in English and in Japanese, one language to a page, search, `llms.txt` and the family's header. Every export of every entry point has a summary, `@param`, `@returns` and an `@example` that imports the package by its name; `pnpm check` fails when one does not.
+- **Every way to use it, written down and tested** (`pnpm test:usage`): a script tag from jsDelivr and from unpkg, the realistic Earth from a CDN, the shared controls, Vite, webpack, React (and a server render of it), Vue, Svelte, Angular, an iframe, TypeScript types and Node. Each example is built or run against the package as npm packs it, opened in a browser and made to show a globe; the guides and the README must hold the same text word for word.
+- **`look` attribute**: `<chikyu-earth look="thick">` is the new name of `style`, which frameworks read as CSS (React refuses a string `style`). `style` still works.
+- **Types for the tags**: `document.querySelector("chikyu-earth")` is a `ChikyuEarth` (and `"chikyu-earth-realistic"`, `"chikyu-space"`) once the element's entry is imported.
+- **Family files**: `family-template.mjs` and `family-readme.mjs` of 2026-11-02 with Chikyu Earth added to the family's list (33 packages), `family.css`, and the README's "The family" block. Added to the list here only; the other packages take the new files when they are next touched.
+
 ## 0.5.0
 
 The Earth from space, and markers for any place on either globe, both under a hard performance budget.
