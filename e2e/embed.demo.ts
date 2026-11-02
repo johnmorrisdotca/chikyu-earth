@@ -8,7 +8,7 @@ test("the embed page draws the globe the address asks for, and nothing else", as
   await page.goto(`${EMBED}?look=thick&center=10,30&graticule=1`);
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   const element = page.locator("chikyu-earth");
-  await expect(element).toHaveAttribute("style", "thick");
+  await expect(element).toHaveAttribute("look", "thick");
   await expect(element).toHaveAttribute("center", "10,30");
   await expect(element).toHaveAttribute("graticule", "");
   expect(await page.locator("chikyu-earth path").count()).toBeGreaterThan(50);

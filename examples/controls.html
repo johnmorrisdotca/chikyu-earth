@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chikyu Earth with the shared controls</title>
+    <script type="module">
+      import "https://cdn.jsdelivr.net/npm/@johnmorrisdotca/kazoku-ui/view-controls/define/+esm";
+      import "https://cdn.jsdelivr.net/npm/@johnmorrisdotca/chikyu-earth/element/+esm";
+
+      const earth = document.querySelector("chikyu-earth");
+      document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (event) => {
+        earth.setView(event.detail, event.detail.final);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="globe" tabindex="0">
+      <chikyu-earth size="420" look="thick" center="139.7,35.7"></chikyu-earth>
+    </div>
+    <kazoku-view-controls for="globe" address controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
+  </body>
+</html>

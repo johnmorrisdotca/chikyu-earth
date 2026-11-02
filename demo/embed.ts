@@ -25,7 +25,7 @@ const AUTO_REDRAW_MS = 1000;
 function mount(): ChikyuEarth | ChikyuEarthRealistic {
   const flat = document.createElement("chikyu-earth") as ChikyuEarth;
   flat.setAttribute("size", "420");
-  flat.setAttribute("style", look === "thick" || look === "realistic" ? "thick" : "line");
+  flat.setAttribute("look", look === "thick" || look === "realistic" ? "thick" : "line");
   if (centre !== "me") flat.setAttribute("center", centre);
   if (query.get("graticule") === "1") flat.setAttribute("graticule", "");
   frame.append(flat);

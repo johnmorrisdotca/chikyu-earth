@@ -15,7 +15,7 @@ const readCentre = (value: string | null): GeoPoint | null => {
 };
 
 /**
- * The `<chikyu-earth>` custom element: the line globe, drawn as SVG in its shadow root. Importing this entry point registers the tag once. It takes the attributes `size` (pixels, 320 by default), `center` (`"lon,lat"`; wins over the browser's location), `style` (`line` or `thick`) and `graticule`, and a shared view controller's camera through `setView`.
+ * The `<chikyu-earth>` custom element: the line globe, drawn as SVG in its shadow root. Importing this entry point registers the tag once. It takes the attributes `size` (pixels, 320 by default), `center` (`"lon,lat"`; wins over the browser's location), `look` (`line` or `thick`; `style` is the older name for it, and a framework that reads `style` as CSS cannot use it) and `graticule`, and a shared view controller's camera through `setView`.
  *
  * @example
  * ```ts no-run
@@ -23,12 +23,12 @@ const readCentre = (value: string | null): GeoPoint | null => {
  *
  * const earth = document.createElement("chikyu-earth") as ChikyuEarth;
  * earth.setAttribute("center", "139.7,35.7");
- * earth.setAttribute("style", "thick");
+ * earth.setAttribute("look", "thick");
  * document.body.append(earth);
  * ```
  */
 export class ChikyuEarth extends HTMLElement {
-  static observedAttributes = ["center", "style", "size", "graticule"];
+  static observedAttributes = ["center", "look", "style", "size", "graticule"];
 
   #centre: GeoPoint = { lon: 0, lat: 0 };
   #view: GlobeView = { ...HOME_VIEW };
@@ -134,12 +134,18 @@ export class ChikyuEarth extends HTMLElement {
 
   #render(): void {
     const size = Number(this.getAttribute("size")) || 320;
-    const style = cleanStyle(this.getAttribute("style"));
+    const style = cleanStyle(this.getAttribute("look") ?? this.getAttribute("style"));
     const svg = globe({ size, style, centre: this.#centre, view: this.#view, graticule: this.hasAttribute("graticule") });
     const root = this.#ensureShell();
     root.querySelector(".holder")!.innerHTML = svg;
     this.#drawn = { ...this.#view };
     this.#publish("");
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "chikyu-earth": ChikyuEarth;
   }
 }
 

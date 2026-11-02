@@ -7,7 +7,7 @@ const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile:
 
 export default defineConfig({
   testDir: "e2e",
-  testMatch: "*.demo.ts",
+  testMatch: "*.demo.{ts,mjs}",
   fullyParallel: true,
   forbidOnly: true,
   workers: process.env.CI ? 1 : 3,

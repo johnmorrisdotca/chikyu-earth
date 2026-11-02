@@ -13,40 +13,101 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
 
 <p align="center"><img alt="The line-drawn globe, Europe and Africa in view, with the shared control bar" src="docs/images/line-desk.png" width="640"></p>
 
-## One minute
+## Install and use
 
 ```sh
 npm install @johnmorrisdotca/chikyu-earth
 ```
 
-```html
-<script type="module">
-  import "@johnmorrisdotca/kazoku-ui/view-controls/define";
-  import "@johnmorrisdotca/chikyu-earth/element";
-</script>
+Or use no install at all: every example below was run in a browser, built or type-checked by `pnpm test:usage` against the package as npm packs it, and the guides hold the same text.
 
-<div id="globe" tabindex="0">
-  <chikyu-earth size="420"></chikyu-earth>
-</div>
-<kazoku-view-controls id="controls" for="globe" address controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+### In a plain HTML page
 
-<script type="module">
-  const earth = document.querySelector("chikyu-earth");
-  document.getElementById("controls").addEventListener("kazoku-viewchange", (event) => {
-    earth.setView(event.detail, event.detail.final);
-  });
-</script>
-```
-
-The globe appears, centred on the reader (the browser asks for their location; until they answer, and if they
-decline, it starts on the Greenwich meridian). The shared control bar turns, tips, zooms and pans it. Auto-turn
-moves at the Earth's own rate: `0.004178` degrees a second, one sidereal day — 23 h 56 min 4.0905 s — per revolution.
-
-Centre it yourself instead:
+One script tag from [jsDelivr](https://www.jsdelivr.com/package/npm/@johnmorrisdotca/chikyu-earth) and the tag. (From unpkg, with the realistic Earth, and pinning a version: [the CDN guide](docs/guides/html-and-cdn.md).)
 
 ```html
-<chikyu-earth center="139.7,35.7" style="thick" graticule></chikyu-earth>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chikyu Earth from jsDelivr</title>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@johnmorrisdotca/chikyu-earth/element/+esm"></script>
+  </head>
+  <body>
+    <chikyu-earth center="139.7,35.7" look="thick" graticule size="320"></chikyu-earth>
+  </body>
+</html>
 ```
+
+The globe appears centred where you say; with no `center` it centres on the reader (the browser asks for their location; until they answer, and if they decline, it starts on the Greenwich meridian). `look` is `line` or `thick`.
+
+### With the shared controls
+
+The [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls turn, tip, zoom and pan it, and keep the view in the address. One listener passes their camera on:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chikyu Earth with the shared controls</title>
+    <script type="module">
+      import "https://cdn.jsdelivr.net/npm/@johnmorrisdotca/kazoku-ui/view-controls/define/+esm";
+      import "https://cdn.jsdelivr.net/npm/@johnmorrisdotca/chikyu-earth/element/+esm";
+
+      const earth = document.querySelector("chikyu-earth");
+      document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (event) => {
+        earth.setView(event.detail, event.detail.final);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="globe" tabindex="0">
+      <chikyu-earth size="420" look="thick" center="139.7,35.7"></chikyu-earth>
+    </div>
+    <kazoku-view-controls for="globe" address controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
+  </body>
+</html>
+```
+
+Auto-turn (add `autoplay`) moves at the Earth's own rate: `0.004178` degrees a second, one sidereal day — 23 h 56 min 4.0905 s — per revolution.
+
+### In React
+
+The element needs a browser, so it is imported inside the effect, never at the top of the file; that keeps a server render working. (Vue, Svelte and Angular do the same: [the frameworks guide](docs/guides/frameworks.md).)
+
+```tsx
+import { useEffect, useRef } from "react";
+
+export function ChikyuEarth({ center = "139.7,35.7", look = "thick" }: { center?: string; look?: "line" | "thick" }) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The element needs a browser, so it is imported here, never at the top of the file: a server render never reaches an effect.
+    void import("@johnmorrisdotca/chikyu-earth/element");
+  }, []);
+  return (
+    <div ref={host}>
+      <chikyu-earth center={center} look={look} graticule />
+    </div>
+  );
+}
+```
+
+### Every other way
+
+| How | Where |
+|---|---|
+| A script tag from jsDelivr or unpkg, the realistic Earth from a CDN | [CDN guide](docs/guides/html-and-cdn.md) |
+| An ES module in Vite or webpack | [bundlers guide](docs/guides/bundlers.md) |
+| React, Vue, Svelte, Angular; Next.js, Nuxt, SvelteKit | [frameworks guide](docs/guides/frameworks.md) |
+| An `<iframe>` of the embed page, no script of your own | [iframe guide](docs/guides/embed-in-an-iframe.md) |
+| TypeScript types, an SVG string on a server, Node | [TypeScript and Node guide](docs/guides/typescript-and-node.md) |
+| The web component (`<chikyu-earth>`, `<chikyu-earth-realistic>`) | every one of the above; its attributes are in [The element](#the-element) |
+| Something does not appear | [troubleshooting](docs/guides/troubleshooting.md) |
+
+The guides are also in Japanese (日本語), one language to a page: [docs/guides/ja/](docs/guides/ja/getting-started.md).
 
 ## The Earth from space
 

@@ -312,6 +312,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 }
 
+declare global {
+  interface HTMLElementTagNameMap {
+    "chikyu-earth-realistic": ChikyuEarthRealistic;
+  }
+}
+
 if (typeof customElements !== "undefined" && !customElements.get("chikyu-earth-realistic")) {
   customElements.define("chikyu-earth-realistic", ChikyuEarthRealistic);
 }
