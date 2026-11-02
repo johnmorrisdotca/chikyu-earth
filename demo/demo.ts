@@ -125,7 +125,7 @@ if (flat && controls && stage) {
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
       element.addEventListener("chikyu-unavailable", () => {
-        say("The space view needs WebGL, which this browser did not give. Showing the line globe.");
+        notice("The space view needs WebGL, which this browser did not give. Showing the line globe.");
         if (spaceButton) spaceButton.disabled = true;
         void setLook("line");
       });
@@ -189,7 +189,7 @@ if (flat && controls && stage) {
       notice(null);
       await enterRealistic();
     } else if (next === "space") {
-      say(null);
+      notice(null);
       await enterSpace();
     } else {
       leave3d();
