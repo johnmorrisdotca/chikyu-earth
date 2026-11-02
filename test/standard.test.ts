@@ -1,5 +1,5 @@
 // The family's must-have list for a package (spx-stats docs/package-work.md, "The must-have list"; kazoku-ui docs/package-standard.md), as a check that fails when an item is missing.
-// scripts/check-standard.mjs is kazoku-ui's templates/check-standard.mjs, copied unchanged and held to one recorded hash.
+// scripts/check-standard.mjs is kazoku-ui's templates/check-standard.mjs (kazoku-ui main, commit 3f218ab: after the v0.9.1 tag, so in its next release), copied unchanged and held to one recorded hash.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";

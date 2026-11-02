@@ -14,4 +14,4 @@ jobs:
     with:
       check-command: pnpm check && pnpm test:package
       freeze-command: pnpm test:freeze
-      github-release: false
+      github-release: true
