@@ -34,14 +34,18 @@ The globe fills the frame (square, at the smaller of its width and height), with
 
 | Parameter | Values | Default |
 |---|---|---|
-| `look` | `line`, `thick`, `realistic` (needs WebGL; falls back to `thick` without it) | `line` |
+| `look` | `line`, `thick`, `realistic`, `space` (the last two need WebGL; they fall back to `thick` without it) | `line` |
 | `center` | `lon,lat`, or `me` to ask the browser for the reader's place | `0,20` |
 | `graticule` | `1` | off |
 | `turn` | `0` still, `1` turned by hand (drag, wheel, pinch, arrow keys), `auto` turns by itself at the Earth's own rate | `0` |
-| `time` | the realistic look's moment, for example `2026-06-21T12:00Z` | now |
+| `time` | the moment the realistic and space looks show, for example `2026-06-21T12:00Z` | now |
 | `clouds`, `lights` | `off` to hide that layer on the realistic look | on |
+| `speed` | the space look's clock in seconds of game time a second: `0` holds still, `1` is real time, `86400` runs a day a second, negative runs backwards | `0` |
+| `scale` | the space look's scale: `true` for real distances and sizes | compressed |
+| `body`, `zoom` | the space look's camera: the body it looks at (`Moon`, `Mars`, ...), and the part of the sky it shows (`earth`, `moon`, `sun`, `inner`, `solar-system`) | the Earth |
+| `orbits`, `labels` | the space look's planet paths (`off` hides them) and the names beside the bodies (`1` shows them) | paths on, names off |
 
-By default the frame is still, has no controls and never asks for the reader's location. It draws only when something changes, and nothing while it is off screen or its tab is hidden.
+By default the frame is still, has no controls and never asks for the reader's location. The space look holds still too (`speed=0`), and draws at most 30 times a second when you give it a speed. It draws only when something changes, and nothing while it is off screen or its tab is hidden.
 
 ## Size and accessibility
 
