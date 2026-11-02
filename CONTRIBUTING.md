@@ -10,8 +10,8 @@ pnpm install
 pnpm check        # lint, typecheck, unit tests, build, package check
 ```
 
-Work in a git worktree from `origin/main`, one branch per change. Ports: this package owns **8000–8099**
-(8000 the demo, 8001 the tests); check a port is free before you use it, and stop only your own processes by PID.
+Work in a git worktree from `origin/main`, one branch per change. Ports: this package owns **8200–8299**
+(8200 the demo, 8201 the tests); check a port is free before you use it, and stop only your own processes by PID.
 
 ## The rules
 
@@ -20,8 +20,8 @@ Work in a git worktree from `origin/main`, one branch per change. Ports: this pa
   marks in this MIT package.
 - **Bake data at build time.** Nothing is fetched at runtime. Change the data through `scripts/make-countries.ts`
   (`pnpm countries`), never by editing `src/data/countries.ts` by hand, and say what a change adds in bytes.
-- **Keep it small.** d3-geo is the one runtime dependency; do not add another without saying so. `globe()` and the
-  rotation helpers stay pure: the same arguments give the same markup.
+- **Keep it small.** d3-geo and kazoku-ui are the runtime dependencies; do not add another without saying so.
+  `globe()` and the rotation helpers stay pure: the same arguments give the same markup.
 - **Two looks, one geometry.** A style changes lines and fills, never the shape. Add a look in `src/styles.ts`.
 - **A fact with no source is left out, never guessed.**
 
@@ -34,7 +34,7 @@ pnpm check        # lint, typecheck, unit tests, build, package check
 pnpm test:demo    # the demo in a real browser (needs: pnpm exec playwright install chromium)
 ```
 
-The demo runs at `pnpm dev` → http://127.0.0.1:8000/chikyu-earth/. If you change what a person sees, look at it:
+The demo runs at `pnpm dev` → http://127.0.0.1:8200/chikyu-earth/. If you change what a person sees, look at it:
 render it, screenshot it, compare it with the line style of Hako Devices and Uchusen Rockets, and fix what is off.
 
 ## Release

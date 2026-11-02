@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+The shared-controls integration is documented and covered in every motion preference, and the future of the
+country data is written down.
+
+- The README's new Controls section has the kazoku-ui snippet and the exact yaw/tilt/zoom/pan mapping. The browser
+  suite now proves reduced motion leaves the globe still, as well as Auto-turn continuing after a zoom.
+- Inspected chizu 1.5.1 from npm: `@johnmorrisdotca/chizu/world` is Miller-projected canvas data centred on 155°E,
+  not longitude/latitude, so chikyu keeps its own Natural Earth 1:110m outlines and d3-geo.
+  [docs/chizu-proposal.md](docs/chizu-proposal.md) proposes the `world-geo` export that would let it share chizu's
+  data later.
+- The demo and test servers move to this work's port block, 8200–8299.
+
 ## 0.2.0
 
 The globe now uses the family's shared view controls.

@@ -100,6 +100,16 @@ test("two fingers pinch and Front returns the home view", async ({ page }) => {
   expect((await stateOf(page)).tilt).toBe(0);
 });
 
+test("reduced motion leaves the globe still", async ({ page }) => {
+  await ready(page);
+  const before = await stateOf(page);
+  const drawn = await markup(page);
+  expect(before.turning).toBe(false);
+  await page.waitForTimeout(1200);
+  expect((await stateOf(page)).yaw).toBe(before.yaw);
+  expect(await markup(page)).toBe(drawn);
+});
+
 test.describe("with motion allowed", () => {
   test.use({ reducedMotion: "no-preference" });
 

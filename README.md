@@ -44,6 +44,32 @@ Centre it yourself instead:
 <chikyu-earth center="139.7,35.7" style="thick" graticule></chikyu-earth>
 ```
 
+## Controls
+
+The shared [kazoku-ui view controls](https://github.com/johnmorrisdotca/kazoku-ui) supply every hand and button:
+drag to turn, tilt up to either pole, zoom, pan, touch pinch, Front and Fit. Chikyu does not draw its own zoom,
+rotate or drag controls.
+
+```html
+<div id="globe" tabindex="0"><chikyu-earth size="420"></chikyu-earth></div>
+<kazoku-view-controls id="controls" for="globe" address tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+```
+
+```ts
+import "@johnmorrisdotca/kazoku-ui/view-controls/define";
+
+const earth = document.querySelector("chikyu-earth");
+document.getElementById("controls").addEventListener("kazoku-viewchange", (event) => {
+  const { yaw, tilt, zoom, panX, panY, final } = event.detail;
+  earth.setView({ yaw, tilt, zoom, panX, panY }, final);
+});
+```
+
+The mapping is `rotate([lambda0 + yaw, phi0 - tilt])`, `scale(baseScale * zoom)` and
+`translate([cx + panX, cy + panY])`, where `lambda0` and `phi0` are the home centre. Front returns to that home
+view. Auto-turn's `0.004178` degrees a second is 360° per sidereal day; kazoku-ui leaves it still for a reader who
+prefers reduced motion, and a drag or zoom never stops or resets it.
+
 ## Draw one as a string
 
 `globe()` returns the SVG markup, so a server, a build step or a test can draw the same globe with no DOM:
@@ -91,4 +117,5 @@ To refresh the outlines after a Natural Earth or kuni update, run `pnpm countrie
 ## The rest
 
 [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/](docs/index.md) · [NOTICE.md](NOTICE.md) ·
-[CHANGELOG.md](CHANGELOG.md) · MIT licence. Projection by d3-geo; shared view controls by kazoku-ui.
+[CHANGELOG.md](CHANGELOG.md) · MIT licence. No third-party dependencies except d3-geo; shared view controls are
+John Morris's kazoku-ui (MIT).

@@ -1,7 +1,7 @@
 # Chikyu Earth
 
-This project owns local ports **8000 to 8099**: 8000 the demo and dev, 8001 the tests, 8002 the picture
-scripts, 8003 and up anything else. `CONTRIBUTING.md` has the rules and the commands.
+This project owns local ports **8200 to 8299**: 8200 the demo and dev, 8201 the tests, 8202 the picture
+scripts, 8203 and up anything else. `CONTRIBUTING.md` has the rules and the commands.
 
 ## Work in progress
 

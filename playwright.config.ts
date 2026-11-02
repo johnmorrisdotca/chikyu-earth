@@ -1,8 +1,8 @@
 // The demo's own tests: a real browser, real taps. `pnpm test:demo` builds the site and runs them.
-// The server is scripts/dev.ts on port 8001, at the site's real address /chikyu-earth/: this package's block of ports is 8000 to 8099.
+// The server is scripts/dev.ts on port 8201, at the site's real address /chikyu-earth/: this package's block of ports is 8200 to 8299.
 import { defineConfig, devices } from "@playwright/test";
 
-const port = Number(process.env.TEST_PORT ?? 8001);
+const port = Number(process.env.TEST_PORT ?? 8201);
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 
 export default defineConfig({
