@@ -9,6 +9,20 @@ The space view can look at any body, bodies can be chosen, and how the Sun and t
 - **A seam for drawing the bodies** (`BodyPainter`, `setBodyPainter`, `plainPainter` from `@johnmorrisdotca/chikyu-earth/space`): the space view keeps each body's place, size, light direction, name and orbit, and asks a painter only for what to draw there (an object of radius 1; `light(toSun)` each draw; the Sun's turns to face the camera). The default is what 0.6.0 drew: spheres in the planets' colours and a glow for the Sun. John chose a separate package (wakusei-planets) for the bodies' own looks, so chikyu ships no planet pictures and no rings; the Earth and the Moon keep theirs.
 - Tests: e2e (a body looked at, its name chosen by keyboard, a press on it chooses it, a drag that turns the view does not) and a unit test of the default painter.
 
+### The family's published parts: demo, embed, docs and usage
+
+Chikyu Earth now has what every package of the family has, and it was missing from 0.3.0 to 0.5.0.
+
+- **Demo on GitHub Pages**, set as the repository's and the package's homepage: <https://johnmorrisdotca.github.io/chikyu-earth/>, with the family header (the kazoku-ui language picker, English and Japanese, and theme switch, the table cloths and the Help switch), light and dark, and the family footer. `pnpm site` builds it, and the Pages workflow publishes it on every push to `main`.
+- **An embed page**, `embed.html`, for an `<iframe>` with no script of your own: `?look=line|thick|realistic`, `center`, `graticule`, `turn=0|1|auto`, `time`, `clouds`, `lights`. Still by default, no controls, no location prompt; it draws only when something changes and nothing while hidden. Tested in Chromium and WebKit, and on the realistic look: one WebGL context, canvas inside its budget, nothing drawn at rest.
+- **A documentation site** at `/docs/`: a page for every export (from its TSDoc, with an example that is run when the site is built), ten guides in English and in Japanese, one language to a page, search, `llms.txt` and the family's header. Every export of every entry point has a summary, `@param`, `@returns` and an `@example` that imports the package by its name; `pnpm check` fails when one does not.
+- **Every way to use it, written down and tested** (`pnpm test:usage`): a script tag from jsDelivr and from unpkg, the realistic Earth from a CDN, the shared controls, Vite, webpack, React (and a server render of it), Vue, Svelte, Angular, an iframe, TypeScript types and Node. Each example is built or run against the package as npm packs it, opened in a browser and made to show a globe; the guides and the README must hold the same text word for word.
+- **`look` attribute**: `<chikyu-earth look="thick">` is the new name of `style`, which frameworks read as CSS (React refuses a string `style`). `style` still works.
+- **Types for the tags**: `document.querySelector("chikyu-earth")` is a `ChikyuEarth` (and `"chikyu-earth-realistic"`, `"chikyu-space"`) once the element's entry is imported.
+- **A freeze test in the release** (`e2e/freeze.demo.ts`, `pnpm test:freeze`): at rest nothing is drawn and no frame asked for, turning draws at most once for each frame of the page and asks for one frame at a time, out of sight or in a hidden tab nothing is drawn, the canvas stays inside 6 million pixels and 4096 a side on a 5K screen at a pixel ratio of 2 in the Earth from space and the space view, and six rounds of changing the look leave the GPU objects flat in one WebGL context and let the context go at the end. Every Chromium project draws WebGL in software, never on the machine's graphics card. The release workflow runs it (`freeze-command`, kazoku-ui 0.9.1).
+- **The family's must-have list**, checked: `scripts/check-standard.mjs` (kazoku-ui's, unchanged) fails `pnpm check` when a package lacks its demo, embed page, docs site with Japanese twins, family files or tested usage.
+- **Family files**: `family-template.mjs` and `family-readme.mjs` of 2026-11-02 with Chikyu Earth added to the family's list (33 packages), `family.css`, and the README's "The family" block. Added to the list here only; the other packages take the new files when they are next touched.
+
 ## 0.6.0 (never published on its own: it ships in 0.7.0)
 
 The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, under the same performance budget as the Earth from space.
@@ -27,20 +41,6 @@ The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, un
   Earth's shaders look at the camera instead of assuming one, so they work from any angle.
 - **Research, no code** ([docs/satellite-sources.md](docs/satellite-sources.md), MODULES-85): CelesTrak (grey), Space-Track (red for a package), the r/SpaceX API (archived, offline), Launch Library 2 (grey), Wikipedia and Wikidata
   (green) for launches; the recommendation is a satellite view that takes elements the page supplies. John chooses before MODULES-86 and MODULES-87 start.
-
-### The family's published parts: demo, embed, docs and usage
-
-Chikyu Earth now has what every package of the family has, and it was missing from 0.3.0 to 0.5.0.
-
-- **Demo on GitHub Pages**, set as the repository's and the package's homepage: <https://johnmorrisdotca.github.io/chikyu-earth/>, with the family header (the kazoku-ui language picker, English and Japanese, and theme switch, the table cloths and the Help switch), light and dark, and the family footer. `pnpm site` builds it, and the Pages workflow publishes it on every push to `main`.
-- **An embed page**, `embed.html`, for an `<iframe>` with no script of your own: `?look=line|thick|realistic`, `center`, `graticule`, `turn=0|1|auto`, `time`, `clouds`, `lights`. Still by default, no controls, no location prompt; it draws only when something changes and nothing while hidden. Tested in Chromium and WebKit, and on the realistic look: one WebGL context, canvas inside its budget, nothing drawn at rest.
-- **A documentation site** at `/docs/`: a page for every export (from its TSDoc, with an example that is run when the site is built), ten guides in English and in Japanese, one language to a page, search, `llms.txt` and the family's header. Every export of every entry point has a summary, `@param`, `@returns` and an `@example` that imports the package by its name; `pnpm check` fails when one does not.
-- **Every way to use it, written down and tested** (`pnpm test:usage`): a script tag from jsDelivr and from unpkg, the realistic Earth from a CDN, the shared controls, Vite, webpack, React (and a server render of it), Vue, Svelte, Angular, an iframe, TypeScript types and Node. Each example is built or run against the package as npm packs it, opened in a browser and made to show a globe; the guides and the README must hold the same text word for word.
-- **`look` attribute**: `<chikyu-earth look="thick">` is the new name of `style`, which frameworks read as CSS (React refuses a string `style`). `style` still works.
-- **Types for the tags**: `document.querySelector("chikyu-earth")` is a `ChikyuEarth` (and `"chikyu-earth-realistic"`, `"chikyu-space"`) once the element's entry is imported.
-- **A freeze test in the release** (`e2e/freeze.demo.ts`, `pnpm test:freeze`): at rest nothing is drawn and no frame asked for, turning draws at most once for each frame of the page and asks for one frame at a time, out of sight or in a hidden tab nothing is drawn, the canvas stays inside 6 million pixels and 4096 a side on a 5K screen at a pixel ratio of 2 in the Earth from space and the space view, and six rounds of changing the look leave the GPU objects flat in one WebGL context and let the context go at the end. Every Chromium project draws WebGL in software, never on the machine's graphics card. The release workflow runs it (`freeze-command`, kazoku-ui 0.9.1).
-- **The family's must-have list**, checked: `scripts/check-standard.mjs` (kazoku-ui's, unchanged) fails `pnpm check` when a package lacks its demo, embed page, docs site with Japanese twins, family files or tested usage.
-- **Family files**: `family-template.mjs` and `family-readme.mjs` of 2026-11-02 with Chikyu Earth added to the family's list (33 packages), `family.css`, and the README's "The family" block. Added to the list here only; the other packages take the new files when they are next touched.
 
 ## 0.5.0
 

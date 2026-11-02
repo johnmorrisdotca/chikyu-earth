@@ -7,9 +7,13 @@ description: What changed between versions and what to do about it. The package 
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
-## To 0.6: the `look` attribute
+## To 0.7: the `look` attribute
 
 `<chikyu-earth look="thick">` is the new name of the `style` attribute. `style="thick"` still works in plain HTML, and nothing you have breaks. In React, Vue and Angular `style` does not work (they read it as CSS), so use `look` there.
+
+## To 0.6: the Sun, the Moon and the planets
+
+A new optional entry point, `/space` (the pure parts) and `/space/element` (`<chikyu-space>`). `astronomy-engine` is an optional peer dependency: install it only for the space view. Nothing changed in the flat globe or the Earth from space.
 
 ## To 0.5: the realistic Earth and markers
 
