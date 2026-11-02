@@ -15,11 +15,11 @@ import { chooseTier, TIERS, type Layer } from "./tiers.ts";
  * console.log(typeof load);
  * ```
  */
-export type ThreeParts = Pick<
-  typeof THREE,
-  | "Texture" | "BufferGeometry" | "BufferAttribute" | "ShaderMaterial" | "Group" | "Mesh" | "Scene" | "OrthographicCamera" | "PerspectiveCamera" | "Vector3" | "WebGLRenderer"
-  | "RepeatWrapping" | "ClampToEdgeWrapping" | "LinearMipmapLinearFilter" | "LinearFilter" | "BackSide" | "DoubleSide" | "LineLoop" | "LineBasicMaterial" | "Color"
->;
+export type ThreeParts = {
+  [Name in
+    | "Texture" | "BufferGeometry" | "BufferAttribute" | "ShaderMaterial" | "Group" | "Mesh" | "Scene" | "OrthographicCamera" | "PerspectiveCamera" | "Vector3" | "WebGLRenderer"
+    | "RepeatWrapping" | "ClampToEdgeWrapping" | "LinearMipmapLinearFilter" | "LinearFilter" | "BackSide" | "DoubleSide" | "LineLoop" | "LineBasicMaterial" | "Color"]: (typeof THREE)[Name];
+};
 
 /** Milliseconds a lower texture size must be enough before the larger one is let go. */
 export const DOWNGRADE_AFTER_MS = 4000;

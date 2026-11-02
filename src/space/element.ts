@@ -12,7 +12,29 @@ import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName
 
 export { setThreeLoader };
 type Three = ThreeParts;
+/**
+ * What the space view is doing: `loading`, `live`, `unavailable` (no WebGL), `lost` (the GPU took the context; it comes back by itself) or `idle` (another view has the page's one context).
+ *
+ * @example
+ * ```ts no-run
+ * import type { ChikyuSpace, SpaceState } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const stateOf = (space: ChikyuSpace): SpaceState => space.stats.state;
+ * console.log(typeof stateOf);
+ * ```
+ */
 export type SpaceState = "loading" | "live" | "unavailable" | "lost" | "idle";
+/**
+ * A named distance for `zoomFor`: the Earth, the Moon, the Sun, the inner planets or the whole solar system.
+ *
+ * @example
+ * ```ts no-run
+ * import type { ChikyuSpace, SpacePreset } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const zoomTo = (space: ChikyuSpace, preset: SpacePreset): number => space.zoomFor(preset);
+ * console.log(typeof zoomTo);
+ * ```
+ */
 export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system";
 
 const RAD = Math.PI / 180;
@@ -32,6 +54,19 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
+/**
+ * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
+ *
+ * @example
+ * ```ts no-run
+ * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const space = document.createElement("chikyu-space") as ChikyuSpace;
+ * space.setAttribute("time", "2026-11-02T12:00Z");
+ * space.setAttribute("speed", "0");
+ * document.body.append(space);
+ * ```
+ */
 export class ChikyuSpace extends HTMLElement {
   static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits"];
 
@@ -296,6 +331,12 @@ export class ChikyuSpace extends HTMLElement {
   #fail(reason: string): void {
     this.#set("unavailable");
     this.dispatchEvent(new CustomEvent("chikyu-unavailable", { detail: { reason } }));
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "chikyu-space": ChikyuSpace;
   }
 }
 

@@ -10,10 +10,40 @@
   },
   "icon": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230b1424'/%3E%3Ccircle cx='50' cy='50' r='34' fill='%2313203a' stroke='%238fa1b8' stroke-width='4'/%3E%3Cpath d='M30 38Q44 30 56 40T70 52M34 60Q46 54 58 66' fill='none' stroke='%238fa1b8' stroke-width='3'/%3E%3C/svg%3E",
   "entries": {
-    ".": { "en": "The globe as an SVG string", "ja": "SVG文字列としての地球儀", "platform": "node" },
-    "./element": { "en": "The <chikyu-earth> element", "ja": "<chikyu-earth> 要素", "platform": "browser" },
-    "./realistic": { "en": "The realistic Earth's pure parts", "ja": "リアルな地球の計算部分", "platform": "node" },
-    "./realistic/element": { "en": "The <chikyu-earth-realistic> element", "ja": "<chikyu-earth-realistic> 要素", "platform": "browser" },
-    "./markers": { "en": "Markers on the globe", "ja": "地球上の目印", "platform": "browser" }
+    ".": {
+      "en": "The globe as an SVG string",
+      "ja": "SVG文字列としての地球儀",
+      "platform": "node"
+    },
+    "./element": {
+      "en": "The <chikyu-earth> element",
+      "ja": "<chikyu-earth> 要素",
+      "platform": "browser"
+    },
+    "./realistic": {
+      "en": "The realistic Earth's pure parts",
+      "ja": "リアルな地球の計算部分",
+      "platform": "node"
+    },
+    "./realistic/element": {
+      "en": "The <chikyu-earth-realistic> element",
+      "ja": "<chikyu-earth-realistic> 要素",
+      "platform": "browser"
+    },
+    "./markers": {
+      "en": "Markers on the globe",
+      "ja": "地球上の目印",
+      "platform": "browser"
+    },
+    "./space": {
+      "en": "The Sun, Moon and planets: pure parts",
+      "ja": "太陽、月、惑星: 計算部分",
+      "platform": "node"
+    },
+    "./space/element": {
+      "en": "The <chikyu-space> element",
+      "ja": "<chikyu-space> 要素",
+      "platform": "browser"
+    }
   }
 }
