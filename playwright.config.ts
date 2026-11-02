@@ -3,6 +3,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.TEST_PORT ?? 8201);
+// WebGL is drawn in software, never on the machine's graphics card (the family's rule). kazoku-ui 0.9.1 exports these as `SOFTWARE_GL_ARGS` from `/testing`; this is that list.
+const SOFTWARE_GL = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"];
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 
 export default defineConfig({
@@ -25,16 +27,16 @@ export default defineConfig({
     {
       name: "chromium-gl",
       testMatch: "*.gl.ts",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: ["--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
     },
     {
       name: "soak",
       testMatch: "*.soak.ts",
       timeout: (Number(process.env.SOAK_MINUTES ?? 10) + 4) * 60_000,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: ["--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
     },
-    { name: "chromium-desk", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } } },
-    { name: "chromium-phone", use: { ...devices["Desktop Chrome"], ...phone } },
+    { name: "chromium-desk", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: SOFTWARE_GL } } },
+    { name: "chromium-phone", use: { ...devices["Desktop Chrome"], ...phone, launchOptions: { args: SOFTWARE_GL } } },
     // WebKit on a desktop viewport with touch: `isMobile` is Chromium's to honour.
     { name: "webkit-desk", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 900 } } },
     { name: "webkit-phone", use: { ...devices["Desktop Safari"], viewport: phone.viewport, hasTouch: true } },

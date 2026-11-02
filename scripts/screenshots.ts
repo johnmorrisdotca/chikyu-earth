@@ -8,7 +8,8 @@ const out = (name: string) => new URL(`../docs/images/${name}.png`, import.meta.
 
 try {
   await new Promise((resolve) => setTimeout(resolve, 800));
-  const browser = await chromium.launch();
+  // WebGL is drawn in software, never on the machine's graphics card (the family's rule).
+  const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
   const shots: [string, { width: number; height: number }, string, string?][] = [
     ["line-desk", { width: 1280, height: 900 }, ""],
     ["line-phone", { width: 390, height: 844 }, ""],

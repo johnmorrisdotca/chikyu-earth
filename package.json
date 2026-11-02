@@ -123,7 +123,9 @@
     "docs:check": "pnpm build && node scripts/docs-site.mjs check",
     "size": "node scripts/docs-site.mjs size",
     "test:usage": "pnpm site && node scripts/check-usage.ts",
-    "test:readme": "pnpm build && node scripts/check-usage.ts readme"
+    "test:readme": "pnpm build && node scripts/check-usage.ts readme",
+    "check:standard": "node scripts/check-standard.mjs",
+    "test:freeze": "pnpm site && playwright test e2e/freeze.demo.ts --project=chromium-desk"
   },
   "dependencies": {
     "@johnmorrisdotca/chizu": "^1.6.0",

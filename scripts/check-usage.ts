@@ -119,7 +119,8 @@ const unpkgAnswer = async (pathname: string): Promise<string | null> => {
 
 const pageOf = (file: string) => readFileSync(file, "utf8");
 
-const browser = await chromium.launch();
+// WebGL is drawn in software, never on the machine's graphics card (the family's rule; kazoku-ui 0.9.1 exports these as `SOFTWARE_GL_ARGS`).
+const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 
 await step("readme", () => {
   // The README's TypeScript and JavaScript blocks: each one is type-checked, and run unless it says `no-run` (it needs a browser).
