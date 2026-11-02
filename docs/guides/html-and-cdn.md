@@ -26,7 +26,7 @@ jsDelivr bundles the package and its dependencies into one module when an addres
 </html>
 ```
 
-The address names the package's entry point: `.../chikyu-earth/element/+esm` is the `./element` entry, which registers `<chikyu-earth>`. With no version in the address you get the latest; pin one for a page that must not change under you, as in `@johnmorrisdotca/chikyu-earth@0.7.0/element/+esm`.
+The address names the package's entry point: `.../chikyu-earth/element/+esm` is the `./element` entry, which registers `<chikyu-earth>`. With no version in the address you get the latest; pin one for a page that must not change under you, as in `@johnmorrisdotca/chikyu-earth@0.8.0/element/+esm`.
 
 ## From unpkg
 
@@ -77,7 +77,7 @@ jsDelivr bundles three.js into the module for you. To ship less, hand over only 
 
 ## Choosing a CDN version
 
-A CDN address without a version follows the latest release, and this package is 0.x, where a minor version may change things ([upgrading](upgrading.md)). Write `@0.7.0` (an exact version) in anything you publish.
+A CDN address without a version follows the latest release, and this package is 0.x, where a minor version may change things ([upgrading](upgrading.md)). Write `@0.8.0` (an exact version) in anything you publish.
 
 ## Content-Security-Policy
 

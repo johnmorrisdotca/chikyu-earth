@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0
+
+Satellites on the space view, the space view in the embed, and the demo's space controls in Japanese.
+
+- **Satellites** (`@johnmorrisdotca/chikyu-earth/satellites`, new, and `<chikyu-space>`): `createSatellites(elements)` turns orbital elements into positions with SGP4, and `space.setSatellites("stations", group)` draws them: a group is **one draw call** however many it holds
+  (`THREE.Points`), each shown or hidden by name (`showSatellites`), with their orbits (`orbits: true` for a group of 40 or fewer), a ring and an orbit for a chosen one (`selectSatellite`, `satelliteInfo`) and `chikyu-satellite-click` for a press on one
+  (not on one behind the Earth). **The package fetches nothing and ships no orbital data**: your page passes in elements in CelesTrak's GP JSON format (`ElementSet`), and the guide has the rules for getting them (CelesTrak's usage policy; Space-Track's
+  agreement does not let an account holder pass data on, so it is not used). Elements more than 14 days from the moment shown (`maxAgeDays`) are left out. [docs/satellites.md](docs/satellites.md), the [satellites guide](docs/guides/satellites.md) (and in Japanese).
+- **SGP4 about once a second, not once a frame**: satellite.js 6.0.2 (MIT, a new optional peer dependency; 10 KB gzipped, plain JavaScript; version 7 pulls WASM helper files that bundlers choke on) is run for the whole group at two moments a step apart, and every
+  position between is an interpolation (a metre at 1 second, a few kilometres at 60). Above 60 times real time the groups are hidden and SGP4 does not run (`MAX_SATELLITE_SPEED`); a chosen satellite is still placed exactly. The package's own part is 2.7 KB minified
+  for the maths and 5.1 KB for the drawing (3.6 KB gzipped together). A unit test checks that a satellite's longitude from the scene's axes and sidereal time agrees with satellite.js's own within 0.02 degree, and an end-to-end test centres the view under the ISS (worked
+  out in the test) and finds it in the middle of the Earth's disc.
+- **Budget, each line tested** (`e2e/satellites.gl.ts`, 6,000 made-up satellites spread round their orbits, together with the demo's 2,252 real ones): paused, 0 GL draw calls, 0 frame requests and 0 SGP4 calls in 3.5 s; at 60 times real time 29.0 frames a second, 8,242 SGP4 calls a second (one for
+  each satellite), 34.2 GL draw calls a frame against 33.4 without the 6,000 (the group is one), 0.09 ms of JavaScript a frame on average and 2.6 ms for the longest SGP4 batch of 8,252; at real time 1.00 frames a second and 2,249 SGP4 calls a second for 2,252
+  satellites; at 3,600 times real time the groups are hidden, 0 SGP4 calls and 29 frames a second; with reduced motion 1.00 frames a second at 60 times; nothing drawn out of sight or in a hidden tab; a group taken away frees its buffer; a lost context comes back with the
+  satellites. The freeze test has a third look, the space view with satellites on, and its look-changing rounds show the stations and Starlink every time (GPU objects flat at 85 after the warm-up round). The ten-minute soak adds and removes the 6,000, chooses satellites and runs
+  past the speed limit: 964 steps, JS heap 13.73 to 14.04 MB after garbage collection (while the 6,000 are on it is 20.4 MB, and it returns), GPU objects 123 to 123, 28.5 frames a second on average, one WebGL context. The soak and the new tests now run with no motion preference, at the full 30 frames a second.
+- **Demo**: a "Satellites" row (Stations, Starlink, and Find: ISS, Tiangong) in the space look, and a line about what is chosen (name, height, speed, period, age of its elements). It uses **one snapshot of CelesTrak's lists from 2 November 2026** in a file of the demo site's own
+  (`demo/celestrak-snapshot.json`, 330 KB, 105 KB gzipped, fetched only when a group is asked for): all 20 stations and every fifth Starlink satellite (2,232 of 11,156), credited on the page and in NOTICE.md. A snapshot more than 14 days old shows the day it was taken instead of today.
+  `scripts/make-satellite-snapshot.mjs` makes the file from two downloaded lists and fetches nothing.
+- **The space view in the embed** (`embed.html?look=space`): `time`, `speed` (still by default), `scale`, `body`, `zoom` (earth, moon, sun, inner, solar-system), `orbits`, `labels`, and `satellites=stations,starlink` with `sat=25544`. One context, a capped canvas, no controls, nothing but its own files, 0 draws at rest,
+  at most 30 a second at a day a second, nothing in a hidden tab (`e2e/embed.gl.ts`). The embed guide, in both languages, lists them.
+- **Japanese for the demo's space controls**: Space, Time, Scale, Go to, Look at, every body's name, Orbits, Names, the scale note, the body and satellite facts and the notices, through `demo/words.js`; the names drawn beside the bodies change too (`element.bodyNames`, `element.bodyHint`). A browser test opens the Japanese
+  page and fails on any English word left in a control, apart from ISS, Starlink, CelesTrak, SGP4 and km.
+- **Docs**: a satellites guide in English and Japanese, a page for the new entry point and every export (TSDoc and an example each), a usage example run by `pnpm test:usage` (a Vite page with the ISS on the space view, opened in a browser and made to place it; and the same elements in Node), README section, and screenshots.
+- `ThreeParts` has an optional `Points`: a three.js subset handed over by `setThreeLoader` needs it only for satellites (the demo's `three-subset.ts` has it).
+- The CHANGELOG of 0.7.0, whose published tarball showed the family-parts notes under the 0.6.0 heading, is as fixed in 6f26012; this entry is under its own heading.
+
 ## 0.7.0
 
 The space view can look at any body, bodies can be chosen, and how the Sun and the planets are drawn is a seam another package can fill.
