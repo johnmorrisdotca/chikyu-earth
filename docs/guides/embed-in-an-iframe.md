@@ -43,6 +43,7 @@ The globe fills the frame (square, at the smaller of its width and height), with
 | `speed` | the space look's clock in seconds of game time a second: `0` holds still, `1` is real time, `86400` runs a day a second, negative runs backwards | `0` |
 | `scale` | the space look's scale: `true` for real distances and sizes | compressed |
 | `body`, `zoom` | the space look's camera: the body it looks at (`Moon`, `Mars`, ...), and the part of the sky it shows (`earth`, `moon`, `sun`, `inner`, `solar-system`) | the Earth |
+| `satellites`, `sat` | the space look's satellites, `stations` and `starlink` (one or both, from the demo site's snapshot of CelesTrak's lists), and the NORAD number of a station to mark, for example `25544` for the ISS | none |
 | `orbits`, `labels` | the space look's planet paths (`off` hides them) and the names beside the bodies (`1` shows them) | paths on, names off |
 
 By default the frame is still, has no controls and never asks for the reader's location. The space look holds still too (`speed=0`), and draws at most 30 times a second when you give it a speed. It draws only when something changes, and nothing while it is off screen or its tab is hidden.

@@ -83,3 +83,23 @@ test("a day a second in the embed draws at most 30 times a second, and nothing i
   const hidden1 = await counts(page);
   expect(hidden1.draws, "nothing drawn in a hidden tab").toBe(hidden0.draws);
 });
+
+test("the space embed can show the stations and the Starlink satellites, in one context and a capped canvas, and rests", async ({ page }) => {
+  const asked: string[] = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+  await page.addInitScript(COUNT_SCRIPT);
+  await page.goto(`/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&satellites=stations,starlink&sat=25544`);
+  await page.locator(`${SPACE}[data-state=live]`).waitFor();
+  await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { satellites: { placed: number } }).satellites.placed), { timeout: 20_000 }).toBeGreaterThan(2000);
+  await settle(page, 800);
+  const stats = await spaceStats(page);
+  expect(stats.contexts).toBe(1);
+  expect(stats.canvas.pixels).toBeLessThanOrEqual(6_000_000);
+  expect(await page.locator(SPACE).evaluate((el) => (el as unknown as { selectedSatellite: { group: string } | null }).selectedSatellite?.group)).toBe("stations");
+  expect(asked.every((path) => path.startsWith("/chikyu-earth/"))).toBe(true);
+  const before = await counts(page);
+  await page.waitForTimeout(3000);
+  const after = await counts(page);
+  expect(after.draws, "nothing drawn at rest").toBe(before.draws);
+  expect(after.rafRequests).toBe(before.rafRequests);
+});

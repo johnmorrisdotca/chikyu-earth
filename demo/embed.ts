@@ -7,6 +7,7 @@
 //   &clouds=off &lights=off      the realistic look's layers
 //   &speed=0                     the space look's clock: game seconds a second (0 holds still, the default; 1 is real time, 86400 a day a second)
 //   &scale=true &orbits=off &labels=1   the space look's scale, the planets' paths, and the names beside the bodies
+//   &satellites=stations,starlink &sat=25544   the space look's satellites (this site's own snapshot of CelesTrak's lists) and the one marked
 //   &body=Mars &zoom=moon        the space look's camera: the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system)
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
 import { createViewController, type ViewState } from "@johnmorrisdotca/kazoku-ui/view-controls";
@@ -35,6 +36,9 @@ function mount(): ChikyuEarth | ChikyuEarthRealistic {
   frame.append(flat);
   return flat;
 }
+
+/** The place of a station in its group, by NORAD number (the group is in the snapshot's order, and all of them start). */
+const groupIndex = (data: { groups: Record<string, (string | number)[][]> }, noradId: number): number => data.groups["stations"]!.findIndex((row) => row[0] === noradId);
 
 const flat = mount();
 let earth: ChikyuEarth | ChikyuEarthRealistic | ChikyuSpace = flat;
@@ -93,6 +97,27 @@ if (look === "space") {
   const preset = query.get("zoom");
   if (preset) startZoom = element.zoomFor(preset as SpacePreset);
   element.setView({ yaw: 0, tilt: 0, zoom: startZoom });
+
+  const groups = (query.get("satellites") ?? "").split(",").filter((name) => name === "stations" || name === "starlink");
+  if (groups.length > 0) {
+    try {
+      const [{ createSatellites }, data] = await Promise.all([
+        import("../src/satellites/index.ts"),
+        fetch("celestrak-snapshot.json").then((response) => (response.ok ? (response.json() as Promise<{ retrieved: string; fields: string[]; groups: Record<string, (string | number)[][]> }>) : Promise.reject(new Error(String(response.status))))),
+      ]);
+      // The elements are one day's snapshot: if that is too old for the date shown (and the address did not ask for one), show the day they were downloaded.
+      if (!time && Math.abs(Date.now() - Date.parse(data.retrieved)) > 14 * 86_400_000) element.time = Date.parse(data.retrieved);
+      for (const name of groups) {
+        const sets = data.groups[name]!.map((row) => Object.fromEntries(data.fields.map((field, index) => [field, row[index]])) as never);
+        element.setSatellites(name, createSatellites(sets), name === "stations" ? { color: "#ffd54f", size: 6, orbits: true } : { color: "#7fd4ff", size: 2.5 });
+      }
+      const chosen = Number(query.get("sat"));
+      const index = chosen ? (element.satelliteGroups.some((one) => one.name === "stations") ? groupIndex(data, chosen) : -1) : -1;
+      if (index >= 0) element.selectSatellite({ group: "stations", index });
+    } catch {
+      // No elements: the planets are still shown.
+    }
+  }
 }
 
 if (interactive) {
