@@ -1,12 +1,16 @@
 // <chikyu-earth-realistic>: the Earth from space as a web component, drawn by kazoku-ui's shared 3D renderer (one WebGL context for the
 // page) with three.js, which is the page's own. Optional entry point: the flat `<chikyu-earth>` needs neither. It draws only when something
 // changes, at most 30 times a second, and nothing at all while it is out of sight or the tab is hidden.
-import { createSharedRenderer, type SharedRenderer, type View } from "@johnmorrisdotca/kazoku-ui/renderer";
+import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
 import { createEarthItem, lookAt, newModel, type EarthModel, type ThreeParts } from "./earth.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
+import { setThreeLoader, takeRenderer } from "./shared.ts";
+export { setThreeLoader };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
+
+type EarthLayer = Exclude<Layer, "moon">;
 
 type Three = ThreeParts;
 /**
@@ -53,39 +57,6 @@ export const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-// --- one renderer for the page ----------------------------------------------------------------------------------------------------------------------
-let shared: SharedRenderer<Three> | undefined;
-let loader: () => Promise<Three> = () => import("three");
-const contextListeners = new Set<(state: "lost" | "restored" | "unavailable") => void>();
-let elements = 0;
-let releaseTimer: ReturnType<typeof setTimeout> | undefined;
-
-/**
- * Where three.js comes from, if a page wants to hand it over itself (before the first element connects). A page that hands over a module re-exporting only the parts the Earth uses ships a few hundred kilobytes of three.js instead of all of it.
- *
- * @param load - Returns the parts of three.js the Earth uses, as a promise.
- *
- * @example
- * ```ts no-run
- * import { setThreeLoader } from "@johnmorrisdotca/chikyu-earth/realistic/element";
- *
- * setThreeLoader(() => import("three"));
- * ```
- */
-export function setThreeLoader(load: () => Promise<Three>): void {
-  loader = load;
-}
-
-function renderer(): SharedRenderer<Three> {
-  shared ??= createSharedRenderer<Three>({
-    load: () => loader(),
-    onContext: (state) => {
-      for (const listener of contextListeners) listener(state);
-    },
-  });
-  return shared;
-}
-
 /**
  * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds` and `texture-base` (where the pictures are served from), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
  *
@@ -109,7 +80,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #gate: Gate | undefined;
   #tick: ReturnType<typeof setInterval> | undefined;
   #state: EarthState = "loading";
-  #tiers: Record<Layer, number> = { day: TIERS.day[0]!, night: TIERS.night[0]!, clouds: TIERS.clouds[0]!, water: TIERS.water[0]! };
+  #tiers: Record<EarthLayer, number> = { day: TIERS.day[0]!, night: TIERS.night[0]!, clouds: TIERS.clouds[0]!, water: TIERS.water[0]! };
+  #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
   #stage: HTMLElement | undefined;
   #overlay: HTMLElement | undefined;
   #pose: OverlayPose | null = null;
@@ -122,8 +94,6 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #restored = (): void => this.#set("live");
 
   connectedCallback(): void {
-    clearTimeout(releaseTimer);
-    elements += 1;
     this.#model.centre = readCentre(this.getAttribute("center")) ?? this.#model.centre;
     this.#mode = readTime(this.getAttribute("time"));
     this.#model.time = this.#mode === "now" ? Date.now() : this.#mode;
@@ -149,9 +119,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       () => undefined,
     );
 
-    contextListeners.add(this.#onContext);
+    const taken = takeRenderer(this.#onContext);
+    this.#taken = taken;
     const item = createEarthItem(this.#model, {
-      assets: renderer().assets,
+      assets: taken.renderer.assets,
       textureBase: () => this.#textureBase(),
       cap: () => this.#textureCap(),
       drift: 1.5,
@@ -162,17 +133,17 @@ export class ChikyuEarthRealistic extends HTMLElement {
       },
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
       onTier: (layer, width) => {
-        this.#tiers[layer] = width;
+        if (layer !== "moon") this.#tiers[layer] = width;
         this.dispatchEvent(new CustomEvent("chikyu-tier", { detail: { layer, width } }));
       },
     });
-    this.#view = renderer().view(this.#stage, item, { still: null });
+    this.#view = taken.renderer.view(this.#stage, item, { still: null });
     this.#set("loading");
     void this.#view.focus().then((live) => {
       if (live) {
         this.#set("live");
         this.dispatchEvent(new CustomEvent("chikyu-ready"));
-      } else if (this.#state === "loading") this.#set(this.#view?.live === false && renderer().focused !== undefined ? "idle" : "unavailable");
+      } else if (this.#state === "loading") this.#set(this.#view?.live === false && taken.renderer.focused !== undefined ? "idle" : "unavailable");
     });
     this.addEventListener("pointerdown", this.#take);
     this.addEventListener("focusin", this.#take);
@@ -188,16 +159,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#gate?.cancel();
     this.#view?.dispose();
     this.#view = undefined;
-    contextListeners.delete(this.#onContext);
-    elements -= 1;
-    if (elements <= 0) {
-      releaseTimer = setTimeout(() => {
-        if (elements <= 0) {
-          shared?.dispose();
-          shared = undefined;
-        }
-      }, 1000);
-    }
+    this.#taken?.release();
+    this.#taken = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -259,9 +222,16 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /** What the element is doing, for a page or a test: its state, the texture widths held, the draws made. */
-  get stats(): { state: EarthState; tiers: Record<Layer, number>; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
-    const stats = renderer().stats;
-    return { state: this.#state, tiers: { ...this.#tiers }, draws: stats.draws, contexts: stats.contexts, canvas: stats.canvas, assets: { entries: stats.assets.entries, refs: stats.assets.refs } };
+  get stats(): { state: EarthState; tiers: Record<EarthLayer, number>; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
+    const stats = this.#taken?.renderer.stats;
+    return {
+      state: this.#state,
+      tiers: { ...this.#tiers },
+      draws: stats?.draws ?? 0,
+      contexts: stats?.contexts ?? 0,
+      canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },
+      assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
+    };
   }
 
   /**

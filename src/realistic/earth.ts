@@ -7,24 +7,10 @@ import type { GeoPoint, GlobeView } from "../types.ts";
 import { HOME_VIEW, lookAt } from "../view.ts";
 import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
 import { subsolarPoint, unitVector } from "./sun.ts";
-import { chooseTier, TIERS, type Layer } from "./tiers.ts";
+import type { Layer } from "./tiers.ts";
+import { createTextureSet, type ThreeParts } from "./textures.ts";
+export type { ThreeParts };
 
-/**
- * The parts of three.js the Earth uses. A page can hand over a module that re-exports just these (see `setThreeLoader`) instead of all of three.
- *
- * @example
- * ```ts no-run
- * import type { ThreeParts } from "@johnmorrisdotca/chikyu-earth/realistic";
- *
- * const load = (): Promise<ThreeParts> => import("three");
- * console.log(typeof load);
- * ```
- */
-export type ThreeParts = {
-  [Name in
-    | "Texture" | "BufferGeometry" | "BufferAttribute" | "ShaderMaterial" | "Group" | "Mesh" | "Scene" | "OrthographicCamera" | "Vector3" | "WebGLRenderer"
-    | "RepeatWrapping" | "ClampToEdgeWrapping" | "LinearMipmapLinearFilter" | "LinearFilter" | "BackSide"]: (typeof THREE)[Name];
-};
 type Three = ThreeParts;
 const RAD = Math.PI / 180;
 /**
@@ -40,8 +26,6 @@ const RAD = Math.PI / 180;
 export const ATMOSPHERE_OUTER = 1.08;
 const CLOUD_RADIUS = 1.006;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water"];
-/** Milliseconds a lower texture size must be enough before the larger one is let go. */
-const DOWNGRADE_AFTER_MS = 4000;
 
 /** What the scene reads at each draw; the element changes it and asks for a draw. */
 export interface EarthModel {
@@ -102,27 +86,8 @@ export const discRadius = (width: number, height: number, zoom: number): number 
 
 export { lookAt };
 
-interface TextureEntry {
-  width: number;
-  texture: THREE.Texture;
-  ready: Promise<void>;
-  release(): void;
-  closed: boolean;
-}
-
-interface Slot {
-  layer: Layer;
-  uniform: { value: THREE.Texture | null };
-  base: TextureEntry;
-  baseWidth: number;
-  entry: TextureEntry;
-  width: number;
-  loading: number | undefined;
-  timer: ReturnType<typeof setTimeout> | undefined;
-}
-
 /** An equirectangular sphere: +z is longitude 0 on the equator, +x east, +y north; v is 0 at the north pole (the top row of the picture). */
-function sphere(three: Three, columns: number, rows: number): THREE.BufferGeometry {
+export function sphere(three: Three, columns: number, rows: number): THREE.BufferGeometry {
   const positions = new Float32Array((columns + 1) * (rows + 1) * 3);
   const uvs = new Float32Array((columns + 1) * (rows + 1) * 2);
   let p = 0;
@@ -158,90 +123,35 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
     key: "chikyu-earth:realistic",
     async build({ three, width, height }: BuildContext<Three>): Promise<Scene3D> {
       let size = { width, height };
-      let disposed = false;
-      const held: string[] = [];
-
-      const makeTexture = (layer: Layer, texels: number): TextureEntry => {
-        const key = `chikyu-earth:${layer}:${texels}`;
-        const entry = deps.assets.acquire<TextureEntry>(
-          key,
-          () => {
-            const texture = new three.Texture();
-            texture.wrapS = three.RepeatWrapping;
-            texture.wrapT = three.ClampToEdgeWrapping;
-            texture.minFilter = three.LinearMipmapLinearFilter;
-            texture.magFilter = three.LinearFilter;
-            texture.anisotropy = 8;
-            const controller = new AbortController();
-            const made: TextureEntry = { width: texels, texture, closed: false, ready: Promise.resolve(), release: () => undefined };
-            made.ready = fetch(`${deps.textureBase()}${layer}-${texels}.webp`, { signal: controller.signal })
-              .then((response) => {
-                if (!response.ok) throw new Error(`${layer}-${texels}.webp: ${response.status}`);
-                return response.blob();
-              })
-              .then((blob) => createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" }))
-              .then((bitmap) => {
-                if (made.closed) bitmap.close();
-                else {
-                  texture.image = bitmap;
-                  texture.needsUpdate = true;
-                }
-              });
-            made.ready.catch(() => undefined);
-            made.release = () => {
-              made.closed = true;
-              controller.abort();
-              texture.dispose();
-              (texture.image as { close?: () => void } | null)?.close?.();
-            };
-            return made;
-          },
-          (value) => value.release(),
-        );
-        held.push(key);
-        return entry;
-      };
-      const letGo = (layer: Layer, texels: number): void => {
-        const key = `chikyu-earth:${layer}:${texels}`;
-        const at = held.indexOf(key);
-        if (at >= 0) held.splice(at, 1);
-        deps.assets.release(key);
-      };
-
-      const slots = new Map<Layer, Slot>();
-      for (const layer of LAYERS) {
-        const baseWidth = TIERS[layer][0]!;
-        const base = makeTexture(layer, baseWidth);
-        slots.set(layer, { layer, uniform: { value: null }, base, baseWidth, entry: base, width: baseWidth, loading: undefined, timer: undefined });
-      }
-      try {
-        await Promise.all([...slots.values()].map((slot) => slot.base.ready));
-      } catch (error) {
-        for (const slot of slots.values()) letGo(slot.layer, slot.baseWidth);
-        deps.onError?.(error);
-        throw error;
-      }
-      for (const slot of slots.values()) slot.uniform.value = slot.base.texture;
+      const textures = await createTextureSet(three, LAYERS, {
+        assets: deps.assets,
+        textureBase: deps.textureBase,
+        cap: deps.cap,
+        invalidate: deps.invalidate,
+        ...(deps.onError ? { onError: deps.onError } : {}),
+        ...(deps.onTier ? { onTier: deps.onTier } : {}),
+      });
+      const uniform = textures.uniforms as Record<Layer, { value: THREE.Texture | null }>;
 
       const sunDir = { value: new three.Vector3(1, 0, 0) };
       const grid = sphere(three, 128, 64);
       const surface = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: SURFACE_FRAG,
-        uniforms: { dayMap: slots.get("day")!.uniform, nightMap: slots.get("night")!.uniform, waterMap: slots.get("water")!.uniform, sunDir, lights: { value: 1 } },
+        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir, lights: { value: 1 }, ortho: { value: 1 } },
       });
       const cloudShift = { value: 0 };
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: CLOUD_FRAG,
-        uniforms: { cloudMap: slots.get("clouds")!.uniform, sunDir, shift: cloudShift, opacity: { value: 0.9 } },
+        uniforms: { cloudMap: uniform.clouds, sunDir, shift: cloudShift, opacity: { value: 0.9 } },
         transparent: true,
         depthWrite: false,
       });
       const atmosphere = new three.ShaderMaterial({
         vertexShader: ATMOSPHERE_VERT,
         fragmentShader: ATMOSPHERE_FRAG,
-        uniforms: { sunDir, outer: { value: ATMOSPHERE_OUTER } },
+        uniforms: { sunView: sunDir, outer: { value: ATMOSPHERE_OUTER }, ortho: { value: 1 } },
         transparent: true,
         depthWrite: false,
         side: three.BackSide,
@@ -262,61 +172,6 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       const camera = new three.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
       camera.position.set(0, 0, 5);
 
-      const setUniformTexture = (slot: Slot, entry: TextureEntry, texels: number): void => {
-        const previous = slot.entry;
-        slot.entry = entry;
-        slot.width = texels;
-        slot.uniform.value = entry.texture;
-        if (previous !== slot.base) letGo(slot.layer, previous.width);
-        deps.onTier?.(slot.layer, texels);
-      };
-
-      const moveTo = (slot: Slot, texels: number): void => {
-        if (disposed || texels === slot.width || slot.loading === texels) return;
-        if (texels === slot.baseWidth) {
-          setUniformTexture(slot, slot.base, texels);
-          deps.invalidate();
-          return;
-        }
-        slot.loading = texels;
-        const entry = makeTexture(slot.layer, texels);
-        entry.ready.then(
-          () => {
-            if (disposed || slot.loading !== texels) {
-              letGo(slot.layer, texels);
-              return;
-            }
-            slot.loading = undefined;
-            setUniformTexture(slot, entry, texels);
-            deps.invalidate();
-          },
-          (error: unknown) => {
-            letGo(slot.layer, texels);
-            if (slot.loading === texels) slot.loading = undefined;
-            deps.onError?.(error);
-          },
-        );
-      };
-
-      const syncTiers = (radiusCssPx: number): void => {
-        const radius = radiusCssPx * model.ratio();
-        for (const slot of slots.values()) {
-          const wanted = chooseTier(slot.layer, radius, deps.cap());
-          if (slot.timer !== undefined && wanted >= slot.width) {
-            clearTimeout(slot.timer);
-            slot.timer = undefined;
-          }
-          if (wanted > slot.width) moveTo(slot, wanted);
-          else if (wanted < slot.width && slot.timer === undefined) {
-            slot.timer = setTimeout(() => {
-              slot.timer = undefined;
-              const now = chooseTier(slot.layer, discRadius(size.width, size.height, model.view.zoom) * model.ratio(), deps.cap());
-              if (now < slot.width) moveTo(slot, now);
-            }, DOWNGRADE_AFTER_MS);
-          }
-        }
-      };
-
       return {
         scene,
         camera,
@@ -336,7 +191,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           camera.bottom = (-size.height / 2 + view.panY) / radius;
           camera.updateProjectionMatrix();
           model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...model.centre } };
-          syncTiers(radius);
+          textures.sync(radius * model.ratio());
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
           return false;
         },
@@ -344,9 +199,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           size = { width: next, height: nextHeight };
         },
         dispose() {
-          disposed = true;
-          for (const slot of slots.values()) if (slot.timer !== undefined) clearTimeout(slot.timer);
-          for (const key of held.splice(0)) deps.assets.release(key);
+          textures.dispose();
           grid.dispose();
           surface.dispose();
           cloudMaterial.dispose();

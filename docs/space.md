@@ -1,0 +1,76 @@
+# The space view
+
+`@johnmorrisdotca/chikyu-earth/space/element` registers `<chikyu-space>`: the Earth, the Moon, the Sun and the planets in their places for a date and time, with the
+Moon's phase and the Earth's sunlit side coming out of the light, not out of a table. Zoom from the Earth out to the whole solar system and back; run time forwards or
+backwards. It is an optional entry point: the line globe and the Earth from space need neither it nor its ephemeris library.
+
+![The Earth, the Moon and Venus on 2 November 2026: the Moon at last quarter](images/space-moon.png)
+
+## Install
+
+```sh
+npm install @johnmorrisdotca/chikyu-earth three @johnmorrisdotca/kazoku-ui astronomy-engine
+```
+
+`three`, `@johnmorrisdotca/kazoku-ui` and `astronomy-engine` ([MIT](https://github.com/cosinekitty/astronomy), Don Cross) are optional peers: only this entry point uses the third.
+The pictures are the Earth's and the Moon's (`dist/textures/`, 1.85 MB in all); the planets are plain colours.
+
+```html
+<script type="module">
+  import "@johnmorrisdotca/kazoku-ui/view-controls/define";
+  import "@johnmorrisdotca/chikyu-earth/space/element";
+</script>
+<div id="sky" tabindex="0"><chikyu-space time="2026-11-02T14:00Z" speed="0" texture-base="/textures/"></chikyu-space></div>
+<kazoku-view-controls for="sky" address zoom-min="0.000001" zoom-max="2.5" tilt-max="90"></kazoku-view-controls>
+<script type="module">
+  const sky = document.querySelector("chikyu-space");
+  document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (e) => sky.setView(e.detail));
+</script>
+```
+
+`zoom-min` and `zoom-max` let the shared controls zoom out far enough (the camera sits `3.4 / zoom` Earth radii from the Earth's centre: zoom 1 shows the Earth, 0.1 shows
+the Moon's neighbourhood, 0.005 the planets). `sky.zoomFor("moon" | "sun" | "inner" | "solar-system" | "earth")` gives the zoom that shows each part of the sky at the
+current scale and moment (`controller.set({ zoom }, true, "jump")` goes there). Yaw and tilt turn the camera round the Earth; it is fixed to the stars, so the Earth
+turns under it as time runs.
+
+## Two scales, and which is shown
+
+Space is mostly empty, so a picture at true scale shows two dots. The element has both and says which:
+
+| `scale` | Distances | Sizes |
+|---|---|---|
+| `compressed` (default) | Every direction is real. The Moon is drawn 10 Earth radii away (it is 60); the Sun 44 (it is 23,500); each planet is drawn in its real direction from the Sun at 44 radii times its distance in astronomical units to the power 0.45, so the Earth's own orbit is the 44 and Neptune's about 200 (it is 30 times as far) | the Sun 5, the Moon 0.9 and the planets 0.5 to 1.8 Earth radii (larger than life) |
+| `true` | Real distances and sizes, the Earth's radius for a unit | real: the planets are specks and the Sun is a dot with a glow; names mark where they are |
+
+The demo shows a line saying "Compressed scale: ..." under the controls whenever the compressed one is on.
+
+## Time
+
+`time` is an ISO date (`2026-11-02T14:00Z`) or `now`; `speed` is game seconds a second: `1` real time, `0` held still, `3600` an hour a second, `86400` a day a second, negative runs
+backwards. Setting `time` points the camera at the same place on the ground again. The Sun is where `astronomy-engine` says (apparent, with aberration), the Earth is turned
+by Greenwich sidereal time, the Moon shows its near side to the Earth (its libration, up to 8 degrees, is not drawn), and each planet is lit from the Sun, so Venus has its crescent and
+the Moon its quarter.
+
+## Properties, events, stats
+
+Attributes and properties: `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`. `setView(view)` takes
+the shared controls' yaw, tilt and zoom (pan is not used). Events: `chikyu-ready`, `chikyu-unavailable`, `chikyu-time` (while time runs). `stats` has `state`, `draws`, `contexts`, `canvas`,
+`tiers`, `distance`, `time` and `lookups`.
+
+## The budget, and how each part is tested (`e2e/space.gl.ts`, `e2e/space.soak.ts`)
+
+The same rules as the Earth from space (one WebGL context through kazoku-ui's shared renderer, a canvas inside 4096 a side and 6 MP, textures that follow the zoom and are freed, nothing drawn out of
+sight, everything disposed, a lost context recovered), and these for time:
+
+| | How | The test |
+|---|---|---|
+| Nothing at rest | `speed="0"`: no timer, no frame | 0 draw calls and 0 frame requests in 4 s |
+| Real time costs a draw a minute | the clock ticks once a minute at 1x | 0 draw calls in 6 s |
+| Fast time is capped | a draw per pixel the Earth's turn moves, 1 to 30 a second | a day a second: 29.4 draws a second, 1.00 days a second |
+| The ephemeris is looked up about once a second, not once a frame | two lookups a game-second span, interpolated between (`createTrack`) | a day a second: 2.0 lookups a second for 29 draws a second; the interpolation is within 0.1 degree of the Moon's true place (unit test) |
+| Out of sight a running clock draws nothing | the renderer pauses | 0 draws, 0 frames while scrolled away at a day a second |
+| Dispose and recover | as the Earth | removal frees our textures, buffers and programs; a lost context is restored without error |
+| Soak | `pnpm test:soak` runs `e2e/space.soak.ts` too: Earth to solar system and back, speeds, scales, toggles | heap, GPU objects and draws compared with the start (numbers in the changelog) |
+
+The ephemeris module (`@johnmorrisdotca/chikyu-earth/space`: `frameAt`, `createTrack`, `orbitPath`, `compress`, `placeAround`) imports on a server and has unit tests: the Sun's distance and declination in the
+seasons, the Moon at the new and full moon, the planets' places round the Sun, the interpolation, both scales.

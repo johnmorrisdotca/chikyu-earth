@@ -34,6 +34,7 @@
               <button type="button" data-style="line" class="on" aria-pressed="true" data-say="look_line">Line</button>
               <button type="button" data-style="thick" aria-pressed="false" data-say="look_thick">Thick</button>
               <button type="button" data-style="realistic" aria-pressed="false" data-say="look_realistic">Realistic</button>
+              <button type="button" data-style="space" aria-pressed="false">Space</button>
             </div>
             <button type="button" class="fam-button" id="grat" aria-pressed="false" data-say="graticule">Graticule</button>
             <button type="button" class="fam-button" id="locate" data-say="locate">Centre on me</button>
@@ -51,12 +52,42 @@
           <div class="fam-row" id="real-controls" hidden data-help-en="The realistic look lights the Earth by the real Sun at this moment. Choose another date and time, or go back to now." data-help-ja="リアルな見た目では、この時刻の本物の太陽で地球を照らします。ほかの日時を選ぶか、「今」に戻せます。">
             <button type="button" class="fam-button" id="clouds" aria-pressed="true" data-say="clouds">Clouds</button>
             <button type="button" class="fam-button" id="lights" aria-pressed="true" data-say="lights">City lights</button>
+          </div>
+          <div class="fam-row" id="time-controls" hidden>
             <label class="field">
               <span data-say="when">Date and time</span>
               <input type="datetime-local" id="when" class="fam-field" />
             </label>
             <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
           </div>
+          <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" hidden>
+            <span class="fam-label">Time</span>
+            <div class="group fam-seg">
+              <button type="button" data-speed="0">Paused</button>
+              <button type="button" data-speed="1" class="on">Real time</button>
+              <button type="button" data-speed="3600">1 hour a second</button>
+              <button type="button" data-speed="86400">1 day a second</button>
+              <button type="button" data-speed="-3600">Back 1 hour a second</button>
+            </div>
+          </div>
+          <div class="fam-row" id="space-controls" hidden>
+            <span class="fam-label">Scale</span>
+            <div class="group fam-seg" role="group" aria-label="Scale">
+              <button type="button" data-scale="compressed" class="on">Compressed</button>
+              <button type="button" data-scale="true">True scale</button>
+            </div>
+            <span class="fam-label">Go to</span>
+            <div class="group fam-seg" role="group" aria-label="Go to">
+              <button type="button" data-jump="earth">Earth</button>
+              <button type="button" data-jump="moon">Moon</button>
+              <button type="button" data-jump="sun">Sun</button>
+              <button type="button" data-jump="inner">Inner planets</button>
+              <button type="button" data-jump="solar-system">Solar system</button>
+            </div>
+            <button type="button" class="fam-button" id="orbits" aria-pressed="true">Orbits</button>
+            <button type="button" class="fam-button" id="labels" aria-pressed="true">Names</button>
+          </div>
+          <p class="fam-fine" id="scale-note" hidden>Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
           <p class="fam-fine" id="status" role="status" hidden></p>
         </div>
       </div>

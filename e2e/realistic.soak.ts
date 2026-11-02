@@ -32,7 +32,7 @@ async function sample(page: Page, t0: number): Promise<Sample> {
     buffers: alive(c, "Buffer"),
     programs: alive(c, "Program"),
     all: sum(c.created) - sum(c.deleted),
-    draws: c.draws,
+    draws: s.draws,
     raf: c.rafRequests,
     tierDay: s.tiers.day,
     canvasMP: s.canvas.pixels / 1e6,
@@ -115,7 +115,7 @@ test(`soak: ${MINUTES} minutes of turning, zooming, re-timing and toggling`, asy
   expect(last.programs, "programs").toBe(warm!.programs);
   expect(last.all, "GPU objects").toBe(warm!.all);
   expect(Math.max(...samples.map((s) => s.canvasMP)), "canvas megapixels").toBeLessThanOrEqual(6);
-  expect(drawsPerSecond, "draws a second").toBeLessThanOrEqual(30);
+  expect(drawsPerSecond, "frames a second").toBeLessThanOrEqual(30);
   expect((await statsOf(page)).contexts, "WebGL contexts made").toBe(1);
   expect(problems).toEqual([]);
 });

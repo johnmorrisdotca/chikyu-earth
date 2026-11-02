@@ -1,0 +1,36 @@
+# Satellite and launch data: which sources may chikyu-earth use
+
+Research only, no code (2026-11-02, for John). Question: where could a satellite view (a Starlink satellite, the ISS) and SpaceX launch data come from, and may
+each be used? Tiers follow the spx-stats rules: **green** (terms allow storing and reuse, clause and date recorded), **grey** (no terms found: a polite, capped
+backup only; never green without John's yes), **red-confirm** (read to confirm, never stored), **red** (barred). Terms were read on 2026-11-02 from the pages named.
+
+Two different things are wanted, and they are not the same problem:
+
+- **Where a satellite is now:** orbital elements for each satellite (a few numbers, called GP or TLE data), which a small SGP4 routine in the browser turns into a position for any
+  moment. The elements change every few hours; the positions are computed, never fetched. This is what a "ride with the ISS or a Starlink" camera needs.
+- **Which launches SpaceX made, and when:** facts about events, for a list or a time line.
+
+## The sources
+
+| Source | What it gives | Terms found (2026-11-02) | Limits and freshness | Tier |
+|---|---|---|---|---|
+| **CelesTrak** (celestrak.org) | Orbital elements (GP) for active satellites, the Starlink group, the ISS, stations; the satellite catalogue. Data come from the U.S. Space Force's 18th Space Defense Squadron (and, for Starlink, SpaceX's own supplemental elements). JSON, CSV, XML, TLE. | `celestrak.org/usage-policy.php` (T.S. Kelso, 2026-05-15, updated 05-22) sets how to use it, not who may reuse the data: no licence, redistribution or attribution clause is stated anywhere we found. | New data only every 2 hours; one download per update per list (a second ask gets HTTP 403); more than 50 errors (301, 403, 404) in 2 hours sends your address to the firewall; stop on any answer that is not 200; Starlink is a subset of Active, so fetch one. Long lists are enforced, so do not poll. | **Grey** (no reuse clause; polite use is clearly invited) |
+| **Space-Track** (space-track.org, U.S. Space Command) | The same government elements, the full catalogue, with history. | Approved users only, one account each; "not to transfer any data ... received from this website" except "basic SSA data", for which USSPACECOM gives blanket approval "conditioned on appropriate citation" (User Agreement). The user agreement may be changed at any time. | 30 requests a minute and 300 an hour; renewals; the agreement lets the government limit access and data amounts. | **Red** for a package that ships or shows data to other people: an account holder may not pass the data on beyond the basic-data exception, and a package cannot hold an account for its readers. Fine for John's own study, not for a library. |
+| **r/SpaceX API** (api.spacexdata.com, github.com/r-spacex/SpaceX-API) | SpaceX launches, rockets, capsules, Starlink satellites, launch pads. | The code is Apache-2.0; the data have no stated licence. The repository was **archived by its owner on 2026-06-06** (last push 2024-08-17) and `api.spacexdata.com` did not answer when tried. | None stated; no longer served or updated. | **Red** (not available), whatever its terms. Do not build on it. |
+| **SpaceX itself** (spacex.com) | Launch schedule and webcast pages. | **No public API.** The site's terms pages are script-built and could not be read here, so there is no permission to collect pages; scraping a company's site without terms is not something to build on. | - | **Red** until John reads the terms: not tested, not fetched. |
+| **Launch Library 2** (The Space Devs, ll.thespacedevs.com) | Launches of all providers, SpaceX included, with dates, rockets, pads, status; also upcoming launches. | "All the API data is available at no cost for up to **15 non-authenticated requests per hour**" (thespacedevs.com/llapi); higher rates need a paid Patreon tier. No clause on storing, redistributing or crediting the data was found. | 15 requests an hour; near real time; a cache of the answers is the only sane use. | **Grey** (free within the cap; no reuse clause): fine as a daily or on-demand source with a stored-and-credited fallback, never a default for every visitor. |
+| **Wikipedia and Wikidata** (en.wikipedia.org: "List of Falcon 9 and Falcon Heavy launches", "List of Starlink and Starshield launches"; Wikidata items for launches and satellites) | Launch dates, vehicles, outcomes, payloads, all as facts, with links to sources. | CC BY-SA 4.0 (Wikipedia, credit and share-alike) and CC0 (Wikidata). Already **green** in spx-stats. | The polite fetcher already exists in spx-stats (`spx-wikipedia-load`); updates within a day of a launch. | **Green** |
+| **N2YO** and similar tracking sites | Positions and passes through a keyed API. | Per-key limits; the terms bar redistribution of the data (not read in full). | - | **Grey** at best, and unnecessary: SGP4 on CelesTrak's elements does the same offline. |
+
+## What to recommend
+
+1. **Satellite positions: CelesTrak (grey), as a user's choice, never a default.** The package should not fetch it by itself. It should take **elements the page passes in** (an array of GP objects, the
+   format CelesTrak and Space-Track both use), run SGP4 in a worker or on a 1 Hz tick with interpolation between, and draw thousands of satellites as one instanced draw. A page that wants live Starlink
+   elements fetches them itself, once every 2 hours at most, caches them, and shows CelesTrak's name. The package ships **no orbital data** (so no licence question inside it), and the demo uses a small
+   set of elements the demo's author fetched once and credited. That meets CelesTrak's one-download-per-update rule and keeps chikyu-earth free of any fetch or store of third-party terms.
+   The SGP4 maths is public (Spacetrack Report No. 3, Vallado et al. 2006) and has an MIT implementation (satellite.js 7.1.0 on npm, MIT licence, 668 KB unpacked, with an optional WASM part; its gzipped size in a bundle is to be measured before anything is added): a new dependency, which needs John's yes first.
+2. **Launch data: Wikipedia first (green).** The launch lists give SpaceX's launches as CC BY-SA facts through the existing, polite, archived path. Use **Launch Library 2 (grey)** only to fill the next few upcoming launches, within its 15 an hour, from a stored copy refreshed by a job, never from a visitor's browser.
+3. **Not Space-Track, not the r/SpaceX API, not SpaceX's own pages.** One needs an account whose data may not be passed on, one is archived and offline, one has no public data service.
+4. **Decision for John (MODULES-86 and 87 wait on it):** (a) a satellite view that takes elements the page supplies, with the demo using one credited CelesTrak snapshot (recommended, no new tier needed, one new dependency to approve), or (b) make CelesTrak **green** by asking T.S. Kelso (ts.kelso@celestrak.org) for the reuse terms in writing: his usage page invites use and he is courteous, but today nothing in writing grants storing or showing the data. Neither (a) nor (b) lets the package fetch on its own.
+
+This page is a research note, not a decision: nothing here was fetched into a database, and no data from these sources is in the package.

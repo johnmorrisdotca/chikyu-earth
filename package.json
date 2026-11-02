@@ -1,7 +1,7 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
-  "version": "0.5.0",
-  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. The outlines, names and codes come from chizu's world-geo (Natural Earth), drawn with d3-geo. SVG, with an optional realistic Earth from space (three.js) and markers.",
+  "version": "0.6.0",
+  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. The outlines, names and codes come from chizu's world-geo (Natural Earth), drawn with d3-geo. SVG, with an optional realistic Earth from space (three.js), the Sun, Moon and planets, and markers.",
   "keywords": [
     "earth",
     "globe",
@@ -26,7 +26,12 @@
     "markers",
     "satellite-imagery",
     "webgl",
-    "three"
+    "three",
+    "astronomy",
+    "solar-system",
+    "moon",
+    "planets",
+    "ephemeris"
   ],
   "homepage": "https://johnmorrisdotca.github.io/chikyu-earth/",
   "repository": {
@@ -43,7 +48,9 @@
     "./dist/element.js",
     "./src/element.ts",
     "./dist/realistic/element.js",
-    "./src/realistic/element.ts"
+    "./src/realistic/element.ts",
+    "./dist/space/element.js",
+    "./src/space/element.ts"
   ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -73,6 +80,16 @@
       "types": "./dist/markers/index.d.ts",
       "import": "./dist/markers/index.js",
       "default": "./dist/markers/index.js"
+    },
+    "./space": {
+      "types": "./dist/space/index.d.ts",
+      "import": "./dist/space/index.js",
+      "default": "./dist/space/index.js"
+    },
+    "./space/element": {
+      "types": "./dist/space/element.d.ts",
+      "import": "./dist/space/element.js",
+      "default": "./dist/space/element.js"
     },
     "./package.json": "./package.json"
   },
@@ -109,13 +126,17 @@
   },
   "peerDependencies": {
     "@johnmorrisdotca/kazoku-ui": ">=0.9.0",
-    "three": ">=0.160.0"
+    "three": ">=0.160.0",
+    "astronomy-engine": ">=2.1.0"
   },
   "peerDependenciesMeta": {
     "@johnmorrisdotca/kazoku-ui": {
       "optional": true
     },
     "three": {
+      "optional": true
+    },
+    "astronomy-engine": {
       "optional": true
     }
   },

@@ -1,6 +1,7 @@
 # Chikyu Earth — docs
 
 - **The Earth from space** — [realistic.md](realistic.md): `<chikyu-earth-realistic>`, its pictures, the Sun, the budget and how each part of it is tested.
+- **The space view** — [space.md](space.md): `<chikyu-space>`, the Sun, the Moon and the planets, both scales, time, and the budget. [satellite-sources.md](satellite-sources.md) is the research on satellite and launch data (no code).
 - **Markers** — [markers.md](markers.md): `attachMarkers(element)`, groups, clusters, labels, events and the budget.
 - **The element** — `<chikyu-earth>` and its attributes are in the [README](../README.md#the-element).
 - **Drawing a string** — `globe(options)` returns the SVG. Options: `size`, `rotation`, `style`, `graticule`,

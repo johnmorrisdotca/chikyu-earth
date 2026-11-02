@@ -1,7 +1,7 @@
 // Which size of each picture to hold on the GPU. Small first, sharper on zoom, and never past a cap. Pure.
 
 /**
- * One of the four pictures the realistic Earth draws with: `day`, `night`, `clouds` and `water`.
+ * One of the pictures the realistic Earth and the space view draw with: `day`, `night`, `clouds`, `water` and `moon`.
  *
  * @example
  * ```ts
@@ -11,7 +11,7 @@
  * console.log(TIERS[layer]);
  * ```
  */
-export type Layer = "day" | "night" | "clouds" | "water";
+export type Layer = "day" | "night" | "clouds" | "water" | "moon";
 
 /**
  * The widths each layer is shipped in (every picture is 2:1, so the height is half).
@@ -28,6 +28,7 @@ export const TIERS: Record<Layer, readonly number[]> = {
   night: [1024, 2048],
   clouds: [1024, 2048],
   water: [1024, 2048],
+  moon: [1024, 2048],
 };
 
 /**

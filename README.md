@@ -66,6 +66,14 @@ Needs `three` and `@johnmorrisdotca/kazoku-ui` (both optional peers) and the pic
 at most 30 times a second while it does, in one WebGL context, with textures that grow as you zoom and are freed after. All of it, the budget and the tests:
 [docs/realistic.md](docs/realistic.md).
 
+## The Sun, the Moon and the planets
+
+`<chikyu-space>` (`@johnmorrisdotca/chikyu-earth/space/element`) places the Earth, the Moon, the Sun and the planets where they are at a date and time, with the Moon's phase and the Earth's day side
+from the light, a compressed scale you can read (and a true one that shows how empty it is), time that runs forwards or backwards, and a zoom from the Earth to the solar system. Positions are
+computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/space.md](docs/space.md).
+
+<p align="center"><img alt="The solar system on 2 November 2026 in the compressed scale: orbits round the Sun, the planets named" src="docs/images/space-solar.png" width="420"></p>
+
 ## Markers
 
 Mark any place at `[lon, lat]` with a label, colour or icon, in groups you can show or hide, on either look. Chikyu ships no places; yours move with the globe, fade on the far side, make room

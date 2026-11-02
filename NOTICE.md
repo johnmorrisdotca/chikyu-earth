@@ -33,6 +33,17 @@ material, so no other licence applies. This package is not endorsed by NASA and 
 The credit names are NASA's usual lines for these series; the Visible Earth pages (now at science.nasa.gov/earth/earth-observatory) did not show a credit line in the
 text read on 2026-11-02, so check them if you need the exact wording for print.
 
+## The Moon's picture
+
+`moon-*.webp` is made by `scripts/make-textures.py` from NASA's Scientific Visualization Studio item 4720, "Moon: LROC colour mosaic" (https://svs.gsfc.nasa.gov/4720/,
+`lroc_color_2k.jpg`), a natural-colour mosaic of the Lunar Reconnaissance Orbiter's wide-angle camera (Arizona State University and NASA/GSFC). NASA's page asks: "Please give credit for this
+item to: NASA's Scientific Visualization Studio" (Visualizer Ernie Wright, USRA; Scientist Noah Petro, NASA/GSFC). Same NASA terms as above.
+
+## The planets' places
+
+`<chikyu-space>` computes positions with **astronomy-engine** (https://github.com/cosinekitty/astronomy, MIT, copyright Don Cross), the page's own optional peer dependency: this package does not
+bundle or ship it. The planets are drawn as plain colours, from no picture.
+
 ## Sun position
 
 `src/realistic/sun.ts` uses the low-precision solar position formulas of NOAA's solar calculator (https://gml.noaa.gov/grad/solcalc/, after Jean Meeus,

@@ -4,7 +4,7 @@
     python3 scripts/make-textures.py [cache-dir]     # needs Python 3 and Pillow (pip install pillow)
 
 Downloads the four source images once into the cache dir (default .cache/textures, git-ignored), then writes each layer at its
-sizes: day 1024, 2048 and 4096 wide, night 1024 and 2048, clouds 1024 and 2048, water mask 1024 and 2048. Every picture is
+sizes: day 1024, 2048 and 4096 wide, night 1024 and 2048, clouds 1024 and 2048, water mask 1024 and 2048, moon 1024 and 2048. Every picture is
 2:1 equirectangular (longitude -180 to 180 across, latitude 90 down to -90). Nothing is fetched at runtime.
 """
 import os
@@ -22,6 +22,8 @@ SOURCES = {
     "night": f"{BASE}/144000/144898/BlackMarble_2016_01deg.jpg",
     # Blue Marble clouds, 2048 x 1024 (Visible Earth 57747)
     "clouds": f"{BASE}/57000/57747/cloud_combined_2048.jpg",
+    # Moon, LROC WAC colour mosaic, 2048 x 1024 (NASA Scientific Visualization Studio 4720)
+    "moon": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg",
 }
 OUT = os.path.join(os.path.dirname(__file__), "..", "textures")
 
@@ -57,12 +59,14 @@ def water_mask(day: Image.Image) -> Image.Image:
 def main() -> None:
     cache = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", ".cache", "textures")
     os.makedirs(OUT, exist_ok=True)
-    day, night, clouds = fetch("day", cache), fetch("night", cache), fetch("clouds", cache)
+    day, night, clouds, moon = fetch("day", cache), fetch("night", cache), fetch("clouds", cache), fetch("moon", cache)
     for width in (1024, 2048, 4096):
         save(day, "day", width, 82)
     for width in (1024, 2048):
         save(night, "night", width, 80)
         save(clouds.convert("L"), "clouds", width, 80)
+    for width in (1024, 2048):
+        save(moon, "moon", width, 80)
     mask = water_mask(day.resize((2048, 1024), Image.LANCZOS))
     for width in (1024, 2048):
         save(mask, "water", width, 75)

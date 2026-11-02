@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0
+
+The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, under the same performance budget as the Earth from space.
+
+- **`<chikyu-space>`** (`@johnmorrisdotca/chikyu-earth/space/element`) places the Earth, the Moon, the Sun and the planets (Mercury to Neptune) in their positions for a date and time, with the Moon's
+  phase and the Earth's sunlit side coming out of the light (the Moon is half lit on 2 November 2026, last quarter). Positions are computed in the browser by **astronomy-engine** (MIT, a new optional peer dependency;
+  nothing is fetched). Time controls: `time` (an ISO date or `now`), `speed` (1 real time, 0 held, 3600 an hour a second, 86400 a day a second, negative backwards). Zoom from the Earth out to the solar system and back with
+  the shared controls (`zoom-min`, `zoom-max`), and `zoomFor("moon" | "sun" | "inner" | "solar-system" | "earth")` for the jumps. Names beside the bodies and the planets' orbits can be switched off.
+- **Two scales, and it says which**: `compressed` (default; every direction real, the Moon 10 Earth radii away instead of 60, the Sun 44, the planets round the Sun at 44 radii times their distance in astronomical
+  units to the power 0.45, sizes enlarged) and `true` (real distances and sizes, where the planets are specks). The demo says "Compressed scale: ..." whenever it is on. [docs/space.md](docs/space.md).
+- **Budget, each line tested** (`e2e/space.gl.ts`): paused, 0 draw calls and 0 frame requests in 4 s; real time, 0 draw calls in 6 s (a draw a minute); a day a second: 1.00 days a second of game time, 29.4 draws a second,
+  and 2.0 ephemeris lookups a second (the ephemeris is looked up once a game-second span and interpolated, within 0.1 degree of the Moon's true place); nothing drawn out of sight at a day a second; the textures follow the zoom and
+  are freed after it; removal frees what it held; a lost context is recovered. SPACE_SOAK
+- **Pictures**: the Moon (NASA SVS 4720, LROC colour mosaic, 1024 and 2048 wide, 306 KB) joins the Earth's; the package's textures are 1.85 MB. The planets are plain colours.
+- **Shared parts**: the texture loader (`src/realistic/textures.ts`) and the page's one renderer (`src/realistic/shared.ts`) now serve both the Earth from space and the space view, so a page keeps one WebGL context between them. The
+  Earth's shaders look at the camera instead of assuming one, so they work from any angle.
+- **Research, no code** ([docs/satellite-sources.md](docs/satellite-sources.md), MODULES-85): CelesTrak (grey), Space-Track (red for a package), the r/SpaceX API (archived, offline), Launch Library 2 (grey), Wikipedia and Wikidata
+  (green) for launches; the recommendation is a satellite view that takes elements the page supplies. John chooses before MODULES-86 and MODULES-87 start.
+
 ## 0.5.0
 
 The Earth from space, and markers for any place on either globe, both under a hard performance budget.

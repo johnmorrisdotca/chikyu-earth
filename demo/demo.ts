@@ -7,8 +7,9 @@ import { crowd, PLACES } from "./places.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { WORDS } from "./words.js";
+import type { ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 
-type Look = "line" | "thick" | "realistic";
+type Look = "line" | "thick" | "realistic" | "space";
 
 /** A word of the page in the language it is in now (the family's chooser, set by the page), English if the chooser is not there. */
 const say = (key: string, values: Record<string, string | number> = {}): string => {
@@ -24,8 +25,16 @@ if (flat && controls && stage) {
   const address = createAddressState({ defaults: { look: "line" } });
   const status = document.querySelector<HTMLElement>("#status");
   const realControls = document.querySelector<HTMLElement>("#real-controls");
+  const timeControls = document.querySelector<HTMLElement>("#time-controls");
+  const speedControls = document.querySelector<HTMLElement>("#speed-controls");
+  const spaceControls = document.querySelector<HTMLElement>("#space-controls");
+  const scaleNote = document.querySelector<HTMLElement>("#scale-note");
+  const placesBox = document.querySelector<HTMLElement>("#places");
+  const pickedNote = document.querySelector<HTMLElement>("#picked");
+  let space: ChikyuSpace | null = null;
   const lookButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-style]")];
   const realisticButton = lookButtons.find((b) => b.dataset["style"] === "realistic");
+  const spaceButton = lookButtons.find((b) => b.dataset["style"] === "space");
   let real: ChikyuEarthRealistic | null = null;
   let markers: Markers | null = null;
   let listening: AbortController | null = null;
@@ -70,6 +79,10 @@ if (flat && controls && stage) {
       real.setView(detail, detail.final);
       return;
     }
+    if (space) {
+      space.setView(detail);
+      return;
+    }
     const now = performance.now();
     const auto = detail.reason === "auto" && now - autoDrawnAt >= AUTO_REDRAW_MS;
     if (auto) autoDrawnAt = now;
@@ -78,19 +91,72 @@ if (flat && controls && stage) {
 
   const state = (): ViewChangeDetail => Reflect.get(controls, "state") as ViewChangeDetail;
 
-  function leaveRealistic(): void {
-    if (!real) return;
-    real.remove();
+  function leave3d(): void {
+    if (!real && !space) return;
+    real?.remove();
+    space?.remove();
     real = null;
+    space = null;
+    controls!.removeAttribute("zoom-min");
+    controls!.removeAttribute("zoom-max");
+    Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
+    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote]) if (box) box.hidden = true;
+    if (placesBox) placesBox.hidden = false;
+    if (pickedNote) pickedNote.hidden = false;
+  }
+
+  async function enterSpace(): Promise<boolean> {
+    const [{ setThreeLoader }] = await Promise.all([import("../src/space/element.ts")]);
+    setThreeLoader(() => import("./three-subset.ts"));
+    if (!space) {
+      leave3d();
+      const element = document.createElement("chikyu-space") as ChikyuSpace;
+      const centre = flat!.centre;
+      element.setAttribute("center", `${centre.lon},${centre.lat}`);
+      element.setAttribute("texture-base", "textures/");
+      const scale = address.get("scale");
+      const speed = address.get("speed");
+      const startTime = address.get("time");
+      if (scale === "true") element.setAttribute("scale", "true");
+      if (speed !== null && Number.isFinite(Number(speed))) element.setAttribute("speed", speed);
+      if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
+      if (address.get("labels") === "off") element.setAttribute("labels", "off");
+      if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
+      element.addEventListener("chikyu-unavailable", () => {
+        say("The space view needs WebGL, which this browser did not give. Showing the line globe.");
+        if (spaceButton) spaceButton.disabled = true;
+        void setLook("line");
+      });
+      element.addEventListener("chikyu-time", (e) => {
+        const ms = (e as CustomEvent<{ time: number }>).detail.time;
+        if (when && document.activeElement !== when) when.value = localValue(ms);
+      });
+      markers?.detach();
+      markers = null;
+      listening?.abort();
+      flat!.hidden = true;
+      controls!.setAttribute("zoom-min", "0.000001");
+      controls!.setAttribute("zoom-max", "2.5");
+      stage!.append(element);
+      space = element;
+      Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
+      element.setView(state());
+    }
     if (realControls) realControls.hidden = true;
+    for (const box of [timeControls, speedControls, spaceControls]) if (box) box.hidden = false;
+    if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
+    if (placesBox) placesBox.hidden = true;
+    if (pickedNote) pickedNote.hidden = true;
+    return true;
   }
 
   async function enterRealistic(): Promise<boolean> {
     const [{ setThreeLoader }] = await Promise.all([import("../src/realistic/element.ts")]);
     setThreeLoader(() => import("./three-subset.ts"));
     if (!real) {
+      leave3d();
       const element = document.createElement("chikyu-earth-realistic") as ChikyuEarthRealistic;
       const centre = flat!.centre;
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
@@ -113,6 +179,8 @@ if (flat && controls && stage) {
       mountMarkers(element);
     }
     if (realControls) realControls.hidden = false;
+    if (timeControls) timeControls.hidden = false;
+    for (const box of [speedControls, spaceControls, scaleNote]) if (box) box.hidden = true;
     return true;
   }
 
@@ -120,8 +188,11 @@ if (flat && controls && stage) {
     if (next === "realistic") {
       notice(null);
       await enterRealistic();
+    } else if (next === "space") {
+      say(null);
+      await enterSpace();
     } else {
-      leaveRealistic();
+      leave3d();
       flat!.setAttribute("style", next);
       flat!.setView(state(), true);
     }
@@ -160,6 +231,7 @@ if (flat && controls && stage) {
       const centre = `${position.coords.longitude},${position.coords.latitude}`;
       flat.setAttribute("center", centre);
       real?.setAttribute("center", centre);
+      space?.setAttribute("center", centre);
     });
   });
 
@@ -179,6 +251,48 @@ if (flat && controls && stage) {
   toggle(clouds, "clouds");
   toggle(lights, "lights");
 
+  const speedButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-speed]")];
+  const markSpeed = (value: number): void => {
+    for (const b of speedButtons) b.classList.toggle("on", Number(b.dataset["speed"]) === value);
+    address.set("speed", value === 1 ? null : String(value));
+  };
+  for (const button of speedButtons) {
+    button.addEventListener("click", () => {
+      const value = Number(button.dataset["speed"]);
+      if (space) {
+        space.speed = value;
+        if (value !== 1) now?.setAttribute("aria-pressed", "false");
+      }
+      markSpeed(value);
+    });
+  }
+  const scaleButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-scale]")];
+  for (const button of scaleButtons) {
+    button.addEventListener("click", () => {
+      const value = button.dataset["scale"] === "true" ? "true" : "compressed";
+      if (space) space.scale = value;
+      for (const b of scaleButtons) b.classList.toggle("on", b === button);
+      if (scaleNote) scaleNote.hidden = value !== "compressed";
+      address.set("scale", value === "true" ? "true" : null);
+    });
+  }
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-jump]")) {
+    button.addEventListener("click", () => {
+      if (!space) return;
+      Reflect.get(controls, "controller").set({ zoom: space.zoomFor((button.dataset["jump"] ?? "earth") as SpacePreset) }, true, "jump");
+    });
+  }
+  const orbits = document.querySelector<HTMLButtonElement>("#orbits");
+  const names = document.querySelector<HTMLButtonElement>("#labels");
+  for (const [button, key] of [[orbits, "orbits"], [names, "labels"]] as const) {
+    button?.addEventListener("click", () => {
+      const on = button.getAttribute("aria-pressed") !== "true";
+      button.setAttribute("aria-pressed", String(on));
+      if (space) space[key] = on;
+      address.set(key, on ? null : "off");
+    });
+  }
+
   const localValue = (ms: number): string => {
     const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
     return d.toISOString().slice(0, 16);
@@ -188,12 +302,18 @@ if (flat && controls && stage) {
     if (!Number.isFinite(ms)) return;
     now?.setAttribute("aria-pressed", "false");
     if (real) real.time = ms;
+    if (space) space.time = ms;
     address.set("time", new Date(ms).toISOString().slice(0, 16) + "Z");
   });
   now?.addEventListener("click", () => {
     now.setAttribute("aria-pressed", "true");
     if (when) when.value = localValue(Date.now());
     if (real) real.time = "now";
+    if (space) {
+      space.time = "now";
+      space.speed = 1;
+      markSpeed(1);
+    }
     address.set("time", null);
   });
 
@@ -211,5 +331,11 @@ if (flat && controls && stage) {
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");
   const first = opened["look"];
-  if (first === "thick" || first === "realistic") void setLook(first);
+  if (opened["scale"] === "true") {
+    for (const b of scaleButtons) b.classList.toggle("on", b.dataset["scale"] === "true");
+  }
+  if (opened["speed"] !== undefined && Number.isFinite(Number(opened["speed"]))) markSpeed(Number(opened["speed"]));
+  if (opened["orbits"] === "off") orbits?.setAttribute("aria-pressed", "false");
+  if (opened["labels"] === "off") names?.setAttribute("aria-pressed", "false");
+  if (first === "thick" || first === "realistic" || first === "space") void setLook(first);
 }

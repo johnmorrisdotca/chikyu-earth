@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -27,3 +27,9 @@ const markers = await import(new URL("../dist/markers/index.js", import.meta.url
 const middle = markers.project(10, 20, { lon: 10, lat: 20, radius: 100, cx: 150, cy: 150 });
 if (Math.abs(middle.x - 150) > 1e-6 || middle.z < 0.999) throw new Error("project is off");
 console.log("markers ok");
+
+const space = await import(new URL("../dist/space/index.js", import.meta.url).href);
+const moon = space.frameAt(Date.UTC(2026, 10, 2, 12)).moon;
+const au = Math.hypot(...moon);
+if (au < 0.0023 || au > 0.0029) throw new Error("frameAt is off");
+console.log("space ok");
