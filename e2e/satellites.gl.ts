@@ -174,7 +174,8 @@ test.describe("moving", () => {
     expect(many.gameSeconds).toBeGreaterThan(45);
     expect(many.frames).toBeLessThanOrEqual(31);
     expect(many.frames).toBeGreaterThan(5);
-    expect(many.glPerFrame - base.glPerFrame, "one more draw call a frame for 6,000 satellites").toBeLessThanOrEqual(1.5);
+    // one draw call for the group (and the odd frame that draws a chosen satellite or an orbit): not 6,000
+    expect(many.glPerFrame - base.glPerFrame, "a draw call or two more a frame for 6,000 satellites").toBeLessThanOrEqual(2.5);
     // SGP4: the step is 60 game seconds = one wall second at 60x, so the 2,252 + 6,000 satellites cost about once each a second
     const all = 2252 + 6000;
     expect(many.propagations, "SGP4 calls a second").toBeLessThanOrEqual(all * 1.5);
