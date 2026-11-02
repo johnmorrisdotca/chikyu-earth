@@ -5,7 +5,7 @@ day side, its night side lit by cities, a drifting cloud layer, a sun glint on t
 day and night line where the Sun really is at the moment you give it (now, by default). It is an optional entry point: the flat
 `<chikyu-earth>` needs neither three.js nor any picture, and a page that never imports this one pays nothing for it.
 
-![The realistic Earth, Africa and Europe by day](images/realistic-desk.png)
+![The realistic Earth, Asia and the Pacific by day, with clouds and the sun glint](images/realistic-desk.png)
 
 ## Install
 
