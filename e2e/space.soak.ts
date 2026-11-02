@@ -25,6 +25,8 @@ const addMany = (page: Page): Promise<void> =>
     const sets = Array.from({ length: 6000 }, (_, i) => ({ ...base[i % base.length]!, NORAD_CAT_ID: 100_000 + i, MEAN_ANOMALY: ((base[i % base.length]!["MEAN_ANOMALY"] as number) + i * 0.37) % 360 }));
     (document.querySelector("chikyu-space") as unknown as { setSatellites(n: string, g: unknown, s?: unknown): void }).setSatellites("many", tools.createSatellites(sets), { size: 2 });
   });
+// Pressed by dispatching the click: a real click scrolls the page to the button and the globe out of sight.
+const rideButton = (page: Page, name: string) => ({ click: () => page.getByRole("group", { name: "Ride along" }).getByRole("button", { name, exact: true }).dispatchEvent("click") });
 const removeMany = (page: Page): Promise<void> => page.locator(SPACE).evaluate((el) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites("many", null));
 
 async function sample(page: Page, t0: number) {
@@ -44,6 +46,7 @@ async function rest(page: Page): Promise<void> {
     (el as unknown as { setSatellites(n: string, g: null): void; selectSatellite(r: null): void }).selectSatellite(null);
   });
   await removeMany(page);
+  await rideButton(page, "Stop").click();
   await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ zoom: 1, yaw: 0, tilt: 0 }, true, "soak"));
   await expect.poll(async () => Object.values((await statsOf(page)).tiers).every((w) => w === 1024), { timeout: 15_000 }).toBe(true);
   await settle(page, 2500);
@@ -64,6 +67,11 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   await addMany(page);
   await page.locator(SPACE).evaluate((el) => (el as unknown as { selectSatellite(r: unknown): void }).selectSatellite({ group: "stations", index: 0 }));
   await settle(page, 1200);
+  // and each way of riding along once, for the same reason
+  for (const name of ["ISS", "Moon", "Mars", "Stop"]) {
+    await rideButton(page, name).click();
+    await settle(page, 1500);
+  }
   await removeMany(page);
   // look at the planets once, so three's own empty texture is made before the baseline
   await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).click();
@@ -101,6 +109,13 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
       [n, speeds[Math.floor(random() * speeds.length)]!] as const,
     );
     if (n % 3 === 0) await ((n / 3) % 2 === 1 ? addMany(page) : removeMany(page));
+    if (n % 5 === 2) {
+      // ride along with one thing or another, from it or behind it, looking down or at the horizon, and stop now and then
+      const names = ["ISS", "Moon", "Mars", "Stop", "Tiangong", "A Starlink satellite"];
+      await rideButton(page, names[Math.floor(random() * names.length)]!).click();
+      if (n % 2 === 0) await page.getByRole("button", { name: random() < 0.5 ? "Behind it" : "From it", exact: true }).dispatchEvent("click");
+      if (n % 3 === 1) await page.getByRole("button", { name: random() < 0.5 ? "At the horizon" : "Straight down", exact: true }).dispatchEvent("click");
+    }
     if (n % 4 === 1) await page.locator(SPACE).evaluate((el, i) => (el as unknown as { selectSatellite(r: unknown): void }).selectSatellite(i % 5 === 0 ? null : { group: "starlink", index: i % 400 }), n);
     await page.waitForTimeout(400 + Math.floor(random() * 400));
     if (!warm && Date.now() >= warmAt) {

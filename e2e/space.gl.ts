@@ -189,3 +189,24 @@ test("a drag that turns the view does not choose the body it began on", async ({
   await page.mouse.up();
   await expect(page.locator("#body-info")).toBeHidden();
 });
+
+test.describe("the controls' Auto-turn", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("at the Earth's own rate it moves nothing a person can see in seconds, so it draws about once in half a minute, not thirty times a second", async ({ page }) => {
+    await open(page);
+    await page.locator("kazoku-view-controls").evaluate((el) => {
+      const controls = el as HTMLElement & { state: { turning: boolean }; play(): void };
+      if (!controls.state.turning) controls.play();
+    });
+    await settle(page, 800);
+    const before = await statsOf(page);
+    const c0 = await counts(page);
+    await page.waitForTimeout(8000);
+    const after = await statsOf(page);
+    const c1 = await counts(page);
+    console.log(`Auto-turn in the space view: ${after.draws - before.draws} draws in 8 s (the page asked for ${c1.rafCallbacks - c0.rafCallbacks} animation frames)`);
+    expect(c1.rafCallbacks - c0.rafCallbacks, "the controls themselves are turning").toBeGreaterThan(100);
+    expect(after.draws - before.draws).toBeLessThanOrEqual(1);
+  });
+});

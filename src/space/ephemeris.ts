@@ -145,7 +145,7 @@ export function blend(a: Frame, b: Frame, t: number): Frame {
  * `stepMs` ahead, so playing time at a steady rate costs one pair of lookups every `stepMs` and every draw in between is arithmetic.
  *
  * @param initialStepMs - How far ahead the second answer looks, in milliseconds.
- * @returns A track: `at(ms)` for a frame, `lookups` for how many times the ephemeris was asked, `reset()` and `setStep(ms)`.
+ * @returns A track: `at(ms)` for a frame, `lookups` for how many times the ephemeris was asked, `ends()` for the two answers it is between (undefined before the first `at`), `reset()` and `setStep(ms)`.
  *
  * @example
  * ```ts
@@ -170,6 +170,10 @@ export function createTrack(initialStepMs = 1000) {
         lookups += 2;
       }
       return blend(a, b, (ms - a.ms) / (b.ms - a.ms));
+    },
+    /** The two answers the track is between now (undefined before the first), for working out which way something is going. */
+    ends(): [Frame, Frame] | undefined {
+      return a && b ? [a, b] : undefined;
     },
     /** How many times astronomy-engine has been asked for a frame. */
     get lookups(): number {

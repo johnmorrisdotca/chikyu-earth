@@ -10,18 +10,21 @@ test.beforeEach(({ browserName }, info) => {
 test.describe.configure({ mode: "serial" });
 
 const NOON = "2026-06-21T12:00Z";
-// "satellites" is the space view with the stations and 2,000 Starlink satellites on show.
-const LOOKS = ["realistic", "space", "satellites"] as const;
-const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", satellites: "chikyu-space" } as const;
+// "satellites" is the space view with the stations and 2,000 Starlink satellites on show, "ride" the same with the camera on the ISS.
+const LOOKS = ["realistic", "space", "satellites", "ride"] as const;
+const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", satellites: "chikyu-space", ride: "chikyu-space" } as const;
 
 async function open(page: Page, look: (typeof LOOKS)[number], query = ""): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
-  const space = look === "space" || look === "satellites";
-  await page.goto(`/chikyu-earth/?look=${space ? "space" : look}&time=${look === "satellites" ? "2026-11-02T18:00Z" : NOON}&center=10,20${space ? "&speed=0" : ""}${look === "satellites" ? "&sats=stations,starlink" : ""}${query}`);
+  const space = look === "space" || look === "satellites" || look === "ride";
+  const withSatellites = look === "satellites" || look === "ride";
+  await page.goto(`/chikyu-earth/?look=${space ? "space" : look}&time=${withSatellites ? "2026-11-02T18:00Z" : NOON}&center=10,20${space ? "&speed=0" : ""}${look === "satellites" ? "&sats=stations,starlink" : ""}${look === "ride" ? "&ride=iss" : ""}${query}`);
   await page.locator(`${ELEMENT[look]}[data-state=live]`).waitFor({ timeout: 60_000 });
+  // riding at the ISS needs the Earth's largest pictures: let them arrive, and the ones that are let go be let go, before anything is asked of the page
+  if (look === "ride") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
   if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(look === "ride" ? 8000 : 800);
 }
 
 /** Make sure the controls are turning the view (a page that opens with `autoplay` already is). */
@@ -137,8 +140,10 @@ test("changing the look over and over gives back what it took: GPU objects stay 
       if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
     }
     await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
+    // the camera on the ISS and off it again, as a reader would
+    await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: round % 2 === 0 ? "ISS" : "Moon", exact: true }).dispatchEvent("click");
     // the satellites are drawn at least once (their buffers are made by the first draw) before the objects are counted
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
     const counted = await readCounts(page);
     settled.push(gpuObjects(counted));
     expect(counted.contexts, "one WebGL context for the page, however the look changes").toBe(1);

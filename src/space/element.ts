@@ -10,10 +10,11 @@ import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
+import type { RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, type ScaleMode } from "./scale.ts";
-import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type SpaceModel } from "./scene.ts";
+import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SpaceModel } from "./scene.ts";
 
-export { BODY_NAMES, type BodyName };
+export { BODY_NAMES, type BodyName, type RideTarget };
 
 let painter: BodyPainter | undefined;
 
@@ -84,6 +85,44 @@ export type SpaceState = "loading" | "live" | "unavailable" | "lost" | "idle";
  */
 export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system";
 
+/**
+ * How a ride along is done: `view` `from` (the default) puts the camera at the body looking at the Earth, `follow` keeps it a fixed distance from the body looking at it (`distanceKm`, 3000 by default,
+ * for a satellite; a planet or the Moon is kept at the distance the zoom says); `look` `down` (the default) or `horizon` is where a camera at the body points; `smooth` (the default) glides
+ * from the old camera to the new one in about a second and a bit, and jumps instead for a reader who asked for reduced motion.
+ *
+ * @example
+ * ```ts no-run
+ * import type { RideOptions } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const options: RideOptions = { view: "from", look: "horizon" };
+ * console.log(options.look);
+ * ```
+ */
+export interface RideOptions {
+  view?: "from" | "follow";
+  look?: RideLook;
+  distanceKm?: number;
+  smooth?: boolean;
+}
+
+/**
+ * What the camera is riding along with now: the body or satellite, how (`from` or `follow`), where it looks, and the distance kept for a satellite.
+ *
+ * @example
+ * ```ts no-run
+ * import type { Riding } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const describe = (ride: Riding | null): string => (ride ? `${ride.view} ${typeof ride.target === "string" ? ride.target : ride.target.group}` : "not riding");
+ * console.log(typeof describe);
+ * ```
+ */
+export interface Riding {
+  target: RideTarget;
+  view: "from" | "follow";
+  look: RideLook;
+  distanceKm: number;
+}
+
 type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
 const RAD = Math.PI / 180;
@@ -136,6 +175,8 @@ export class ChikyuSpace extends HTMLElement {
   #pool = new Map<BodyName, HTMLElement>();
   #places: Record<BodyName, BodyPlace | null> | undefined;
   #chosenLabel: HTMLElement | undefined;
+  #focusBeforeRide: BodyName = "Earth";
+  #lostTold = false;
   #names: Partial<Record<BodyName, string>> = {};
   #hint = "choose to look at it";
   #tiers: Record<string, number> = {};
@@ -179,6 +220,8 @@ export class ChikyuSpace extends HTMLElement {
       },
       onLabels: (places) => this.#placeLabels(places),
       onSelected: (place) => this.#placeChosen(place),
+      onMoving: () => this.#gate?.request(),
+      onRideLost: () => this.#rideLost(),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       ...(painter ? { painter } : {}),
     });
@@ -277,11 +320,22 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
-  /** The shared controls' camera: yaw and tilt turn the view, zoom brings the camera in (1 shows the Earth, less shows the sky round it). Pan is not used. */
-  setView(view: { yaw: number; tilt: number; zoom: number }): void {
+  /**
+   * The shared controls' camera: yaw and tilt turn the view, zoom brings the camera in (1 shows the Earth, less shows the sky round it). Pan is not used. A turn that moves nothing on the screen by half a pixel is kept
+   * for the next draw but does not cause one unless `final` is true (the default), so an Auto-turn at the Earth's own rate costs a draw every half minute, not thirty a second.
+   *
+   * @param view - The controls' yaw and tilt in degrees and zoom.
+   * @param final - False for the frames of a turn that is still going on (Auto-turn, a drag); true when it has settled.
+   */
+  setView(view: { yaw: number; tilt: number; zoom: number }, final = true): void {
     const now = this.#model.view;
     if (view.yaw === now.yaw && view.tilt === now.tilt && view.zoom === now.zoom) return;
     this.#model.view = { yaw: view.yaw, tilt: view.tilt, zoom: view.zoom };
+    const drawn = this.#model.drawnView;
+    if (drawn && !final && view.zoom === drawn.zoom) {
+      const turned = Math.max(Math.abs(view.yaw - drawn.yaw), Math.abs(view.tilt - drawn.tilt)) * RAD;
+      if (turned * (this.#model.heightPx / 2) < 0.5) return;
+    }
     this.#gate?.request();
   }
 
@@ -293,6 +347,53 @@ export class ChikyuSpace extends HTMLElement {
     if (!BODY_NAMES.includes(name)) return;
     this.#model.focus = name;
     this.#gate?.request();
+  }
+
+  // --- riding along -------------------------------------------------------------------------------------------------------------------------------
+  /**
+   * Ride along with a body or a satellite. By default the camera sits at it and looks at the Earth, with the way it is going at the top of the picture, at its real place for the moment shown, so the
+   * Earth turns and slides beneath as it moves along its orbit (an ISS view goes round about every 90 minutes). The shared controls' yaw and tilt turn the view and tip it towards the horizon, their zoom narrows it.
+   * A satellite is `{ group, index }` of a group set with `setSatellites`; it is placed exactly, one SGP4 call a frame, at any speed. Another call switches smoothly; `null` stops. The draw rate follows how
+   * fast the picture moves, never more than 30 a second (one a second for a reader who asked for reduced motion), and nothing is drawn out of sight.
+   *
+   * @param target - A body name (`"Moon"`, `"Mars"`, ...) or a satellite `{ group, index }`, or `null` to stop.
+   * @param options - `view`, `look`, `distanceKm`, `smooth` (see `RideOptions`).
+   */
+  ride(target: RideTarget | null, options: RideOptions = {}): void {
+    const model = this.#model;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wasRiding = model.ride !== null;
+    if (target === null) {
+      model.ride = null;
+      model.focus = this.#focusBeforeRide;
+    } else {
+      if (typeof target === "string" && !BODY_NAMES.includes(target)) return;
+      if (typeof target !== "string" && !model.satellites.groups.get(target.group)) return;
+      if (!wasRiding) this.#focusBeforeRide = model.focus;
+      const view = typeof target === "string" && target === "Earth" ? "follow" : (options.view ?? "from");
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: options.look ?? "down", distanceKm: Math.max(100, options.distanceKm ?? 3000) };
+      if (typeof target === "string" && view === "follow") model.focus = target;
+      else if (wasRiding) model.focus = this.#focusBeforeRide;
+    }
+    this.#lostTold = false;
+    const pose = model.pose;
+    model.transition = (options.smooth ?? true) && !reduced && pose.valid ? { start: performance.now(), duration: 1200, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+  }
+
+  /** What the camera is riding along with now, or null. */
+  get riding(): Riding | null {
+    const ride = this.#model.ride;
+    return ride ? { ...ride, target: typeof ride.target === "string" ? ride.target : { ...ride.target } } : null;
+  }
+
+  #rideLost(): void {
+    if (this.#lostTold) return;
+    this.#lostTold = true;
+    this.dispatchEvent(new CustomEvent("chikyu-ride-lost", { detail: this.riding }));
   }
 
   // --- satellites ---------------------------------------------------------------------------------------------------------------------------------
@@ -411,6 +512,9 @@ export class ChikyuSpace extends HTMLElement {
     time: number;
     lookups: number;
     satellites: SatelliteStats;
+    ride: { riding: boolean; lost: boolean; gliding: boolean };
+    /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, and its field of view in degrees. */
+    camera: { position: [number, number, number]; fov: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -424,6 +528,8 @@ export class ChikyuSpace extends HTMLElement {
       time: this.#model.time,
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
+      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
+      camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], fov: this.#model.pose.fov },
     };
   }
 
@@ -454,17 +560,18 @@ export class ChikyuSpace extends HTMLElement {
     return false;
   }
 
-  /** While time runs, draw as often as it shows: real time once a minute; faster time as often as the Earth's turn moves a pixel (1 to 30 times a second). Satellites go round in 90 minutes, so with a group on show real time draws once a second, and 1 a second is all a reader who asked for reduced motion gets. */
+  /** While time runs, draw as often as it shows: real time once a minute; faster time as often as the Earth's turn moves a pixel (1 to 30 times a second). Satellites go round in 90 minutes and a ride along moves the whole picture, so with either on show real time draws about as often as a pixel moves (once a second at least), and a reader who asked for reduced motion gets one step a second. */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
     if (!this.isConnected || this.#speed === 0) return;
     const satellites = this.#satellitesMoving();
+    const riding = this.#model.ride !== null;
     const radius = this.#model.drawn?.radiusPx ?? 200;
-    const pixelsPerSecond = (satellites ? SATELLITE_RATE : EARTH_RATE) * RAD * Math.abs(this.#speed) * radius;
+    const pixelsPerSecond = Math.max((satellites ? SATELLITE_RATE : EARTH_RATE) * RAD * Math.abs(this.#speed) * radius, this.#model.rideMotion * Math.abs(this.#speed));
     let perSecond = Math.min(30, Math.max(1, pixelsPerSecond));
-    if (satellites && matchMedia("(prefers-reduced-motion: reduce)").matches) perSecond = 1;
-    const wait = !satellites && this.#speed === 1 ? REAL_TIME_TICK_MS : 1000 / perSecond;
+    if ((satellites || riding) && matchMedia("(prefers-reduced-motion: reduce)").matches) perSecond = 1;
+    const wait = !satellites && !riding && this.#speed === 1 ? REAL_TIME_TICK_MS : 1000 / perSecond;
     this.#timer = setTimeout(this.#tick, wait);
   }
 

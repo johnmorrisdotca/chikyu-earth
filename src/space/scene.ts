@@ -9,6 +9,7 @@ import type { Layer } from "../realistic/tiers.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
+import { ridePose, type RideLook } from "./ride.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 
 type Three = ThreeParts;
@@ -47,6 +48,36 @@ export type BodyName = (typeof BODY_NAMES)[number];
 const COLORS: Record<PlanetName, string> = { Mercury: "#a79f96", Venus: "#e3c98a", Mars: "#c1593a", Jupiter: "#d2b48c", Saturn: "#e4d4a0", Uranus: "#9fd6dc", Neptune: "#4a6bd6" };
 const ORBIT_COLORS: Record<PlanetName, string> = { Mercury: "#6b655f", Venus: "#8c7c55", Mars: "#7a4034", Jupiter: "#85735a", Saturn: "#8d8567", Uranus: "#5f8a8e", Neptune: "#34499a" };
 
+/**
+ * What a camera can ride along with: the name of one of the bodies, or a satellite of a group (`{ group, index }`).
+ *
+ * @example
+ * ```ts no-run
+ * import type { RideTarget } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const targets: RideTarget[] = ["Moon", { group: "stations", index: 0 }];
+ * console.log(targets.length);
+ * ```
+ */
+export type RideTarget = BodyName | SatelliteRef;
+
+export interface RideState {
+  target: RideTarget;
+  /** `from`: the camera is at the body, looking at the Earth. `follow`: the camera keeps a fixed distance from it, looking at it. */
+  view: "from" | "follow";
+  look: RideLook;
+  /** For `follow` a satellite: how far the camera keeps, in kilometres. */
+  distanceKm: number;
+}
+
+/** The camera as the last draw left it, for the next one to start from when the ride changes. */
+export interface Pose {
+  p: Vec3;
+  q: [number, number, number, number];
+  fov: number;
+  valid: boolean;
+}
+
 export interface SpaceModel {
   /** Moment shown, milliseconds since the epoch. */
   time: number;
@@ -71,6 +102,18 @@ export interface SpaceModel {
   speed: number;
   /** The satellites shown, the one chosen, and what the last draw did with them. */
   satellites: SatelliteState;
+  /** The body or satellite the camera rides along with, or null. */
+  ride: RideState | null;
+  /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
+  rideLost: boolean;
+  /** A camera move in progress from where the last draw left it: when it began (ms of the page's clock), how long it takes. */
+  transition: { start: number; duration: number; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
+  /** The shared controls' view as the last draw used it, and how tall the view was (CSS pixels): `setView` skips a draw for a turn that moves nothing by half a pixel. */
+  drawnView: { yaw: number; tilt: number; zoom: number } | null;
+  heightPx: number;
+  pose: Pose;
+  /** Pixels a second that riding makes things move on the screen at 1x clock speed (0 when not riding): the draw rate follows it. */
+  rideMotion: number;
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   ratio(): number;
@@ -89,6 +132,13 @@ export const newSpaceModel = (): SpaceModel => ({
   drawn: null,
   lookups: 0,
   speed: 1,
+  ride: null,
+  rideLost: false,
+  transition: null,
+  drawnView: null,
+  heightPx: 420,
+  pose: { p: [0, 0, 0], q: [0, 0, 0, 1], fov: FOV, valid: false },
+  rideMotion: 0,
   satellites: newSatelliteState(),
   pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
@@ -148,6 +198,10 @@ export interface SpaceDeps {
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
+  /** Called at the end of a draw while the camera is moving from one ride to another, so the next frame is asked for (at the page's frame cap). */
+  onMoving?: () => void;
+  /** The target of the ride could not be placed at this draw. */
+  onRideLost?: () => void;
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
   /** How the Sun and the planets are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
@@ -294,11 +348,20 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       }
 
       let layer: SatelliteLayer | undefined;
+      const rideState = new Float64Array(6);
       let selectedShown = false;
       const camera = new three.PerspectiveCamera(FOV, width / Math.max(1, height), 0.05, 1000);
       const target = new three.Vector3();
+      const desiredQ = camera.quaternion.clone();
+      const fromQ = camera.quaternion.clone();
       const projected = new three.Vector3();
 
+      const placeAll = (at: Frame): Record<BodyName, Vec3> => {
+        const sunAt = placeSun(model.mode, at.sun);
+        const all = { Earth: [0, 0, 0] as Vec3, Moon: placeMoon(model.mode, at.moon), Sun: sunAt } as Record<BodyName, Vec3>;
+        for (const name of PLANETS) all[name] = placeAround(model.mode, sunAt, [at.planets[name][0] - at.sun[0], at.planets[name][1] - at.sun[1], at.planets[name][2] - at.sun[2]]);
+        return all;
+      };
       const labelFor = (v: Vec3): { x: number; y: number } | null => {
         projected.set(v[0], v[1], v[2]).project(camera);
         if (projected.z > 1 || projected.z < -1) return null;
@@ -377,27 +440,106 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           layer?.update(model.time, model.speed);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
 
-          // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says
-          const focus = model.focus;
-          const focusRadius = radiusOf(focus);
-          const spin = model.cameraSpin ?? frame.spin;
-          const lon = model.centre.lon - model.view.yaw;
-          const lat = Math.max(-90, Math.min(90, model.centre.lat + model.view.tilt));
-          const aim = direction(spin + lon, lat);
-          const distance = Math.max(1.05 * focusRadius, (FIT_DISTANCE * focusRadius) / Math.max(1e-9, model.view.zoom));
-          target.set(pos[focus][0], pos[focus][1], pos[focus][2]);
-          camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
-          camera.up.set(0, 1, 0);
-          camera.lookAt(target);
-          camera.near = Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01);
-          camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
+          // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says; or, riding along, sits at the
+          // body and looks at the Earth
+          let focus: BodyName = model.focus;
+          let focusPos: Vec3 = pos[focus];
+          let focusRadius = radiusOf(focus);
+          let rideFrom: { position: Vec3; velocity: Vec3; hidden: BodyName | null; gameSeconds: number } | null = null;
+          model.rideLost = false;
+          model.rideMotion = 0;
+          const ride = model.ride;
+          if (ride) {
+            if (typeof ride.target === "string") {
+              if (ride.view === "follow") {
+                focus = ride.target;
+                focusPos = pos[focus];
+                focusRadius = radiusOf(focus);
+              } else {
+                const ends = track.ends();
+                const was = ends ? placeAll(ends[0])[ride.target] : pos[ride.target];
+                const will = ends ? placeAll(ends[1])[ride.target] : pos[ride.target];
+                const seconds = ends ? Math.max(1e-3, (ends[1].ms - ends[0].ms) / 1000) : 1;
+                rideFrom = { position: pos[ride.target], velocity: [will[0] - was[0], will[1] - was[1], will[2] - was[2]], hidden: ride.target, gameSeconds: seconds };
+              }
+            } else if (layer?.exact(ride.target, model.time, rideState)) {
+              const place: Vec3 = [rideState[0]!, rideState[1]!, rideState[2]!];
+              if (ride.view === "follow") {
+                focusPos = place;
+                focusRadius = Math.max(1e-4, ride.distanceKm / 6371 / FIT_DISTANCE);
+              } else rideFrom = { position: place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], hidden: null, gameSeconds: 0 };
+            } else model.rideLost = true;
+          }
+          const hidden = rideFrom?.hidden ?? null;
+          moon.visible = hidden !== "Moon";
+          sunDrawing.object.visible = hidden !== "Sun";
+          for (const [name, p] of planets) p.drawing.object.visible = hidden !== name;
+
+          let fovNow = FOV;
+          let distance = 0;
+          if (rideFrom) {
+            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom });
+            camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
+            camera.up.set(pose.up[0], pose.up[1], pose.up[2]);
+            camera.lookAt(pose.position[0] + pose.forward[0], pose.position[1] + pose.forward[1], pose.position[2] + pose.forward[2]);
+            fovNow = pose.fov;
+            const away = Math.hypot(...rideFrom.position);
+            camera.near = Math.max(0.0008, Math.min(0.05, (away - 1) * 0.1));
+            camera.far = Math.max(2000, 400 + (mode === "true" ? 40 * 23_481 : 0));
+            // how fast the ground goes by under the camera, in pixels a second at 1x: the speed over the height for a satellite, the turn of the direction to the Earth for a body
+            const focal = (size.height / 2) / Math.tan((fovNow / 2) * RAD);
+            const speed = Math.hypot(...rideFrom.velocity);
+            model.rideMotion = typeof ride!.target === "string" ? ((speed / Math.max(1e-9, away)) / rideFrom.gameSeconds) * focal : (speed / Math.max(50, (away - 1) * 6371)) * focal;
+          } else {
+            const spin = model.cameraSpin ?? frame.spin;
+            const lon = model.centre.lon - model.view.yaw;
+            const lat = Math.max(-90, Math.min(90, model.centre.lat + model.view.tilt));
+            const aim = direction(spin + lon, lat);
+            distance = Math.max(1.05 * focusRadius, (FIT_DISTANCE * focusRadius) / Math.max(1e-9, model.view.zoom));
+            target.set(focusPos[0], focusPos[1], focusPos[2]);
+            camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
+            camera.up.set(0, 1, 0);
+            camera.lookAt(target);
+            camera.near = Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01);
+            camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
+            if (ride && ride.view === "follow" && typeof ride.target !== "string") {
+              const focal = (size.height / 2) / Math.tan((fovNow / 2) * RAD);
+              model.rideMotion = (Math.hypot(rideState[3]!, rideState[4]!, rideState[5]!) / Math.max(50, ride.distanceKm / Math.max(1e-9, model.view.zoom))) * focal;
+            }
+          }
+
+          // a ride that changed: glide from where the last draw left the camera (a jump for a reader who asked for reduced motion; the element does not start one then)
+          const glide = model.transition;
+          if (glide) {
+            const k = Math.min(1, (performance.now() - glide.start) / glide.duration);
+            const ease = k * k * (3 - 2 * k);
+            desiredQ.copy(camera.quaternion);
+            camera.position.set(glide.from.p[0] + (camera.position.x - glide.from.p[0]) * ease, glide.from.p[1] + (camera.position.y - glide.from.p[1]) * ease, glide.from.p[2] + (camera.position.z - glide.from.p[2]) * ease);
+            fromQ.set(glide.from.q[0], glide.from.q[1], glide.from.q[2], glide.from.q[3]);
+            camera.quaternion.copy(fromQ.slerp(desiredQ, ease));
+            fovNow = glide.from.fov + (fovNow - glide.from.fov) * ease;
+            if (k >= 1) model.transition = null;
+          }
+          camera.fov = fovNow;
           camera.aspect = size.width / Math.max(1, size.height);
           camera.updateProjectionMatrix();
           camera.updateMatrixWorld();
           sunView.value.copy(sunEarth.value).transformDirection(camera.matrixWorldInverse);
+          const pose = model.pose;
+          pose.p[0] = camera.position.x;
+          pose.p[1] = camera.position.y;
+          pose.p[2] = camera.position.z;
+          pose.q[0] = camera.quaternion.x;
+          pose.q[1] = camera.quaternion.y;
+          pose.q[2] = camera.quaternion.z;
+          pose.q[3] = camera.quaternion.w;
+          pose.fov = fovNow;
+          pose.valid = true;
+          model.drawnView = { yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom };
+          model.heightPx = size.height;
 
           // how many pixels across each body is: for the pictures the Earth and the Moon need, and for what is chosen
-          const half = Math.tan((FOV / 2) * RAD);
+          const half = Math.tan((fovNow / 2) * RAD);
           const radiusPxOf = (name: BodyName): number => {
             const d = Math.hypot(pos[name][0] - camera.position.x, pos[name][1] - camera.position.y, pos[name][2] - camera.position.z);
             const r = radiusOf(name);
@@ -412,7 +554,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (deps.onLabels && model.labels) {
             const places = {} as Record<BodyName, BodyPlace | null>;
             for (const name of BODY_NAMES) {
-              const at = labelFor(pos[name]);
+              const at = name === hidden || (rideFrom && name === "Earth") ? null : labelFor(pos[name]);
               places[name] = at ? { x: at.x, y: at.y, r: px[name] } : null;
             }
             deps.onLabels(places);
@@ -422,6 +564,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             if (at || selectedShown) deps.onSelected(at);
             selectedShown = at !== null;
           }
+          if (model.rideLost) deps.onRideLost?.();
+          if (model.transition) deps.onMoving?.();
           return false;
         },
         resize(w, h) {
