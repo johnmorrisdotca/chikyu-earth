@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0
+
+Ride along: the camera on the ISS, a Starlink satellite, the Moon or a planet, looking at the Earth.
+
+- **`element.ride(target, options)`** on `<chikyu-space>`: the camera sits at a moving body at its real place for the moment shown and looks at the Earth, with the way the body is going at the top of the picture; the Earth turns and slides beneath it as the body goes along its orbit
+  (an ISS view goes round in about 93 minutes). `target` is a body name (`"Moon"`, `"Mars"`, ...) or a satellite of a group (`{ group, index }`). Options: `view: "from"` (the default) or `"follow"` (a fixed distance from the body, looking at it; `distanceKm` for a satellite), `look: "down"` (the default) or
+  `"horizon"` (tipped forward until the horizon is a little above the middle), and `smooth`. The shared controls' tilt tips the camera further, their yaw turns it round the straight-down line, their zoom narrows the 60 degree field of view. Time is the page's clock, forwards, backwards, faster or slower.
+  `element.riding`, the `chikyu-ride` event, and `chikyu-ride-lost` (the satellite could not be placed on this date: its elements are too old; the ordinary camera comes back). A ridden satellite is placed exactly, one SGP4 call a frame, at any speed, even where its group is hidden.
+- **Switching is smooth**: another `ride` call glides the camera's place, its turn (spherical interpolation) and its field of view from where the last draw left them to the new camera over 1.2 seconds, eased; reduced motion jumps. `ride(null)` stops.
+- **`ridePose(input)`** (`@johnmorrisdotca/chikyu-earth/space`, pure, no browser): where the camera looks, for a place, a way of travel, a look and the controls' yaw, tilt and zoom. Unit-tested (looking down at the Earth's centre, the way it goes at the top, the horizon look, tilt, yaw, zoom, no way of travel).
+- **Budget, each line tested** (`e2e/ride.gl.ts`): the camera is within 1 km of satellite.js's own place for the ISS and 420 km up; at 60 times real time it goes round the Earth at the ISS's rate (301 game seconds: 19.4 degrees, 19.4 expected); riding the Moon puts it 10 Earth radii away in the compressed scale and 55 to 66 in the true one;
+  it animates continuously but at most 30 frames a second (the ISS at real time 6.5 a second, at 60 times 28.5, Mars at a day a second 28.5); paused, 0 GL draws and 0 frame requests; scrolled away or in a hidden tab, 0 GL draws at 60 times; reduced motion 1.00 frames a second at 60 times, and a jump instead of a glide; the glide from the ISS to the Moon takes 1.4 s
+  and then rests; a satellite too old for the date gives `chikyu-ride-lost`; two more rounds of six switches add no buffers, textures or vertex arrays; a lost context comes back with the ride. The freeze test has a fourth look, the space view riding the ISS (and the look-changing rounds ride the ISS and the Moon). The ten-minute soak rides every
+  way (the ISS, Tiangong, a Starlink satellite, the Moon, Mars, from it and behind it, down and at the horizon) while it adds, removes and chooses satellites: 965 steps, JS heap 14.35 to 14.51 MB after garbage collection, GPU objects 123 to 123, one WebGL context, no error.
+- **The Auto-turn of the controls no longer draws thirty times a second in the space view.** Its turn at the Earth's own rate moves nothing visible in seconds, but every frame of it asked the space view for a draw. `setView(view, final = true)` now keeps a turn that moves less than half a pixel for the next draw and does not draw for it unless `final` is true:
+  8 seconds of Auto-turn now make 0 draws (the controls ask for 480 animation frames in that time). This holds for the Earth's views, for riding, and for satellites.
+- **Demo**: a "Ride along" row in the space look (ISS, Tiangong, a Starlink satellite, Moon, Mars, Stop; View: From it or Behind it; Looking: Straight down or At the horizon), with a line saying what is ridden, in English and Japanese (the Japanese page is tested for English words left in a control). The choices are kept in the address (`ride`, `rview`, `rlook`).
+  The embed takes `ride=iss|css|starlink|Moon|Mars`, `rview=follow` and `rlook=horizon`; its test: one context, the ISS's height, nothing drawn at rest, a Moon ride at a day a second capped.
+- **Docs**: a ride-along guide in English and Japanese, a page for it (docs/ride-along.md) and every new export with TSDoc and an example, usage examples run by `pnpm test:usage` (a Vite page that rides the ISS and is opened in a browser; `ridePose` in Node), README section, screenshots. The space view has no markers (those belong to the flat and the realistic globes), so the ticket's "markers stay on the ground" has nothing to do here.
+- The names beside the bodies are not drawn for the body being ridden (the camera is inside it) and the Earth's is not drawn when riding at a body.
+
 ## 0.8.0
 
 Satellites on the space view, the space view in the embed, and the demo's space controls in Japanese.

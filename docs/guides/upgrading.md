@@ -7,6 +7,10 @@ description: What changed between versions and what to do about it. The package 
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.9: riding along, and a quieter Auto-turn
+
+New: `element.ride(...)` and `ridePose` (in `/space`). One change you may notice: `<chikyu-space>`'s `setView(view, final = true)` takes a second argument. Passing the shared controls' `detail.final` (as the demo does) lets the Auto-turn at the Earth's own rate stop drawing thirty times a second; passing nothing draws on every change, as before.
+
 ## To 0.8: satellites
 
 A new optional entry point, `/satellites` (the pure parts) and new methods on `<chikyu-space>` (`setSatellites` and friends). `satellite.js` (version 6) is an optional peer dependency: install it only for satellites. Nothing you have changes. The demo's space controls and the embed's `look=space` are new.
