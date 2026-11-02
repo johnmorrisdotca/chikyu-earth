@@ -127,6 +127,8 @@ export class ChikyuSpace extends HTMLElement {
   #last = 0;
   #pool = new Map<BodyName, HTMLElement>();
   #places: Record<BodyName, BodyPlace | null> | undefined;
+  #names: Partial<Record<BodyName, string>> = {};
+  #hint = "choose to look at it";
   #tiers: Record<string, number> = {};
 
   connectedCallback(): void {
@@ -280,6 +282,24 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
+  /** The words shown beside each body, for a page in another language (`{ Mars: "火星" }`). A body left out keeps its English name. */
+  get bodyNames(): Partial<Record<BodyName, string>> {
+    return { ...this.#names };
+  }
+  set bodyNames(value: Partial<Record<BodyName, string>>) {
+    this.#names = { ...value };
+    for (const [name, button] of this.#pool) this.#nameLabel(button, name);
+  }
+
+  /** What a screen reader hears after a body's name: "choose to look at it" by default, or the page's own words. */
+  get bodyHint(): string {
+    return this.#hint;
+  }
+  set bodyHint(value: string) {
+    this.#hint = value;
+    for (const [name, button] of this.#pool) this.#nameLabel(button, name);
+  }
+
   /** The radius and the distance from the Earth of a body now, for a page's own caption. */
   bodyInfo(name: BodyName): BodyInfo {
     const frame = this.#model.drawn?.frame ?? frameAt(this.#model.time);
@@ -363,8 +383,7 @@ export class ChikyuSpace extends HTMLElement {
         button.type = "button";
         button.className = "sp-label";
         button.dataset["body"] = name;
-        button.textContent = name;
-        button.setAttribute("aria-label", `${name}: choose to look at it`);
+        this.#nameLabel(button, name);
         box.append(button);
         this.#pool.set(name, button);
         label = button;
@@ -376,6 +395,12 @@ export class ChikyuSpace extends HTMLElement {
       if (label.hidden) label.hidden = false;
       label.style.transform = `translate(${Math.round(at.x + Math.max(4, Math.min(at.r, 40)))}px,${Math.round(at.y - 8)}px)`;
     }
+  }
+
+  #nameLabel(button: HTMLElement, name: BodyName): void {
+    const text = this.#names[name] ?? name;
+    button.textContent = text;
+    button.setAttribute("aria-label", `${text}: ${this.#hint}`);
   }
 
   // A body is chosen by pressing on it or on its name (and by Tab and Enter on the name); a drag that turns the view is not a choice.

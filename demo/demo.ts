@@ -108,6 +108,20 @@ if (flat && controls && stage) {
   }
 
   const bodyInfo = document.querySelector<HTMLElement>("#body-info");
+  let infoOf: { name: BodyName; facts: BodyInfo } | null = null;
+  const describe = (name: BodyName, facts: BodyInfo): string => {
+    const values = { name: say(`body_${name}`), radius: Math.round(facts.radiusKm).toLocaleString(say("locale")), distance: Math.round(facts.distanceKm).toLocaleString(say("locale")) };
+    return say(name === "Earth" ? "bodyFactEarth" : "bodyFact", values);
+  };
+  /** Words that live in the element, not in the page: the names beside the bodies. */
+  const speakSpace = (): void => {
+    if (!space) return;
+    space.bodyNames = Object.fromEntries(bodyButtons.map((b) => [b.dataset["body"], say(`body_${b.dataset["body"]}`)]));
+    space.bodyHint = say("chooseBody");
+    space.setAttribute("aria-label", say("spaceAria"));
+    if (infoOf && bodyInfo && !bodyInfo.hidden) bodyInfo.textContent = describe(infoOf.name, infoOf.facts);
+  };
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(speakSpace));
   const bodyButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-body]")];
   /** Look at one body: it fills the view, and a line says how big it is and how far. */
   function lookAtBody(name: BodyName, info?: BodyInfo): void {
@@ -118,7 +132,8 @@ if (flat && controls && stage) {
     const facts = info ?? space.bodyInfo(name);
     if (bodyInfo) {
       bodyInfo.hidden = false;
-      bodyInfo.textContent = `${name}: radius ${Math.round(facts.radiusKm).toLocaleString("en")} km, ${name === "Earth" ? "where we are" : `${Math.round(facts.distanceKm).toLocaleString("en")} km from the Earth`}.`;
+      infoOf = { name, facts };
+      bodyInfo.textContent = describe(name, facts);
     }
   }
   for (const button of bodyButtons) button.addEventListener("click", () => lookAtBody((button.dataset["body"] ?? "Earth") as BodyName));
@@ -141,7 +156,7 @@ if (flat && controls && stage) {
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
       element.addEventListener("chikyu-unavailable", () => {
-        notice("The space view needs WebGL, which this browser did not give. Showing the line globe.");
+        notice(say("noWebglSpace"));
         if (spaceButton) spaceButton.disabled = true;
         void setLook("line");
       });
@@ -158,6 +173,7 @@ if (flat && controls && stage) {
       controls!.setAttribute("zoom-max", "2.5");
       stage!.append(element);
       space = element;
+      speakSpace();
       Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
       element.setView(state());
     }

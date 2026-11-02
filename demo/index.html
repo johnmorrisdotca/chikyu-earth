@@ -28,13 +28,13 @@
 
       <div class="fam-panels">
         <div class="fam-panel controls">
-          <div class="fam-row" data-help-en="Draw the outlines as thin lines or thick ones, or switch to the realistic Earth from space (it needs WebGL and loads a few pictures)." data-help-ja="国の輪郭を細い線か太い線で描きます。「リアル」にすると、宇宙から見たような地球になります (WebGL が必要で、画像を少し読み込みます)。">
+          <div class="fam-row" data-help-en="Draw the outlines as thin lines or thick ones, the realistic Earth from space, or Space: the Earth, Moon, Sun and planets in their places (both need WebGL and load a few pictures)." data-help-ja="国の輪郭を細い線か太い線で描きます。「リアル」は宇宙から見たような地球、「宇宙」は地球、月、太陽、惑星の位置を表示します (どちらも WebGL が必要で、画像を少し読み込みます)。">
             <span class="fam-label" data-say="look">Look</span>
             <div class="group fam-seg" role="group" aria-label="Look" data-say-label="look">
               <button type="button" data-style="line" class="on" aria-pressed="true" data-say="look_line">Line</button>
               <button type="button" data-style="thick" aria-pressed="false" data-say="look_thick">Thick</button>
               <button type="button" data-style="realistic" aria-pressed="false" data-say="look_realistic">Realistic</button>
-              <button type="button" data-style="space" aria-pressed="false">Space</button>
+              <button type="button" data-style="space" aria-pressed="false" data-say="look_space">Space</button>
             </div>
             <button type="button" class="fam-button" id="grat" aria-pressed="false" data-say="graticule">Graticule</button>
             <button type="button" class="fam-button" id="locate" data-say="locate">Centre on me</button>
@@ -60,48 +60,48 @@
             </label>
             <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
           </div>
-          <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" hidden>
-            <span class="fam-label">Time</span>
+          <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" data-say-label="timeSpeed" hidden data-help-en="Run time faster than real time, hold it still, or run it backwards. A day a second shows the Earth turning and the Moon moving." data-help-ja="時間を実際より速く進めたり、止めたり、逆に戻したりします。「1秒で1日」にすると、地球が回り、月が動くのが見えます。">
+            <span class="fam-label" data-say="time">Time</span>
             <div class="group fam-seg">
-              <button type="button" data-speed="0">Paused</button>
-              <button type="button" data-speed="1" class="on">Real time</button>
-              <button type="button" data-speed="3600">1 hour a second</button>
-              <button type="button" data-speed="86400">1 day a second</button>
-              <button type="button" data-speed="-3600">Back 1 hour a second</button>
+              <button type="button" data-speed="0" data-say="speed_paused">Paused</button>
+              <button type="button" data-speed="1" class="on" data-say="speed_real">Real time</button>
+              <button type="button" data-speed="3600" data-say="speed_hour">1 hour a second</button>
+              <button type="button" data-speed="86400" data-say="speed_day">1 day a second</button>
+              <button type="button" data-speed="-3600" data-say="speed_back">Back 1 hour a second</button>
             </div>
           </div>
-          <div class="fam-row" id="space-controls" hidden>
-            <span class="fam-label">Scale</span>
-            <div class="group fam-seg" role="group" aria-label="Scale">
-              <button type="button" data-scale="compressed" class="on">Compressed</button>
-              <button type="button" data-scale="true">True scale</button>
+          <div class="fam-row" id="space-controls" hidden data-help-en="Compressed scale squeezes the distances so everything fits one view; True scale shows how empty space is. Go to zooms to a part of the sky; Look at points the camera at a body." data-help-ja="「縮めた縮尺」は、全体が1つの画面に入るように距離を縮めます。「本当の縮尺」では、宇宙がどれだけ空っぽかがわかります。「移動先」で空の一部にズームし、「見る天体」でカメラを天体に向けます。">
+            <span class="fam-label" data-say="scale">Scale</span>
+            <div class="group fam-seg" role="group" aria-label="Scale" data-say-label="scale">
+              <button type="button" data-scale="compressed" class="on" data-say="scale_compressed">Compressed</button>
+              <button type="button" data-scale="true" data-say="scale_true">True scale</button>
             </div>
-            <span class="fam-label">Go to</span>
-            <div class="group fam-seg" role="group" aria-label="Go to">
-              <button type="button" data-jump="earth">Earth</button>
-              <button type="button" data-jump="moon">Moon</button>
-              <button type="button" data-jump="sun">Sun</button>
-              <button type="button" data-jump="inner">Inner planets</button>
-              <button type="button" data-jump="solar-system">Solar system</button>
+            <span class="fam-label" data-say="goTo">Go to</span>
+            <div class="group fam-seg" role="group" aria-label="Go to" data-say-label="goTo">
+              <button type="button" data-jump="earth" data-say="body_Earth">Earth</button>
+              <button type="button" data-jump="moon" data-say="body_Moon">Moon</button>
+              <button type="button" data-jump="sun" data-say="body_Sun">Sun</button>
+              <button type="button" data-jump="inner" data-say="jump_inner">Inner planets</button>
+              <button type="button" data-jump="solar-system" data-say="jump_solar">Solar system</button>
             </div>
-            <span class="fam-label">Look at</span>
-            <div class="group fam-seg" role="group" aria-label="Look at">
-              <button type="button" data-body="Earth" class="on">Earth</button>
-              <button type="button" data-body="Moon">Moon</button>
-              <button type="button" data-body="Sun">Sun</button>
-              <button type="button" data-body="Mercury">Mercury</button>
-              <button type="button" data-body="Venus">Venus</button>
-              <button type="button" data-body="Mars">Mars</button>
-              <button type="button" data-body="Jupiter">Jupiter</button>
-              <button type="button" data-body="Saturn">Saturn</button>
-              <button type="button" data-body="Uranus">Uranus</button>
-              <button type="button" data-body="Neptune">Neptune</button>
+            <span class="fam-label" data-say="lookAt">Look at</span>
+            <div class="group fam-seg" role="group" aria-label="Look at" data-say-label="lookAt">
+              <button type="button" data-body="Earth" class="on" data-say="body_Earth">Earth</button>
+              <button type="button" data-body="Moon" data-say="body_Moon">Moon</button>
+              <button type="button" data-body="Sun" data-say="body_Sun">Sun</button>
+              <button type="button" data-body="Mercury" data-say="body_Mercury">Mercury</button>
+              <button type="button" data-body="Venus" data-say="body_Venus">Venus</button>
+              <button type="button" data-body="Mars" data-say="body_Mars">Mars</button>
+              <button type="button" data-body="Jupiter" data-say="body_Jupiter">Jupiter</button>
+              <button type="button" data-body="Saturn" data-say="body_Saturn">Saturn</button>
+              <button type="button" data-body="Uranus" data-say="body_Uranus">Uranus</button>
+              <button type="button" data-body="Neptune" data-say="body_Neptune">Neptune</button>
             </div>
-            <button type="button" class="fam-button" id="orbits" aria-pressed="true">Orbits</button>
-            <button type="button" class="fam-button" id="labels" aria-pressed="true">Names</button>
+            <button type="button" class="fam-button" id="orbits" aria-pressed="true" data-say="orbits">Orbits</button>
+            <button type="button" class="fam-button" id="labels" aria-pressed="true" data-say="names">Names</button>
           </div>
           <p class="fam-fine" id="body-info" role="status" hidden></p>
-          <p class="fam-fine" id="scale-note" hidden>Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
+          <p class="fam-fine" id="scale-note" hidden data-say="scaleNote">Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
           <p class="fam-fine" id="status" role="status" hidden></p>
         </div>
       </div>
