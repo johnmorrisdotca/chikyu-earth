@@ -1,7 +1,7 @@
 ---
 title: How it stays light
 section: explanation
-order: 9
+order: 10
 description: What the globe draws, when, and the limits it keeps so a page with it never works the processor for nothing.
 ---
 

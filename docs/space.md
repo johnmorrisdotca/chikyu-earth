@@ -69,6 +69,10 @@ supply bodies with surface maps and rings without this one carrying them.
 `element.setSatellites("stations", createSatellites(elements))` (from `@johnmorrisdotca/chikyu-earth/satellites`) draws satellites at the places SGP4 puts them, in one draw call a group; `showSatellites`, `selectSatellite`, `satelliteInfo`,
 the `chikyu-satellite-click` event and `stats.satellites` go with it. Elements come from your page, nothing is fetched. [satellites.md](satellites.md).
 
+## Riding along
+
+`element.ride("Moon")` or `element.ride({ group, index })` puts the camera at the body and looks at the Earth; `ride(null)` stops. [ride-along.md](ride-along.md).
+
 ## Properties, events, stats
 
 Attributes and properties: `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`; property `body`. `setView(view)` takes

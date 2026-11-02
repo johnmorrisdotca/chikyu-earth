@@ -149,6 +149,11 @@ await step("node-satellites", () => {
   if (!/^ISS \(ZARYA\): \d+ km up, 7\.\d\d km\/s$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-ride", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "ride.mjs")], { cwd: usage, encoding: "utf8" }).trim();
+  if (out !== "The horizon is 70 degrees from straight down; the camera looks -0.53, 0.00, -0.85.") throw new Error(`unexpected output: ${out}`);
+});
+
 await step("typescript", () => {
   writeFileSync(join(examples("typescript"), "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "esnext", moduleResolution: "bundler", strict: true, noEmit: true, lib: ["es2023", "dom", "dom.iterable"], types: [], skipLibCheck: true }, include: ["index.ts"] }));
   sh(process.execPath, [require.resolve("typescript/bin/tsc"), "-p", join(examples("typescript"), "tsconfig.json")], usage);
@@ -265,6 +270,26 @@ await step("satellites", async () => {
   });
 });
 
+await step("ride", async () => {
+  // Riding along with a satellite, built by Vite from the package as npm packs it: the camera must come up at the ISS's height and be moving a minute a second.
+  const out = join(usage, "out", "ride");
+  await viteBuild({ root: examples("ride"), logLevel: "warn", build: { outDir: out, emptyOutDir: true }, base: "./", configFile: false });
+  await opened(browser, async (page) => {
+    await serve(page, "https://app.test", out);
+    await page.route("https://app.test/textures/**", (route) => {
+      const file = join(installed, "dist", "textures", new URL(route.request().url()).pathname.slice("/textures/".length));
+      return existsSync(file) ? route.fulfill({ body: readFileSync(file), contentType: "image/webp" }) : route.fulfill({ status: 404, body: "" });
+    });
+    await page.goto("https://app.test/");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => {
+      const stats = Reflect.get(document.querySelector("chikyu-space")!, "stats") as { ride: { riding: boolean }; camera: { position: number[] } };
+      const height = (Math.hypot(...(stats.camera.position as [number, number, number])) - 1) * 6371;
+      return stats.ride.riding && height > 380 && height < 470;
+    }, undefined, { timeout: 20_000 });
+  });
+});
+
 await step("react-ssr", async () => {
   const script = join(usage, "ssr-react.tsx");
   writeFileSync(script, `import { renderToString } from "react-dom/server";\nimport { ChikyuEarth } from "./examples/react/ChikyuEarth";\nconst html = renderToString(<ChikyuEarth />);\nif (!html.includes("<chikyu-earth")) throw new Error("no element in " + html);\nconsole.log(html);\n`);
@@ -329,6 +354,9 @@ const FILES: Record<string, string[]> = {
   "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
+  "ride/index.html": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
+  "ride/main.ts": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
 };
 const normal = (text: string) => text.replace(/\r\n/g, "\n").trim();
 for (const [file, places] of everything ? Object.entries(FILES) : []) {

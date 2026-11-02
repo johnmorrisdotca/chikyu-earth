@@ -149,6 +149,14 @@ const elements: ElementSet[] = await (await fetch("/my-celestrak-copy.json")).js
 document.querySelector("chikyu-space")!.setSatellites("stations", createSatellites(elements), { orbits: true });
 ```
 
+## Riding along
+
+<p align="center"><img alt="Riding along with the ISS, tipped towards the horizon: the Earth's curve and atmosphere, and the orbits of the other stations in the sky" src="docs/images/space-ride-horizon.png" width="420"></p>
+
+`space.ride({ group: "stations", index: 0 }, { look: "horizon" })` puts the camera on the ISS (or a Starlink satellite, the Moon, a planet) at its real place for the moment shown and looks at the Earth, which goes by beneath
+as the body moves along its orbit; switch to another body and the camera glides there. Straight down or toward the horizon, from the body or following it at a distance, time faster or slower. It animates continuously, so it keeps to the
+same budget: at most 30 frames a second (one a second for reduced motion), nothing drawn while paused, out of sight or hidden. [Ride along guide](docs/guides/ride-along.md), [docs/ride-along.md](docs/ride-along.md).
+
 ## Markers
 
 Mark any place at `[lon, lat]` with a label, colour or icon, in groups you can show or hide, on either look. Chikyu ships no places; yours move with the globe, fade on the far side, make room
