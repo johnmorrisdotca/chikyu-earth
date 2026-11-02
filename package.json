@@ -95,6 +95,7 @@
     "test:package": "pnpm build && node scripts/check-package.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && node scripts/check-package.ts",
     "prepublishOnly": "pnpm check",
+    "family:readme": "node scripts/family-readme.mjs",
     "site": "pnpm build && node scripts/site.ts",
     "dev": "pnpm site && node scripts/dev.ts",
     "test:demo": "pnpm site && playwright test --project=chromium-desk --project=chromium-phone --project=webkit-desk --project=webkit-phone --project=chromium-gl",

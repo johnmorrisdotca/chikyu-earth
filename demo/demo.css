@@ -1,38 +1,7 @@
-:root {
-  color-scheme: dark;
-  --bg: #070b12;
-  --ink: #d7e0ec;
-  --muted: #8fa1b8;
-  --line: #22304a;
-  --accent: #6cd0ff;
-  --kazoku-ink: #d7e0ec;
-  --kazoku-surface: #101a2b;
-  --kazoku-line: #22304a;
-  --kazoku-accent: #6cd0ff;
-}
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: radial-gradient(1200px 700px at 50% -10%, #0e1830, var(--bg));
-  color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  display: block;
-  padding: 32px 16px;
-}
-
-main { width: min(560px, 100%); margin: 0 auto; text-align: center; }
-
-h1 { font-size: 28px; letter-spacing: 0.02em; margin: 0 0 4px; }
-h1 span { color: var(--muted); font-size: 20px; }
-.tag { color: var(--muted); margin: 0 0 24px; }
-
+/* Chikyu's own part of the demo: the globe's stage, the controls and the embed frame. family.css is the shared look. */
+.earth-stage { display: grid; justify-items: center; padding: 18px 12px; margin-bottom: 8px; }
 .globe-view {
-  width: 420px;
-  max-width: 100%;
-  margin: 0 auto;
+  width: min(420px, 100%);
   overflow: hidden;
   cursor: grab;
   user-select: none;
@@ -40,53 +9,19 @@ h1 span { color: var(--muted); font-size: 20px; }
   border-radius: 12px;
 }
 .globe-view[data-grab="1"] { cursor: grabbing; }
-.globe-view:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-chikyu-earth { display: block; width: 100%; aspect-ratio: 1; }
+.globe-view:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+chikyu-earth, chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
 chikyu-earth svg { display: block; width: 100%; height: 100%; }
-kazoku-view-controls { margin-top: 8px; }
+kazoku-view-controls { display: block; margin: 8px auto 14px; max-width: 560px; }
+kazoku-view-controls { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
 
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
-  align-items: center;
-  margin: 16px 0 12px;
-}
+.controls .fam-seg button, .controls .fam-button, .controls .fam-field { min-height: 48px; min-width: 48px; }
+.controls .fam-button, .controls .fam-seg button { font-family: inherit; }
+.controls input[type="datetime-local"] { border-radius: 999px; padding: 0 14px; }
+.controls .field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
+.controls #picked { min-height: 1.3em; }
 
-.group { display: inline-flex; gap: 0; }
-
-button {
-  min-height: 48px;
-  min-width: 48px;
-  padding: 0 18px;
-  font: inherit;
-  color: var(--ink);
-  background: #101a2b;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  cursor: pointer;
-}
-.group button { border-radius: 0; }
-.group button:first-child { border-radius: 999px 0 0 999px; }
-.group button:last-child { border-radius: 0 999px 999px 0; }
-button:hover { border-color: var(--accent); }
-button.on, button[aria-pressed="true"] { background: #1a2b47; border-color: var(--accent); color: #fff; }
-
-.field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
-input[type="datetime-local"] {
-  min-height: 48px;
-  padding: 0 14px;
-  font: inherit;
-  color: var(--ink);
-  background: #101a2b;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color-scheme: dark;
-}
-input[type="datetime-local"]:hover, input[type="datetime-local"]:focus-visible { border-color: var(--accent); outline: none; }
-[hidden] { display: none !important; }
-chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
-
-.note { color: var(--muted); font-size: 13px; margin-top: 8px; }
-.note a { color: var(--muted); }
+.more .fam-panel { justify-items: start; }
+.embed-frame { width: min(420px, 100%); aspect-ratio: 1; border: 1px solid var(--rule); border-radius: 12px; }
+.credits { margin-top: 20px; }
+.more .fam-actions .fam-button { color: inherit; }

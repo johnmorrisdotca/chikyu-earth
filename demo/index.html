@@ -1,19 +1,21 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chikyu Earth 地球</title>
+    <!--family:head-->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230b1424'/%3E%3Ccircle cx='50' cy='50' r='34' fill='%2313203a' stroke='%238fa1b8' stroke-width='4'/%3E%3Cpath d='M30 38Q44 30 56 40T70 52M34 60Q46 54 58 66' fill='none' stroke='%238fa1b8' stroke-width='3'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="family.css" />
     <link rel="stylesheet" href="demo.css" />
   </head>
   <body>
     <main>
-      <h1>Chikyu Earth <span>地球</span></h1>
-      <p class="tag">A line-drawn globe that turns at the Earth's own rate, centred on where you are.</p>
+      <!--family:header-->
 
-      <div id="globe" class="globe-view" tabindex="0" role="group" aria-label="Earth view">
-        <chikyu-earth id="earth" size="420" style="line"></chikyu-earth>
-      </div>
+      <section class="fam-felt earth-stage" aria-labelledby="stage-h">
+        <h2 id="stage-h" class="fam-sr" data-say="stage">Earth view</h2>
+        <div id="globe" class="globe-view" tabindex="0" role="group" aria-label="Earth view" data-say-label="stage">
+          <chikyu-earth id="earth" size="420" style="line"></chikyu-earth>
+        </div>
+      </section>
       <kazoku-view-controls
         id="view-controls"
         for="globe"
@@ -24,35 +26,62 @@
         autoplay
       ></kazoku-view-controls>
 
-      <div class="controls">
-        <div class="group" role="group" aria-label="Look">
-          <button type="button" data-style="line" class="on">Line</button>
-          <button type="button" data-style="thick">Thick</button>
-          <button type="button" data-style="realistic">Realistic</button>
+      <div class="fam-panels">
+        <div class="fam-panel controls">
+          <div class="fam-row" data-help-en="Draw the outlines as thin lines or thick ones, or switch to the realistic Earth from space (it needs WebGL and loads a few pictures)." data-help-ja="国の輪郭を細い線か太い線で描きます。「リアル」にすると、宇宙から見たような地球になります (WebGL が必要で、画像を少し読み込みます)。">
+            <span class="fam-label" data-say="look">Look</span>
+            <div class="group fam-seg" role="group" aria-label="Look" data-say-label="look">
+              <button type="button" data-style="line" class="on" aria-pressed="true" data-say="look_line">Line</button>
+              <button type="button" data-style="thick" aria-pressed="false" data-say="look_thick">Thick</button>
+              <button type="button" data-style="realistic" aria-pressed="false" data-say="look_realistic">Realistic</button>
+            </div>
+            <button type="button" class="fam-button" id="grat" aria-pressed="false" data-say="graticule">Graticule</button>
+            <button type="button" class="fam-button" id="locate" data-say="locate">Centre on me</button>
+          </div>
+
+          <div class="fam-row" id="places" role="group" aria-label="Places" data-say-label="places" data-help-en="Show or hide a group of markers. The places are examples: the package ships none of its own." data-help-ja="目印のグループを表示したり隠したりします。場所は例で、パッケージ自体は場所のデータを持っていません。">
+            <span class="fam-label" data-say="places">Places</span>
+            <div class="fam-seg">
+              <button type="button" data-group="Cities" aria-pressed="true" data-say="placesCities">Cities</button>
+              <button type="button" data-group="Stadiums" aria-pressed="true" data-say="placesStadiums">Stadiums</button>
+            </div>
+          </div>
+          <p class="fam-fine" id="picked" role="status" data-say="picked">Hover or tap a place.</p>
+
+          <div class="fam-row" id="real-controls" hidden data-help-en="The realistic look lights the Earth by the real Sun at this moment. Choose another date and time, or go back to now." data-help-ja="リアルな見た目では、この時刻の本物の太陽で地球を照らします。ほかの日時を選ぶか、「今」に戻せます。">
+            <button type="button" class="fam-button" id="clouds" aria-pressed="true" data-say="clouds">Clouds</button>
+            <button type="button" class="fam-button" id="lights" aria-pressed="true" data-say="lights">City lights</button>
+            <label class="field">
+              <span data-say="when">Date and time</span>
+              <input type="datetime-local" id="when" class="fam-field" />
+            </label>
+            <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
+          </div>
+          <p class="fam-fine" id="status" role="status" hidden></p>
         </div>
-        <button type="button" id="grat" aria-pressed="false">Graticule</button>
-        <button type="button" id="locate">Centre on me</button>
       </div>
 
-      <div class="controls" id="places" role="group" aria-label="Places">
-        <button type="button" data-group="Cities" aria-pressed="true">Cities</button>
-        <button type="button" data-group="Stadiums" aria-pressed="true">Stadiums</button>
-      </div>
-      <p class="note" id="picked" role="status">Hover or tap a place.</p>
+      <section class="more" id="embed" aria-labelledby="embed-h">
+        <h2 id="embed-h" data-say="embedTitle">Put it in your page</h2>
+        <p data-say="embedText">One iframe, no script of your own. The address chooses what it shows: look, centre, graticule, and whether it turns by itself.</p>
+        <div class="fam-panels">
+          <div class="fam-panel">
+            <iframe class="embed-frame" title="Chikyu Earth" loading="lazy" src="embed.html?look=thick&amp;center=10,30&amp;graticule=1"></iframe>
+            <pre><code>&lt;iframe src="https://johnmorrisdotca.github.io/chikyu-earth/embed.html?look=thick&amp;center=10,30"
+        title="The Earth" width="420" height="420" loading="lazy"&gt;&lt;/iframe&gt;</code></pre>
+            <div class="fam-actions">
+              <a class="fam-button" href="embed.html" data-say="embedLink">Open the embed page</a>
+              <a class="fam-button" href="docs/" data-say="docsLink">Read the docs</a>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <div class="controls" id="real-controls" hidden>
-        <button type="button" id="clouds" aria-pressed="true">Clouds</button>
-        <button type="button" id="lights" aria-pressed="true">City lights</button>
-        <label class="field">
-          <span>Date and time</span>
-          <input type="datetime-local" id="when" />
-        </label>
-        <button type="button" id="now" aria-pressed="true">Now</button>
-      </div>
-      <p class="note" id="status" role="status" hidden></p>
+      <p class="fam-fine credits"><span data-say="credits">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain). Details in</span> <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">NOTICE.md</a></p>
 
-      <p class="note">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain), in <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">NOTICE.md</a>.</p>
+      <!--family:unreviewed-->
+      <!--family:footer-->
     </main>
-    <script type="module" src="demo.js"></script>
+    <!--family:scripts demo.js-->
   </body>
 </html>

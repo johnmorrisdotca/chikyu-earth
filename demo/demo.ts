@@ -6,8 +6,15 @@ import { attachMarkers, type MarkerEventDetail, type Markers } from "../src/mark
 import { crowd, PLACES } from "./places.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
+import { WORDS } from "./words.js";
 
 type Look = "line" | "thick" | "realistic";
+
+/** A word of the page in the language it is in now (the family's chooser, set by the page), English if the chooser is not there. */
+const say = (key: string, values: Record<string, string | number> = {}): string => {
+  const chooser = Reflect.get(globalThis, "chikyuLanguage") as { word(key: string): string | undefined } | undefined;
+  return (chooser?.word(key) ?? WORDS.en[key] ?? key).replace(/\{(\w+)\}/g, (all, name: string) => String(values[name] ?? all));
+};
 
 const flat = document.querySelector<ChikyuEarth>("chikyu-earth");
 const controls = document.querySelector("kazoku-view-controls");
@@ -36,19 +43,19 @@ if (flat && controls && stage) {
     markers.addAll(crowded > 0 ? [...PLACES, ...crowd(Math.min(crowded, 20000))] : PLACES);
     for (const group of hiddenGroups) markers.hideGroup(group);
     Reflect.set(globalThis, "chikyuMarkers", markers);
-    const say = (text: string): void => {
+    const tell = (text: string): void => {
       if (picked) picked.textContent = text;
     };
-    const named = (d: MarkerEventDetail): string => d.marker?.label ?? `${d.cluster?.length ?? 0} places together`;
+    const named = (d: MarkerEventDetail): string => d.marker?.label ?? say("together", { n: d.cluster?.length ?? 0 });
     element.addEventListener("chikyu-marker-hover", (e) => {
       const d = (e as CustomEvent<MarkerEventDetail>).detail;
-      if (d.marker || d.cluster) say(`Over ${named(d)}`);
+      if (d.marker || d.cluster) tell(say("over", { name: named(d) }));
     }, { signal });
-    element.addEventListener("chikyu-marker-click", (e) => say(`Chose ${named((e as CustomEvent<MarkerEventDetail>).detail)}`), { signal });
-    element.addEventListener("chikyu-marker-focus", (e) => say(`Focus on ${named((e as CustomEvent<MarkerEventDetail>).detail)}`), { signal });
+    element.addEventListener("chikyu-marker-click", (e) => tell(say("chose", { name: named((e as CustomEvent<MarkerEventDetail>).detail) })), { signal });
+    element.addEventListener("chikyu-marker-focus", (e) => tell(say("focus", { name: named((e as CustomEvent<MarkerEventDetail>).detail) })), { signal });
   };
 
-  const say = (text: string | null): void => {
+  const notice = (text: string | null): void => {
     if (!status) return;
     status.hidden = text === null;
     status.textContent = text ?? "";
@@ -95,7 +102,7 @@ if (flat && controls && stage) {
       if (lights === "off") element.setAttribute("lights", "off");
       if (when && Number.isFinite(Date.parse(when))) element.setAttribute("time", when);
       element.addEventListener("chikyu-unavailable", () => {
-        say("The realistic look needs WebGL, which this browser did not give. Showing the line globe.");
+        notice(say("noWebgl"));
         if (realisticButton) realisticButton.disabled = true;
         void setLook("line");
       });
@@ -111,7 +118,7 @@ if (flat && controls && stage) {
 
   async function setLook(next: Look): Promise<void> {
     if (next === "realistic") {
-      say(null);
+      notice(null);
       await enterRealistic();
     } else {
       leaveRealistic();
@@ -119,7 +126,10 @@ if (flat && controls && stage) {
       flat!.setView(state(), true);
     }
     address.set("look", next);
-    for (const b of lookButtons) b.classList.toggle("on", b.dataset["style"] === next);
+    for (const b of lookButtons) {
+      b.classList.toggle("on", b.dataset["style"] === next);
+      b.setAttribute("aria-pressed", String(b.dataset["style"] === next));
+    }
   }
 
   for (const button of lookButtons) {

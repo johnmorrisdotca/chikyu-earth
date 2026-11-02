@@ -37,15 +37,20 @@ async function touch(page: Page, type: string, id: number, x: number, y: number)
   }, [type, id, x, y]);
 }
 
-test("the globe and shared control bar are in the first viewport", async ({ page }) => {
+test("the globe, and the control bar's first row, are in the first viewport", async ({ page }) => {
   await ready(page);
   expect(await page.locator("chikyu-earth path").count()).toBeGreaterThan(50);
-  const box = await page.locator(`${CONTROLS} .bar`).boundingBox();
+  const globe = await page.locator("#globe").boundingBox();
+  const bar = await page.locator(`${CONTROLS} .bar`).boundingBox();
   const viewport = page.viewportSize();
-  expect(box).not.toBeNull();
+  expect(globe).not.toBeNull();
+  expect(bar).not.toBeNull();
   expect(viewport).not.toBeNull();
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+  expect(globe!.y).toBeGreaterThanOrEqual(0);
+  expect(globe!.y + globe!.height).toBeLessThanOrEqual(viewport!.height);
+  expect(bar!.y).toBeGreaterThanOrEqual(0);
+  // The family's header takes the top of a phone; the bar's first row (the angle slider, Auto-turn) must still be on screen.
+  expect(bar!.y + 56).toBeLessThanOrEqual(viewport!.height);
 });
 
 test("the style control switches the drawing", async ({ page }) => {
