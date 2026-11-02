@@ -1,7 +1,7 @@
 // Draw the globe as one SVG string: an orthographic disc, the country outlines on it, and the rim. Pure: the same
 // arguments always give the same markup, so it works on a server, in a test, or in the element.
 import { geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
-import { COUNTRIES } from "./data/countries.ts";
+import { COUNTRIES } from "./countries.ts";
 import { cleanStyle, STYLES } from "./styles.ts";
 import { projectionView } from "./view.ts";
 import type { GlobeOptions, Rotation } from "./types.ts";

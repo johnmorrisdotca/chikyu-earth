@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/data/countries.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 

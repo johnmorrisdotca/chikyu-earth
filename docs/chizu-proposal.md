@@ -1,5 +1,8 @@
 # A chizu longitude/latitude export for chikyu-earth
 
+**Status: done.** chizu 1.6.0 shipped `@johnmorrisdotca/chizu/world-geo` (177 features, the four extra places included,
+so there was no count difference to reconcile), and chikyu-earth 0.4.0 uses it. What follows is the record from before.
+
 ## Decision
 
 Chikyu-earth keeps its own Natural Earth 1:110m GeoJSON and d3-geo for now. Chizu 1.5.1 cannot replace that data:

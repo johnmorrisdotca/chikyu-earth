@@ -9,6 +9,8 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
   <img alt="TypeScript" src="https://img.shields.io/badge/types-TypeScript-3178c6">
 </p>
 
+<p align="center"><img alt="The line-drawn globe, Europe and Africa in view, with the shared control bar" src="docs/images/line-desk.png" width="640"></p>
+
 ## One minute
 
 ```sh
@@ -24,7 +26,7 @@ npm install @johnmorrisdotca/chikyu-earth
 <div id="globe" tabindex="0">
   <chikyu-earth size="420"></chikyu-earth>
 </div>
-<kazoku-view-controls id="controls" for="globe" address tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+<kazoku-view-controls id="controls" for="globe" address controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
 
 <script type="module">
   const earth = document.querySelector("chikyu-earth");
@@ -52,7 +54,7 @@ rotate or drag controls.
 
 ```html
 <div id="globe" tabindex="0"><chikyu-earth size="420"></chikyu-earth></div>
-<kazoku-view-controls id="controls" for="globe" address tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+<kazoku-view-controls id="controls" for="globe" address controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
 ```
 
 ```ts
@@ -101,9 +103,11 @@ Front is therefore the home centre; Fit is 1x with no pan.
 
 ## The data
 
-Every country the globe draws is in the package, baked in at build time — nothing is fetched at runtime.
-The outlines are **Natural Earth**'s (public domain), and each carries its English and Japanese name and ISO
-alpha-2 code from **kuni**. `COUNTRIES` is the GeoJSON, and `countryList()` is just the names and codes:
+Every country the globe draws comes from [chizu](https://github.com/johnmorrisdotca/chizu)'s `world-geo` entry
+(`@johnmorrisdotca/chizu/world-geo`): **Natural Earth** 1:110m (public domain) as longitude and latitude, with
+chizu's English and Japanese names. Nothing is fetched at runtime. `COUNTRIES` is that GeoJSON (177 features,
+Antarctica included); `countryList()` is just the names and codes. `alpha2` is the two-letter code, `XK` for Kosovo,
+and `null` for Northern Cyprus and Somaliland, which have none:
 
 ```ts
 import { countryList } from "@johnmorrisdotca/chikyu-earth";
@@ -111,11 +115,10 @@ import { countryList } from "@johnmorrisdotca/chikyu-earth";
 countryList().find((c) => c.alpha2 === "JP"); // { name: "Japan", ja: "日本", alpha2: "JP" }
 ```
 
-To refresh the outlines after a Natural Earth or kuni update, run `pnpm countries` and commit
-`src/data/countries.ts`.
+To take newer outlines, update `@johnmorrisdotca/chizu`; there is no data file in this repository.
 
 ## The rest
 
 [CONTRIBUTING.md](CONTRIBUTING.md) · [docs/](docs/index.md) · [NOTICE.md](NOTICE.md) ·
-[CHANGELOG.md](CHANGELOG.md) · MIT licence. No third-party dependencies except d3-geo; shared view controls are
+[CHANGELOG.md](CHANGELOG.md) · MIT licence. Dependencies: d3-geo and chizu (MIT); shared view controls are
 John Morris's kazoku-ui (MIT).

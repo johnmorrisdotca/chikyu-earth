@@ -6,14 +6,15 @@ Chikyu Earth is original work by John Morris, under the MIT licence in `LICENSE`
 
 The country boundaries are **Natural Earth** (https://www.naturalearthdata.com), the 1:110m
 admin-0 countries, which Natural Earth places in the **public domain**
-(https://www.naturalearthdata.com/about/terms-of-use/). They reach this package through
-**world-atlas** (https://github.com/topojson/world-atlas), converted from TopoJSON to GeoJSON at
-build time by `scripts/make-countries.ts` and baked into the package, so nothing is fetched at runtime.
+(https://www.naturalearthdata.com/about/terms-of-use/). They reach this package through **chizu**
+(https://github.com/johnmorrisdotca/chizu, MIT, by John Morris), whose `world-geo` entry
+(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime.
 
 ## Country names and codes
 
-Each outline's English name, Japanese name and ISO 3166-1 alpha-2 code come from **kuni**
-(https://github.com/johnmorrisdotca/kuni), also by John Morris, matched by ISO numeric id at build time.
+Each outline's English name, Japanese name and country code come from **chizu**'s `world-geo`, whose names are
+**kuni**'s (https://github.com/johnmorrisdotca/kuni, also by John Morris) and Unicode CLDR's
+(https://www.unicode.org/license.txt) and Wikidata's (CC0). chizu's own NOTICE.md has the terms.
 
 ## Projection
 

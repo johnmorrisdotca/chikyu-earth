@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0
+
+The outlines now come from chizu, the controls from kazoku-ui 0.9, and the release from the family's shared workflow.
+
+- **chizu's `world-geo` replaces our own country data.** `src/data/countries.ts` (154 KB) and `scripts/make-countries.ts`
+  are gone; `src/countries.ts` is a small adapter over `@johnmorrisdotca/chizu/world-geo` (chizu 1.6.0, now a
+  dependency). The globe looks the same and `COUNTRIES` and `countryList()` keep their shape. Region count: 177 before,
+  177 now, so nothing to reconcile (chizu's 173 `WORLD` countries plus Antarctica, the French Southern Lands, Northern
+  Cyprus and Somaliland). One difference: Kosovo's `alpha2` is `XK` (it was `null`); Northern Cyprus and Somaliland
+  stay `null`. The demo bundle goes from 207 KB to 220 KB (chizu's data is a little larger than ours was, and
+  kazoku-ui 0.9's bar has more in it). `world-atlas`, `topojson-client` and kuni are no longer dev dependencies.
+- **kazoku-ui ^0.9.0** (was ^0.1.0, which could not move past 0.1.x), now a dev dependency: the package itself
+  imports none of it, only the demo does. The demo asks for `controls="advanced"` so Front, 2x, tilt and the pan pad
+  stay on the bar; the idle turn stops when the view is out of sight (kazoku-ui 0.7.1) and the demo's one redraw a
+  second stays.
+- **Shared release workflow.** `release.yml` now calls kazoku-ui's `reusable-release.yml` (pinned to v0.9.0) with
+  `pnpm check && pnpm test:package`; the npm trusted-publisher entry still names `release.yml`.
+- **AGENTS.md** is kazoku-ui's template (Facts: board `modules`, area `chikyu-earth`, ports 8200 to 8299).
+- A still picture of the demo opens the README; `pnpm screenshots` makes the pictures in `docs/images/`.
+
 ## 0.3.0
 
 The shared-controls integration is documented and covered in every motion preference, and the future of the

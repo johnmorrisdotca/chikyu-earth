@@ -20,3 +20,14 @@ test("kuni names and codes come through", () => {
 test("countryList returns one entry per outline", () => {
   assert.equal(countryList().length, COUNTRIES.features.length);
 });
+
+test("chizu's world-geo gives 177 outlines, Antarctica included", () => {
+  assert.equal(COUNTRIES.features.length, 177);
+  assert.ok(COUNTRIES.features.some((f) => f.properties.name === "Antarctica"));
+});
+
+test("the three places with no ISO code keep a null code, Kosovo has XK", () => {
+  const nulls = COUNTRIES.features.filter((f) => f.properties.alpha2 === null).map((f) => f.properties.name);
+  assert.deepEqual(nulls.sort(), ["N. Cyprus", "Somaliland"].sort());
+  assert.ok(COUNTRIES.features.some((f) => f.properties.alpha2 === "XK"));
+});

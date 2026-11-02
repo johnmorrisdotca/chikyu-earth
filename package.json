@@ -1,7 +1,7 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
-  "version": "0.3.0",
-  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. Country codes and names come from kuni; the outlines are Natural Earth's, drawn with d3-geo. SVG, no canvas.",
+  "version": "0.4.0",
+  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. The outlines, names and codes come from chizu's world-geo (Natural Earth), drawn with d3-geo. SVG, no canvas.",
   "keywords": [
     "earth",
     "globe",
@@ -68,7 +68,6 @@
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "countries": "node scripts/make-countries.ts",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.check.json && tsc -p tsconfig.tools.json && tsc -p tsconfig.demo.json",
     "test": "node --test test/*.test.ts",
@@ -77,27 +76,24 @@
     "prepublishOnly": "pnpm check",
     "site": "pnpm build && node scripts/site.ts",
     "dev": "pnpm site && node scripts/dev.ts",
-    "test:demo": "pnpm site && playwright test"
+    "test:demo": "pnpm site && playwright test",
+    "screenshots": "pnpm site && node scripts/screenshots.ts"
   },
   "dependencies": {
+    "@johnmorrisdotca/chizu": "^1.6.0",
     "d3-geo": "^3.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@johnmorrisdotca/kazoku-ui": "^0.9.0",
-    "@johnmorrisdotca/kuni": "1.4.0",
     "@playwright/test": "1.64.0",
     "@types/d3-geo": "^3.1.0",
     "@types/geojson": "^7946.0.14",
     "@types/node": "^24.0.0",
-    "@types/topojson-client": "^3.1.5",
-    "@types/topojson-specification": "^1.0.5",
     "esbuild": "^0.25.0",
     "eslint": "^9.0.0",
-    "topojson-client": "^3.1.0",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.0.0",
-    "world-atlas": "^2.0.2"
+    "typescript-eslint": "^8.0.0"
   },
   "publishConfig": {
     "access": "public"

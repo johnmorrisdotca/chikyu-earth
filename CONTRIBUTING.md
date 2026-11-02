@@ -16,11 +16,11 @@ Work in a git worktree from `origin/main`, one branch per change. Ports: this pa
 ## The rules
 
 - **Draw from public facts, and cite them.** The outlines are Natural Earth's (public domain); names and codes
-  are kuni's. Never copy or trace a map's artwork, a flag, an emblem or any official mark. No SPX, SPXN or SPXIS
+  are chizu's world-geo (kuni's, by way of chizu). Never copy or trace a map's artwork, a flag, an emblem or any official mark. No SPX, SPXN or SPXIS
   marks in this MIT package.
-- **Bake data at build time.** Nothing is fetched at runtime. Change the data through `scripts/make-countries.ts`
-  (`pnpm countries`), never by editing `src/data/countries.ts` by hand, and say what a change adds in bytes.
-- **Keep it small.** d3-geo and kazoku-ui are the runtime dependencies; do not add another without saying so.
+- **No data of our own, nothing fetched.** The outlines are `@johnmorrisdotca/chizu/world-geo`, shaped by
+  `src/countries.ts`. Take newer outlines by updating chizu, and say what a change adds in bytes.
+- **Keep it small.** d3-geo and chizu are the runtime dependencies (kazoku-ui is for the demo); do not add another without saying so.
   `globe()` and the rotation helpers stay pure: the same arguments give the same markup.
 - **Two looks, one geometry.** A style changes lines and fills, never the shape. Add a look in `src/styles.ts`.
 - **A fact with no source is left out, never guessed.**
