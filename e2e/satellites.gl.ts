@@ -84,7 +84,7 @@ test("the ISS is drawn over the ground it is over: the view centred under it sho
   await open(page, "", "stations");
   await page.locator(SPACE).evaluate((el, centre) => Reflect.set(el, "centre", centre), under);
   // dispatched, not clicked: a real click scrolls the page to the button, and a globe scrolled out of sight is (rightly) not drawn
-  await page.getByRole("button", { name: "ISS", exact: true }).dispatchEvent("click");
+  await page.getByRole("group", { name: "Find" }).getByRole("button", { name: "ISS", exact: true }).dispatchEvent("click");
   await expect.poll(() => page.locator(SPACE).evaluate((el) => el.shadowRoot!.querySelector(".sp-sat:not([hidden])") !== null), { timeout: 20_000 }).toBe(true);
   await settle(page, 400);
   const place = await page.locator(SPACE).evaluate((el) => {
