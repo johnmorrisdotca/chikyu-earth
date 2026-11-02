@@ -112,6 +112,28 @@
               <button type="button" data-sat-find="48274" data-say="sat_css">Tiangong</button>
             </div>
           </div>
+          <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
+            <span class="fam-label" data-say="rideAlong">Ride along</span>
+            <div class="group fam-seg" role="group" aria-label="Ride along" data-say-label="rideAlong">
+              <button type="button" data-ride="iss" data-say="sat_iss">ISS</button>
+              <button type="button" data-ride="css" data-say="sat_css">Tiangong</button>
+              <button type="button" data-ride="starlink" data-say="ride_starlink">A Starlink satellite</button>
+              <button type="button" data-ride="Moon" data-say="body_Moon">Moon</button>
+              <button type="button" data-ride="Mars" data-say="body_Mars">Mars</button>
+              <button type="button" data-ride="none" data-say="ride_none">Stop</button>
+            </div>
+            <span class="fam-label" data-say="rideView">View</span>
+            <div class="group fam-seg" role="group" aria-label="View" data-say-label="rideView">
+              <button type="button" data-ride-view="from" class="on" data-say="ride_from">From it</button>
+              <button type="button" data-ride-view="follow" data-say="ride_follow">Behind it</button>
+            </div>
+            <span class="fam-label" data-say="rideLook">Looking</span>
+            <div class="group fam-seg" role="group" aria-label="Looking" data-say-label="rideLook">
+              <button type="button" data-ride-look="down" class="on" data-say="look_down">Straight down</button>
+              <button type="button" data-ride-look="horizon" data-say="look_horizon">At the horizon</button>
+            </div>
+          </div>
+          <p class="fam-fine" id="ride-info" role="status" hidden></p>
           <p class="fam-fine" id="sat-info" role="status" hidden></p>
           <p class="fam-fine" id="sat-note" hidden></p>
           <p class="fam-fine" id="body-info" role="status" hidden></p>

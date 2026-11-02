@@ -24,6 +24,8 @@ try {
     ["space-true", { width: 1280, height: 900 }, "?look=space&time=2026-11-02T14:00Z&speed=0&center=-100,40&scale=true", "Moon"],
     ["space-sat-starlink", { width: 1280, height: 900 }, "?look=space&time=2026-11-02T14:00Z&speed=0&center=-100,40&sats=stations,starlink"],
     ["space-sat-iss", { width: 1280, height: 900 }, "?look=space&time=2026-11-03T07:30Z&speed=0&center=25,-31&sats=stations&sat=25544"],
+    ["space-ride-down", { width: 1280, height: 900 }, "?look=space&time=2026-11-03T07:30Z&speed=0&center=25,-31&sats=stations&ride=iss"],
+    ["space-ride-horizon", { width: 1280, height: 900 }, "?look=space&time=2026-11-03T07:30Z&speed=0&center=25,-31&sats=stations&ride=iss&rlook=horizon"],
     ["realistic-night", { width: 1280, height: 900 }, "?look=realistic&time=2026-11-02T22:00Z&center=10,45&zoom=1.4"],
   ];
   for (const [name, viewport, query, jump] of shots) {
@@ -36,9 +38,10 @@ try {
     } else if (name.startsWith("space")) {
       await page.waitForSelector("chikyu-space[data-state=live]");
       if (jump) await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: jump, exact: true }).click();
+      if (name.startsWith("space-ride")) await page.waitForFunction(() => (Reflect.get(document.querySelector("chikyu-space")!, "stats") as { ride: { riding: boolean; gliding: boolean } }).ride.riding, undefined, { timeout: 20000 });
       if (name === "space-sat-iss") await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ zoom: 1.7 }, true, "shot"));
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(name.startsWith("space-ride") ? 9000 : 2500);
     } else if (name === "markers-flat") {
       await page.waitForSelector("chikyu-earth svg");
     } else {

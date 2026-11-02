@@ -103,3 +103,32 @@ test("the space embed can show the stations and the Starlink satellites, in one 
   expect(after.draws, "nothing drawn at rest").toBe(before.draws);
   expect(after.rafRequests).toBe(before.rafRequests);
 });
+
+test("the space embed can ride along with the ISS: one context, the camera at the ISS's height, and at rest nothing is drawn; a Moon ride at a day a second is capped", async ({ page }) => {
+  await page.addInitScript(COUNT_SCRIPT);
+  await page.goto(`/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&ride=iss&rlook=horizon`);
+  await page.locator(`${SPACE}[data-state=live]`).waitFor();
+  await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
+  // the pictures the ISS's view needs arrive, and the ones it lets go are let go
+  await settle(page, 9000);
+  const stats = (await page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats"))) as { contexts: number; canvas: { pixels: number }; camera: { position: number[] } };
+  expect(stats.contexts).toBe(1);
+  expect(stats.canvas.pixels).toBeLessThanOrEqual(6_000_000);
+  const height = (Math.hypot(...(stats.camera.position as [number, number, number])) - 1) * 6371;
+  expect(height).toBeGreaterThan(380);
+  expect(height).toBeLessThan(470);
+  expect(await page.locator("button, input, select").count()).toBe(0);
+  const before = await counts(page);
+  await page.waitForTimeout(3000);
+  expect((await counts(page)).draws, "nothing drawn at rest").toBe(before.draws);
+
+  await page.goto(`/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&ride=Moon&speed=86400`);
+  await page.locator(`${SPACE}[data-state=live]`).waitFor();
+  await settle(page, 1000);
+  const s0 = await spaceStats(page);
+  const t0 = Date.now();
+  await page.waitForTimeout(4000);
+  const perSecond = ((await spaceStats(page)).draws - s0.draws) / ((Date.now() - t0) / 1000);
+  console.log(`Moon ride in the embed at a day a second: ${perSecond.toFixed(1)} draws a second`);
+  expect(perSecond).toBeLessThanOrEqual(31);
+});

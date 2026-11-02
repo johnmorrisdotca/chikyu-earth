@@ -33,9 +33,12 @@ test("in Japanese no control or name of the space view is left in English", asyn
   await page.getByRole("group", { name: "見る天体" }).getByRole("button", { name: "木星", exact: true }).click();
   await expect(page.locator("#body-info")).toContainText("木星: 半径 69,911 km");
   await expect(page.locator("#body-info")).not.toContainText("radius");
-  await page.getByRole("button", { name: "ISS", exact: true }).click();
+  await page.getByRole("group", { name: "探す" }).getByRole("button", { name: "ISS", exact: true }).click();
   await expect(page.locator("#sat-info")).toContainText("高さ");
   await expect(page.locator("#sat-info")).not.toContainText("up,");
+  await page.getByRole("group", { name: "いっしょに動く" }).getByRole("button", { name: "月", exact: true }).click();
+  await expect(page.locator("#ride-info")).toContainText("といっしょに移動中");
+  await expect(page.locator("#ride-info")).not.toContainText("Riding");
   await page.getByRole("button", { name: "本当の縮尺" }).click();
   await expect(page.locator("#scale-note")).toBeHidden();
 });

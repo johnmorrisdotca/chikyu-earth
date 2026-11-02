@@ -9,6 +9,7 @@ import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { WORDS } from "./words.js";
 import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
+import type { RideTarget } from "../src/space/element.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
 
@@ -33,6 +34,8 @@ if (flat && controls && stage) {
   const satControls = document.querySelector<HTMLElement>("#sat-controls");
   const satInfo = document.querySelector<HTMLElement>("#sat-info");
   const satNote = document.querySelector<HTMLElement>("#sat-note");
+  const rideControls = document.querySelector<HTMLElement>("#ride-controls");
+  const rideInfo = document.querySelector<HTMLElement>("#ride-info");
   const placesBox = document.querySelector<HTMLElement>("#places");
   const pickedNote = document.querySelector<HTMLElement>("#picked");
   let space: ChikyuSpace | null = null;
@@ -84,7 +87,7 @@ if (flat && controls && stage) {
       return;
     }
     if (space) {
-      space.setView(detail);
+      space.setView(detail, detail.final);
       return;
     }
     const now = performance.now();
@@ -106,7 +109,7 @@ if (flat && controls && stage) {
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
-    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote]) if (box) box.hidden = true;
+    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
     if (placesBox) placesBox.hidden = false;
     if (pickedNote) pickedNote.hidden = false;
   }
@@ -124,12 +127,14 @@ if (flat && controls && stage) {
     space.bodyHint = say("chooseBody");
     space.setAttribute("aria-label", say("spaceAria"));
     if (infoOf && bodyInfo && !bodyInfo.hidden) bodyInfo.textContent = describe(infoOf.name, infoOf.facts);
+    speakRide();
   };
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(speakSpace));
   const bodyButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-body]")];
   /** Look at one body: it fills the view, and a line says how big it is and how far. */
   function lookAtBody(name: BodyName, info?: BodyInfo): void {
     if (!space) return;
+    if (space.riding) stopRide(true);
     space.body = name;
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "body");
     for (const b of bodyButtons) b.classList.toggle("on", b.dataset["body"] === name);
@@ -226,6 +231,90 @@ if (flat && controls && stage) {
     });
   }
 
+  // --- riding along: the camera at the ISS, a Starlink satellite, the Moon or Mars, looking at the Earth -------------------------------------------------------------------------
+  let rideKey = address.get("ride");
+  let rideView: "from" | "follow" = address.get("rview") === "follow" ? "follow" : "from";
+  let rideLook: "down" | "horizon" = address.get("rlook") === "horizon" ? "horizon" : "down";
+  const rideButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride]")];
+  const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-view]")];
+  const lookButtonsRide = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-look]")];
+  const markRide = (): void => {
+    for (const b of rideButtons) b.classList.toggle("on", b.dataset["ride"] === (rideKey ?? "none"));
+    for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
+    for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
+  };
+  const setRideZoom = (riding: boolean): void => {
+    // riding at a body, the zoom narrows the view (a little either way); otherwise it is the distance from the Earth
+    controls!.setAttribute("zoom-min", riding && rideView === "from" ? "0.5" : "0.000001");
+    controls!.setAttribute("zoom-max", riding && rideView === "from" ? "6" : "2.5");
+    Reflect.get(controls!, "controller").set({ zoom: 1, yaw: 0, tilt: 0 }, true, "ride");
+  };
+  const speakRide = (): void => {
+    const riding = space?.riding;
+    if (!rideInfo) return;
+    if (!riding || !space) {
+      rideInfo.hidden = true;
+      return;
+    }
+    rideInfo.hidden = false;
+    if (typeof riding.target === "string") {
+      const facts = space.bodyInfo(riding.target);
+      rideInfo.textContent = say(riding.view === "follow" ? "rideFollowBody" : "rideBody", { name: say(`body_${riding.target}`), distance: Math.round(facts.distanceKm).toLocaleString(say("locale")) });
+    } else {
+      const info = space.satelliteInfo(riding.target);
+      rideInfo.textContent = info ? say("rideSat", { name: info.name, altitude: Math.round(info.altitudeKm), period: Math.round(info.periodMinutes) }) : say("rideLost");
+    }
+  };
+  function stopRide(keepZoom = false): void {
+    rideKey = null;
+    space?.ride(null);
+    if (!keepZoom && space) setRideZoom(false);
+    markRide();
+    speakRide();
+    for (const key of ["ride", "rview", "rlook"]) address.set(key, null);
+  }
+  async function startRide(key: string): Promise<void> {
+    if (!space) return;
+    if (key === "none") {
+      stopRide();
+      return;
+    }
+    let target: RideTarget;
+    if (key === "Moon" || key === "Mars") target = key;
+    else {
+      const group = key === "starlink" ? "starlink" : "stations";
+      await toggleGroup(group, true);
+      const sets = (await groupOf(group)).sets;
+      const index = key === "starlink" ? 0 : sets.findIndex((set) => set.NORAD_CAT_ID === (key === "iss" ? 25544 : 48274));
+      if (index < 0 || !space) return;
+      target = { group, index };
+    }
+    rideKey = key;
+    markRide();
+    if (typeof target !== "string") showSatellite(null);
+    setRideZoom(true);
+    space.ride(target, { view: rideView, look: rideLook });
+    speakRide();
+    address.set("ride", key);
+    address.set("rview", rideView === "follow" ? "follow" : null);
+    address.set("rlook", rideLook === "horizon" ? "horizon" : null);
+  }
+  for (const button of rideButtons) button.addEventListener("click", () => void startRide(button.dataset["ride"] ?? "none"));
+  for (const button of viewButtons) {
+    button.addEventListener("click", () => {
+      rideView = button.dataset["rideView"] === "follow" ? "follow" : "from";
+      if (rideKey) void startRide(rideKey);
+      else markRide();
+    });
+  }
+  for (const button of lookButtonsRide) {
+    button.addEventListener("click", () => {
+      rideLook = button.dataset["rideLook"] === "horizon" ? "horizon" : "down";
+      if (rideKey) void startRide(rideKey);
+      else markRide();
+    });
+  }
+
   async function enterSpace(): Promise<boolean> {
     const [{ setThreeLoader }] = await Promise.all([import("../src/space/element.ts")]);
     setThreeLoader(() => import("./three-subset.ts"));
@@ -251,6 +340,10 @@ if (flat && controls && stage) {
       element.addEventListener("chikyu-body-click", (e) => lookAtBody((e as CustomEvent<BodyInfo>).detail.name, (e as CustomEvent<BodyInfo>).detail));
       element.addEventListener("chikyu-satellite-click", (e) => showSatellite((e as CustomEvent<SatelliteRef>).detail));
       element.addEventListener("chikyu-satellites-unavailable", () => notice(say("satLoadFail")));
+      element.addEventListener("chikyu-ride-lost", () => {
+        notice(say("rideLost"));
+        stopRide();
+      });
       element.addEventListener("chikyu-time", (e) => {
         const ms = (e as CustomEvent<{ time: number }>).detail.time;
         if (when && document.activeElement !== when) when.value = localValue(ms);
@@ -268,10 +361,12 @@ if (flat && controls && stage) {
       element.setView(state());
     }
     if (realControls) realControls.hidden = true;
-    for (const box of [timeControls, speedControls, spaceControls, satControls]) if (box) box.hidden = false;
+    for (const box of [timeControls, speedControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
+    markRide();
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
     for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
     for (const name of shownGroups) void toggleGroup(name as keyof typeof GROUP_STYLE, true);
+    if (rideKey) void startRide(rideKey);
     const wanted = Number(address.get("sat"));
     if (wanted) {
       void toggleGroup("stations", true).then(async () => {

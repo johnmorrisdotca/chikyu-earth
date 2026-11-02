@@ -8,6 +8,7 @@
 //   &speed=0                     the space look's clock: game seconds a second (0 holds still, the default; 1 is real time, 86400 a day a second)
 //   &scale=true &orbits=off &labels=1   the space look's scale, the planets' paths, and the names beside the bodies
 //   &satellites=stations,starlink &sat=25544   the space look's satellites (this site's own snapshot of CelesTrak's lists) and the one marked
+//   &ride=iss|css|starlink|Moon|Mars &rview=follow &rlook=horizon   the space look's camera riding along with a body, from it (default) or behind it, looking down (default) or at the horizon
 //   &body=Mars &zoom=moon        the space look's camera: the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system)
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
 import { createViewController, type ViewState } from "@johnmorrisdotca/kazoku-ui/view-controls";
@@ -98,7 +99,10 @@ if (look === "space") {
   if (preset) startZoom = element.zoomFor(preset as SpacePreset);
   element.setView({ yaw: 0, tilt: 0, zoom: startZoom });
 
-  const groups = (query.get("satellites") ?? "").split(",").filter((name) => name === "stations" || name === "starlink");
+  const listed = (query.get("satellites") ?? "").split(",").filter((name): name is "stations" | "starlink" => name === "stations" || name === "starlink");
+  const rideKey = query.get("ride");
+  const rideGroup: "stations" | "starlink" | null = rideKey === "starlink" ? "starlink" : rideKey === "iss" || rideKey === "css" ? "stations" : null;
+  const groups = rideGroup && !listed.includes(rideGroup) ? [...listed, rideGroup] : listed;
   if (groups.length > 0) {
     try {
       const [{ createSatellites }, data] = await Promise.all([
@@ -110,14 +114,24 @@ if (look === "space") {
       for (const name of groups) {
         const sets = data.groups[name]!.map((row) => Object.fromEntries(data.fields.map((field, index) => [field, row[index]])) as never);
         element.setSatellites(name, createSatellites(sets), name === "stations" ? { color: "#ffd54f", size: 6, orbits: true } : { color: "#7fd4ff", size: 2.5 });
+        // a group that is only there to be ridden along with is not drawn
+        if (!listed.includes(name)) element.showSatellites(name, false);
       }
       const chosen = Number(query.get("sat"));
-      const index = chosen ? (element.satelliteGroups.some((one) => one.name === "stations") ? groupIndex(data, chosen) : -1) : -1;
-      if (index >= 0) element.selectSatellite({ group: "stations", index });
+      const index = chosen ? groupIndex(data, chosen) : -1;
+      if (index >= 0 && groups.includes("stations")) element.selectSatellite({ group: "stations", index });
+      if (rideKey === "iss" || rideKey === "css") {
+        const at = groupIndex(data, rideKey === "iss" ? 25544 : 48274);
+        if (at >= 0) element.ride({ group: "stations", index: at }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
+      } else if (rideKey === "starlink") element.ride({ group: "starlink", index: 0 }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
     } catch {
       // No elements: the planets are still shown.
     }
   }
+}
+
+if (look === "space" && (query.get("ride") === "Moon" || query.get("ride") === "Mars")) {
+  space?.ride(query.get("ride") as BodyName, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
 }
 
 if (interactive) {
@@ -128,11 +142,11 @@ if (interactive) {
   const view = createViewController({
     speed: 0.004178,
     zoom: space ? startZoom : "fit",
-    limits: space ? { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 } : { tiltMax: 90 },
+    limits: space ? (query.get("ride") && query.get("rview") !== "follow" ? { tiltMax: 90, zoomMin: 0.5, zoomMax: 6 } : { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 }) : { tiltMax: 90 },
     onChange(state: ViewState, info) {
       const detail: GlobeView = { yaw: state.yaw, tilt: state.tilt, zoom: state.zoom, panX: state.panX, panY: state.panY };
       if (space) {
-        space.setView(detail);
+        space.setView(detail, info.final);
         return;
       }
       if (real) {
