@@ -8,5 +8,16 @@ export type { CountryProps, GeoPoint, GlobeOptions, GlobeView, Rotation } from "
 import { COUNTRIES } from "./countries.ts";
 import type { CountryProps } from "./types.ts";
 
-/** Every country the globe draws, with its kuni name and code. */
+/**
+ * Every country the globe draws, with its kuni name and code.
+ *
+ * @returns A list of English name, Japanese name (or `null`) and two-letter code (or `null` where a place has none).
+ *
+ * @example
+ * ```ts
+ * import { countryList } from "@johnmorrisdotca/chikyu-earth";
+ *
+ * console.log(countryList().find((country) => country.alpha2 === "JP"));
+ * ```
+ */
 export const countryList = (): CountryProps[] => COUNTRIES.features.map((f) => f.properties);

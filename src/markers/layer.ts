@@ -6,6 +6,17 @@ import { canvasRatio, projectAll, type Pose } from "./project.ts";
 import type { GroupInfo, MarkerEventDetail, MarkerIcon, MarkerInput } from "./types.ts";
 
 /** The view as an element tells it: the Pose, the size of the box it is drawn in, and the CSS transform its picture carries between redraws. */
+/**
+ * The pose of an element's last drawing, with the size of its box and the CSS transform its picture carries between redraws.
+ *
+ * @example
+ * ```ts
+ * import type { OverlayPose } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const where = (pose: OverlayPose): string => `${pose.lon}, ${pose.lat} at ${pose.width} x ${pose.height}`;
+ * console.log(typeof where);
+ * ```
+ */
 export interface OverlayPose extends Pose {
   width: number;
   height: number;
@@ -13,12 +24,35 @@ export interface OverlayPose extends Pose {
 }
 
 /** What an element gives the markers: a box laid over its view, the pose of its last draw, and a way to hear the next ones. */
+/**
+ * What an element gives the markers (`element.overlay`): a box laid over its view, the pose of its last draw, and a way to hear the next ones.
+ *
+ * @example
+ * ```ts
+ * import type { OverlayHost } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const follow = (host: OverlayHost): (() => void) => host.subscribe((pose) => console.log(pose.radius));
+ * console.log(typeof follow);
+ * ```
+ */
 export interface OverlayHost {
   readonly overlayRoot: HTMLElement;
   readonly pose: OverlayPose | null;
   subscribe(listener: (pose: OverlayPose) => void): () => void;
 }
 
+/**
+ * What {@link attachMarkers} may be asked: the most labels, how close markers gather, and the default colour.
+ *
+ * @example
+ * ```ts
+ * import { attachMarkers, type MarkerOptions, type OverlayElement } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const options: MarkerOptions = { maxLabels: 12, clusterRadius: 20, color: "#ffcc00" };
+ * const mark = (element: OverlayElement) => attachMarkers(element, options);
+ * console.log(typeof mark);
+ * ```
+ */
 export interface MarkerOptions {
   /** Most labels shown at once (24). */
   maxLabels?: number;
@@ -28,6 +62,20 @@ export interface MarkerOptions {
   color?: string;
 }
 
+/**
+ * The markers on one globe: add, update, remove and find them, show or hide groups, and detach.
+ *
+ * @example
+ * ```ts no-run
+ * import { attachMarkers, type Markers, type OverlayElement } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * declare const earth: OverlayElement;
+ * const markers: Markers = attachMarkers(earth);
+ * markers.add({ id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo", group: "Cities" });
+ * markers.toggleGroup("Cities");
+ * console.log(markers.size, markers.groups());
+ * ```
+ */
 export interface Markers {
   add(marker: MarkerInput): void;
   addAll(markers: readonly MarkerInput[]): void;
@@ -47,6 +95,17 @@ export interface Markers {
   detach(): void;
 }
 
+/**
+ * An element markers can be put on: any HTML element with an `overlay` (both `<chikyu-earth>` and `<chikyu-earth-realistic>` have one).
+ *
+ * @example
+ * ```ts
+ * import { attachMarkers, type OverlayElement } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const mark = (element: OverlayElement) => attachMarkers(element);
+ * console.log(typeof mark);
+ * ```
+ */
 export type OverlayElement = HTMLElement & { overlay: OverlayHost };
 
 const CSS = `
@@ -69,6 +128,27 @@ interface Compiled {
   sizes: Float32Array;
 }
 
+/**
+ * Put markers on a globe, for either look: dots drawn in one pass on a canvas, a few labels as real buttons, crowded places gathered into clusters. It draws only when the view or the markers change, reads no layout to place a label, and shows no more labels than `maxLabels`. Hovering, clicking or focusing a marker fires `chikyu-marker-hover`, `chikyu-marker-click` and `chikyu-marker-focus` on the element, with your own `data` in the detail.
+ *
+ * @param element - `<chikyu-earth>` or `<chikyu-earth-realistic>`.
+ * @param options - The most labels, the cluster radius and the default colour; each has a default.
+ * @returns The markers: `add`, `addAll`, `update`, `remove`, `clear`, `groups`, `toggleGroup`, `stats` and `detach`.
+ *
+ * @example
+ * ```ts no-run
+ * import "@johnmorrisdotca/chikyu-earth/element";
+ * import { attachMarkers, type MarkerEventDetail } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const earth = document.querySelector("chikyu-earth")!;
+ * const markers = attachMarkers(earth);
+ * markers.add({ id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo", group: "Cities" });
+ * earth.addEventListener("chikyu-marker-click", (event) => {
+ *   const { marker } = (event as CustomEvent<MarkerEventDetail>).detail;
+ *   console.log("chose", marker?.label);
+ * });
+ * ```
+ */
 export function attachMarkers(element: OverlayElement, options: MarkerOptions = {}): Markers {
   const host = element.overlay;
   const root = host.overlayRoot;

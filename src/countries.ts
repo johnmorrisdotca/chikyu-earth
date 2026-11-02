@@ -4,6 +4,17 @@ import WORLD_GEO from "@johnmorrisdotca/chizu/world-geo";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { CountryProps } from "./types.ts";
 
+/**
+ * Every country the globe draws, as GeoJSON in longitude and latitude (177 features, Antarctica included), each with its English name, its Japanese name and its two-letter code.
+ *
+ * @example
+ * ```ts
+ * import { COUNTRIES } from "@johnmorrisdotca/chikyu-earth";
+ *
+ * const japan = COUNTRIES.features.find((feature) => feature.properties.alpha2 === "JP");
+ * console.log(japan?.properties.name, japan?.properties.ja, COUNTRIES.features.length);
+ * ```
+ */
 export const COUNTRIES: FeatureCollection<Geometry, CountryProps> = {
   type: "FeatureCollection",
   features: WORLD_GEO.features.map((feature) => ({

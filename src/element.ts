@@ -14,6 +14,19 @@ const readCentre = (value: string | null): GeoPoint | null => {
   return { lon, lat };
 };
 
+/**
+ * The `<chikyu-earth>` custom element: the line globe, drawn as SVG in its shadow root. Importing this entry point registers the tag once. It takes the attributes `size` (pixels, 320 by default), `center` (`"lon,lat"`; wins over the browser's location), `style` (`line` or `thick`) and `graticule`, and a shared view controller's camera through `setView`.
+ *
+ * @example
+ * ```ts no-run
+ * import type { ChikyuEarth } from "@johnmorrisdotca/chikyu-earth/element";
+ *
+ * const earth = document.createElement("chikyu-earth") as ChikyuEarth;
+ * earth.setAttribute("center", "139.7,35.7");
+ * earth.setAttribute("style", "thick");
+ * document.body.append(earth);
+ * ```
+ */
 export class ChikyuEarth extends HTMLElement {
   static observedAttributes = ["center", "style", "size", "graticule"];
 

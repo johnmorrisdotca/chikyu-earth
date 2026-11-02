@@ -9,6 +9,17 @@ import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
 
 type Three = ThreeParts;
+/**
+ * What the realistic Earth is doing: `loading` its pictures, `live` and drawing, `unavailable` (no WebGL), `lost` (the GPU took the context; it comes back by itself) or `idle` (another view has the page's one WebGL context; press or focus it to take it).
+ *
+ * @example
+ * ```ts no-run
+ * import type { ChikyuEarthRealistic, EarthState } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+ *
+ * const describe = (earth: ChikyuEarthRealistic): EarthState => earth.stats.state;
+ * console.log(typeof describe);
+ * ```
+ */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
 const RAD = Math.PI / 180;
@@ -23,7 +34,19 @@ const readCentre = (value: string | null): GeoPoint | null => {
   return { lon: lon!, lat: lat! };
 };
 
-/** A `time` attribute: "now" (or none) follows the clock, else an ISO date such as 2026-06-21T12:00:00Z. */
+/**
+ * A `time` attribute: "now" (or none) follows the clock, else an ISO date such as 2026-06-21T12:00:00Z.
+ *
+ * @param value - The attribute's text, or `null` when it is not there.
+ * @returns The moment in milliseconds since the Unix epoch, or `"now"` when the value is empty, `"now"` or not a date.
+ *
+ * @example
+ * ```ts no-run
+ * import { readTime } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+ *
+ * console.log(readTime("2026-06-21T12:00:00Z"), readTime(null), readTime("tomorrow"));
+ * ```
+ */
 export const readTime = (value: string | null): number | "now" => {
   if (value === null || value === "" || value === "now") return "now";
   const ms = Date.parse(value);
@@ -37,7 +60,18 @@ const contextListeners = new Set<(state: "lost" | "restored" | "unavailable") =>
 let elements = 0;
 let releaseTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Where three.js comes from, if a page wants to hand it over itself (before the first element connects). */
+/**
+ * Where three.js comes from, if a page wants to hand it over itself (before the first element connects). A page that hands over a module re-exporting only the parts the Earth uses ships a few hundred kilobytes of three.js instead of all of it.
+ *
+ * @param load - Returns the parts of three.js the Earth uses, as a promise.
+ *
+ * @example
+ * ```ts no-run
+ * import { setThreeLoader } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+ *
+ * setThreeLoader(() => import("three"));
+ * ```
+ */
 export function setThreeLoader(load: () => Promise<Three>): void {
   loader = load;
 }
@@ -52,6 +86,20 @@ function renderer(): SharedRenderer<Three> {
   return shared;
 }
 
+/**
+ * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds` and `texture-base` (where the pictures are served from), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
+ *
+ * @example
+ * ```ts no-run
+ * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+ *
+ * const earth = document.createElement("chikyu-earth-realistic") as ChikyuEarthRealistic;
+ * earth.setAttribute("center", "139.7,35.7");
+ * earth.setAttribute("time", "2026-06-21T03:00Z");
+ * earth.setAttribute("texture-base", "/textures/");
+ * document.body.append(earth);
+ * ```
+ */
 export class ChikyuEarthRealistic extends HTMLElement {
   static observedAttributes = ["center", "time", "clouds", "lights", "live-seconds"];
 

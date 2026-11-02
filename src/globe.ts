@@ -8,7 +8,21 @@ import type { GlobeOptions, Rotation } from "./types.ts";
 
 const SPHERE = { type: "Sphere" } as const;
 
-/** The globe as an SVG string, turned to `rotation` and drawn in `style`, `size` pixels square. */
+/**
+ * The globe as an SVG string, turned to `rotation` and drawn in `style`, `size` pixels square. It is pure: the same options always give the same markup, so it runs on a server, in a test or in a build step with no DOM.
+ *
+ * @param options - Size, turn, look and graticule; every one has a default, so `globe()` draws a 320-pixel globe facing the Greenwich meridian.
+ * @returns One `<svg>` element as text, with the country outlines as paths.
+ *
+ * @example
+ * ```ts
+ * import { globe } from "@johnmorrisdotca/chikyu-earth";
+ *
+ * const svg = globe({ size: 240, rotation: [-139.7, -35.7], style: "line" });
+ * console.log(svg.slice(0, 60));
+ * console.log(svg.length > 10_000);
+ * ```
+ */
 export function globe(options: GlobeOptions = {}): string {
   const size = options.size ?? 320;
   const style = STYLES[cleanStyle(options.style)];

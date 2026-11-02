@@ -6,10 +6,35 @@ import type { GeoPoint } from "../types.ts";
 const RAD = Math.PI / 180;
 const wrap360 = (degrees: number): number => ((degrees % 360) + 360) % 360;
 
-/** Julian day number of a moment in milliseconds since the Unix epoch. */
+/**
+ * Julian day number of a moment in milliseconds since the Unix epoch.
+ *
+ * @param ms - Milliseconds since 1970-01-01T00:00Z.
+ * @returns The Julian day number, with its fraction.
+ *
+ * @example
+ * ```ts
+ * import { julianDay } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * console.log(julianDay(Date.UTC(2000, 0, 1, 12)));
+ * ```
+ */
 export const julianDay = (ms: number): number => ms / 86_400_000 + 2_440_587.5;
 
-/** The point where the Sun is at the zenith at `ms`: latitude is the Sun's declination, longitude runs west at 15 degrees an hour. */
+/**
+ * The point where the Sun is at the zenith at `ms`: latitude is the Sun's declination, longitude runs west at 15 degrees an hour.
+ *
+ * @param ms - A moment, in milliseconds since the Unix epoch.
+ * @returns The longitude and latitude on the Earth that has the Sun straight overhead.
+ *
+ * @example
+ * ```ts
+ * import { subsolarPoint } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const sun = subsolarPoint(Date.UTC(2026, 5, 21, 12));
+ * console.log(sun.lat.toFixed(1), sun.lon.toFixed(1));
+ * ```
+ */
 export function subsolarPoint(ms: number): GeoPoint {
   const jd = julianDay(ms);
   const t = (jd - 2_451_545) / 36_525;
@@ -29,7 +54,19 @@ export function subsolarPoint(ms: number): GeoPoint {
   return { lon, lat: declination / RAD };
 }
 
-/** A point on the globe as a unit vector: +z is longitude 0 on the equator, +x east, +y north. */
+/**
+ * A point on the globe as a unit vector: +z is longitude 0 on the equator, +x east, +y north.
+ *
+ * @param point - A longitude and latitude in degrees.
+ * @returns The `[x, y, z]` of the point on a sphere of radius 1.
+ *
+ * @example
+ * ```ts
+ * import { unitVector } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * console.log(unitVector({ lon: 90, lat: 0 }).map((n) => Math.round(n)));
+ * ```
+ */
 export function unitVector(point: GeoPoint): [number, number, number] {
   const lon = point.lon * RAD;
   const lat = point.lat * RAD;

@@ -9,15 +9,34 @@ import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, CLOUD_FRAG, SURFACE_FRAG, SURFACE_VER
 import { subsolarPoint, unitVector } from "./sun.ts";
 import { chooseTier, TIERS, type Layer } from "./tiers.ts";
 
-/** The parts of three.js the Earth uses. A page can hand over a module that re-exports just these (see `setThreeLoader`) instead of all of three. */
-export type ThreeParts = Pick<
-  typeof THREE,
-  | "Texture" | "BufferGeometry" | "BufferAttribute" | "ShaderMaterial" | "Group" | "Mesh" | "Scene" | "OrthographicCamera" | "Vector3" | "WebGLRenderer"
-  | "RepeatWrapping" | "ClampToEdgeWrapping" | "LinearMipmapLinearFilter" | "LinearFilter" | "BackSide"
->;
+/**
+ * The parts of three.js the Earth uses. A page can hand over a module that re-exports just these (see `setThreeLoader`) instead of all of three.
+ *
+ * @example
+ * ```ts no-run
+ * import type { ThreeParts } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const load = (): Promise<ThreeParts> => import("three");
+ * console.log(typeof load);
+ * ```
+ */
+export type ThreeParts = {
+  [Name in
+    | "Texture" | "BufferGeometry" | "BufferAttribute" | "ShaderMaterial" | "Group" | "Mesh" | "Scene" | "OrthographicCamera" | "Vector3" | "WebGLRenderer"
+    | "RepeatWrapping" | "ClampToEdgeWrapping" | "LinearMipmapLinearFilter" | "LinearFilter" | "BackSide"]: (typeof THREE)[Name];
+};
 type Three = ThreeParts;
 const RAD = Math.PI / 180;
-/** The glow reaches this many radii from the centre; the globe at 1x is drawn to fit inside it. */
+/**
+ * The glow reaches this many radii from the centre; the globe at 1x is drawn to fit inside it.
+ *
+ * @example
+ * ```ts
+ * import { ATMOSPHERE_OUTER } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * console.log(ATMOSPHERE_OUTER);
+ * ```
+ */
 export const ATMOSPHERE_OUTER = 1.08;
 const CLOUD_RADIUS = 1.006;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water"];
@@ -64,7 +83,21 @@ export const newModel = (): EarthModel => ({
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
-/** The disc's radius in CSS pixels in a box of `width` x `height` at `zoom`: it fits the glow in the box at 1x. */
+/**
+ * The disc's radius in CSS pixels in a box of `width` x `height` at `zoom`: it fits the glow in the box at 1x.
+ *
+ * @param width - The box's width in CSS pixels.
+ * @param height - The box's height in CSS pixels.
+ * @param zoom - The view's zoom, 1 at Fit.
+ * @returns The radius in CSS pixels, at least 1.
+ *
+ * @example
+ * ```ts
+ * import { discRadius } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * console.log(discRadius(400, 400, 1).toFixed(1));
+ * ```
+ */
 export const discRadius = (width: number, height: number, zoom: number): number => Math.max(1, (Math.min(width, height) / 2 / ATMOSPHERE_OUTER - 1) * zoom);
 
 export { lookAt };

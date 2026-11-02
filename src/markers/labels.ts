@@ -1,5 +1,16 @@
 // Which labels to show: the most important first, each beside its dot, none over another label or a dot's label slot already taken. Pure.
 
+/**
+ * One label to place: its dot's centre and radius, its box's size and its priority.
+ *
+ * @example
+ * ```ts
+ * import type { LabelItem } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const label: LabelItem = { x: 100, y: 100, r: 4, w: 60, h: 20, priority: 1 };
+ * console.log(label.w);
+ * ```
+ */
 export interface LabelItem {
   /** The dot's centre and radius. */
   x: number;
@@ -12,6 +23,17 @@ export interface LabelItem {
   priority: number;
 }
 
+/**
+ * Where one label goes: which item it is and its box's top-left corner.
+ *
+ * @example
+ * ```ts
+ * import { placeLabels, type Placement } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const placed: Placement[] = placeLabels([{ x: 100, y: 100, r: 4, w: 60, h: 20, priority: 1 }], 300, 300, 10);
+ * console.log(placed[0]);
+ * ```
+ */
 export interface Placement {
   /** Index into the items given. */
   item: number;
@@ -33,6 +55,24 @@ const GAP = 3;
  * Place up to `max` labels inside `width` x `height`. Each label is tried to the right of its dot, then to the left, above and below; the first spot that is inside
  * and free of the labels already placed wins. Items are taken highest priority first (a tie keeps the order given). The cost is the number of items times at most
  * four tries against a grid of what is placed.
+ *
+ * @param items - The dots and the size of each one's label.
+ * @param width - The width of the area the labels must stay inside, in pixels.
+ * @param height - The height of that area, in pixels.
+ * @param max - The most labels to place.
+ * @param cell - The side of the grid cell used to find overlaps, in pixels.
+ * @returns A placement for each label that fits; the others are left out.
+ *
+ * @example
+ * ```ts
+ * import { placeLabels } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const items = [
+ *   { x: 100, y: 100, r: 4, w: 60, h: 20, priority: 1 },
+ *   { x: 110, y: 104, r: 4, w: 60, h: 20, priority: 9 },
+ * ];
+ * console.log(placeLabels(items, 300, 300, 10).map((place) => place.item));
+ * ```
  */
 export function placeLabels(items: readonly LabelItem[], width: number, height: number, max: number, cell = 64): Placement[] {
   const order = items.map((_, i) => i).sort((a, b) => items[b]!.priority - items[a]!.priority || a - b);
