@@ -45,7 +45,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
   await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(0);
   // look at the planets once, so three's own empty texture is made before the baseline
-  await page.getByRole("button", { name: "Solar system", exact: true }).click();
+  await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).click();
   await settle(page, 1500);
 
   const t0 = Date.now();
@@ -67,7 +67,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     step += 1;
     const n = step;
     await page.locator("kazoku-view-controls").evaluate((el, [yaw, tilt]) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ yaw, tilt }, true, "soak"), [(random() - 0.5) * 360, (random() - 0.5) * 120] as const);
-    if (n % 3 === 0) await page.getByRole("button", { name: jumps[Math.floor(random() * jumps.length)]!, exact: true }).click();
+    if (n % 3 === 0) await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: jumps[Math.floor(random() * jumps.length)]!, exact: true }).click();
     await page.locator(SPACE).evaluate(
       (el, [k, speed]) => {
         const e = el as unknown as { scale: string; orbits: boolean; labels: boolean; speed: number; time: unknown };

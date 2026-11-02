@@ -88,3 +88,39 @@ test("compressed scale: the Moon is 10 away, the Sun 44, the planets round the S
   near(c[0] / c[1], 0.75, 1e-9, "direction");
   assert.deepEqual(truePosition([1, 0, 0]), [AU_IN_EARTH_RADII, 0, 0]);
 });
+
+test("the default painter makes a sphere in a colour for each planet and a facing glow for the Sun, and lights and frees them", async () => {
+  const { plainPainter, PLANETS: names } = await import("../src/space/scene.ts").then(async (m) => ({ plainPainter: m.plainPainter, PLANETS: (await import("../src/space/ephemeris.ts")).PLANETS }));
+  const made: string[] = [];
+  class Thing {
+    scale = { setScalar: () => undefined };
+    position = { set: () => undefined };
+    add(): void {}
+    setAttribute(): void {}
+    setIndex(): void {}
+    dispose(): void {
+      made.push("disposed");
+    }
+  }
+  class Vec {
+    x = 0;
+    y = 0;
+    z = 0;
+    set(x: number, y: number, z: number): void {
+      [this.x, this.y, this.z] = [x, y, z];
+    }
+  }
+  const three = { BufferGeometry: Thing, BufferAttribute: Thing, ShaderMaterial: Thing, Mesh: Thing, Group: Thing, Vector3: Vec, Color: Vec } as never;
+  const sun = plainPainter.make(three, "Sun");
+  assert.equal(sun.billboard, true);
+  assert.equal(sun.light, undefined);
+  sun.dispose();
+  for (const name of names) {
+    const drawing = plainPainter.make(three, name);
+    assert.ok(drawing.object);
+    assert.equal(typeof drawing.light, "function");
+    drawing.light?.([1, 0, 0]);
+    drawing.dispose();
+  }
+  assert.ok(made.length >= 2 * (names.length + 1), "each drawing frees its geometry and its material");
+});

@@ -6,9 +6,33 @@ import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
-import { frameAt } from "./ephemeris.ts";
+import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, type ScaleMode } from "./scale.ts";
-import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type SpaceModel } from "./scene.ts";
+import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type SpaceModel } from "./scene.ts";
+
+export { BODY_NAMES, type BodyName };
+
+let painter: BodyPainter | undefined;
+
+/**
+ * Change how the Sun and the planets are drawn (before the first element connects): the space view keeps their places, sizes, light, names and orbits and asks
+ * the painter only for what to draw at each place (see `BodyPainter`). Left alone, they are plain spheres in the right colours.
+ */
+export function setBodyPainter(next: BodyPainter | undefined): void {
+  painter = next;
+}
+
+/** Mean radii in kilometres (IAU), for what a click tells. */
+const RADIUS_KM: Record<BodyName, number> = { Sun: 695_700, Mercury: 2439.7, Venus: 6051.8, Earth: 6371, Moon: 1737.4, Mars: 3389.5, Jupiter: 69_911, Saturn: 58_232, Uranus: 25_362, Neptune: 24_622 };
+
+/** What a page can tell a reader about a body now. */
+export interface BodyInfo {
+  name: BodyName;
+  /** Mean radius, kilometres. */
+  radiusKm: number;
+  /** Distance from the Earth's centre now, kilometres (0 for the Earth). */
+  distanceKm: number;
+}
 
 export { setThreeLoader };
 type Three = ThreeParts;
@@ -82,6 +106,7 @@ export class ChikyuSpace extends HTMLElement {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #last = 0;
   #pool = new Map<BodyName, HTMLElement>();
+  #places: Record<BodyName, BodyPlace | null> | undefined;
   #tiers: Record<string, number> = {};
 
   connectedCallback(): void {
@@ -97,7 +122,7 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}</style><div id="stage"></div><div id="labels" aria-hidden="true"></div>`;
+    root.innerHTML = `<style>:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}</style><div id="stage"></div><div id="labels" aria-hidden="true"></div>`;
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#pool.clear();
@@ -121,6 +146,7 @@ export class ChikyuSpace extends HTMLElement {
         this.#tiers[layer] = width;
       },
       onLabels: (places) => this.#placeLabels(places),
+      ...(painter ? { painter } : {}),
     });
     this.#view = taken.renderer.view(this.#stage, item, { still: null });
     this.#set("loading");
@@ -132,9 +158,14 @@ export class ChikyuSpace extends HTMLElement {
     });
     this.#last = performance.now();
     this.#schedule();
+    this.addEventListener("pointerdown", this.#down);
+    this.#labelBox.addEventListener("click", this.#labelClick);
+    this.#labelBox.addEventListener("focusin", this.#labelFocus);
   }
 
   disconnectedCallback(): void {
+    this.removeEventListener("pointerdown", this.#down);
+    window.removeEventListener("pointerup", this.#up, true);
     clearTimeout(this.#timer);
     this.#timer = undefined;
     this.#gate?.cancel();
@@ -219,6 +250,23 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
+  /** The body the camera looks at: at zoom 1 it fills the view; the yaw and tilt turn the camera round it. */
+  get body(): BodyName {
+    return this.#model.focus;
+  }
+  set body(name: BodyName) {
+    if (!BODY_NAMES.includes(name)) return;
+    this.#model.focus = name;
+    this.#gate?.request();
+  }
+
+  /** The radius and the distance from the Earth of a body now, for a page's own caption. */
+  bodyInfo(name: BodyName): BodyInfo {
+    const frame = this.#model.drawn?.frame ?? frameAt(this.#model.time);
+    const geo = name === "Earth" ? ([0, 0, 0] as const) : name === "Sun" ? frame.sun : name === "Moon" ? frame.moon : frame.planets[name];
+    return { name, radiusKm: RADIUS_KM[name], distanceKm: Math.hypot(geo[0], geo[1], geo[2]) * (AU_IN_EARTH_RADII * EARTH_RADIUS_KM) };
+  }
+
   /** The zoom that shows a part of the sky: the Earth alone, the Moon's orbit, the Sun, the planets out to Mars, or all of them, at this scale and moment. */
   zoomFor(preset: SpacePreset): number {
     const frame = this.#model.drawn?.frame ?? frameAt(this.#model.time);
@@ -282,7 +330,8 @@ export class ChikyuSpace extends HTMLElement {
   };
 
   // --- labels --------------------------------------------------------------------------------------------------------------------------------------
-  #placeLabels(places: Record<BodyName, { x: number; y: number } | null>): void {
+  #placeLabels(places: Record<BodyName, BodyPlace | null>): void {
+    this.#places = places;
     const box = this.#labelBox;
     if (!box) return;
     for (const name of BODY_NAMES) {
@@ -290,20 +339,60 @@ export class ChikyuSpace extends HTMLElement {
       const at = places[name];
       if (!label) {
         if (!at) continue;
-        label = box.ownerDocument.createElement("span");
-        label.className = "sp-label";
-        label.textContent = name;
-        box.append(label);
-        this.#pool.set(name, label);
+        const button = box.ownerDocument.createElement("button");
+        button.type = "button";
+        button.className = "sp-label";
+        button.dataset["body"] = name;
+        button.textContent = name;
+        button.setAttribute("aria-label", `${name}: choose to look at it`);
+        box.append(button);
+        this.#pool.set(name, button);
+        label = button;
       }
       if (!at) {
         if (!label.hidden) label.hidden = true;
         continue;
       }
       if (label.hidden) label.hidden = false;
-      label.style.transform = `translate(${Math.round(at.x + 4)}px,${Math.round(at.y - 8)}px)`;
+      label.style.transform = `translate(${Math.round(at.x + Math.max(4, Math.min(at.r, 40)))}px,${Math.round(at.y - 8)}px)`;
     }
   }
+
+  // A body is chosen by pressing on it or on its name (and by Tab and Enter on the name); a drag that turns the view is not a choice.
+  #downX = 0;
+  #downY = 0;
+  #down = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+    this.#downX = event.clientX;
+    this.#downY = event.clientY;
+    window.addEventListener("pointerup", this.#up, { capture: true, once: true });
+  };
+  #up = (event: PointerEvent): void => {
+    if (Math.hypot(event.clientX - this.#downX, event.clientY - this.#downY) > 6 || !this.#places) return;
+    const rect = this.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    let best: BodyName | undefined;
+    let bestD = Infinity;
+    for (const name of BODY_NAMES) {
+      const at = this.#places[name];
+      if (!at) continue;
+      const d = Math.hypot(x - at.x, y - at.y);
+      if (d <= Math.max(at.r, 14) && d < bestD) {
+        best = name;
+        bestD = d;
+      }
+    }
+    if (best) this.dispatchEvent(new CustomEvent("chikyu-body-click", { detail: this.bodyInfo(best), bubbles: true, composed: true }));
+  };
+  #labelClick = (event: Event): void => {
+    const name = (event.target as HTMLElement | null)?.dataset?.["body"] as BodyName | undefined;
+    if (name) this.dispatchEvent(new CustomEvent("chikyu-body-click", { detail: this.bodyInfo(name), bubbles: true, composed: true }));
+  };
+  #labelFocus = (event: Event): void => {
+    const name = (event.target as HTMLElement | null)?.dataset?.["body"] as BodyName | undefined;
+    if (name) this.dispatchEvent(new CustomEvent("chikyu-body-focus", { detail: this.bodyInfo(name), bubbles: true, composed: true }));
+  };
 
   // --- the rest --------------------------------------------------------------------------------------------------------------------------------------
   #textureBase(): string {

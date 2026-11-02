@@ -7,7 +7,7 @@ import { crowd, PLACES } from "./places.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { WORDS } from "./words.js";
-import type { ChikyuSpace, SpacePreset } from "../src/space/element.ts";
+import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
 
@@ -102,10 +102,26 @@ if (flat && controls && stage) {
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
-    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote]) if (box) box.hidden = true;
+    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo]) if (box) box.hidden = true;
     if (placesBox) placesBox.hidden = false;
     if (pickedNote) pickedNote.hidden = false;
   }
+
+  const bodyInfo = document.querySelector<HTMLElement>("#body-info");
+  const bodyButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-body]")];
+  /** Look at one body: it fills the view, and a line says how big it is and how far. */
+  function lookAtBody(name: BodyName, info?: BodyInfo): void {
+    if (!space) return;
+    space.body = name;
+    Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "body");
+    for (const b of bodyButtons) b.classList.toggle("on", b.dataset["body"] === name);
+    const facts = info ?? space.bodyInfo(name);
+    if (bodyInfo) {
+      bodyInfo.hidden = false;
+      bodyInfo.textContent = `${name}: radius ${Math.round(facts.radiusKm).toLocaleString("en")} km, ${name === "Earth" ? "where we are" : `${Math.round(facts.distanceKm).toLocaleString("en")} km from the Earth`}.`;
+    }
+  }
+  for (const button of bodyButtons) button.addEventListener("click", () => lookAtBody((button.dataset["body"] ?? "Earth") as BodyName));
 
   async function enterSpace(): Promise<boolean> {
     const [{ setThreeLoader }] = await Promise.all([import("../src/space/element.ts")]);
@@ -129,6 +145,7 @@ if (flat && controls && stage) {
         if (spaceButton) spaceButton.disabled = true;
         void setLook("line");
       });
+      element.addEventListener("chikyu-body-click", (e) => lookAtBody((e as CustomEvent<BodyInfo>).detail.name, (e as CustomEvent<BodyInfo>).detail));
       element.addEventListener("chikyu-time", (e) => {
         const ms = (e as CustomEvent<{ time: number }>).detail.time;
         if (when && document.activeElement !== when) when.value = localValue(ms);
@@ -279,6 +296,8 @@ if (flat && controls && stage) {
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-jump]")) {
     button.addEventListener("click", () => {
       if (!space) return;
+      space.body = "Earth";
+      for (const b of bodyButtons) b.classList.toggle("on", b.dataset["body"] === "Earth");
       Reflect.get(controls, "controller").set({ zoom: space.zoomFor((button.dataset["jump"] ?? "earth") as SpacePreset) }, true, "jump");
     });
   }

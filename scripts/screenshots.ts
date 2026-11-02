@@ -32,7 +32,7 @@ try {
       await page.waitForSelector("chikyu-earth svg");
     } else if (name.startsWith("space")) {
       await page.waitForSelector("chikyu-space[data-state=live]");
-      if (jump) await page.getByRole("button", { name: jump, exact: true }).click();
+      if (jump) await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: jump, exact: true }).click();
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(2500);
     } else if (name === "markers-flat") {

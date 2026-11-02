@@ -10,7 +10,7 @@ export { setThreeLoader };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
 
-type EarthLayer = Exclude<Layer, "moon">;
+type EarthLayer = Extract<Layer, "day" | "night" | "clouds" | "water">;
 
 type Three = ThreeParts;
 /**
@@ -133,7 +133,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       },
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
       onTier: (layer, width) => {
-        if (layer !== "moon") this.#tiers[layer] = width;
+        if (layer in this.#tiers) this.#tiers[layer as EarthLayer] = width;
         this.dispatchEvent(new CustomEvent("chikyu-tier", { detail: { layer, width } }));
       },
     });

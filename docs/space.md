@@ -51,10 +51,23 @@ backwards. Setting `time` points the camera at the same place on the ground agai
 by Greenwich sidereal time, the Moon shows its near side to the Earth (its libration, up to 8 degrees, is not drawn), and each planet is lit from the Sun, so Venus has its crescent and
 the Moon its quarter.
 
+## Looking at a body, and choosing one
+
+`element.body = "Jupiter"` points the camera at a body (Earth, Moon, Sun, Mercury to Neptune); at zoom 1 it fills the view. The name beside each body is a button (Tab, Enter) and a press on a body
+that is not a drag fires `chikyu-body-click` (`chikyu-body-focus` for the keyboard) with `{ name, radiusKm, distanceKm }`; `element.bodyInfo(name)` gives the same. What happens next is the page's: the demo looks at the body
+and prints a line about it.
+
+## The seam for drawing the bodies
+
+The Earth and the Moon keep their pictures here. The Sun and the planets are plain spheres in the right colours (and a glow for the Sun), drawn by a `BodyPainter`
+(`@johnmorrisdotca/chikyu-earth/space`: `plainPainter`, `BodyPainter`, `BodyDrawing`, and `setBodyPainter` from the element module). The view decides where each body is, how big it is (the real ratio in true scale),
+which way the Sun lights it, and what it is called; a painter's `make(three, name)` returns an object of radius 1 and, optionally, `light(toSun)` (called at each draw) and `billboard: true`. Another package can
+supply bodies with surface maps and rings without this one carrying them.
+
 ## Properties, events, stats
 
-Attributes and properties: `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`. `setView(view)` takes
-the shared controls' yaw, tilt and zoom (pan is not used). Events: `chikyu-ready`, `chikyu-unavailable`, `chikyu-time` (while time runs). `stats` has `state`, `draws`, `contexts`, `canvas`,
+Attributes and properties: `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`; property `body`. `setView(view)` takes
+the shared controls' yaw, tilt and zoom (pan is not used). Events: `chikyu-ready`, `chikyu-unavailable`, `chikyu-time` (while time runs), `chikyu-body-click`, `chikyu-body-focus`. `stats` has `state`, `draws`, `contexts`, `canvas`,
 `tiers`, `distance`, `time` and `lookups`.
 
 ## The budget, and how each part is tested (`e2e/space.gl.ts`, `e2e/space.soak.ts`)

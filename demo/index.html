@@ -84,9 +84,23 @@
               <button type="button" data-jump="inner">Inner planets</button>
               <button type="button" data-jump="solar-system">Solar system</button>
             </div>
+            <span class="fam-label">Look at</span>
+            <div class="group fam-seg" role="group" aria-label="Look at">
+              <button type="button" data-body="Earth" class="on">Earth</button>
+              <button type="button" data-body="Moon">Moon</button>
+              <button type="button" data-body="Sun">Sun</button>
+              <button type="button" data-body="Mercury">Mercury</button>
+              <button type="button" data-body="Venus">Venus</button>
+              <button type="button" data-body="Mars">Mars</button>
+              <button type="button" data-body="Jupiter">Jupiter</button>
+              <button type="button" data-body="Saturn">Saturn</button>
+              <button type="button" data-body="Uranus">Uranus</button>
+              <button type="button" data-body="Neptune">Neptune</button>
+            </div>
             <button type="button" class="fam-button" id="orbits" aria-pressed="true">Orbits</button>
             <button type="button" class="fam-button" id="labels" aria-pressed="true">Names</button>
           </div>
+          <p class="fam-fine" id="body-info" role="status" hidden></p>
           <p class="fam-fine" id="scale-note" hidden>Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
           <p class="fam-fine" id="status" role="status" hidden></p>
         </div>

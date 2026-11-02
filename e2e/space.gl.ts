@@ -26,7 +26,7 @@ async function open(page: Page, query = `time=${NOV2}&speed=0&center=-100,40`): 
   await settle(page);
 }
 
-const jump = (page: Page, name: string): Promise<void> => page.getByRole("button", { name, exact: true }).click();
+const jump = (page: Page, name: string): Promise<void> => page.getByRole("group", { name: "Go to" }).getByRole("button", { name, exact: true }).click();
 
 test("the Earth is lit from where the Sun is: its east side by day at 14:00 UTC over North America, in one context", async ({ page }) => {
   await open(page);
@@ -146,4 +146,46 @@ test("a lost context is recovered", async ({ page }) => {
   await page.locator(SPACE).evaluate((el) => Reflect.set(el, "scale", "true"));
   await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(draws);
   expect(errors).toEqual([]);
+});
+
+test("a body can be looked at: the camera goes to it, and choosing its name by keyboard does the same and says how big and far it is", async ({ page }) => {
+  await open(page);
+  await page.getByRole("group", { name: "Look at" }).getByRole("button", { name: "Jupiter", exact: true }).click();
+  await expect.poll(async () => (await statsOf(page)).distance).toBeCloseTo(3.4 * 1.8, 0);
+  await expect(page.locator("#body-info")).toContainText("Jupiter: radius 69,911 km");
+  await jump(page, "Solar system");
+  await settle(page, 800);
+  await page.locator(SPACE).evaluate((el) => (el.shadowRoot!.querySelector('button.sp-label[data-body="Mars"]') as HTMLButtonElement).focus());
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await statsOf(page)).distance).toBeCloseTo(3.4 * 0.6, 0);
+  await expect(page.locator("#body-info")).toContainText("Mars: radius 3,390 km");
+});
+
+async function moonPlace(page: Page): Promise<{ x: number; y: number }> {
+  await open(page);
+  await jump(page, "Moon");
+  await settle(page, 1000);
+  await page.locator(SPACE).scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  return page.locator(SPACE).evaluate((el) => {
+    const label = el.shadowRoot!.querySelector('button.sp-label[data-body="Moon"]') as HTMLElement;
+    const box = el.getBoundingClientRect();
+    const m = /translate\((-?\d+)px,\s*(-?\d+)px\)/.exec(label.style.transform)!;
+    return { x: box.left + Number(m[1]) - 14, y: box.top + Number(m[2]) + 8 };
+  });
+}
+
+test("pressing on a planet chooses it", async ({ page }) => {
+  const place = await moonPlace(page);
+  await page.mouse.click(place.x, place.y);
+  await expect(page.locator("#body-info")).toContainText("Moon: radius 1,737 km");
+});
+
+test("a drag that turns the view does not choose the body it began on", async ({ page }) => {
+  const place = await moonPlace(page);
+  await page.mouse.move(place.x, place.y);
+  await page.mouse.down();
+  await page.mouse.move(place.x + 40, place.y + 5, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator("#body-info")).toBeHidden();
 });

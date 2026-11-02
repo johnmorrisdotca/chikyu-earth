@@ -15,6 +15,8 @@ const RAD = Math.PI / 180;
 export const FIT_DISTANCE = 3.4;
 const FOV = 35;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water", "moon"];
+
+const PLAIN_COLOR = (name: PlanetName | "Sun"): string => (name === "Sun" ? "#ffb347" : COLORS[name]);
 export const BODY_NAMES = ["Earth", "Sun", "Moon", ...PLANETS] as const;
 export type BodyName = (typeof BODY_NAMES)[number];
 
@@ -35,6 +37,8 @@ export interface SpaceModel {
   labels: boolean;
   /** Milliseconds of game time one second of wall time covers (the ephemeris is looked up once per such span). */
   stepMs: number;
+  /** The body the camera looks at, and (in `zoom`) fills the view with at 1x. */
+  focus: BodyName;
   /** Filled at each draw. */
   drawn: { frame: Frame; distance: number; radiusPx: number } | null;
   /** How many times astronomy-engine has been asked for a frame. */
@@ -51,10 +55,36 @@ export const newSpaceModel = (): SpaceModel => ({
   orbits: true,
   labels: true,
   stepMs: 1000,
+  focus: "Earth",
   drawn: null,
   lookups: 0,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
+
+/** Where a body is on the screen: its centre and its apparent radius, in CSS pixels in the box. */
+export interface BodyPlace {
+  x: number;
+  y: number;
+  r: number;
+}
+
+/** One body as drawn by a painter: an object of radius 1 at the origin, which the scene places, scales and (for the Sun) turns to face the camera. */
+export interface BodyDrawing {
+  object: THREE.Object3D;
+  /** Told at each draw the unit direction from the body to the Sun, in scene axes (x to the vernal equinox, y north). */
+  light?(toSun: Vec3): void;
+  /** True to have the scene turn the object to face the camera (a disc or a glow). */
+  billboard?: boolean;
+  dispose(): void;
+}
+
+/**
+ * The seam for drawing the Sun and the planets. The space view places them, sizes them, lights them and labels them; a painter only makes what is drawn at
+ * each place. The default (`plainPainter`) is a sphere in the body's colour, and a glow for the Sun. Another package can supply better looking ones.
+ */
+export interface BodyPainter {
+  make(three: ThreeParts, name: PlanetName | "Sun"): BodyDrawing;
+}
 
 export interface SpaceDeps {
   assets: AssetCache;
@@ -64,7 +94,9 @@ export interface SpaceDeps {
   onError?: (error: unknown) => void;
   onTier?: (layer: Layer, width: number) => void;
   /** Where each body is on the screen, in CSS pixels in the box, or null when it is behind the camera. Called at each draw. */
-  onLabels?: (places: Record<BodyName, { x: number; y: number } | null>) => void;
+  onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
+  /** How the Sun and the planets are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
+  painter?: BodyPainter;
 }
 
 /** An inertial direction from the Earth's centre, in scene axes, for right ascension and declination in degrees. */
@@ -82,6 +114,43 @@ function quad(three: Three): THREE.BufferGeometry {
   g.setIndex([0, 1, 2, 0, 2, 3]);
   return g;
 }
+
+/** The default look: a sphere in the planet's colour, lit by the Sun, and for the Sun a glowing disc. */
+export const plainPainter: BodyPainter = {
+  make(three, name) {
+    if (name === "Sun") {
+      const geometry = quad(three);
+      const material = new three.ShaderMaterial({ vertexShader: GLOW_VERT, fragmentShader: GLOW_FRAG, uniforms: { tint: { value: new three.Color(PLAIN_COLOR(name)) } }, transparent: true, depthWrite: false });
+      const mesh = new three.Mesh(geometry, material);
+      mesh.renderOrder = 4;
+      mesh.frustumCulled = false;
+      mesh.scale.setScalar(3.2);
+      const group = new three.Group();
+      group.add(mesh);
+      return {
+        object: group,
+        billboard: true,
+        dispose() {
+          geometry.dispose();
+          material.dispose();
+        },
+      };
+    }
+    const geometry = sphere(three, 48, 24);
+    const sun = { value: new three.Vector3(1, 0, 0) };
+    const material = new three.ShaderMaterial({ vertexShader: SURFACE_VERT, fragmentShader: BODY_FRAG, uniforms: { map: { value: null }, tint: { value: new three.Color(PLAIN_COLOR(name)) }, textured: { value: 0 }, sunDir: sun, ambient: { value: 0.2 } } });
+    return {
+      object: new three.Mesh(geometry, material),
+      light(toSun) {
+        sun.value.set(toSun[0], toSun[1], toSun[2]);
+      },
+      dispose() {
+        geometry.dispose();
+        material.dispose();
+      },
+    };
+  },
+};
 
 export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Three> {
   return {
@@ -104,7 +173,6 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const sunView = { value: new three.Vector3(1, 0, 0) };
       const grid = sphere(three, 96, 48);
       const solid = sphere(three, 48, 24);
-      const flat = quad(three);
 
       const earthMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
@@ -143,29 +211,22 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         new three.ShaderMaterial({ vertexShader: SURFACE_VERT, fragmentShader: BODY_FRAG, uniforms: { map: uniform.moon, tint: { value: new three.Color("#bbbbbb") }, textured: { value: 1 }, sunDir: moonSun, ambient: { value: 0.03 } } }),
       );
 
-      const sunMesh = new three.Mesh(
-        flat,
-        new three.ShaderMaterial({ vertexShader: GLOW_VERT, fragmentShader: GLOW_FRAG, uniforms: { tint: { value: new three.Color("#ffb347") } }, transparent: true, depthWrite: false }),
-      );
-      sunMesh.renderOrder = 4;
-      sunMesh.frustumCulled = false;
-
-      const planets = new Map<PlanetName, { mesh: THREE.Mesh; sun: { value: THREE.Vector3 }; orbit: THREE.LineLoop; positions: Float32Array; samples: Vec3[]; epoch: number }>();
+      const painter = deps.painter ?? plainPainter;
       const scene = new three.Scene();
-      scene.add(earth, clouds, glow, moon, sunMesh);
+      scene.add(earth, clouds, glow, moon);
+      const sunDrawing = painter.make(three, "Sun");
+      scene.add(sunDrawing.object);
+      type Planet = { drawing: BodyDrawing; orbit: THREE.LineLoop; positions: Float32Array; samples: Vec3[]; epoch: number };
+      const planets = new Map<PlanetName, Planet>();
       for (const name of PLANETS) {
-        const sun = { value: new three.Vector3(1, 0, 0) };
-        const mesh = new three.Mesh(
-          solid,
-          new three.ShaderMaterial({ vertexShader: SURFACE_VERT, fragmentShader: BODY_FRAG, uniforms: { map: { value: null }, tint: { value: new three.Color(COLORS[name]) }, textured: { value: 0 }, sunDir: sun, ambient: { value: 0.2 } } }),
-        );
+        const drawing = painter.make(three, name);
         const positions = new Float32Array(96 * 3);
         const lineGeometry = new three.BufferGeometry();
         lineGeometry.setAttribute("position", new three.BufferAttribute(positions, 3));
         const orbit = new three.LineLoop(lineGeometry, new three.LineBasicMaterial({ color: ORBIT_COLORS[name], transparent: true, opacity: 0.7 }));
         orbit.frustumCulled = false;
-        scene.add(mesh, orbit);
-        planets.set(name, { mesh, sun, orbit, positions, samples: [], epoch: Number.NaN });
+        scene.add(drawing.object, orbit);
+        planets.set(name, { drawing, orbit, positions, samples: [], epoch: Number.NaN });
       }
 
       const camera = new three.PerspectiveCamera(FOV, width / Math.max(1, height), 0.05, 1000);
@@ -209,19 +270,20 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const moonToSun = unit([frame.sun[0] - frame.moon[0], frame.sun[1] - frame.moon[1], frame.sun[2] - frame.moon[2]]);
           moonSun.value.set(moonToSun[0], moonToSun[1], moonToSun[2]);
 
-          // the Sun
-          sunMesh.position.set(sunPos[0], sunPos[1], sunPos[2]);
-          sunMesh.quaternion.copy(camera.quaternion);
-          sunMesh.scale.setScalar(RADIUS["Sun"]![mode] * 3.2);
+          // where everything is, and how big
+          const pos = { Earth: [0, 0, 0] as Vec3, Moon: moonPos, Sun: sunPos } as Record<BodyName, Vec3>;
+          for (const name of PLANETS) pos[name] = placeAround(mode, sunPos, helioOf(frame.planets[name]));
+          const radiusOf = (name: BodyName): number => (name === "Earth" ? 1 : RADIUS[name]![mode]);
 
-          // the planets, and their orbits round the Sun
+          // the Sun and the planets, drawn by the painter, and the planets' orbits round the Sun
+          sunDrawing.object.position.set(sunPos[0], sunPos[1], sunPos[2]);
+          sunDrawing.object.scale.setScalar(radiusOf("Sun"));
+          if (sunDrawing.billboard) sunDrawing.object.quaternion.copy(camera.quaternion);
           for (const name of PLANETS) {
             const p = planets.get(name)!;
-            const pos = placeAround(mode, sunPos, helioOf(frame.planets[name]));
-            p.mesh.position.set(pos[0], pos[1], pos[2]);
-            p.mesh.scale.setScalar(RADIUS[name]![mode]);
-            const away = unit([frame.sun[0] - frame.planets[name][0], frame.sun[1] - frame.planets[name][1], frame.sun[2] - frame.planets[name][2]]);
-            p.sun.value.set(away[0], away[1], away[2]);
+            p.drawing.object.position.set(pos[name][0], pos[name][1], pos[name][2]);
+            p.drawing.object.scale.setScalar(radiusOf(name));
+            p.drawing.light?.(unit([frame.sun[0] - frame.planets[name][0], frame.sun[1] - frame.planets[name][1], frame.sun[2] - frame.planets[name][2]]));
             p.orbit.visible = model.orbits;
             if (model.orbits) {
               if (!Number.isFinite(p.epoch) || Math.abs(model.time - p.epoch) > 365 * 86_400_000) {
@@ -229,8 +291,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 p.epoch = model.time;
               }
               for (let i = 0; i < 96; i += 1) {
-                const s = p.samples[i]!;
-                const o = placeAround(mode, sunPos, s);
+                const o = placeAround(mode, sunPos, p.samples[i]!);
                 p.positions[i * 3] = o[0];
                 p.positions[i * 3 + 1] = o[1];
                 p.positions[i * 3 + 2] = o[2];
@@ -239,33 +300,44 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
           }
 
-          // the camera: above the home place as the sky was when it was last moved, turned by yaw and tilt, as far as the zoom says
+          // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says
+          const focus = model.focus;
+          const focusRadius = radiusOf(focus);
           const spin = model.cameraSpin ?? frame.spin;
           const lon = model.centre.lon - model.view.yaw;
           const lat = Math.max(-90, Math.min(90, model.centre.lat + model.view.tilt));
           const aim = direction(spin + lon, lat);
-          const distance = Math.max(1.05, FIT_DISTANCE / Math.max(1e-9, model.view.zoom));
-          camera.position.set(aim[0] * distance, aim[1] * distance, aim[2] * distance);
+          const distance = Math.max(1.05 * focusRadius, (FIT_DISTANCE * focusRadius) / Math.max(1e-9, model.view.zoom));
+          target.set(pos[focus][0], pos[focus][1], pos[focus][2]);
+          camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
           camera.up.set(0, 1, 0);
-          target.set(0, 0, 0);
           camera.lookAt(target);
-          camera.near = Math.max(0.005, distance * 0.02);
+          camera.near = Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01);
           camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
           camera.aspect = size.width / Math.max(1, size.height);
           camera.updateProjectionMatrix();
           camera.updateMatrixWorld();
           sunView.value.copy(sunEarth.value).transformDirection(camera.matrixWorldInverse);
 
+          // how many pixels across each body is: for the pictures the Earth and the Moon need, and for what is chosen
           const half = Math.tan((FOV / 2) * RAD);
-          const radiusPx = (size.height / 2) * Math.tan(Math.asin(Math.min(1, 1 / distance))) / half;
-          const toMoon = Math.hypot(moonPos[0] - camera.position.x, moonPos[1] - camera.position.y, moonPos[2] - camera.position.z);
-          const moonPx = ((size.height / 2) * RADIUS["Moon"]![mode]) / Math.max(1e-6, toMoon) / half;
-          model.drawn = { frame, distance, radiusPx };
+          const radiusPxOf = (name: BodyName): number => {
+            const d = Math.hypot(pos[name][0] - camera.position.x, pos[name][1] - camera.position.y, pos[name][2] - camera.position.z);
+            const r = radiusOf(name);
+            return d <= r * 1.001 ? 1e5 : ((size.height / 2) * (r / Math.sqrt(d * d - r * r))) / half;
+          };
+          const px = {} as Record<BodyName, number>;
+          for (const name of BODY_NAMES) px[name] = radiusPxOf(name);
+          model.drawn = { frame, distance, radiusPx: px.Earth };
           const ratio = model.ratio();
-          textures.sync({ day: radiusPx * ratio, night: radiusPx * ratio, clouds: radiusPx * ratio, water: radiusPx * ratio, moon: Math.min(moonPx, 1e5) * ratio });
+          const earthPx = Math.min(px.Earth, 1e5) * ratio;
+          textures.sync({ day: earthPx, night: earthPx, clouds: earthPx, water: earthPx, moon: Math.min(px.Moon, 1e5) * ratio });
           if (deps.onLabels && model.labels) {
-            const places = { Earth: labelFor([0, 0, 0]), Sun: labelFor(sunPos), Moon: labelFor(moonPos) } as Record<BodyName, { x: number; y: number } | null>;
-            for (const name of PLANETS) places[name] = labelFor(placeAround(mode, sunPos, helioOf(frame.planets[name])));
+            const places = {} as Record<BodyName, BodyPlace | null>;
+            for (const name of BODY_NAMES) {
+              const at = labelFor(pos[name]);
+              places[name] = at ? { x: at.x, y: at.y, r: px[name] } : null;
+            }
             deps.onLabels(places);
           }
           return false;
@@ -275,19 +347,18 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         },
         dispose() {
           textures.dispose();
+          sunDrawing.dispose();
           for (const p of planets.values()) {
-            (p.mesh.material as THREE.Material).dispose();
+            p.drawing.dispose();
             p.orbit.geometry.dispose();
             (p.orbit.material as THREE.Material).dispose();
           }
           grid.dispose();
           solid.dispose();
-          flat.dispose();
           earthMaterial.dispose();
           cloudMaterial.dispose();
           atmosphereMaterial.dispose();
           (moon.material as THREE.Material).dispose();
-          (sunMesh.material as THREE.Material).dispose();
         },
       };
     },

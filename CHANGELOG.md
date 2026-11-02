@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+The space view can look at any body, bodies can be chosen, and how the Sun and the planets are drawn is a seam another package can fill.
+
+- **Look at a body**: `element.body = "Mars"` (any of Earth, Moon, Sun and the seven planets) points the camera at it; at zoom 1 it fills the view, and the shared controls turn the camera round it and zoom in and out from it. The demo's "Look at" row does it.
+- **Bodies can be chosen**: each name beside a body is a real button (Tab and Enter), and a press on a body (not a drag) fires `chikyu-body-click`; `chikyu-body-focus` for the keyboard. The event carries `name`, `radiusKm` and `distanceKm` (`element.bodyInfo(name)` gives the same for a caption); the demo prints "Jupiter: radius 69,911 km, 666,000,000 km from the Earth".
+- **A seam for drawing the bodies** (`BodyPainter`, `setBodyPainter`, `plainPainter` from `@johnmorrisdotca/chikyu-earth/space`): the space view keeps each body's place, size, light direction, name and orbit, and asks a painter only for what to draw there (an object of radius 1; `light(toSun)` each draw; the Sun's turns to face the camera). The default is what 0.6.0 drew: spheres in the planets' colours and a glow for the Sun. John chose a separate package (wakusei-planets) for the bodies' own looks, so chikyu ships no planet pictures and no rings; the Earth and the Moon keep theirs.
+- Tests: e2e (a body looked at, its name chosen by keyboard, a press on it chooses it, a drag that turns the view does not) and a unit test of the default painter.
+
 ## 0.6.0
 
 The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, under the same performance budget as the Earth from space.
