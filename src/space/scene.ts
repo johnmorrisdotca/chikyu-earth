@@ -17,7 +17,29 @@ const FOV = 35;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water", "moon"];
 
 const PLAIN_COLOR = (name: PlanetName | "Sun"): string => (name === "Sun" ? "#ffb347" : COLORS[name]);
+/**
+ * The ten bodies the space view places, names and lets a reader choose: the Earth, the Sun, the Moon and the seven other planets.
+ *
+ * @example
+ * ```ts no-run
+ * import { BODY_NAMES } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * console.log(BODY_NAMES.join(", "));
+ * ```
+ */
 export const BODY_NAMES = ["Earth", "Sun", "Moon", ...PLANETS] as const;
+
+/**
+ * The name of one of the bodies in `BODY_NAMES`.
+ *
+ * @example
+ * ```ts no-run
+ * import { BODY_NAMES, type BodyName } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const mars: BodyName = "Mars";
+ * console.log(BODY_NAMES.includes(mars));
+ * ```
+ */
 export type BodyName = (typeof BODY_NAMES)[number];
 
 const COLORS: Record<PlanetName, string> = { Mercury: "#a79f96", Venus: "#e3c98a", Mars: "#c1593a", Jupiter: "#d2b48c", Saturn: "#e4d4a0", Uranus: "#9fd6dc", Neptune: "#4a6bd6" };
@@ -68,7 +90,17 @@ export interface BodyPlace {
   r: number;
 }
 
-/** One body as drawn by a painter: an object of radius 1 at the origin, which the scene places, scales and (for the Sun) turns to face the camera. */
+/**
+ * One body as drawn by a painter: an object of radius 1 at the origin, which the scene places, scales and (for the Sun) turns to face the camera.
+ *
+ * @example
+ * ```ts no-run
+ * import type { BodyDrawing } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const drawing = { object: undefined as never, dispose: () => undefined } satisfies BodyDrawing;
+ * console.log(typeof drawing.dispose);
+ * ```
+ */
 export interface BodyDrawing {
   object: THREE.Object3D;
   /** Told at each draw the unit direction from the body to the Sun, in scene axes (x to the vernal equinox, y north). */
@@ -81,6 +113,14 @@ export interface BodyDrawing {
 /**
  * The seam for drawing the Sun and the planets. The space view places them, sizes them, lights them and labels them; a painter only makes what is drawn at
  * each place. The default (`plainPainter`) is a sphere in the body's colour, and a glow for the Sun. Another package can supply better looking ones.
+ *
+ * @example
+ * ```ts no-run
+ * import { plainPainter, type BodyPainter } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const painter: BodyPainter = { make: (three, name) => plainPainter.make(three, name) };
+ * console.log(typeof painter.make);
+ * ```
  */
 export interface BodyPainter {
   make(three: ThreeParts, name: PlanetName | "Sun"): BodyDrawing;
@@ -115,7 +155,16 @@ function quad(three: Three): THREE.BufferGeometry {
   return g;
 }
 
-/** The default look: a sphere in the planet's colour, lit by the Sun, and for the Sun a glowing disc. */
+/**
+ * The default look: a sphere in the planet's colour, lit by the Sun, and for the Sun a glowing disc.
+ *
+ * @example
+ * ```ts no-run
+ * import { plainPainter } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(typeof plainPainter.make);
+ * ```
+ */
 export const plainPainter: BodyPainter = {
   make(three, name) {
     if (name === "Sun") {

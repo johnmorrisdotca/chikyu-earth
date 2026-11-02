@@ -9,7 +9,7 @@ The space view can look at any body, bodies can be chosen, and how the Sun and t
 - **A seam for drawing the bodies** (`BodyPainter`, `setBodyPainter`, `plainPainter` from `@johnmorrisdotca/chikyu-earth/space`): the space view keeps each body's place, size, light direction, name and orbit, and asks a painter only for what to draw there (an object of radius 1; `light(toSun)` each draw; the Sun's turns to face the camera). The default is what 0.6.0 drew: spheres in the planets' colours and a glow for the Sun. John chose a separate package (wakusei-planets) for the bodies' own looks, so chikyu ships no planet pictures and no rings; the Earth and the Moon keep theirs.
 - Tests: e2e (a body looked at, its name chosen by keyboard, a press on it chooses it, a drag that turns the view does not) and a unit test of the default painter.
 
-## 0.6.0
+## 0.6.0 (never published on its own: it ships in 0.7.0)
 
 The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, under the same performance budget as the Earth from space.
 

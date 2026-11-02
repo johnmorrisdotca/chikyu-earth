@@ -17,6 +17,16 @@ let painter: BodyPainter | undefined;
 /**
  * Change how the Sun and the planets are drawn (before the first element connects): the space view keeps their places, sizes, light, names and orbits and asks
  * the painter only for what to draw at each place (see `BodyPainter`). Left alone, they are plain spheres in the right colours.
+ *
+ * @param next - The painter to use, or `undefined` for the plain one.
+ *
+ * @example
+ * ```ts no-run
+ * import { plainPainter } from "@johnmorrisdotca/chikyu-earth/space";
+ * import { setBodyPainter } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * setBodyPainter({ make: (three, name) => plainPainter.make(three, name) });
+ * ```
  */
 export function setBodyPainter(next: BodyPainter | undefined): void {
   painter = next;
@@ -25,7 +35,17 @@ export function setBodyPainter(next: BodyPainter | undefined): void {
 /** Mean radii in kilometres (IAU), for what a click tells. */
 const RADIUS_KM: Record<BodyName, number> = { Sun: 695_700, Mercury: 2439.7, Venus: 6051.8, Earth: 6371, Moon: 1737.4, Mars: 3389.5, Jupiter: 69_911, Saturn: 58_232, Uranus: 25_362, Neptune: 24_622 };
 
-/** What a page can tell a reader about a body now. */
+/**
+ * What a page can tell a reader about a body now.
+ *
+ * @example
+ * ```ts no-run
+ * import type { BodyInfo } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const info: BodyInfo = { name: "Mars", radiusKm: 3389.5, distanceKm: 225_000_000 };
+ * console.log(`${info.name}: ${info.radiusKm} km`);
+ * ```
+ */
 export interface BodyInfo {
   name: BodyName;
   /** Mean radius, kilometres. */
