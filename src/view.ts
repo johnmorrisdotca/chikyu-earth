@@ -13,6 +13,12 @@ export interface ProjectionView {
 /** The radius of an unzoomed globe in a square of `size` pixels. */
 export const globeBaseScale = (size: number): number => size / 2 - 1;
 
+/** Where the view is centred on the globe: the home centre, turned by yaw (west) and tipped by tilt (north), held to the poles. */
+export const lookAt = (centre: GeoPoint, view: GlobeView): GeoPoint => ({
+  lon: centre.lon - view.yaw,
+  lat: Math.max(-90, Math.min(90, centre.lat + view.tilt)),
+});
+
 /** yaw turns longitude, tilt tips latitude, zoom scales and pan moves the disc in CSS pixels. */
 export function projectionView(centre: GeoPoint, size: number, view: GlobeView = HOME_VIEW): ProjectionView {
   return {

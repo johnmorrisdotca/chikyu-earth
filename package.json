@@ -1,7 +1,7 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
-  "version": "0.4.0",
-  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. The outlines, names and codes come from chizu's world-geo (Natural Earth), drawn with d3-geo. SVG, no canvas.",
+  "version": "0.5.0",
+  "description": "Chikyu Earth 地球: a line-drawn globe with country outlines that turns at the Earth's own rate and opens centred on where you are. The outlines, names and codes come from chizu's world-geo (Natural Earth), drawn with d3-geo. SVG, with an optional realistic Earth from space (three.js) and markers.",
   "keywords": [
     "earth",
     "globe",
@@ -22,7 +22,11 @@
     "custom-element",
     "d3-geo",
     "natural-earth",
-    "typescript"
+    "typescript",
+    "markers",
+    "satellite-imagery",
+    "webgl",
+    "three"
   ],
   "homepage": "https://johnmorrisdotca.github.io/chikyu-earth/",
   "repository": {
@@ -37,7 +41,9 @@
   "type": "module",
   "sideEffects": [
     "./dist/element.js",
-    "./src/element.ts"
+    "./src/element.ts",
+    "./dist/realistic/element.js",
+    "./src/realistic/element.ts"
   ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -53,6 +59,21 @@
       "import": "./dist/element.js",
       "default": "./dist/element.js"
     },
+    "./realistic": {
+      "types": "./dist/realistic/index.d.ts",
+      "import": "./dist/realistic/index.js",
+      "default": "./dist/realistic/index.js"
+    },
+    "./realistic/element": {
+      "types": "./dist/realistic/element.d.ts",
+      "import": "./dist/realistic/element.js",
+      "default": "./dist/realistic/element.js"
+    },
+    "./markers": {
+      "types": "./dist/markers/index.d.ts",
+      "import": "./dist/markers/index.js",
+      "default": "./dist/markers/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -67,7 +88,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "build": "node -e \"const fs=require('node:fs');fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('textures','dist/textures',{recursive:true})\"",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.check.json && tsc -p tsconfig.tools.json && tsc -p tsconfig.demo.json",
     "test": "node --test test/*.test.ts",
@@ -76,12 +97,26 @@
     "prepublishOnly": "pnpm check",
     "site": "pnpm build && node scripts/site.ts",
     "dev": "pnpm site && node scripts/dev.ts",
-    "test:demo": "pnpm site && playwright test",
-    "screenshots": "pnpm site && node scripts/screenshots.ts"
+    "test:demo": "pnpm site && playwright test --project=chromium-desk --project=chromium-phone --project=webkit-desk --project=webkit-phone --project=chromium-gl",
+    "screenshots": "pnpm site && node scripts/screenshots.ts",
+    "textures": "python3 scripts/make-textures.py",
+    "test:soak": "pnpm site && playwright test --project=soak"
   },
   "dependencies": {
     "@johnmorrisdotca/chizu": "^1.6.0",
     "d3-geo": "^3.1.1"
+  },
+  "peerDependencies": {
+    "@johnmorrisdotca/kazoku-ui": ">=0.9.0",
+    "three": ">=0.160.0"
+  },
+  "peerDependenciesMeta": {
+    "@johnmorrisdotca/kazoku-ui": {
+      "optional": true
+    },
+    "three": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -90,8 +125,11 @@
     "@types/d3-geo": "^3.1.0",
     "@types/geojson": "^7946.0.14",
     "@types/node": "^24.0.0",
+    "@types/three": "^0.187.0",
+    "astronomy-engine": "2.1.19",
     "esbuild": "^0.25.0",
     "eslint": "^9.0.0",
+    "three": "0.186.1",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.0.0"
   },

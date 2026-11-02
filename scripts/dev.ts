@@ -11,6 +11,8 @@ const types: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json",
   ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".png": "image/png",
 };
 
 createServer((req, res) => {

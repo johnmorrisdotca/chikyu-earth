@@ -2,7 +2,8 @@
 // it opens centred on where you are (the `center` attribute wins over geolocation). Importing registers it once.
 import { globe } from "./globe.ts";
 import { cleanStyle } from "./styles.ts";
-import { HOME_VIEW } from "./view.ts";
+import { globeBaseScale, HOME_VIEW, lookAt } from "./view.ts";
+import type { OverlayHost, OverlayPose } from "./markers/layer.ts";
 import type { GeoPoint, GlobeView } from "./types.ts";
 
 const readCentre = (value: string | null): GeoPoint | null => {
@@ -19,6 +20,27 @@ export class ChikyuEarth extends HTMLElement {
   #centre: GeoPoint = { lon: 0, lat: 0 };
   #view: GlobeView = { ...HOME_VIEW };
   #drawn: GlobeView = { ...HOME_VIEW };
+  #listeners = new Set<(pose: OverlayPose) => void>();
+  #overlay: HTMLElement | undefined;
+  #pose: OverlayPose | null = null;
+
+  /** Where the view is centred now: the `center` attribute, else the reader's place once the browser has answered. */
+  get centre(): GeoPoint {
+    return { ...this.#centre };
+  }
+
+  /** A box laid over the globe for markers (see `@johnmorrisdotca/chikyu-earth/markers`): where it is, the pose of the last drawing, and a way to hear the next. */
+  get overlay(): OverlayHost {
+    this.#ensureShell();
+    return {
+      overlayRoot: this.#overlay!,
+      pose: this.#pose,
+      subscribe: (listener) => {
+        this.#listeners.add(listener);
+        return () => this.#listeners.delete(listener);
+      },
+    };
+  }
 
   connectedCallback(): void {
     this.#centre = readCentre(this.getAttribute("center")) ?? { lon: 0, lat: 0 };
@@ -62,15 +84,49 @@ export class ChikyuEarth extends HTMLElement {
     const y = this.#view.panY - this.#drawn.panY;
     svg.style.transformOrigin = "50% 50%";
     svg.style.transform = zoom === 1 && x === 0 && y === 0 ? "" : `translate(${x}px, ${y}px) scale(${zoom})`;
+    this.#publish(svg.style.transform);
+  }
+
+  /** The shell: the picture's holder and the overlay for markers, made once; a redraw replaces only the picture. */
+  #ensureShell(): ShadowRoot {
+    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+    if (!this.#overlay || !root.contains(this.#overlay)) {
+      root.innerHTML = `<style>:host{display:block;position:relative}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}</style><div class="holder"></div><div class="overlay"></div>`;
+      this.#overlay = root.querySelector<HTMLElement>(".overlay")!;
+    }
+    return root;
+  }
+
+  #publish(transform: string): void {
+    if (this.#listeners.size === 0) {
+      this.#pose = null;
+      return;
+    }
+    const size = Number(this.getAttribute("size")) || 320;
+    const k = (this.clientWidth || size) / size;
+    const look = lookAt(this.#centre, this.#drawn);
+    const pose: OverlayPose = {
+      lon: look.lon,
+      lat: look.lat,
+      radius: globeBaseScale(size) * this.#drawn.zoom * k,
+      cx: (size / 2 + this.#drawn.panX) * k,
+      cy: (size / 2 + this.#drawn.panY) * k,
+      width: size * k,
+      height: size * k,
+      transform,
+    };
+    this.#pose = pose;
+    for (const listener of this.#listeners) listener(pose);
   }
 
   #render(): void {
     const size = Number(this.getAttribute("size")) || 320;
     const style = cleanStyle(this.getAttribute("style"));
     const svg = globe({ size, style, centre: this.#centre, view: this.#view, graticule: this.hasAttribute("graticule") });
-    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>:host{display:block}svg{display:block;width:100%;height:auto}</style>${svg}`;
+    const root = this.#ensureShell();
+    root.querySelector(".holder")!.innerHTML = svg;
     this.#drawn = { ...this.#view };
+    this.#publish("");
   }
 }
 

@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.0
+
+The Earth from space, and markers for any place on either globe, both under a hard performance budget.
+
+### Markers
+
+- **`attachMarkers(element)`** (`@johnmorrisdotca/chikyu-earth/markers`) puts your places on `<chikyu-earth>` or `<chikyu-earth-realistic>`: add, update and remove markers at `[lon, lat]` with a label, colour, icon and size; groups (cities, stadiums) shown or hidden together; markers that turn, zoom and pan with the globe and fade on the far side; crowded places gathered into clusters; labels that make room for each other; `chikyu-marker-hover`, `-click` and `-focus` events carrying your own `data`; a button for each shown label (Tab and Enter work) and a hidden list of every place for a screen reader. Chikyu ships no places; the demo shows 22 cities and 10 stadiums (Wikidata coordinates, CC0). [docs/markers.md](docs/markers.md).
+- **Budget**, each line tested: all dots in one 2D canvas pass, and a pool of 24 label buttons, never an element per place; 5,000 markers cost 0.36 ms a view change on the flat globe; a 5,000-marker drag on the Earth from space made 117 draws in 4 s (29 a second), the markers drawn with them one for one and not at all at rest or out of sight; the overlay canvas holds the same 4096-a-side, 6 MP limit.
+- The flat element's picture now sits in a holder beside the markers' overlay (a redraw replaces only the picture), and `lookAt` moves to `view.ts`.
+
+### The Earth from space
+
+An optional realistic look, drawn with three.js through kazoku-ui's shared renderer.
+
+- **`<chikyu-earth-realistic>`** (`@johnmorrisdotca/chikyu-earth/realistic/element`): day side from NASA's Blue Marble, the cities' lights on the night side, a cloud
+  layer that drifts with the date, a sun glint on the sea, an atmosphere at the rim, and the day and night line placed by the real Sun for a date and time (now by
+  default). The same shared controls (turn, tilt, zoom, pan) and the same `setView(view, final)` as the flat globe. `time`, `clouds`, `lights`, `center`,
+  `texture-base`, `max-texture` and `live-seconds` attributes; `chikyu-ready`, `chikyu-unavailable` and `chikyu-tier` events. [docs/realistic.md](docs/realistic.md).
+- **The flat look stays**: `<chikyu-earth>` is unchanged (and gains a `centre` getter); the demo's Line, Thick and Realistic buttons choose between them, keep the
+  camera, and keep the choice, the graticule, the clouds, the lights and the time in the address (kazoku-ui's address state). Without WebGL the demo says so and
+  shows the line globe.
+- **Optional, so the base install stays small**: `three` and `@johnmorrisdotca/kazoku-ui` are optional peer dependencies; the base entry and `<chikyu-earth>` need neither.
+  The realistic element, its Sun, its scene and its shaders, with kazoku-ui's renderer, are 22.6 KB minified (9.2 KB gzipped); three.js is the page's, and the demo's
+  subset of it (`demo/three-subset.ts`) is 188 KB gzipped. Sun position: `subsolarPoint(ms)` in `@johnmorrisdotca/chikyu-earth/realistic`, tested against the almanac
+  (declination within 0.05 degree, the equation of time in the longitude).
+- **Pictures** (1.55 MB in `dist/textures/`, WebP, all NASA public domain, credited in NOTICE.md): day at 1024, 2048 and 4096; night, clouds and a water mask at 1024 and 2048.
+  The 1024 ones load first; a larger one loads when the zoom needs it (about 3 texels per pixel of the disc's radius), replaces the smaller, and is freed 4 s after the
+  zoom drops. No texture is wider than 4096 (2048 on a device with 2 GB or less); `pnpm textures` rebuilds them.
+- **Performance, each proved by `e2e/realistic.gl.ts` (Chromium, software WebGL)**: 0 draw calls and 0 animation frames in 4 s at rest; a drag at 125 moves a second
+  draws 29.3 times a second, and 2,700 `setView` calls in 2 s make 59 draws; an Auto-turn at the Earth's rate draws 0 times in 6 s; one WebGL context; the canvas on a
+  5K screen at ratio 2 is 3264 x 1835 = 5.99 MP; the textures alive grow one a layer with the zoom and return to the start after it; 0 draws and 0 frames while out of
+  sight or in a hidden tab; after removal 0 buffers, 0 programs and none of our textures remain, and the element can come back; a lost context draws nothing and then
+  recovers, not black; no WebGL gives `chikyu-unavailable`. The soak (10 minutes, 976 moves, 2,000 markers on): JS heap 7.29 to 7.80 MB after garbage collection, GPU objects 20 to 20, textures, buffers and programs the same as at the start, the draw rate 5.4 a second on average, one WebGL context, no error.
+- `pnpm test:soak` (`SOAK_MINUTES`, 10 by default; CI runs 1) turns, zooms, re-times and toggles for that long and compares the heap, the GPU objects and the draw rate with the start.
+- `pnpm screenshots` also makes the realistic pictures; `scripts/make-textures.py` makes the textures from NASA's sources.
+
 ## 0.4.0
 
 The outlines now come from chizu, the controls from kazoku-ui 0.9, and the release from the family's shared workflow.

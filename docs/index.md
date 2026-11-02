@@ -1,5 +1,7 @@
 # Chikyu Earth — docs
 
+- **The Earth from space** — [realistic.md](realistic.md): `<chikyu-earth-realistic>`, its pictures, the Sun, the budget and how each part of it is tested.
+- **Markers** — [markers.md](markers.md): `attachMarkers(element)`, groups, clusters, labels, events and the budget.
 - **The element** — `<chikyu-earth>` and its attributes are in the [README](../README.md#the-element).
 - **Drawing a string** — `globe(options)` returns the SVG. Options: `size`, `rotation`, `style`, `graticule`,
   or `centre` and `view` for the shared controls' camera.

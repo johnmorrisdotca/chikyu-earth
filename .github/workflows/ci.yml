@@ -44,3 +44,5 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium webkit
       - name: The demo, played in Chromium and WebKit at a phone's width and a desk's
         run: pnpm test:demo
+      - name: The realistic Earth's soak, one minute (ten minutes by hand with pnpm test:soak)
+        run: SOAK_MINUTES=1 pnpm test:soak

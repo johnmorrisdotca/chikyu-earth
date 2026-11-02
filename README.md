@@ -46,6 +46,36 @@ Centre it yourself instead:
 <chikyu-earth center="139.7,35.7" style="thick" graticule></chikyu-earth>
 ```
 
+## The Earth from space
+
+An optional second look, for a page with room for a real picture: day and night by the real Sun, cities' lights, a sun glint on the sea, a cloud layer and the
+atmosphere at the rim, drawn with three.js through kazoku-ui's shared renderer. It is its own entry point, so the line globe above costs nothing extra.
+
+<p align="center"><img alt="The Earth from space: Asia and the Pacific by day, with clouds and the sun glint" src="docs/images/realistic-desk.png" width="560"></p>
+
+```html
+<script type="module">
+  import "@johnmorrisdotca/chikyu-earth/realistic/element";
+</script>
+<chikyu-earth-realistic center="139.7,35.7" time="2026-06-21T03:00Z" texture-base="/textures/"></chikyu-earth-realistic>
+```
+
+Needs `three` and `@johnmorrisdotca/kazoku-ui` (both optional peers) and the pictures (1.6 MB, from NASA, in `dist/textures/`). It draws nothing while nothing changes,
+at most 30 times a second while it does, in one WebGL context, with textures that grow as you zoom and are freed after. All of it, the budget and the tests:
+[docs/realistic.md](docs/realistic.md).
+
+## Markers
+
+Mark any place at `[lon, lat]` with a label, colour or icon, in groups you can show or hide, on either look. Chikyu ships no places; yours move with the globe, fade on the far side, make room
+for their labels, gather into clusters when crowded, and fire hover, click and keyboard events with your own data. One canvas pass for thousands, a pool of 24 buttons for the labels. [docs/markers.md](docs/markers.md).
+
+```ts
+import { attachMarkers } from "@johnmorrisdotca/chikyu-earth/markers";
+
+const markers = attachMarkers(document.querySelector("chikyu-earth")!);
+markers.add({ id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo", group: "Cities" });
+```
+
 ## Controls
 
 The shared [kazoku-ui view controls](https://github.com/johnmorrisdotca/kazoku-ui) supply every hand and button:

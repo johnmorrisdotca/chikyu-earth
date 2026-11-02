@@ -21,6 +21,18 @@ export default defineConfig({
     reuseExistingServer: false,
   },
   projects: [
+    // The realistic Earth: Chromium only (WebGL in software), with precise memory readings and gc() for the leak checks. `pnpm test:soak` runs the long one.
+    {
+      name: "chromium-gl",
+      testMatch: "*.gl.ts",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: ["--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
+    },
+    {
+      name: "soak",
+      testMatch: "*.soak.ts",
+      timeout: (Number(process.env.SOAK_MINUTES ?? 10) + 4) * 60_000,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: ["--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
+    },
     { name: "chromium-desk", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } } },
     { name: "chromium-phone", use: { ...devices["Desktop Chrome"], ...phone } },
     // WebKit on a desktop viewport with touch: `isMobile` is Chromium's to honour.

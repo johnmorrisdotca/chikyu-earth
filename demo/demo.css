@@ -73,4 +73,20 @@ button {
 button:hover { border-color: var(--accent); }
 button.on, button[aria-pressed="true"] { background: #1a2b47; border-color: var(--accent); color: #fff; }
 
+.field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+input[type="datetime-local"] {
+  min-height: 48px;
+  padding: 0 14px;
+  font: inherit;
+  color: var(--ink);
+  background: #101a2b;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color-scheme: dark;
+}
+input[type="datetime-local"]:hover, input[type="datetime-local"]:focus-visible { border-color: var(--accent); outline: none; }
+[hidden] { display: none !important; }
+chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
+
 .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
+.note a { color: var(--muted); }

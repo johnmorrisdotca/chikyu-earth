@@ -25,15 +25,33 @@
       ></kazoku-view-controls>
 
       <div class="controls">
-        <div class="group" role="group" aria-label="Line style">
+        <div class="group" role="group" aria-label="Look">
           <button type="button" data-style="line" class="on">Line</button>
           <button type="button" data-style="thick">Thick</button>
+          <button type="button" data-style="realistic">Realistic</button>
         </div>
         <button type="button" id="grat" aria-pressed="false">Graticule</button>
         <button type="button" id="locate">Centre on me</button>
       </div>
 
-      <p class="note">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo.</p>
+      <div class="controls" id="places" role="group" aria-label="Places">
+        <button type="button" data-group="Cities" aria-pressed="true">Cities</button>
+        <button type="button" data-group="Stadiums" aria-pressed="true">Stadiums</button>
+      </div>
+      <p class="note" id="picked" role="status">Hover or tap a place.</p>
+
+      <div class="controls" id="real-controls" hidden>
+        <button type="button" id="clouds" aria-pressed="true">Clouds</button>
+        <button type="button" id="lights" aria-pressed="true">City lights</button>
+        <label class="field">
+          <span>Date and time</span>
+          <input type="datetime-local" id="when" />
+        </label>
+        <button type="button" id="now" aria-pressed="true">Now</button>
+      </div>
+      <p class="note" id="status" role="status" hidden></p>
+
+      <p class="note">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain), in <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">NOTICE.md</a>.</p>
     </main>
     <script type="module" src="demo.js"></script>
   </body>
