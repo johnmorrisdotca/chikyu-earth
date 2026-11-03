@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1
+
+The ground now follows the pointer, in every look and when riding.
+
+- **The Earth turned the wrong way up and down** (MODULES-200). A drag up made the ground go down in the line, thick, realistic and space looks, and the up arrow did the same: the controls' tilt was added to the latitude of the view, and it should be subtracted (the top of the globe tips away as the tilt grows, as the controls say). It is now one sign in `lookAt` and `projectionView` (`src/view.ts`) and one in the space view, so the flat globe, the realistic Earth and the space view agree. **A tilt in an address or a call now tips the other way.**
+  Left and right were right already. Auto-turn turns the real way: the Earth goes round west to east, so with north up the ground moves from left to right, the same way as a drag right and the right arrow.
+- **A ride could not be dragged** (MODULES-199). Riding at a body, a drag turned the camera's head round the straight-down line, which from the ISS only spun the picture, and tilt could not go the other way past the straight-down look, so a drag seemed to do nothing. `ridePose` now looks about from the base look as a head on a pivot does: yaw turns the camera to its left and tilt tips it towards the bottom of its picture, so a drag right moves the ground right and a drag up moves it up, about one and a half pixels a pixel, the pace of the line globe and the Earth from space. The angle for a pixel follows the field of view, so zooming in does not make the ground race. Behind a satellite (`view: "follow"`) the drag is mirrored, because the Earth is behind what the camera looks at, and the Earth follows the pointer.
+- **The demo keeps the address's yaw and tilt when it opens on a ride** (it set both to 0 as the ride began), and **an address with `ride` and no `look` opens the space look**, so the reported address rides the ISS.
+- **Tests**: `e2e/drag.gl.ts` drags with a real pointer, presses the arrow keys and runs Auto-turn in the line, thick, realistic and space looks, riding the ISS (down and at the horizon) and the Moon, and behind the ISS and the Moon, and checks which way the ground moved by sliding the first picture over the second; and that a ride opens with the address's turn, a drag writes it back and the address brings the same picture back; and the reported address. All fail on 0.9.0. Unit tests for `ridePose` and the view's signs.
+
 ## 0.9.0
 
 Ride along: the camera on the ISS, a Starlink satellite, the Moon or a planet, looking at the Earth.
