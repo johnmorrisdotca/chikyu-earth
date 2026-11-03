@@ -55,7 +55,7 @@ description: ページに地球儀を置き、中心を決め、見る人が回�
     <div id="globe" tabindex="0">
       <chikyu-earth size="420" look="thick" center="139.7,35.7"></chikyu-earth>
     </div>
-    <kazoku-view-controls for="globe" address controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
+    <kazoku-view-controls for="globe" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
   </body>
 </html>
 ```

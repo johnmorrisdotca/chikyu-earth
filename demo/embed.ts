@@ -19,6 +19,7 @@ import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import type { GlobeView } from "../src/types.ts";
+import { discRadius } from "../src/realistic/earth.ts";
 
 const query = new URLSearchParams(location.search);
 const frame = document.getElementById("frame")!;
@@ -157,6 +158,7 @@ if (interactive) {
   const view = createViewController({
     speed: 0.004178,
     zoom: space ? startZoom : "fit",
+    grabRadius: space ? undefined : real ? discRadius(frame.clientWidth, frame.clientWidth, 1) : "fit",
     limits: space ? (query.get("ride") && query.get("rview") !== "follow" ? { tiltMax: 90, zoomMin: 0.5, zoomMax: 6 } : { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 }) : { tiltMax: 90 },
     onChange(state: ViewState, info) {
       const detail: GlobeView = { yaw: state.yaw, tilt: state.tilt, zoom: state.zoom, panX: state.panX, panY: state.panY };
@@ -175,6 +177,7 @@ if (interactive) {
     },
   });
   view.bind(frame);
+  if (real) new ResizeObserver(() => (view.grabRadius = discRadius(frame.clientWidth, frame.clientWidth, 1))).observe(frame);
   if (turn === "auto") view.play();
   // Nothing turns while nothing can see it.
   let seen = true;

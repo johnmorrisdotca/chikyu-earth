@@ -19,6 +19,12 @@ async function ready(page: Page): Promise<void> {
   await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
 }
 
+/** Back to Fit: the Fit button, or on a narrow screen (the horizontal layout) the zoom readout, which is Fit there. */
+async function fit(page: Page): Promise<void> {
+  const button = page.locator(`${CONTROLS} [data-b="fit"]`);
+  await ((await button.isVisible()) ? button : page.locator(`${CONTROLS} [data-b="level"]`)).click();
+}
+
 async function touch(page: Page, type: string, id: number, x: number, y: number): Promise<void> {
   await page.locator("#globe").evaluate((el, [t, i, cx, cy]) => {
     el.dispatchEvent(
@@ -82,7 +88,7 @@ test("zoom out, zoom in and Fit work", async ({ page }) => {
   await page.locator(`${CONTROLS} [data-b="in"]`).click();
   await page.locator(`${CONTROLS} [data-b="in"]`).click();
   expect((await stateOf(page)).zoom).toBeGreaterThan(1.5);
-  await page.locator(`${CONTROLS} [data-b="fit"]`).click();
+  await fit(page);
   expect((await stateOf(page)).zoom).toBe(1);
   expect((await stateOf(page)).panX).toBe(0);
   expect((await stateOf(page)).panY).toBe(0);
@@ -100,7 +106,7 @@ test("two fingers pinch and Front returns the home view", async ({ page }) => {
   await touch(page, "pointerup", 2, x + 100, y);
   await touch(page, "pointerup", 1, x - 100, y);
   expect((await stateOf(page)).zoom).toBeCloseTo(2, 1);
-  await page.locator(`${CONTROLS} [data-b="fit"]`).click();
+  await fit(page);
   await page.locator(`${CONTROLS} [data-b="front"]`).click();
   expect((await stateOf(page)).yaw).toBe(0);
   expect((await stateOf(page)).tilt).toBe(0);

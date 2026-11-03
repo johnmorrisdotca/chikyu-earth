@@ -11,6 +11,7 @@ import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
 import type { RideTarget } from "../src/space/element.ts";
 import type { BodyPainter } from "../src/space/index.ts";
+import { discRadius } from "../src/realistic/earth.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
 
@@ -466,6 +467,15 @@ if (flat && controls && stage) {
     return true;
   }
 
+  /** Exact grab where the globe's radius is known (the flat globe fills its square; the Earth from space has its glow outside the disc); the space view keeps the fixed angle. */
+  let shownLook: Look = "line";
+  function markGrab(look: Look): void {
+    shownLook = look;
+    if (look === "space") controls!.removeAttribute("grab-radius");
+    else if (look === "realistic") controls!.setAttribute("grab-radius", String(discRadius(stage!.clientWidth, stage!.clientWidth, 1)));
+    else controls!.setAttribute("grab-radius", "fit");
+  }
+
   async function setLook(next: Look): Promise<void> {
     if (next === "realistic") {
       notice(null);
@@ -478,6 +488,7 @@ if (flat && controls && stage) {
       flat!.setAttribute("style", next);
       flat!.setView(state(), true);
     }
+    markGrab(next);
     address.set("look", next);
     for (const b of lookButtons) {
       b.classList.toggle("on", b.dataset["style"] === next);
@@ -623,5 +634,7 @@ if (flat && controls && stage) {
   if (opened["speed"] !== undefined && Number.isFinite(Number(opened["speed"]))) markSpeed(Number(opened["speed"]));
   if (opened["orbits"] === "off") orbits?.setAttribute("aria-pressed", "false");
   if (opened["labels"] === "off") names?.setAttribute("aria-pressed", "false");
+  markGrab("line");
   if (first === "thick" || first === "realistic" || first === "space") void setLook(first);
+  new ResizeObserver(() => markGrab(shownLook)).observe(stage);
 }
