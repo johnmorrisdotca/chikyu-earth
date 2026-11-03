@@ -753,6 +753,9 @@ if (flat && controls && stage) {
     if (timeSpeed && timeSpeed.value !== value) timeSpeed.value = value;
     address.set("speed", value === 1 ? null : String(value));
   };
+  const nameTimeSpeed = (): void => timeSpeed?.setAttribute("label", say("timeSpeed"));
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(nameTimeSpeed));
+  nameTimeSpeed();
   timeSpeed?.addEventListener("kazoku-speedchange", (event) => {
     const { value, reason } = (event as CustomEvent<{ value: number; reason: string }>).detail;
     if (reason !== "user") return;

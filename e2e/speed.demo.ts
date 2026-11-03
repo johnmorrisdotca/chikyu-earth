@@ -26,4 +26,7 @@ test("the time speed row is the same speed buttons, in multiples of real time, a
   await expect(time.locator("button")).toHaveText(["0×", "1×", "3600×", "86400×", "−3600×"]);
   await expect(time.locator('button[data-v="86400"]')).toHaveAttribute("aria-pressed", "true");
   expect(await page.locator("[data-speed]").count()).toBe(0);
+  await expect(time.locator("[role='group']")).toHaveAttribute("aria-label", "Time speed");
+  await page.locator("kazoku-language-picker").evaluate((el) => el.dispatchEvent(new CustomEvent("kazoku-languagechange", { detail: { lang: "ja" }, bubbles: true })));
+  await expect(time.locator("[role='group']")).not.toHaveAttribute("aria-label", "Time speed");
 });
