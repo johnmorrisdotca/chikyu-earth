@@ -492,8 +492,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             model.rideMotion = typeof ride!.target === "string" ? ((speed / Math.max(1e-9, away)) / rideFrom.gameSeconds) * focal : (speed / Math.max(50, (away - 1) * 6371)) * focal;
           } else {
             const spin = model.cameraSpin ?? frame.spin;
-            const lon = model.centre.lon - model.view.yaw;
-            const lat = Math.max(-90, Math.min(90, model.centre.lat + model.view.tilt));
+            // behind a satellite the Earth is the far side of what the camera looks at, so it moves with the camera's side-step; the view is mirrored for the ground to follow the pointer
+            const way = ride && ride.view === "follow" && typeof ride.target !== "string" ? -1 : 1;
+            const lon = model.centre.lon - way * model.view.yaw;
+            const lat = Math.max(-90, Math.min(90, model.centre.lat - way * model.view.tilt));
             const aim = direction(spin + lon, lat);
             distance = Math.max(1.05 * focusRadius, (FIT_DISTANCE * focusRadius) / Math.max(1e-9, model.view.zoom));
             target.set(focusPos[0], focusPos[1], focusPos[2]);

@@ -13,9 +13,9 @@ test("the home view is the starting centre, upright and unzoomed", () => {
   });
 });
 
-test("yaw turns longitude and tilt tips latitude from the home centre", () => {
+test("yaw turns longitude west and tilt tips latitude south from the home centre, so a drag right or up moves the ground right or up", () => {
   const view = projectionView(home, 420, { ...HOME_VIEW, yaw: 45, tilt: 20 });
-  assert.deepEqual(view.rotation, [73.9857 + 45, -40.7484 - 20]);
+  assert.deepEqual(view.rotation, [73.9857 + 45, -40.7484 + 20]);
 });
 
 test("zoom scales the globe and pan moves it in CSS pixels", () => {

@@ -193,7 +193,7 @@ document.getElementById("controls")!.addEventListener("kazoku-viewchange", (even
 });
 ```
 
-The mapping is `rotate([lambda0 + yaw, phi0 - tilt])`, `scale(baseScale * zoom)` and
+The mapping is `rotate([lambda0 + yaw, phi0 + tilt])`, `scale(baseScale * zoom)` and
 `translate([cx + panX, cy + panY])`, where `lambda0` and `phi0` are the home centre. Front returns to that home
 view. Auto-turn's `0.004178` degrees a second is 360° per sidereal day; kazoku-ui leaves it still for a reader who
 prefers reduced motion, and a drag or zoom never stops or resets it.

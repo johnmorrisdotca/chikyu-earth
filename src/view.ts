@@ -46,7 +46,7 @@ export interface ProjectionView {
 export const globeBaseScale = (size: number): number => size / 2 - 1;
 
 /**
- * Where the view is centred on the globe: the home centre, turned by yaw (west) and tipped by tilt (north), held to the poles.
+ * Where the view is centred on the globe: the home centre, turned by yaw (west) and tipped by tilt (south), held to the poles; a drag right is yaw and a drag up is tilt, and the ground follows the pointer.
  *
  * @param centre - The home centre.
  * @param view - The turn, tip, zoom and pan from the view controls.
@@ -61,7 +61,7 @@ export const globeBaseScale = (size: number): number => size / 2 - 1;
  */
 export const lookAt = (centre: GeoPoint, view: GlobeView): GeoPoint => ({
   lon: centre.lon - view.yaw,
-  lat: Math.max(-90, Math.min(90, centre.lat + view.tilt)),
+  lat: Math.max(-90, Math.min(90, centre.lat - view.tilt)),
 });
 
 /**
@@ -81,7 +81,7 @@ export const lookAt = (centre: GeoPoint, view: GlobeView): GeoPoint => ({
  */
 export function projectionView(centre: GeoPoint, size: number, view: GlobeView = HOME_VIEW): ProjectionView {
   return {
-    rotation: [-centre.lon + view.yaw, -centre.lat - view.tilt],
+    rotation: [-centre.lon + view.yaw, -centre.lat + view.tilt],
     scale: globeBaseScale(size) * view.zoom,
     translate: [size / 2 + view.panX, size / 2 + view.panY],
   };
