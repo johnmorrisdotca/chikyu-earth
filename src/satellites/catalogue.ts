@@ -273,6 +273,9 @@ const squash = (text: string): string => text.toUpperCase().replace(/[^A-Z0-9]+/
 /**
  * Find catalogue entries by name, group name or NORAD number: "hubble", "hst", "25544" or "weather". Matching ignores case, spaces and punctuation, and a name that starts with the text comes before one that only has it inside.
  *
+ * @param text - What the reader typed.
+ * @param limit - The most entries to give back (8 by default).
+ * @returns The matching entries, best first; none for empty text.
  * @example
  * ```ts
  * import { findInCatalogue } from "@johnmorrisdotca/chikyu-earth/satellites";
@@ -296,6 +299,8 @@ export function findInCatalogue(text: string, limit = 8): CatalogueEntry[] {
 /**
  * The catalogue entry for a NORAD number, if there is one.
  *
+ * @param noradId - The NORAD catalogue number.
+ * @returns The entry, or undefined when the catalogue does not name that satellite.
  * @example
  * ```ts
  * import { catalogueEntry } from "@johnmorrisdotca/chikyu-earth/satellites";

@@ -19,14 +19,15 @@ npm install @johnmorrisdotca/chikyu-earth three @johnmorrisdotca/kazoku-ui astro
 
 ## 軌道要素を入手する
 
-形式は、[CelesTrak](https://celestrak.org) が配信する「GP」の JSON で、衛星1機につき1つのオブジェクトです (読み取る項目は `ElementSet` にあります)。取得する前に CelesTrak の[利用ポリシー](https://celestrak.org/usage-policy.php)を読み、ページに出典を書いてください。2026年11月2日の時点の要点です。
+形式は、[CelesTrak](https://celestrak.org) が配信する「GP」の JSON で、衛星1機につき1つのオブジェクトです (読み取る項目は `ElementSet` にあります)。取得する前に CelesTrak の[利用ポリシー](https://celestrak.org/usage-policy.php)を読み、ページに出典を書いてください。2026年11月3日の時点の要点です。
 
 - データは、早くても2時間おきにしか更新されません。リストは、訪問者ごとではなく、更新ごとに1回だけ頼みます。決まった間隔でサーバーから取得して保存し、その写しを配信してください。
 - 200 以外の応答が返ったら、そこで止めてください。2時間に50回より多くエラーになると、あなたのアドレスが CelesTrak のファイアウォールに入ります。
 - Starlink などのグループは、全体リストの一部です。取得するのはどちらか一方です。
-- [Space-Track](https://www.space-track.org) も同じ要素を、承認されたアカウントに配信しています。ただし利用規約で、データを他の人に渡すことが認められていないので、他の人が見るページには向きません。
+- [Space-Track](https://www.space-track.org) も同じ要素を、承認されたアカウントに配信しています。ログインが必要で、ページには持たせられません。利用規約では、基本のデータ (TLE と OMM) は出典を書けば他の人に渡せます。[SatNOGS DB](https://db.satnogs.org) は公開のライセンス (CC BY-SA 4.0) ですが、別のサイトからの読み込みを許す設定がないので、ブラウザーからは直接頼めません。
+- [docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) に、各サイトの規約の引用と、使ってよい場所 (訪問者のブラウザー、自分のサイトの写し、パッケージ) があります。
 
-軌道要素は古くなります。SGP4 の誤差は、1日に数キロメートルずつ増えます。表示している日時から14日より離れた要素の衛星は、表示から外します (`maxAgeDays`)。要素の古さは `info(index, ms).ageDays` でわかります。デモは、2026年11月2日の CelesTrak のリスト (すべてのステーションと、Starlink の5機に1機) を1回だけ取得した写しを使い、ページに出典を書き、要素の古さを表示します。
+軌道要素は古くなります。SGP4 の誤差は、1日に数キロメートルずつ増えます。表示している日時から14日より離れた要素の衛星は、表示から外します (`maxAgeDays`)。要素の古さは `info(index, ms).ageDays` でわかります。デモは、2026年11月3日の CelesTrak の14のリスト (Starlink は5機に1機、ほかはすべて) を取得した写しを使い、ページに出典を書き、要素の古さを表示します。
 
 ## 表示する
 
@@ -80,6 +81,21 @@ space.addEventListener("chikyu-satellite-click", (event) => console.log((event a
 ## 1機を選ぶ
 
 衛星を押すと (表示を回すドラッグや、地球の裏側の衛星は対象外です)、`chikyu-satellite-click` が `{ group, index, info }` と一緒に発生します。`info` には、名前、NORAD 番号、軌道要素の古さ、高さ、速さ、周期が入っています。`selectSatellite({ group, index })` はコードから1機を選び (リング、軌道、横に名前が出ます)、`satelliteInfo(ref)` はその情報を返します。検索ボックスや名前の一覧があるページでは、この2つを使えば、キーボードだけの人も選べます。
+
+## カタログ
+
+GPS 衛星がどのリストにあるかをページが知らなくてすむように、パッケージには、名前、番号、軌道の種類を日本語と英語で並べた小さなカタログがあります。14のグループ (宇宙ステーション、有名な衛星、科学、地球観測、気象、静止衛星、GPS、GLONASS、ガリレオ、北斗、アマチュア無線、OneWeb、イリジウム、Starlink) と、名前を挙げる価値のある約40機があります。ISS や天宮から、いちばん古い現役の衛星バンガード1までです。各グループには、どの CelesTrak のリストにあるか (`celestrak`)、またはどの番号を1つずつ頼むか (`catnr`) が書いてあります。**軌道要素は入っていません。** 要素は、これまでどおりページが取得します。静止衛星 (`still: true`) は赤道の1点の上にあり、動かないように見えます。JWST は地球の軌道にいないので、入っていません。
+
+```js
+import { SATELLITE_GROUPS, catalogueEntry, findInCatalogue } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const gps = SATELLITE_GROUPS.find((group) => group.id === "gps");
+console.log(`${gps.label}: ${gps.about} (CelesTrak list ${gps.celestrak})`);
+console.log(catalogueEntry(5).about);
+console.log(findInCatalogue("sentinel 2").map((entry) => entry.name).join(", "));
+```
+
+`findInCatalogue(text)` は、名前、番号、衛星の役目 ("weather"、"telescope" など) に合う項目を、大文字小文字や記号を無視して探します。デモの「探す」欄はこれを使い、そのあと、読み込んだ衛星の名前の中も探します。
 
 ## サーバーで
 

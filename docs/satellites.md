@@ -41,6 +41,12 @@ The numbers are from the software drawing the tests use on a laptop; on a graphi
 
 ## The demo's data
 
-`demo/celestrak-snapshot.json` (demo site only): one download each of CelesTrak's `stations` and `starlink` lists on 2026-11-02, every fifth Starlink satellite (2,232 of 11,156), numbers only.
-`scripts/make-satellite-snapshot.mjs` makes it from two downloaded files and fetches nothing. Credit and the policy: [NOTICE.md](../NOTICE.md). A page that wants live elements fetches them itself, at most once
-every two hours for a list, and stops on any answer that is not 200 ([satellite-sources.md](satellite-sources.md)).
+`demo/elements/` (demo site only, never in the npm package): one file for each of the fourteen groups of the catalogue (`SATELLITE_GROUPS`), made from one download of each CelesTrak list on 2026-11-03, with every
+fifth Starlink satellite (2,231 of 11,155), as rows of numbers; `manifest.json` says what exists and when it was retrieved, `index.json` holds every name for the demo's Find box. `scripts/elements.ts from-dir` makes the files from
+downloaded lists and fetches nothing. Credit and the policy: [NOTICE.md](../NOTICE.md). A page that wants live elements fetches them itself, at most once every two hours for a list, and stops on any answer that is not 200
+([satellite-sources.md](satellite-sources.md) has every source's terms and where each may go). `demo/celestrak-snapshot.json` (the stations and every fifth Starlink satellite of 2026-11-02) is what the embed page and the older tests still read.
+
+## The catalogue
+
+`SATELLITE_GROUPS` (fourteen groups, each with its CelesTrak list or catalogue numbers, an orbit kind, whether it sits still, and a line in English and Japanese) and `CATALOGUE` (about forty satellites by NORAD number, with a line each)
+carry no elements. `findInCatalogue` finds by name, number or what a satellite does. JWST is left out on purpose: it is not in Earth orbit.

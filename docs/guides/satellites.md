@@ -19,14 +19,15 @@ npm install @johnmorrisdotca/chikyu-earth three @johnmorrisdotca/kazoku-ui astro
 
 ## Getting orbital elements
 
-The format is the "GP" JSON that [CelesTrak](https://celestrak.org) serves, one object for each satellite (`ElementSet` has the fields that are read). Read CelesTrak's [usage policy](https://celestrak.org/usage-policy.php) before you fetch, and credit it on your page. In short, on 2 November 2026:
+The format is the "GP" JSON that [CelesTrak](https://celestrak.org) serves, one object for each satellite (`ElementSet` has the fields that are read). Read CelesTrak's [usage policy](https://celestrak.org/usage-policy.php) before you fetch, and credit it on your page. In short, on 3 November 2026:
 
 - The data change every two hours at most. Ask for a list once for each update, not once for each visitor: fetch on a schedule or on your server, keep the answer, and serve your copy.
 - Stop on any answer that is not 200. More than 50 errors in two hours puts your address in CelesTrak's firewall.
 - A group such as Starlink is a subset of the full list: fetch one of them, not both.
-- [Space-Track](https://www.space-track.org) serves the same elements to approved accounts, but its user agreement does not let an account holder pass the data on, so it does not suit a page for other people.
+- [Space-Track](https://www.space-track.org) serves the same elements to approved accounts. It needs a login, which a page cannot hold; its user agreement lets basic data (TLEs and OMMs) be passed on with a citation. [SatNOGS DB](https://db.satnogs.org) has an open licence (CC BY-SA 4.0) but no cross-origin header, so a browser cannot ask it directly.
+- [docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) has every source's terms, quoted, with where each may go: your visitor's browser, a snapshot on your site, or a package.
 
-Elements go stale: SGP4's error grows by a few kilometres a day. A satellite whose elements are more than 14 days from the moment shown (`maxAgeDays`) is left out, and `info(index, ms).ageDays` tells you how old they are. The demo uses one snapshot of CelesTrak's lists from 2 November 2026 (every fifth Starlink satellite and all the stations), credited on its page, and shows the age of the elements.
+Elements go stale: SGP4's error grows by a few kilometres a day. A satellite whose elements are more than 14 days from the moment shown (`maxAgeDays`) is left out, and `info(index, ms).ageDays` tells you how old they are. The demo uses a snapshot of fourteen of CelesTrak's lists from 3 November 2026 (every fifth Starlink satellite, all the others whole), credited on its page, and shows the age of the elements.
 
 ## Show them
 
@@ -80,6 +81,21 @@ A group is **one draw call** however many satellites it holds. Name each group (
 ## Choosing one
 
 A press on a satellite (not a drag that turns the view, and not one behind the Earth) fires `chikyu-satellite-click` with `{ group, index, info }`; `info` has its name, NORAD number, the age of its elements, its height, speed and period. `selectSatellite({ group, index })` marks one from code (a ring, its orbit and its name beside it), and `satelliteInfo(ref)` tells you about it. A page with a search box or a list of names uses those two, so a keyboard reader can choose too.
+
+## The catalogue
+
+So that a page does not have to know which list holds the GPS satellites, the package carries a small catalogue of names, numbers and orbit kinds, in English and Japanese: fourteen groups (stations, famous ones, science, Earth observation, weather, geostationary, GPS, GLONASS, Galileo, BeiDou, amateur radio, OneWeb, Iridium, Starlink) and about forty satellites worth naming, from the ISS and Tiangong to Vanguard 1, the oldest satellite still in orbit. Each group says which CelesTrak list holds it (`celestrak`) or which numbers to ask for one by one (`catnr`). **It has no orbital elements**: your page still fetches those. Geostationary satellites (`still: true`) sit over one point of the equator and do not appear to move, and JWST is not in it because it is not in Earth orbit.
+
+```js
+import { SATELLITE_GROUPS, catalogueEntry, findInCatalogue } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const gps = SATELLITE_GROUPS.find((group) => group.id === "gps");
+console.log(`${gps.label}: ${gps.about} (CelesTrak list ${gps.celestrak})`);
+console.log(catalogueEntry(5).about);
+console.log(findInCatalogue("sentinel 2").map((entry) => entry.name).join(", "));
+```
+
+`findInCatalogue(text)` matches names, numbers and what a satellite does ("weather", "telescope"), ignoring case and punctuation. The demo's Find box uses it, then looks in the names of the satellites it has loaded.
 
 ## On a server
 

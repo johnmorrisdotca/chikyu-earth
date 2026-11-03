@@ -49,11 +49,12 @@ bundle or ship it. The planets are drawn as plain colours, from no picture.
 `<chikyu-space>` draws satellites from orbital elements that **your page** passes in; this package fetches and ships none. SGP4 is run by **satellite.js** (https://github.com/shashwatak/satellite-js, MIT, by
 Shashwat Kandadai and contributors), the page's own optional peer dependency: this package does not bundle or ship it.
 
-The demo's file `demo/celestrak-snapshot.json` (the demo site only, not the npm package) holds element sets from **CelesTrak** (https://celestrak.org, T.S. Kelso), which serves the U.S. Space Force's
+The demo's files `demo/elements/*.json` (the demo site only, not the npm package) hold element sets, one file for each of fourteen groups, from one download of each of CelesTrak's lists on 2026-11-03 (about 16:00 UTC), with every fifth
+Starlink satellite kept (2,231 of 11,155), within the same usage policy, credited the same way and with the same grey tier. `demo/celestrak-snapshot.json` below is the older snapshot of 2026-11-02 that the embed page and some tests still read. It holds element sets from **CelesTrak** (https://celestrak.org, T.S. Kelso), which serves the U.S. Space Force's
 18th Space Defense Squadron's general-perturbation (GP) data and, for Starlink, SpaceX's own supplemental elements. It is one download of the `stations` list and one of the `starlink` list on 2026-11-02
 (about 17:07 UTC), within CelesTrak's usage policy (https://celestrak.org/usage-policy.php, read 2026-11-02: one download per update per list, nothing fetched at a visitor's request), with every fifth Starlink satellite
 kept (2,232 of 11,156), as numbers only. CelesTrak states no licence or credit rule for the data; it is credited on the demo page, and the demo shows the age of the elements. The tier is "grey" in John's
-terms: a snapshot with credit, never a live fetch. Space-Track's data are not used (it needs an account; its user agreement allows passing on basic data such as TLEs and OMMs only with a citation). docs/satellite-sources.md has every source's terms, read 2026-11-03.
+terms: a snapshot with credit, never a live fetch. The catalogue (`src/satellites/catalogue.ts`) holds names, NORAD numbers and orbit kinds, which are facts, and lines written for this package in its own words (English and Japanese); nothing is copied from NASA, ESA, Wikipedia or any other page. Space-Track's data are not used (it needs an account; its user agreement allows passing on basic data such as TLEs and OMMs only with a citation). docs/satellite-sources.md has every source's terms, read 2026-11-03.
 
 ## Sun position
 
