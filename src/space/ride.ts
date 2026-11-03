@@ -4,6 +4,9 @@ import type { Vec3 } from "./ephemeris.ts";
 
 const RAD = Math.PI / 180;
 
+/** How far the ground moves in the picture for each pixel of a drag at the middle of it: the same pace as the line globe and the Earth from space (about one and a half). */
+const GRAB = 1.5;
+
 /**
  * The field of view, in degrees, of a camera riding along at zoom 1 (the Earth's view from outside is 35).
  *
@@ -47,9 +50,9 @@ export interface RideInput {
   /** Its direction of travel, in any unit: only the direction is used. */
   velocity: Vec3;
   look: RideLook;
-  /** Degrees: turns the view round the straight-down line (0 has the way it is going at the top of the picture). */
+  /** The shared controls' yaw in degrees (a drag across the view is 180): turns the camera to look along its picture's left, so the ground moves right. 0 has the way it is going at the top of the picture. */
   yaw: number;
-  /** Degrees: tips the view forward from where `look` puts it, towards the horizon and beyond. */
+  /** The shared controls' tilt in degrees (a drag down the view is 60): tips the camera to look towards the bottom of its picture, so the ground moves up. */
   tilt: number;
   /** 1 is the natural view; more narrows the field of view. */
   zoom: number;
@@ -86,7 +89,8 @@ const unit = (a: Vec3): Vec3 => {
 
 /**
  * The camera of a body-borne view: at `position`, looking at the Earth, with the way the body is going at the top of the picture. `look: "horizon"` tips it forward until the
- * horizon is a little above the middle; `tilt` tips it further, `yaw` turns it round the straight-down line, and `zoom` narrows the field of view.
+ * horizon is a little above the middle. A drag looks about from there, as a head on a pivot does: `yaw` turns the camera to its left and `tilt` tips it towards the bottom of its picture, so the
+ * ground follows the pointer (right for a drag right, up for a drag up); the angle for each pixel of the drag is the field of view's, so the pace is the same at any zoom. `zoom` narrows the field of view.
  *
  * @param input - The camera's place, its way of travel, the look, and the shared controls' yaw, tilt and zoom.
  * @returns The camera's place, forward and up directions (unit vectors), its field of view, and the Earth's angular radius from there.
@@ -110,12 +114,15 @@ export function ridePose(input: RideInput): RidePose {
     if (norm(ahead) < 1e-9) ahead = cross([1, 0, 0], nadir);
   }
   ahead = unit(ahead);
-  const turn = input.yaw * RAD;
-  ahead = add(scale(ahead, Math.cos(turn)), scale(cross(nadir, ahead), Math.sin(turn)));
   const earthRadiusDegrees = distance <= 1 ? 90 : Math.asin(1 / distance) / RAD;
-  const base = input.look === "horizon" ? Math.max(0, earthRadiusDegrees - 12) : 0;
-  const pitch = Math.min(150, Math.max(0, base + input.tilt)) * RAD;
-  const forward = add(scale(nadir, Math.cos(pitch)), scale(ahead, Math.sin(pitch)));
-  const up = add(scale(ahead, Math.cos(pitch)), scale(nadir, -Math.sin(pitch)));
-  return { position: [input.position[0], input.position[1], input.position[2]], forward, up, fov: Math.min(100, Math.max(5, RIDE_FOV / Math.max(0.05, input.zoom))), earthRadiusDegrees };
+  const base = input.look === "horizon" ? Math.max(0, earthRadiusDegrees - 12) * RAD : 0;
+  const forward0 = add(scale(nadir, Math.cos(base)), scale(ahead, Math.sin(base)));
+  const up0 = add(scale(ahead, Math.cos(base)), scale(nadir, -Math.sin(base)));
+  const fov = Math.min(100, Math.max(5, RIDE_FOV / Math.max(0.05, input.zoom)));
+  const turn = input.yaw * (GRAB * fov / 180) * RAD;
+  const lift = input.tilt * (GRAB * fov / 60) * RAD;
+  const turned = add(scale(forward0, Math.cos(turn)), scale(cross(up0, forward0), Math.sin(turn)));
+  const forward = add(scale(turned, Math.cos(lift)), scale(up0, -Math.sin(lift)));
+  const up = add(scale(up0, Math.cos(lift)), scale(turned, Math.sin(lift)));
+  return { position: [input.position[0], input.position[1], input.position[2]], forward, up, fov, earthRadiusDegrees };
 }

@@ -243,11 +243,11 @@ if (flat && controls && stage) {
     for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
     for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
   };
-  const setRideZoom = (riding: boolean): void => {
+  const setRideZoom = (riding: boolean, keepTurn = false): void => {
     // riding at a body, the zoom narrows the view (a little either way); otherwise it is the distance from the Earth
     controls!.setAttribute("zoom-min", riding && rideView === "from" ? "0.5" : "0.000001");
     controls!.setAttribute("zoom-max", riding && rideView === "from" ? "6" : "2.5");
-    Reflect.get(controls!, "controller").set({ zoom: 1, yaw: 0, tilt: 0 }, true, "ride");
+    Reflect.get(controls!, "controller").set(keepTurn ? { zoom: 1 } : { zoom: 1, yaw: 0, tilt: 0 }, true, "ride");
   };
   const speakRide = (): void => {
     const riding = space?.riding;
@@ -273,7 +273,7 @@ if (flat && controls && stage) {
     speakRide();
     for (const key of ["ride", "rview", "rlook"]) address.set(key, null);
   }
-  async function startRide(key: string): Promise<void> {
+  async function startRide(key: string, keepTurn = false): Promise<void> {
     if (!space) return;
     if (key === "none") {
       stopRide();
@@ -292,7 +292,7 @@ if (flat && controls && stage) {
     rideKey = key;
     markRide();
     if (typeof target !== "string") showSatellite(null);
-    setRideZoom(true);
+    setRideZoom(true, keepTurn);
     space.ride(target, { view: rideView, look: rideLook });
     speakRide();
     address.set("ride", key);
@@ -366,7 +366,7 @@ if (flat && controls && stage) {
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
     for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
     for (const name of shownGroups) void toggleGroup(name as keyof typeof GROUP_STYLE, true);
-    if (rideKey) void startRide(rideKey);
+    if (rideKey) void startRide(rideKey, true);
     const wanted = Number(address.get("sat"));
     if (wanted) {
       void toggleGroup("stations", true).then(async () => {
@@ -559,7 +559,7 @@ if (flat && controls && stage) {
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");
-  const first = opened["look"];
+  const first = opened["look"] ?? (opened["ride"] ? "space" : undefined);
   if (opened["scale"] === "true") {
     for (const b of scaleButtons) b.classList.toggle("on", b.dataset["scale"] === "true");
   }

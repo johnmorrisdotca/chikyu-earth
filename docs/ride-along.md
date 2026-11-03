@@ -9,12 +9,19 @@ and looks at the Earth. [guides/ride-along.md](guides/ride-along.md) (Japanese: 
 
 - **From it** (`view: "from"`): the camera is at the body. `ridePose` (pure, `@johnmorrisdotca/chikyu-earth/space`) works out where it looks: straight at the Earth's centre, with the way the body is going
   (its velocity, less the part that points at the Earth) at the top of the picture; `look: "horizon"` tips it forward by the Earth's angular radius less 12 degrees, so the horizon is a little above the middle;
-  the shared controls' tilt tips it further, their yaw turns it round the straight-down line, their zoom narrows the 60 degree field of view. A satellite's place and velocity are one exact SGP4 call a frame
+  a drag looks about from there, like a head on a pivot (see "Dragging a ride"); their zoom narrows the 60 degree field of view. A satellite's place and velocity are one exact SGP4 call a frame
   (never the interpolation, so the camera is right at any speed); a body's way of going is the difference of its places at the two ends of the ephemeris track.
 - **Behind it** (`view: "follow"`): the camera keeps a fixed distance and looks at the body, from the direction the sky was in when the view was last moved (the same camera as "Look at"). For a satellite the
   distance is `distanceKm / zoom`.
 - **Switching** glides: the camera's place, its turn (a spherical interpolation) and its field of view move from where the last draw left them to the new camera over 1.2 seconds, eased. Reduced motion jumps.
 - The body being ridden is not drawn (the camera is inside it), nor is its name.
+
+## Dragging a ride
+
+The camera is fixed to the body, so a drag cannot move the camera; it turns it. A drag right turns the camera to its left and a drag up tips it towards the bottom of its picture, so the ground follows the pointer as it does on the line globe and the
+Earth from space (right for right, up for up, about one and a half pixels for each pixel of the drag). The angle for a pixel is the field of view's, so zooming in does not make the ground race away. It is a pan and tilt about the camera's own up and
+sideways lines, so it works the same looking straight down (where a turn round the vertical would only spin the picture) and tipped to the horizon. The yaw and tilt are in the address, and a page opened with them looks the same. Behind a satellite (`view: "follow"`) the drag
+goes round the satellite and the Earth, which is behind it, follows the pointer.
 
 ## When it draws
 
@@ -32,6 +39,8 @@ Paused: no timer, nothing drawn. Out of sight or in a hidden tab: the renderer d
 | Nothing at rest | paused: 0 GL draws, 0 frame requests in 3 s; after a glide it rests |
 | Nothing out of sight | scrolled away or a hidden tab at 60x: 0 GL draws |
 | Reduced motion | no glide; about 1 frame a second at 60x |
+| A drag moves the ground the way the pointer goes | `e2e/drag.gl.ts`: real pointer drags, arrow keys and Auto-turn on the ISS (down and at the horizon), the Moon and behind them; the ground's move is found by sliding the first picture over the second |
+| The address keeps the turn | `e2e/drag.gl.ts`: a ride opens with the address's yaw and tilt, a drag writes them back, and the address brings the same picture back |
 | Smooth switching ends | the glide from the ISS to the Moon takes about 1.2 s, is part of the way after half a second, and then 0 draws |
 | Lost target | elements too old for the date: `chikyu-ride-lost`, the ordinary camera |
 | Dispose, recover | five switches and a stop leave the buffers and textures where they were; a lost context comes back and still rides |

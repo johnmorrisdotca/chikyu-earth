@@ -321,7 +321,7 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
-   * The shared controls' camera: yaw and tilt turn the view, zoom brings the camera in (1 shows the Earth, less shows the sky round it). Pan is not used. A turn that moves nothing on the screen by half a pixel is kept
+   * The shared controls' camera: yaw and tilt turn the view (the Earth's surface moves right for a drag right and up for a drag up), zoom brings the camera in (1 shows the Earth, less shows the sky round it). Pan is not used. A turn that moves nothing on the screen by half a pixel is kept
    * for the next draw but does not cause one unless `final` is true (the default), so an Auto-turn at the Earth's own rate costs a draw every half minute, not thirty a second.
    *
    * @param view - The controls' yaw and tilt in degrees and zoom.
@@ -352,7 +352,7 @@ export class ChikyuSpace extends HTMLElement {
   // --- riding along -------------------------------------------------------------------------------------------------------------------------------
   /**
    * Ride along with a body or a satellite. By default the camera sits at it and looks at the Earth, with the way it is going at the top of the picture, at its real place for the moment shown, so the
-   * Earth turns and slides beneath as it moves along its orbit (an ISS view goes round about every 90 minutes). The shared controls' yaw and tilt turn the view and tip it towards the horizon, their zoom narrows it.
+   * Earth turns and slides beneath as it moves along its orbit (an ISS view goes round about every 90 minutes). A drag looks about from there (a drag right turns the camera to its left and a drag up tips it towards the bottom of its picture, so the ground follows the pointer), the shared controls' zoom narrows the view.
    * A satellite is `{ group, index }` of a group set with `setSatellites`; it is placed exactly, one SGP4 call a frame, at any speed. Another call switches smoothly; `null` stops. The draw rate follows how
    * fast the picture moves, never more than 30 a second (one a second for a reader who asked for reduced motion), and nothing is drawn out of sight.
    *

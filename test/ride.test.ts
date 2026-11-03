@@ -36,16 +36,40 @@ test("the horizon look tips the camera forward until the horizon is a little abo
   near((Math.acos(-far.forward[0]) * 180) / Math.PI, 0, 1e-9, "from far away the horizon is the picture's edge, so it looks down");
 });
 
-test("tilt tips it further, yaw turns it round the straight-down line, and zoom narrows the view", () => {
-  const tipped = ridePose({ ...iss, tilt: 30 });
-  near((Math.acos(-tipped.forward[0]) * 180) / Math.PI, 30, 1e-6, "tilt");
-  const turned = ridePose({ ...iss, velocity: [0, 0, -7.66], yaw: 90 });
-  near(Math.abs(turned.up[1]), 1, 1e-9, "a quarter turn puts the way it goes at the side");
-  near(dot(turned.forward, [-1, 0, 0]), 1, 1e-9, "still looking straight down");
+test("zoom narrows the view", () => {
   near(ridePose({ ...iss, zoom: 2 }).fov, RIDE_FOV / 2, 1e-9, "twice the zoom, half the field of view");
   assert.equal(ridePose({ ...iss, zoom: 1000 }).fov, 5);
   assert.equal(ridePose({ ...iss, zoom: 0.0001 }).fov, 100);
-  assert.equal(ridePose({ ...iss, tilt: 400 }).forward.every(Number.isFinite), true);
+  assert.equal(ridePose({ ...iss, tilt: 400, yaw: 400 }).forward.every(Number.isFinite), true);
+});
+
+test("a drag right (yaw) turns the camera left and a drag up (tilt) tips it towards the bottom of the picture, so the ground follows the pointer", () => {
+  // looking down over +x with the way it goes (-z) at the top: the picture's left is +y, its bottom is +z
+  const clean: RideInput = { ...iss, velocity: [0, 0, -7.66] };
+  const right = ridePose({ ...clean, yaw: 40 });
+  assert.ok(right.forward[1] > 0.1, `looks to the picture's left: ${right.forward}`);
+  near(right.forward[2], 0, 1e-9, "and not along the way it goes");
+  const up = ridePose({ ...clean, tilt: 20 });
+  assert.ok(up.forward[2] > 0.1, `looks towards the picture's bottom: ${up.forward}`);
+  near(up.forward[1], 0, 1e-9, "and not sideways");
+  for (const pose of [right, up]) {
+    near(len(pose.forward), 1, 1e-9, "forward is a unit vector");
+    near(len(pose.up), 1, 1e-9, "up is a unit vector");
+    near(dot(pose.forward, pose.up), 0, 1e-9, "up is square to forward");
+  }
+});
+
+test("the angle for each pixel of a drag follows the field of view, so the ground keeps pace with the pointer at any zoom", () => {
+  const angle = (zoom: number): number => (Math.acos(-ridePose({ ...iss, yaw: 30, zoom }).forward[0]) * 180) / Math.PI;
+  near(angle(1), 30 * 1.5 * (RIDE_FOV / 180), 1e-6, "at zoom 1");
+  near(angle(2), angle(1) / 2, 1e-6, "twice the zoom, half the angle");
+});
+
+test("a drag from the horizon look turns about the camera's own up, so the picture's up stays put", () => {
+  const level = ridePose({ ...iss, look: "horizon" });
+  const turned = ridePose({ ...iss, look: "horizon", yaw: 30 });
+  for (let i = 0; i < 3; i += 1) near(turned.up[i]!, level.up[i]!, 1e-9, "up");
+  assert.ok(Math.abs(turned.forward[1]!) > 0.05, "and it looks to the side");
 });
 
 test("with no way of travel it still has a sensible up: north, or east at a pole", () => {
