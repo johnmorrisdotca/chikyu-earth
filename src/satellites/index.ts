@@ -2,3 +2,4 @@
 export { createSatellites, type SatellitesOptions } from "./track.ts";
 export { DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED } from "./limits.ts";
 export type { ElementSet, RefusedElementSet, SatelliteInfo, SatelliteRef, Satellites } from "./types.ts";
+export { CATALOGUE, SATELLITE_GROUPS, catalogueEntry, findInCatalogue, type CatalogueEntry, type OrbitKind, type SatelliteGroupInfo } from "./catalogue.ts";
