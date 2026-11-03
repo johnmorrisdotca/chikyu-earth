@@ -7,7 +7,7 @@ description: iframe 1つ、スクリプトなしで、どんなページにも�
 
 デモサイトには、枠に入れるための専用ページ `embed.html` があります。アドレスに書かれた内容を描き、自分のファイル以外は取得しません。なので、あなたの側にはスクリプトも、ビルドも、パッケージも要りません。
 
-![コードビルダー：場所・見た目・経緯線・大きさを選ぶ行、ページの作り方ごとのタブ、プレビュー、コピーできるコード。](https://raw.githubusercontent.com/johnmorrisdotca/chikyu-earth/main/docs/images/builder-desk.png)
+図：[コードビルダー：場所・見た目・経緯線・大きさを選ぶ行、ページの作り方ごとのタブ、プレビュー、コピーできるコード。](https://raw.githubusercontent.com/johnmorrisdotca/chikyu-earth/main/docs/images/builder-desk.png)
 
 ```html
 <!doctype html>
