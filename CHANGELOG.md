@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 - 2026-11-03
+
+More satellites to follow and ride (MODULES-261, steps 1 and 2): where the data may come from, a curated catalogue, and fourteen groups in the demo.
+
+- **`docs/satellite-sources.md`: every source's terms read and quoted** (CelesTrak, Space-Track, SatNOGS DB, N2YO, AMSAT, NASA and ESA, Wikidata), each with a tier (green, grey, red) and whether it may be fetched by the visitor's own browser, snapshotted on the demo site, or redistributed in the package. CelesTrak stays grey; Space-Track's blanket approval for passing on basic data (TLEs, OMMs) with a citation is noted; the decisions that are John's are one ticket (MODULES-333). The package still ships no orbital elements.
+- **A curated catalogue** in `@johnmorrisdotca/chikyu-earth/satellites`: `SATELLITE_GROUPS` (fourteen groups: stations, famous, science, Earth observation, weather, geostationary, GPS, GLONASS, Galileo, BeiDou, amateur radio, OneWeb, Iridium, Starlink, each with its CelesTrak list or catalogue numbers, an orbit kind, whether it sits still, and a line in English and Japanese), `CATALOGUE` (about forty satellites by NORAD number, from the ISS and Tiangong to Hubble and Vanguard 1, the oldest satellite still in orbit, each with a line in English and Japanese), `findInCatalogue` and `catalogueEntry`. JWST is left out on purpose: it is not in Earth orbit. No elements in it.
+- **The demo's groups are buttons** (a coloured dot each; a group switched on says what it is, and the demo zooms out to a group that goes far from the Earth), with **Find** (a search box over the catalogue and the names of every satellite in the demo's files, plus ISS and Tiangong) and two new rides, **The chosen satellite** and **One from the last group**. The address keeps the groups (`sats=gps,weather`), the chosen satellite (`sat=<NORAD number>`) and the ride (`ride=chosen`). A chosen satellite shows its catalogue line beside its height, speed and age.
+- **`demo/elements/`** (demo site only): one file for each group, made from one download of each CelesTrak list on 2026-11-03, `manifest.json` and `index.json`; `scripts/elements.ts` makes them from downloaded lists and fetches nothing. Starlink stays at every fifth satellite (about 2,200 dots in one draw call); the others are whole (the geostationary list has 569).
+- Tests: the catalogue and the file maker (`test/catalogue.test.ts`, `test/elements.test.ts`) and the demo's groups, Find and Ride on **made-up** element files served in place of the demo's own, with a check that nothing is asked of any other site (`e2e/groups.gl.ts`).
+
 ## 0.11.0 - 2026-11-03
 
 The real Sun, planets, Pluto and moons in the space view.
