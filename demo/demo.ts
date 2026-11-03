@@ -9,6 +9,7 @@ import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { WORDS } from "./words.js";
 import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
+import { catalogueEntry, findInCatalogue, SATELLITE_GROUPS, type SatelliteGroupInfo } from "../src/satellites/catalogue.ts";
 import type { RideTarget } from "../src/space/element.ts";
 import type { BodyPainter } from "../src/space/index.ts";
 import { discRadius } from "../src/realistic/earth.ts";
@@ -150,35 +151,97 @@ if (flat && controls && stage) {
   }
   for (const button of bodyButtons) button.addEventListener("click", () => lookAtBody((button.dataset["body"] ?? "Earth") as BodyName));
 
-  // --- satellites: CelesTrak's element sets of one day, in a small file of this site's own, made into groups the first time one is asked for ---------------------------------
-  interface Snapshot {
+  // --- satellites: the demo site's element files (elements/, one for each group), made into groups the first time one is asked for --------------------------------------------
+  interface GroupFile {
+    id: string;
     retrieved: string;
+    all: number;
     fields: string[];
-    groups: Record<string, (string | number)[][]>;
+    rows: (string | number)[][];
   }
-  const GROUP_STYLE = { stations: { color: "#ffd54f", size: 6, orbits: true }, starlink: { color: "#7fd4ff", size: 2.5, orbits: false } } as const;
-  const GROUP_ALL = 11156;
+  interface Manifest {
+    retrieved: string;
+    groups: Record<string, { file: string; retrieved: string; count: number; all: number }>;
+    index: string;
+  }
+  const GROUP_STYLE: Record<string, { color: string; size: number; orbits: boolean }> = {
+    stations: { color: "#ffd54f", size: 6, orbits: true },
+    famous: { color: "#ff8a65", size: 6, orbits: true },
+    science: { color: "#b39ddb", size: 5, orbits: false },
+    "earth-observation": { color: "#69f0ae", size: 3.5, orbits: false },
+    weather: { color: "#4dd0e1", size: 4, orbits: false },
+    geostationary: { color: "#f48fb1", size: 3.5, orbits: false },
+    gps: { color: "#ffb74d", size: 4.5, orbits: false },
+    glonass: { color: "#ef5350", size: 4.5, orbits: false },
+    galileo: { color: "#64b5f6", size: 4.5, orbits: false },
+    beidou: { color: "#fff176", size: 4.5, orbits: false },
+    amateur: { color: "#aed581", size: 4, orbits: false },
+    oneweb: { color: "#ce93d8", size: 2.5, orbits: false },
+    iridium: { color: "#80cbc4", size: 3.5, orbits: false },
+    starlink: { color: "#7fd4ff", size: 2.5, orbits: false },
+  };
   const MAX_AGE_DAYS = 14;
-  let snapshot: Promise<Snapshot> | null = null;
+  const isJa = (): boolean => say("locale").startsWith("ja");
+  const loadJson = <T,>(name: string): Promise<T> => fetch(`elements/${name}`).then((response) => (response.ok ? (response.json() as Promise<T>) : Promise.reject(new Error(String(response.status)))));
+  const fetched = new Map<string, Promise<unknown>>();
+  const once = <T,>(name: string): Promise<T> => {
+    let found = fetched.get(name) as Promise<T> | undefined;
+    if (!found) {
+      found = loadJson<T>(name).catch((error: unknown) => {
+        fetched.delete(name);
+        throw error;
+      });
+      fetched.set(name, found);
+    }
+    return found;
+  };
+  const loadManifest = (): Promise<Manifest> => once<Manifest>("manifest.json");
   const made = new Map<string, Satellites>();
+  const filesOf = new Map<string, GroupFile>();
   const shownGroups = new Set((address.get("sats") ?? "").split(",").filter((name) => name in GROUP_STYLE));
-  const satButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-sat-group]")];
+  const satBox = document.querySelector<HTMLElement>("#sat-groups");
+  const satAbout = document.querySelector<HTMLElement>("#sat-about");
+  const satSearch = document.querySelector<HTMLInputElement>("#sat-search");
+  const satResults = document.querySelector<HTMLElement>("#sat-results");
+  const groupLabel = (info: SatelliteGroupInfo): string => (isJa() ? info.labelJa : info.label);
+  const satButtons = SATELLITE_GROUPS.map((info) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset["satGroup"] = info.id;
+    button.setAttribute("aria-pressed", "false");
+    button.textContent = info.label;
+    button.style.setProperty("--dot", GROUP_STYLE[info.id]?.color ?? "currentColor");
+    satBox?.append(button);
+    return button;
+  });
+  const relabelSatellites = (): void => {
+    for (const button of satButtons) button.textContent = groupLabel(SATELLITE_GROUPS.find((info) => info.id === button.dataset["satGroup"])!);
+  };
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(relabelSatellites));
+  relabelSatellites();
+  let lastGroup: string | null = null;
+  let chosen: SatelliteRef | null = null;
 
-  const loadSnapshot = (): Promise<Snapshot> => (snapshot ??= fetch("celestrak-snapshot.json").then((response) => (response.ok ? (response.json() as Promise<Snapshot>) : Promise.reject(new Error(String(response.status))))));
-  async function groupOf(name: keyof typeof GROUP_STYLE): Promise<Satellites> {
+  async function groupOf(name: string): Promise<Satellites> {
     const found = made.get(name);
     if (found) return found;
-    const [{ createSatellites }, data] = await Promise.all([import("../src/satellites/index.ts"), loadSnapshot()]);
-    const sets = data.groups[name]!.map((row) => Object.fromEntries(data.fields.map((field, index) => [field, row[index]])) as never);
+    const [{ createSatellites }, data] = await Promise.all([import("../src/satellites/index.ts"), once<GroupFile>(`${name}.json`)]);
+    filesOf.set(name, data);
+    const sets = data.rows.map((row) => Object.fromEntries(data.fields.map((field, index) => [field, row[index]])) as never);
     const group = createSatellites(sets, { maxAgeDays: MAX_AGE_DAYS });
     made.set(name, group);
     Reflect.set(globalThis, "chikyuSatellites", { createSatellites, groups: made });
     return group;
   }
   const ageText = (days: number): string => (Math.abs(days) < 2 ? say("satAgeHours", { n: Math.round(Math.abs(days) * 24) }) : say("satAgeDays", { n: Math.round(Math.abs(days)) }));
-  const describeSatellite = (info: SatelliteInfo): string => say("satFact", { name: info.name, altitude: Math.round(info.altitudeKm), speed: info.speedKmS.toFixed(2), period: Math.round(info.periodMinutes), age: ageText(info.ageDays) });
+  const aboutText = (noradId: number): string => {
+    const entry = catalogueEntry(noradId);
+    return entry ? (isJa() ? entry.aboutJa : entry.about) : "";
+  };
+  const describeSatellite = (info: SatelliteInfo): string => `${say("satFact", { name: info.name, altitude: Math.round(info.altitudeKm), speed: info.speedKmS.toFixed(2), period: Math.round(info.periodMinutes), age: ageText(info.ageDays) })} ${aboutText(info.noradId)}`.trim();
   const showSatellite = (ref: SatelliteRef | null): void => {
     space?.selectSatellite(ref);
+    chosen = ref;
     const info = ref && space ? space.satelliteInfo(ref) : undefined;
     if (satInfo) {
       satInfo.hidden = !info;
@@ -186,14 +249,33 @@ if (flat && controls && stage) {
     }
     address.set("sat", info ? String(info.noradId) : null);
   };
-  const noteSatellites = async (): Promise<void> => {
+  const noteSatellites = (): void => {
     if (!satNote) return;
-    const data = await loadSnapshot();
-    satNote.hidden = false;
-    satNote.textContent = say("satNote", { date: new Date(data.retrieved).toLocaleDateString(say("locale"), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }), stations: data.groups["stations"]!.length, starlink: data.groups["starlink"]!.length.toLocaleString(say("locale")), all: GROUP_ALL.toLocaleString(say("locale")), limit: 60 });
+    const files = [...filesOf.values()].filter((file) => shownGroups.has(file.id));
+    satNote.hidden = files.length === 0;
+    if (!files.length) return;
+    const oldest = files.map((file) => file.retrieved).sort()[0]!;
+    satNote.textContent = say("satNote", { date: new Date(oldest).toLocaleDateString(say("locale"), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }), shown: files.reduce((sum, file) => sum + file.rows.length, 0).toLocaleString(say("locale")), all: files.reduce((sum, file) => sum + file.all, 0).toLocaleString(say("locale")), limit: 60 });
   };
-  /** Show or hide one group on the space view; the first time, make it. The elements are a day's snapshot: if that is too old for the date shown, show the day it was downloaded instead. */
-  async function toggleGroup(name: keyof typeof GROUP_STYLE, on: boolean): Promise<void> {
+  const noteGroup = (): void => {
+    if (!satAbout) return;
+    const info = SATELLITE_GROUPS.find((one) => one.id === lastGroup);
+    satAbout.hidden = !info || !shownGroups.has(info.id);
+    if (info && !satAbout.hidden) satAbout.textContent = `${groupLabel(info)}: ${isJa() ? info.aboutJa : info.about}`;
+  };
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(noteGroup));
+  /** How far out a group goes, in Earth radii (capped at 8, so a few far-out telescopes do not shrink the Earth): from the mean motion and eccentricity of each satellite. */
+  const reachOf = (file: GroupFile): number => {
+    const at = (field: string): number => file.fields.indexOf(field);
+    let far = 0;
+    for (const row of file.rows) {
+      const revs = Number(row[at("MEAN_MOTION")]);
+      far = Math.max(far, 6.62 * Math.pow(1 / revs, 2 / 3) * (1 + Number(row[at("ECCENTRICITY")])));
+    }
+    return Math.min(8, far);
+  };
+  /** Show or hide one group on the space view; the first time, make it. The elements are a snapshot: if it is too old for the date shown, show the day it was downloaded instead. */
+  async function toggleGroup(name: string, on: boolean, fit = false): Promise<void> {
     if (!space) return;
     const button = satButtons.find((b) => b.dataset["satGroup"] === name);
     button?.setAttribute("aria-pressed", String(on));
@@ -202,37 +284,94 @@ if (flat && controls && stage) {
     address.set("sats", shownGroups.size ? [...shownGroups].join(",") : null);
     if (!on) {
       space.showSatellites(name, false);
+      noteSatellites();
+      noteGroup();
       return;
     }
+    lastGroup = name;
     try {
       const group = await groupOf(name);
-      const data = await loadSnapshot();
-      const retrieved = Date.parse(data.retrieved);
+      const retrieved = Date.parse(filesOf.get(name)!.retrieved);
       if (Math.abs(space.time - retrieved) > MAX_AGE_DAYS * 86_400_000 && address.get("time") === null) {
         space.time = retrieved;
         if (when) when.value = localValue(retrieved);
         now?.setAttribute("aria-pressed", "false");
-        notice(say("satOld", { days: Math.round(Math.abs(Date.now() - retrieved) / 86_400_000), date: data.retrieved.slice(0, 10) }));
+        notice(say("satOld", { days: Math.round(Math.abs(Date.now() - retrieved) / 86_400_000), date: filesOf.get(name)!.retrieved.slice(0, 10) }));
       }
-      if (!space.satelliteGroups.some((one) => one.name === name)) space.setSatellites(name, group, GROUP_STYLE[name]);
+      if (!space.satelliteGroups.some((one) => one.name === name)) space.setSatellites(name, group, GROUP_STYLE[name]!);
       else space.showSatellites(name, true);
-      void noteSatellites();
+      noteSatellites();
+      noteGroup();
+      if (fit && !space.riding) {
+        const reach = reachOf(filesOf.get(name)!);
+        if (reach > 1.6) Reflect.get(controls!, "controller").set({ zoom: Math.min(1, 1.8 / reach) }, true, "satellites");
+      }
     } catch {
       notice(say("satLoadFail"));
       button?.setAttribute("aria-pressed", "false");
       shownGroups.delete(name);
     }
   }
-  for (const button of satButtons) button.addEventListener("click", () => void toggleGroup(button.dataset["satGroup"] as keyof typeof GROUP_STYLE, button.getAttribute("aria-pressed") !== "true"));
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-sat-find]")) {
-    button.addEventListener("click", async () => {
-      if (!space) return;
-      const noradId = Number(button.dataset["satFind"]);
-      await toggleGroup("stations", true);
-      const index = (await groupOf("stations")).sets.findIndex((set) => set.NORAD_CAT_ID === noradId);
-      if (index >= 0) showSatellite({ group: "stations", index });
-    });
+  for (const button of satButtons) button.addEventListener("click", () => void toggleGroup(button.dataset["satGroup"]!, button.getAttribute("aria-pressed") !== "true", true));
+
+  /** Every name in every file, for Find: [number, name, group]. */
+  const loadIndex = (): Promise<{ rows: [number, string, string][] }> => loadManifest().then((manifest) => once<{ rows: [number, string, string][] }>(manifest.index));
+  const squash = (text: string): string => text.toUpperCase().replace(/[^A-Z0-9]+/g, "");
+  /** Switch the satellite's group on and mark it as the chosen one. */
+  async function chooseSatellite(noradId: number, group?: string): Promise<boolean> {
+    if (!space) return false;
+    let name = group;
+    try {
+      name = (await loadIndex()).rows.find((row) => row[0] === noradId)?.[2] ?? group;
+    } catch {
+      notice(say("satLoadFail"));
+    }
+    if (!name || !(name in GROUP_STYLE)) return false;
+    await toggleGroup(name, true, true);
+    const index = (await groupOf(name).catch(() => null))?.sets.findIndex((set) => set.NORAD_CAT_ID === noradId) ?? -1;
+    if (index < 0) return false;
+    showSatellite({ group: name, index });
+    return true;
   }
+  async function runSearch(): Promise<void> {
+    if (!satSearch || !satResults) return;
+    const text = satSearch.value;
+    const wanted = squash(text);
+    satResults.replaceChildren();
+    satResults.hidden = !wanted;
+    if (!wanted) return;
+    const found = new Map<number, { name: string; group: string }>();
+    for (const entry of findInCatalogue(text, 6)) found.set(entry.noradId, { name: entry.name, group: entry.group });
+    try {
+      for (const [id, name, group] of (await loadIndex()).rows) {
+        if (found.size >= 10) break;
+        if (!found.has(id) && (String(id) === wanted || squash(name).includes(wanted))) found.set(id, { name, group });
+      }
+    } catch {
+      notice(say("satLoadFail"));
+    }
+    if (satSearch.value !== text) return;
+    if (!found.size) {
+      satResults.textContent = say("satNoMatch");
+      return;
+    }
+    for (const [id, one] of found) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset["satPick"] = String(id);
+      button.textContent = `${one.name} (${groupLabel(SATELLITE_GROUPS.find((info) => info.id === one.group)!)})`;
+      button.addEventListener("click", () => {
+        void chooseSatellite(id, one.group);
+        satResults.hidden = true;
+      });
+      satResults.append(button);
+    }
+  }
+  satSearch?.addEventListener("input", () => void runSearch());
+  satSearch?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") satResults?.querySelector<HTMLButtonElement>("button")?.click();
+  });
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-sat-find]")) button.addEventListener("click", () => void chooseSatellite(Number(button.dataset["satFind"]), "stations"));
 
   // --- riding along: the camera at the ISS, a Starlink satellite, the Moon or Mars, looking at the Earth -------------------------------------------------------------------------
   let rideKey = address.get("ride");
@@ -242,7 +381,7 @@ if (flat && controls && stage) {
   const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-view]")];
   const lookButtonsRide = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-look]")];
   const markRide = (): void => {
-    for (const b of rideButtons) b.classList.toggle("on", b.dataset["ride"] === (rideKey ?? "none"));
+    for (const b of rideButtons) b.classList.toggle("on", b.dataset["ride"] === (rideKey?.startsWith("group:") ? "group" : (rideKey ?? "none")));
     for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
     for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
   };
@@ -284,7 +423,28 @@ if (flat && controls && stage) {
     }
     let target: RideTarget;
     if (key === "Moon" || key === "Mars") target = key;
-    else {
+    else if (key === "chosen") {
+      if (!chosen) {
+        notice(say("rideChoose"));
+        return;
+      }
+      target = { ...chosen };
+    } else if (key.startsWith("group:")) {
+      const group = key.slice(6);
+      if (!(group in GROUP_STYLE)) {
+        notice(say("rideChoose"));
+        return;
+      }
+      lastGroup = group;
+      await toggleGroup(group, true);
+      const satellites = await groupOf(group);
+      const index = satellites.sets.findIndex((_, i) => space && satellites.info(i, space.time) !== undefined);
+      if (index < 0 || !space) {
+        notice(say("satNone"));
+        return;
+      }
+      target = { group, index };
+    } else {
       const group = key === "starlink" ? "starlink" : "stations";
       await toggleGroup(group, true);
       const sets = (await groupOf(group)).sets;
@@ -294,7 +454,10 @@ if (flat && controls && stage) {
     }
     rideKey = key;
     markRide();
-    if (typeof target !== "string") showSatellite(null);
+    if (key === "chosen") {
+      space.selectSatellite(null);
+      if (satInfo) satInfo.hidden = true;
+    } else if (typeof target !== "string") showSatellite(null);
     setRideZoom(true, keepTurn);
     space.ride(target, { view: rideView, look: rideLook });
     speakRide();
@@ -302,7 +465,7 @@ if (flat && controls && stage) {
     address.set("rview", rideView === "follow" ? "follow" : null);
     address.set("rlook", rideLook === "horizon" ? "horizon" : null);
   }
-  for (const button of rideButtons) button.addEventListener("click", () => void startRide(button.dataset["ride"] ?? "none"));
+  for (const button of rideButtons) button.addEventListener("click", () => void startRide(button.dataset["ride"] === "group" ? `group:${lastGroup ?? ""}` : (button.dataset["ride"] ?? "none")));
   for (const button of viewButtons) {
     button.addEventListener("click", () => {
       rideView = button.dataset["rideView"] === "follow" ? "follow" : "from";
@@ -419,15 +582,10 @@ if (flat && controls && stage) {
     markRide();
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
     for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
-    for (const name of shownGroups) void toggleGroup(name as keyof typeof GROUP_STYLE, true);
-    if (rideKey) void startRide(rideKey, true);
+    for (const name of shownGroups) void toggleGroup(name, true);
     const wanted = Number(address.get("sat"));
-    if (wanted) {
-      void toggleGroup("stations", true).then(async () => {
-        const index = (await groupOf("stations")).sets.findIndex((set) => set.NORAD_CAT_ID === wanted);
-        if (index >= 0) showSatellite({ group: "stations", index });
-      });
-    }
+    const restored = wanted ? chooseSatellite(wanted) : Promise.resolve(true);
+    if (rideKey) void restored.then(() => startRide(rideKey!, true));
     if (placesBox) placesBox.hidden = true;
     if (pickedNote) pickedNote.hidden = true;
     return true;

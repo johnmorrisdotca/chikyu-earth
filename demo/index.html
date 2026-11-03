@@ -118,17 +118,16 @@
             <button type="button" class="fam-button" id="orbits" aria-pressed="true" data-say="orbits">Orbits</button>
             <button type="button" class="fam-button" id="labels" aria-pressed="true" data-say="names">Names</button>
           </div>
-          <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are now: the space stations, and a share of the Starlink satellites. Press one to see how high and fast it goes and its orbit." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。宇宙ステーションと、Starlink の一部です。衛星を押すと、高さと速さ、軌道がわかります。">
+          <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are: press a group to switch it on or off. Press a dot, or find one by name, to see how high and fast it goes and its orbit; the Ride row puts the camera on it. A group shows how old its elements are." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。グループを押すと、表示と非表示が切り替わります。点を押すか、名前で探すと、高さと速さ、軌道がわかります。「いっしょに移動」の行で、カメラをその衛星に載せられます。">
             <span class="fam-label" data-say="satellites">Satellites</span>
-            <div class="group fam-seg">
-              <button type="button" data-sat-group="stations" aria-pressed="false" data-say="sat_stations">Stations</button>
-              <button type="button" data-sat-group="starlink" aria-pressed="false" data-say="sat_starlink">Starlink</button>
-            </div>
+            <div class="group fam-seg" id="sat-groups" role="group" aria-label="Satellite groups" data-say-label="satGroups"></div>
             <span class="fam-label" data-say="satFind">Find</span>
             <div class="group fam-seg" role="group" aria-label="Find" data-say-label="satFind">
               <button type="button" data-sat-find="25544" data-say="sat_iss">ISS</button>
               <button type="button" data-sat-find="48274" data-say="sat_css">Tiangong</button>
             </div>
+            <input type="search" id="sat-search" class="fam-field" autocomplete="off" spellcheck="false" aria-label="Find a satellite" data-say-label="satSearch" placeholder="Hubble, GPS, 25544" data-say-placeholder="satSearchHint" aria-controls="sat-results" />
+            <div class="group fam-seg" id="sat-results" role="group" aria-label="Matches" data-say-label="satMatches" hidden></div>
           </div>
           <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
             <span class="fam-label" data-say="rideAlong">Ride along</span>
@@ -136,6 +135,8 @@
               <button type="button" data-ride="iss" data-say="sat_iss">ISS</button>
               <button type="button" data-ride="css" data-say="sat_css">Tiangong</button>
               <button type="button" data-ride="starlink" data-say="ride_starlink">A Starlink satellite</button>
+              <button type="button" data-ride="chosen" data-say="ride_chosen">The chosen satellite</button>
+              <button type="button" data-ride="group" data-say="ride_group">One from the last group</button>
               <button type="button" data-ride="Moon" data-say="body_Moon">Moon</button>
               <button type="button" data-ride="Mars" data-say="body_Mars">Mars</button>
               <button type="button" data-ride="Jupiter" data-say="body_Jupiter">Jupiter</button>
@@ -154,6 +155,7 @@
           </div>
           <p class="fam-fine" id="ride-info" role="status" hidden></p>
           <p class="fam-fine" id="sat-info" role="status" hidden></p>
+          <p class="fam-fine" id="sat-about" hidden></p>
           <p class="fam-fine" id="sat-note" hidden></p>
           <p class="fam-fine" id="body-info" role="status" hidden></p>
           <p class="fam-fine" id="scale-note" hidden data-say="scaleNote">Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>

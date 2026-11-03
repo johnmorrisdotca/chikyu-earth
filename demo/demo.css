@@ -17,7 +17,8 @@ kazoku-view-controls { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface
 
 .controls .fam-seg button, .controls .fam-button, .controls .fam-field { min-height: 48px; min-width: 48px; }
 .controls .fam-button, .controls .fam-seg button { font-family: inherit; }
-.controls input[type="datetime-local"] { border-radius: 999px; padding: 0 14px; }
+.controls input[type="datetime-local"], .controls input[type="search"] { border-radius: 999px; padding: 0 14px; }
+.controls #sat-groups, .controls #sat-results { flex-wrap: wrap; }
 .controls .field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
 .controls #picked { min-height: 1.3em; }
 
@@ -25,3 +26,4 @@ kazoku-view-controls { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface
 .embed-frame { width: min(420px, 100%); aspect-ratio: 1; border: 1px solid var(--rule); border-radius: 12px; }
 .credits { margin-top: 20px; }
 .more .fam-actions .fam-button { color: inherit; }
+#sat-groups button::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent); flex: none; }

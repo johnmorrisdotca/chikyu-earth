@@ -30,6 +30,7 @@ await cp(at("textures"), at("site/textures"), { recursive: true });
 // the pictures of the Sun, planets and moons (wakusei-planets, an optional peer the demo draws them with): the two smaller widths ship in its package, the sharpest come from the repository by jsDelivr
 await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("site/planets"), { recursive: true });
 await cp(at("demo/celestrak-snapshot.json"), at("site/celestrak-snapshot.json"));
+await cp(at("demo/elements"), at("site/elements"), { recursive: true });
 // The family's card in the demo's <head> (og:image, twitter:image, the icon), and the three pictures published beside it.
 const ALT = "Chikyu Earth: the globe as a line drawing over Europe and Africa, and as the realistic Earth over Asia with evening in the east.";
 const pkg = JSON.parse(readFileSync(at("package.json"), "utf8"));
