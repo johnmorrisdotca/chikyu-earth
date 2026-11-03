@@ -69,15 +69,9 @@
             </label>
             <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
           </div>
-          <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" data-say-label="timeSpeed" hidden data-help-en="Run time faster than real time, hold it still, or run it backwards. A day a second shows the Earth turning and the Moon moving." data-help-ja="時間を実際より速く進めたり、止めたり、逆に戻したりします。「1秒で1日」にすると、地球が回り、月が動くのが見えます。">
+          <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" data-say-label="timeSpeed" hidden data-help-en="Run time faster than real time, hold it still, or run it backwards. The buttons are multiples of real time: 0 holds it still, 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="時間を実際より速く進めたり、止めたり、逆に戻したりします。ボタンは実際の時間の何倍かを表します。0は止まり、3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。「1秒で1日」にすると、地球が回り、月が動くのが見えます。">
             <span class="fam-label" data-say="time">Time</span>
-            <div class="group fam-seg">
-              <button type="button" data-speed="0" data-say="speed_paused">Paused</button>
-              <button type="button" data-speed="1" class="on" data-say="speed_real">Real time</button>
-              <button type="button" data-speed="3600" data-say="speed_hour">1 hour a second</button>
-              <button type="button" data-speed="86400" data-say="speed_day">1 day a second</button>
-              <button type="button" data-speed="-3600" data-say="speed_back">Back 1 hour a second</button>
-            </div>
+            <kazoku-speed-buttons id="time-speed" data-testid="time-speed" steps="0 1 3600 86400 -3600" value="1" no-label></kazoku-speed-buttons>
           </div>
           <div class="fam-row" id="space-controls" hidden data-help-en="Compressed scale squeezes the distances so everything fits one view; True scale shows how empty space is. Go to zooms to a part of the sky; Look at points the camera at a body." data-help-ja="「縮めた縮尺」は、全体が1つの画面に入るように距離を縮めます。「本当の縮尺」では、宇宙がどれだけ空っぽかがわかります。「移動先」で空の一部にズームし、「見る天体」でカメラを天体に向けます。">
             <span class="fam-label" data-say="scale">Scale</span>

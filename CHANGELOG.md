@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0 - 2026-11-03
+
+The family's speed buttons, in the demo's two places that run time (KAZOKU-UI-46).
+
+- **Auto-turn has 0.5×, 1× and 2×.** The demo's view controls come from kazoku-ui 0.14: under More, the Earth's Auto-turn takes the shared speed buttons (they were Slow, Medium and Fast), 1× being the Earth's own rate of 0.004178 degrees a second. The choice is the controls' `pace` attribute and the address' `pace`.
+- **The space view's Time row is `<kazoku-speed-buttons>`**: `0 1 3600 86400 -3600`, read as multiples of real time (0× holds it still, 3600× is an hour a second, 86400× a day a second, −3600× runs back), in the same look as Auto-turn's. It replaces the page's own five buttons ("Paused", "Real time", ...); `?speed=` still keeps the choice and Now still puts it back to 1×.
+- `kazoku-ui` is `^0.14.0` for the demo (the optional peer is unchanged). Tests: `e2e/speed.demo.ts` (the controls' buttons and the time row, desk and phone, Chromium and WebKit, with the config's reduced motion) and `e2e/speed.gl.ts` (a press sets the clock and the address; Now returns to 1×).
+
 ## 0.13.0 - 2026-11-03
 
 The demo's elements refresh by themselves, every satellite shows its age, and you can bring your own source (MODULES-261, steps 3 and 4).

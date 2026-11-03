@@ -43,7 +43,7 @@ console.log(view.rotation, view.scale, view.translate);
 
 ## The Earth's own rate
 
-Auto-turn does not pick a speed: it uses the Earth's. One sidereal day is 23 h 56 min 4.0905 s, so the globe turns at 0.004178 degrees a second and keeps real time.
+Auto-turn does not pick a speed: it uses the Earth's. One sidereal day is 23 h 56 min 4.0905 s, so the globe turns at 0.004178 degrees a second and keeps real time. The view controls' speed buttons (0.5×, 1×, 2×) are multiples of that rate; 1× is the Earth's own. The space view's time speed uses the same buttons, in multiples of real time.
 
 ```ts
 import { DEGREES_PER_MS, SIDEREAL_DAY_MS, spinAt } from "@johnmorrisdotca/chikyu-earth";

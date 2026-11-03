@@ -13,7 +13,7 @@
 chikyu-earth, chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
 chikyu-earth svg { display: block; width: 100%; height: 100%; }
 kazoku-view-controls { display: block; margin: 8px auto 14px; max-width: 560px; }
-kazoku-view-controls { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
+kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
 
 .controls .fam-seg button, .controls .fam-button, .controls .fam-field { min-height: 48px; min-width: 48px; }
 .controls .fam-button, .controls .fam-seg button { font-family: inherit; }

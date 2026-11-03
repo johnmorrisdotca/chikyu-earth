@@ -47,7 +47,7 @@ The demo shows a line saying "Compressed scale: ..." under the controls whenever
 ## Time
 
 `time` is an ISO date (`2026-11-02T14:00Z`) or `now`; `speed` is game seconds a second: `1` real time, `0` held still, `3600` an hour a second, `86400` a day a second, negative runs
-backwards. Setting `time` points the camera at the same place on the ground again. The Sun is where `astronomy-engine` says (apparent, with aberration), the Earth is turned
+backwards. The demo's Time row is the family's speed buttons (kazoku-ui's `<kazoku-speed-buttons>`) with those steps, `0 1 3600 86400 -3600`, read as multiples of real time. Setting `time` points the camera at the same place on the ground again. The Sun is where `astronomy-engine` says (apparent, with aberration), the Earth is turned
 by Greenwich sidereal time, the Moon shows its near side to the Earth (its libration, up to 8 degrees, is not drawn), and each planet is lit from the Sun, so Venus has its crescent and
 the Moon its quarter.
 

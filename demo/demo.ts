@@ -1,4 +1,6 @@
 import "@johnmorrisdotca/kazoku-ui/view-controls/define";
+import "@johnmorrisdotca/kazoku-ui/speed-buttons/define";
+import type { SpeedButtonsElement } from "@johnmorrisdotca/kazoku-ui/speed-buttons/element";
 import { createAddressState } from "@johnmorrisdotca/kazoku-ui/address-state";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import "../src/element.ts";
@@ -745,21 +747,21 @@ if (flat && controls && stage) {
   toggle(clouds, "clouds");
   toggle(lights, "lights");
 
-  const speedButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-speed]")];
+  // The time speed is the family's speed buttons, in multiples of real time; the demo keeps the choice in its own address.
+  const timeSpeed = document.querySelector<SpeedButtonsElement>("#time-speed");
   const markSpeed = (value: number): void => {
-    for (const b of speedButtons) b.classList.toggle("on", Number(b.dataset["speed"]) === value);
+    if (timeSpeed && timeSpeed.value !== value) timeSpeed.value = value;
     address.set("speed", value === 1 ? null : String(value));
   };
-  for (const button of speedButtons) {
-    button.addEventListener("click", () => {
-      const value = Number(button.dataset["speed"]);
-      if (space) {
-        space.speed = value;
-        if (value !== 1) now?.setAttribute("aria-pressed", "false");
-      }
-      markSpeed(value);
-    });
-  }
+  timeSpeed?.addEventListener("kazoku-speedchange", (event) => {
+    const { value, reason } = (event as CustomEvent<{ value: number; reason: string }>).detail;
+    if (reason !== "user") return;
+    if (space) {
+      space.speed = value;
+      if (value !== 1) now?.setAttribute("aria-pressed", "false");
+    }
+    markSpeed(value);
+  });
   const scaleButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-scale]")];
   for (const button of scaleButtons) {
     button.addEventListener("click", () => {

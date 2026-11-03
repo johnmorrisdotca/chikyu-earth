@@ -25,7 +25,7 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
 ## Features
 
 - A line-drawn globe as one SVG: country outlines on an orthographic disc, in two looks (`line`, `thick`), with an optional graticule.
-- It opens centred on where the reader is, or where you say. Auto-turn runs at the Earth's own rate: one sidereal day a turn.
+- It opens centred on where the reader is, or where you say. Auto-turn runs at the Earth's own rate: one sidereal day a turn, and the family's speed buttons (0.5×, 1×, 2×) are multiples of it.
 - The Earth from space (`/realistic`): day and night by the real Sun, city lights, sun glint, clouds and the atmosphere, drawn with three.js through one shared WebGL context.
 - The Sun, the Moon and the planets where they are on a date and time (`/space`), and satellites at the places SGP4 puts them (`/satellites`), with a camera that rides along.
 - Markers with labels, groups, clusters and events (`/markers`), on either globe.
