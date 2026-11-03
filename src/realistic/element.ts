@@ -1,12 +1,13 @@
 // <chikyu-earth-realistic>: the Earth from space as a web component, drawn by kazoku-ui's shared 3D renderer (one WebGL context for the
 // page) with three.js, which is the page's own. Optional entry point: the flat `<chikyu-earth>` needs neither. It draws only when something
 // changes, at most 30 times a second, and nothing at all while it is out of sight or the tab is hidden.
+import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
 import { createEarthItem, lookAt, newModel, type EarthModel, type ThreeParts } from "./earth.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
-import { setThreeLoader, takeRenderer } from "./shared.ts";
-export { setThreeLoader };
+import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
+export { setSharedRenderer, setThreeLoader };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
 
@@ -26,6 +27,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}";
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often while the time is "now": 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -36,6 +38,11 @@ const readCentre = (value: string | null): GeoPoint | null => {
   const [lon, lat] = value.split(",").map((part) => Number(part.trim()));
   if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon!) > 180 || Math.abs(lat!) > 90) return null;
   return { lon: lon!, lat: lat! };
+};
+
+const readRatio = (value: string | null): number | undefined => {
+  const ratio = Number(value);
+  return value !== null && Number.isFinite(ratio) && ratio > 0 ? Math.min(ratio, 2) : undefined;
 };
 
 /**
@@ -58,7 +65,7 @@ export const readTime = (value: string | null): number | "now" => {
 };
 
 /**
- * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds` and `texture-base` (where the pictures are served from), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
+ * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds`, `texture-base` (where the pictures are served from) and `max-ratio` (the most device pixels to a CSS pixel the canvas is drawn at, 2 at most, and `0.5` draws at half the size and scales it up: for a background; read when the element connects, and it is the shared renderer's cap for the whole page), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
  *
  * @example
  * ```ts no-run
@@ -103,7 +110,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>:host{display:block;aspect-ratio:1/1;position:relative}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}</style><div id="stage"></div><div id="overlay"></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="overlay"></div>`;
+    adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#overlay = root.getElementById("overlay")!;
     this.#stage.addEventListener("webglcontextlost", this.#lost, true);
@@ -119,14 +127,16 @@ export class ChikyuEarthRealistic extends HTMLElement {
       () => undefined,
     );
 
-    const taken = takeRenderer(this.#onContext);
+    const maxRatio = readRatio(this.getAttribute("max-ratio"));
+    if (maxRatio) this.#model.ratio = () => Math.min(globalThis.devicePixelRatio || 1, 2, maxRatio);
+    const taken = takeRenderer(this.#onContext, maxRatio);
     this.#taken = taken;
     const item = createEarthItem(this.#model, {
       assets: taken.renderer.assets,
       textureBase: () => this.#textureBase(),
       cap: () => this.#textureCap(),
       drift: 1.5,
-      invalidate: () => this.#gate?.request(),
+      invalidate: () => this.#gate?.soon(),
       onPose: (pose) => {
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
@@ -190,7 +200,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
   set centre(value: GeoPoint) {
     this.#model.centre = { ...value };
-    this.#gate?.request();
+    this.#gate?.soon();
   }
 
   /** The moment shown: milliseconds since the epoch, or "now" to follow the clock. */
@@ -202,7 +212,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (this.#mode === "now") this.#model.time = Date.now();
     else this.#model.time = this.#mode;
     this.#startTick();
-    this.#gate?.request();
+    this.#gate?.soon();
   }
 
   get clouds(): boolean {
@@ -210,7 +220,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
   set clouds(value: boolean) {
     this.#model.clouds = value;
-    this.#gate?.request();
+    this.#gate?.soon();
   }
 
   get lights(): boolean {
@@ -218,7 +228,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
   set lights(value: boolean) {
     this.#model.lights = value;
-    this.#gate?.request();
+    this.#gate?.soon();
   }
 
   /** What the element is doing, for a page or a test: its state, the texture widths held, the draws made. */
@@ -242,14 +252,14 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.view = { ...view };
     const drawn = this.#model.drawn;
     if (!drawn) {
-      this.#gate?.request();
+      this.#gate?.soon();
       return;
     }
     const shifted = view.zoom !== drawn.view.zoom || view.panX !== drawn.view.panX || view.panY !== drawn.view.panY;
     const a = lookAt(drawn.centre, drawn.view);
     const b = lookAt(this.#model.centre, view);
     const px = (Math.abs(b.lon - a.lon) * Math.cos(((a.lat + b.lat) / 2) * RAD) + Math.abs(b.lat - a.lat)) * RAD * drawn.radius;
-    if (shifted || px >= 0.5 || (final && px > 0.01)) this.#gate?.request();
+    if (shifted || px >= 0.5 || (final && px > 0.01)) this.#gate?.soon();
   }
 
   /** The view as it is (for a page that wants to read it back). */
@@ -269,7 +279,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   #onTick = (): void => {
     this.#model.time = Date.now();
-    this.#gate?.request();
+    this.#gate?.soon();
   };
 
   #take = (): void => {

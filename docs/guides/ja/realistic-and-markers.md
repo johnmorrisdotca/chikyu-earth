@@ -37,6 +37,17 @@ setThreeLoader(() => import("./three-subset"));
 
 `three-subset.ts` は、`"three"` から `BackSide`、`BufferAttribute`、`BufferGeometry`、`ClampToEdgeWrapping`、`Group`、`LinearFilter`、`LinearMipmapLinearFilter`、`Mesh`、`OrthographicCamera`、`RepeatWrapping`、`Scene`、`ShaderMaterial`、`Texture`、`Vector3`、`WebGLRenderer` を再エクスポートするファイルです。くわしい説明と制限は [docs/realistic.md](../../realistic.md) にあります (英語)。
 
+背景に使うときは、画面に必要な細かさまでにします。`max-ratio="1"` (または `0.5`。半分の大きさで描いて、拡大して表示します) を付けると、ページ全体のキャンバスの細かさに上限がかかります。この値は、要素がページに入るときに読み込まれます。
+
+要素は、スタイルを constructable stylesheet として書き込みます。そのため、`style-src 'self'` のページでも、ハッシュを足す必要はありません。ページがすでに kazoku-ui の共有レンダラーで別のものを描いているときは、最初の要素がページに入る前にそのレンダラーを渡してください。ページの WebGL コンテキストは 1 つのままです。
+
+```ts no-run
+import { createSharedRenderer } from "@johnmorrisdotca/kazoku-ui/renderer";
+import { setSharedRenderer } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+
+setSharedRenderer(createSharedRenderer({ load: () => import("three") }));
+```
+
 ## 目印
 
 どちらの見た目にも、`[lon, lat]` の位置に、ラベル、色、アイコン付きの目印を付けられます。グループごとに表示と非表示を切り替えられます。Chikyu は場所のデータを持っていません。場所は自分で用意します。目印は地球儀と一緒に動き、裏側では薄くなり、ラベルの場所を空け、混み合うとまとまり、ホバー、クリック、キーボードのイベントで、自分のデータを渡します。

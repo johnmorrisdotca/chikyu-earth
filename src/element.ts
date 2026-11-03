@@ -1,5 +1,6 @@
 // <chikyu-earth>: the globe as a web component. A shared view controller supplies its yaw, tilt, zoom and pan;
 // it opens centred on where you are (the `center` attribute wins over geolocation). Importing registers it once.
+import { adoptStyles } from "./adopt.ts";
 import { globe } from "./globe.ts";
 import { cleanStyle } from "./styles.ts";
 import { globeBaseScale, HOME_VIEW, lookAt } from "./view.ts";
@@ -13,6 +14,8 @@ const readCentre = (value: string | null): GeoPoint | null => {
   if (Math.abs(lon) > 180 || Math.abs(lat) > 90) return null;
   return { lon, lat };
 };
+
+const STYLE = ":host{display:block;position:relative}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}";
 
 /**
  * The `<chikyu-earth>` custom element: the line globe, drawn as SVG in its shadow root. Importing this entry point registers the tag once. It takes the attributes `size` (pixels, 320 by default), `center` (`"lon,lat"`; wins over the browser's location), `look` (`line` or `thick`; `style` is the older name for it, and a framework that reads `style` as CSS cannot use it) and `graticule`, and a shared view controller's camera through `setView`.
@@ -104,7 +107,8 @@ export class ChikyuEarth extends HTMLElement {
   #ensureShell(): ShadowRoot {
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
     if (!this.#overlay || !root.contains(this.#overlay)) {
-      root.innerHTML = `<style>:host{display:block;position:relative}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}</style><div class="holder"></div><div class="overlay"></div>`;
+      root.innerHTML = `<div class="holder"></div><div class="overlay"></div>`;
+      adoptStyles(root, STYLE, this.nonce);
       this.#overlay = root.querySelector<HTMLElement>(".overlay")!;
     }
     return root;

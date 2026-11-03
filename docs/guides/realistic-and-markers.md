@@ -37,6 +37,17 @@ setThreeLoader(() => import("./three-subset"));
 
 where `three-subset.ts` re-exports `BackSide`, `BufferAttribute`, `BufferGeometry`, `ClampToEdgeWrapping`, `Group`, `LinearFilter`, `LinearMipmapLinearFilter`, `Mesh`, `OrthographicCamera`, `RepeatWrapping`, `Scene`, `ShaderMaterial`, `Texture`, `Vector3` and `WebGLRenderer` from `"three"`. The details and the budget: [docs/realistic.md](../realistic.md).
 
+On a background, draw it no finer than the screen needs: `max-ratio="1"` (or `0.5`, which draws at half the size and scales it up) caps the canvas for the whole page, and is read when the element connects.
+
+The elements write their styles as constructable stylesheets, so a page with `style-src 'self'` needs no hash for them. If your page already draws other things with kazoku-ui's shared renderer, hand it over before the first element connects and the page keeps one WebGL context:
+
+```ts no-run
+import { createSharedRenderer } from "@johnmorrisdotca/kazoku-ui/renderer";
+import { setSharedRenderer } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+
+setSharedRenderer(createSharedRenderer({ load: () => import("three") }));
+```
+
 ## Markers
 
 Mark any place at `[lon, lat]` on either look, with a label, colour or icon, in groups you can show or hide. Chikyu ships no places: yours move with the globe, fade on the far side, make room for their labels, gather into clusters when crowded, and fire hover, click and keyboard events with your own data.

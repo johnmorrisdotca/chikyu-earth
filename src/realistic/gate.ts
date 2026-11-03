@@ -27,6 +27,8 @@ export const browserTimers: Timers = {
 export interface Gate {
   /** Ask for `fire` to run: now if the last run was `minMs` ago or more, else once, when that time has passed. */
   request(): void;
+  /** Like `request`, but every ask made in one task is one ask, made when the task ends: a time and a view set together are one draw. */
+  soon(): void;
   /** Forget a run that is waiting. */
   cancel(): void;
   /** Change the least time between runs (a lower frame rate on a battery). */
@@ -56,17 +58,27 @@ export function createGate(minMs: number, fire: () => void, timers: Timers = bro
   let least = minMs;
   let last = -Infinity;
   let waiting: unknown;
+  let soon = false;
   const run = (): void => {
     waiting = undefined;
     last = timers.now();
     fire();
   };
+  const request = (): void => {
+    if (waiting !== undefined) return;
+    const wait = last + least - timers.now();
+    if (wait <= 0) run();
+    else waiting = timers.set(run, wait);
+  };
   return {
-    request() {
-      if (waiting !== undefined) return;
-      const wait = last + least - timers.now();
-      if (wait <= 0) run();
-      else waiting = timers.set(run, wait);
+    request,
+    soon() {
+      if (soon) return;
+      soon = true;
+      queueMicrotask(() => {
+        soon = false;
+        request();
+      });
     },
     cancel() {
       if (waiting !== undefined) timers.clear(waiting);

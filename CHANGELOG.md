@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+Three fixes for a page that puts the Earth behind something else.
+
+- **A time and a view changed together are one draw** (MODULES-177). `time` and `setView` in one task each asked the rate gate; the first drew at once and the second 33 ms later, so a page moving the Sun and the camera on every tick drew twice. `Gate.soon()` makes every ask of one task a single ask, made when the task ends, and the realistic element uses it. Measured before: 2 draws for the two changes, now 1 (`e2e/realistic.gl.ts`).
+- **`max-ratio`** on `<chikyu-earth-realistic>`: the most device pixels to a CSS pixel the canvas is drawn at (2 at most; `0.5` draws at half the size and scales it up). It is read when the element connects and is the shared renderer's cap for the page; the textures are chosen for it too. Test: at a device ratio of 2, `max-ratio="1"` draws a canvas under a third of the pixels.
+- **A strict Content-Security-Policy no longer refuses the elements' styles** (MODULES-180). `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` wrote a `<style>` into their shadow roots, which `style-src 'self'` blocks. They now adopt a constructable stylesheet (shared by every element with the same text), and where a browser has none, a `<style>` carrying the element's `nonce`. Test (`e2e/csp.gl.ts`): each element in a page served with `style-src 'self'` reports no violation, its styles apply, and no `<style>` is written.
+- **`setSharedRenderer(renderer)`** (`@johnmorrisdotca/chikyu-earth/realistic/element`; MODULES-171): the page hands the Earth and the space view a renderer made with kazoku-ui's `createSharedRenderer`, so a page that draws other things with it keeps one WebGL context. The page owns it: its `maxRatio` and `onContext` apply and the elements never dispose it. Call it before the first element connects (it throws while one is in the page). Unit-tested (`test/shared.test.ts`).
+
 ## 0.9.1
 
 The ground now follows the pointer, in every look and when riding.

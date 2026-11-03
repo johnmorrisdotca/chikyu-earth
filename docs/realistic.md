@@ -70,11 +70,18 @@ lowers that, and a device that reports 2 GB of memory or less stops at 2048.
 | `time="2026-06-21T12:00Z"` | the moment shown; `now` (the default) follows the clock |
 | `clouds="off"`, `lights="off"` | switch the cloud layer or the night lights off |
 | `texture-base`, `max-texture` | where the pictures are; the widest one to use |
+| `max-ratio` | the most device pixels to a CSS pixel the canvas is drawn at (2 at most; `0.5` draws at half the size and scales it up, for a background). Read when the element connects; the shared renderer keeps it for the whole page |
 | `live-seconds` | how often the Sun and clouds are put right while the time is `now` (60) |
 
 Properties: `time` (a number of milliseconds, a `Date` or `"now"`), `centre`, `clouds`, `lights`, `view`, `stats`. Events: `chikyu-ready`,
 `chikyu-unavailable` (WebGL missing or a picture would not load; `detail.reason`), `chikyu-tier` (`detail.layer`, `detail.width`). `data-state` is
 `loading`, `live`, `lost` or `unavailable`.
+
+**Draws.** Changes made in one task (a `time` and a `setView` together) are one draw.
+
+**Strict Content-Security-Policy.** The elements write their styles as constructable stylesheets, which `style-src 'self'` allows. A browser without them gets a `<style>` that carries the element's `nonce` attribute, so a page can allow it by nonce.
+
+**One context with the page's own renderer.** `setSharedRenderer(renderer)` (from `@johnmorrisdotca/chikyu-earth/realistic/element`, before the first element connects) gives the Earth and the space view a renderer made with kazoku-ui's `createSharedRenderer`, so a page that draws other things with it keeps one WebGL context. The page owns that renderer: its `maxRatio` applies and the elements never dispose it.
 
 ## Where the Sun is
 

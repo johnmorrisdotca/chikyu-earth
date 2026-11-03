@@ -100,3 +100,31 @@ test("the frame cap is 30, lower on a small device", () => {
   assert.equal(frameCap(30, { hardwareConcurrency: 2 }), 20);
   assert.equal(frameCap(10, { deviceMemory: 1 }), 10);
 });
+
+test("asks made in one task are one draw, made when the task ends", async () => {
+  let now = 0;
+  const timers: { run: () => void }[] = [];
+  const clock: Timers = {
+    set: (callback) => {
+      const handle = { run: callback };
+      timers.push(handle);
+      return handle;
+    },
+    clear: () => undefined,
+    now: () => now,
+  };
+  const ran: number[] = [];
+  const gate = createGate(33, () => ran.push(now), clock);
+  gate.soon();
+  gate.soon();
+  gate.soon();
+  assert.deepEqual(ran, [], "nothing runs inside the task");
+  await Promise.resolve();
+  assert.deepEqual(ran, [0], "one run when the task ends");
+  assert.equal(timers.length, 0, "and no second one waiting");
+  now = 10;
+  gate.soon();
+  gate.soon();
+  await Promise.resolve();
+  assert.equal(timers.length, 1, "inside the gap the one ask waits");
+});

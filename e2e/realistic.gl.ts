@@ -309,3 +309,33 @@ test("the controls are the demo's own, never the browser's", async ({ page }) =>
   );
   expect(bad).toEqual([]);
 });
+
+test("a time and a view changed in one task are one draw", async ({ page }) => {
+  await openEarth(page);
+  const before = (await statsOf(page)).draws;
+  await page.locator(EARTH).evaluate((el) => {
+    const e = el as unknown as { time: number; setView(v: unknown, f: boolean): void };
+    e.time = Date.parse("2026-06-21T14:00Z");
+    e.setView({ yaw: 25, tilt: 0, zoom: 1, panX: 0, panY: 0 }, true);
+  });
+  await settle(page, 1200);
+  expect((await statsOf(page)).draws - before, "one draw for both changes").toBe(1);
+});
+
+test.describe("max-ratio", () => {
+  test.use({ deviceScaleFactor: 2 });
+  test("the canvas is drawn no finer than max-ratio, and the textures are chosen for it", async ({ page }) => {
+    await openEarth(page);
+    const full = await statsOf(page);
+    await page.locator(EARTH).evaluate(async (el) => {
+      const next = el.cloneNode(false) as HTMLElement;
+      next.setAttribute("max-ratio", "1");
+      el.replaceWith(next);
+      await new Promise<void>((done) => next.addEventListener("chikyu-ready", () => done(), { once: true }));
+    });
+    await settle(page, 1200);
+    const capped = await statsOf(page);
+    expect(capped.canvas.pixels, `canvas ${full.canvas.width}x${full.canvas.height} at the page's ratio, ${capped.canvas.width}x${capped.canvas.height} at 1`).toBeLessThan(full.canvas.pixels * 0.3);
+    expect(capped.canvas.width).toBeGreaterThan(100);
+  });
+});
