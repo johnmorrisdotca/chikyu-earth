@@ -459,6 +459,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         planets.set(name, { slot: newSlot(name), orbit, positions, samples: [], epoch: Number.NaN, toSun: [1, 0, 0] });
       }
       const moonSlots = new Map<string, { slot: Slot; seen: number }>();
+      let releaseTimer: ReturnType<typeof setTimeout> | undefined;
 
       let layer: SatelliteLayer | undefined;
       const rideState = new Float64Array(6);
@@ -714,14 +715,18 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 drawing.update?.({ toSun: p.toSun, ms: model.time, radiusPx: moonPx });
               }
             }
+            let soonest = Number.POSITIVE_INFINITY;
             for (const [key, held] of moonSlots) {
               if (seen.has(key)) continue;
               if (held.slot.drawing) held.slot.drawing.object.visible = false;
               if (now - held.seen > MOON_KEEP_MS) {
                 empty(held.slot);
                 moonSlots.delete(key);
-              }
+              } else soonest = Math.min(soonest, held.seen + MOON_KEEP_MS - now);
             }
+            // a view that is at rest draws nothing, so a moon that has gone from the view would be kept for ever: ask for one more draw when the first of them is due to be let go
+            if (releaseTimer !== undefined) clearTimeout(releaseTimer);
+            releaseTimer = soonest < Number.POSITIVE_INFINITY ? setTimeout(() => deps.invalidate(), soonest + 50) : undefined;
           }
           const ratio = model.ratio();
           const earthPx = Math.min(px.Earth, 1e5) * ratio;
@@ -747,6 +752,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           size = { width: w, height: h };
         },
         dispose() {
+          if (releaseTimer !== undefined) clearTimeout(releaseTimer);
           layer?.dispose();
           model.pick = null;
           textures.dispose();

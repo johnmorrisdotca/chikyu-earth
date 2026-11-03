@@ -48,10 +48,24 @@ async function rest(page: Page): Promise<void> {
   });
   await removeMany(page);
   await rideButton(page, "Stop").click();
+  // looking at the Earth, not at whichever body the walk left it on: a body in view keeps its shader, so the count at rest is only comparable with the same body in view
+  await page.locator('[data-body="Earth"]').first().dispatchEvent("click");
   await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ zoom: 1, yaw: 0, tilt: 0 }, true, "soak"));
   await expect.poll(async () => Object.values((await statsOf(page)).tiers).every((w) => w === 1024), { timeout: 15_000 }).toBe(true);
   // the moons and the sharper body pictures are let go four seconds after they leave the view
   await settle(page, 6000);
+  // and what is let go stays let go: the count of shader programs has not moved for five seconds (a body that has just been let go would otherwise be counted as growth)
+  let seen = -1;
+  let since = Date.now();
+  const giveUp = Date.now() + 40_000;
+  while (Date.now() - since < 5000 && Date.now() < giveUp) {
+    const now = alive(await counts(page), "Program");
+    if (now !== seen) {
+      seen = now;
+      since = Date.now();
+    }
+    await page.waitForTimeout(500);
+  }
 }
 
 test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {

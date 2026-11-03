@@ -240,6 +240,19 @@ test("zoomed in on Jupiter its moons are there, at the places the ephemeris give
   expect((await bodiesOf(page)).contexts).toBe(1);
 });
 
+test("moons that have left the view are let go four seconds later even if nothing else is drawn: a view at rest asks for one more draw", async ({ page }) => {
+  await open(page, `time=${NOV2}&speed=0&center=-100,40&bodies=realistic`);
+  const programs = async (): Promise<number> => alive(await counts(page), "Program");
+  const before = await programs();
+  await jump(page, "Jupiter and its moons");
+  await expect.poll(async () => (await bodiesOf(page)).bodies.moons, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+  const peak = await programs();
+  expect(peak, "the moons' shaders are made").toBeGreaterThanOrEqual(before + 3);
+  await jump(page, "Earth");
+  // no further input: the view is at rest and draws nothing, so only the timer can bring the draw that lets the moons go (their shaders are freed, the planet's own stays)
+  await expect.poll(programs, { timeout: 12_000, message: "the moons' shaders are let go" }).toBeLessThanOrEqual(peak - 3);
+});
+
 /** The share of the pixels of the Earth's disc (the middle of the view) that are not nearly black. */
 const brightShare = async (page: Page): Promise<number> => {
   const png = (await page.locator(SPACE).screenshot()).toString("base64");
