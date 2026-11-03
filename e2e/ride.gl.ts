@@ -246,3 +246,47 @@ test("riding, stopping and riding again frees what it took, and a lost context c
   expect((await statsOf(page)).ride.riding).toBe(true);
   expect(errors).toEqual([]);
 });
+
+/** The mean of red, green and blue over a picture of the view, 0 to 255. */
+const meanBrightness = async (page: Page): Promise<number> => {
+  const png = (await page.locator(SPACE).screenshot()).toString("base64");
+  return page.evaluate(async (data) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const { data: px } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    let sum = 0;
+    for (let i = 0; i < px.length; i += 4) sum += px[i]! + px[i + 1]! + px[i + 2]!;
+    return sum / (px.length / 4) / 3;
+  }, png);
+};
+
+test("a ride on the night side is black with the true Sun and shows the surface with Always lit and Night boost", async ({ page }) => {
+  await open(page, "&ride=iss");
+  await expect.poll(async () => (await statsOf(page)).ride.riding, { timeout: 30_000 }).toBe(true);
+  await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 10_000 }).toBe(false);
+  // an orbit of the ISS spends a third of its 93 minutes in the Earth's shadow: look for a moment of it
+  const start = Date.parse(T);
+  let night: number | undefined;
+  for (let step = 0; step < 8 && night === undefined; step += 1) {
+    const ms = start + step * 12 * 60_000;
+    await page.locator(SPACE).evaluate((el, value) => Reflect.set(el, "time", value), ms);
+    await settle(page, 1200);
+    if ((await meanBrightness(page)) < 12) night = ms;
+  }
+  expect(night, "a moment of the orbit when the ground under the ISS is dark").toBeDefined();
+  const dark = await meanBrightness(page);
+  const light = async (value: string): Promise<void> => {
+    await page.locator(SPACE).evaluate((el, v) => Reflect.set(el, "light", v), value);
+  };
+  await light("lit");
+  await expect.poll(() => meanBrightness(page), { timeout: 20_000, message: "Always lit: the surface under the camera is lit" }).toBeGreaterThan(dark + 15);
+  console.log(`night ride: true Sun ${dark.toFixed(1)}, Always lit ${(await meanBrightness(page)).toFixed(1)}`);
+  await light("boost");
+  await expect.poll(() => meanBrightness(page), { timeout: 20_000, message: "Night boost: the land and coasts read" }).toBeGreaterThan(dark + 4);
+  console.log(`night ride: Night boost ${(await meanBrightness(page)).toFixed(1)}`);
+  await light("sun");
+  await expect.poll(() => meanBrightness(page), { timeout: 20_000, message: "the true Sun again: dark" }).toBeLessThan(12);
+  expect((await statsOf(page)).contexts).toBe(1);
+});
