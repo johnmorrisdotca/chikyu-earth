@@ -18,9 +18,9 @@ const sha = (path: string) => createHash("sha256").update(readFileSync(path)).di
 const pkg = JSON.parse(read("package.json")) as { description: string; scripts: Record<string, string>; devDependencies?: Record<string, string>; dependencies?: Record<string, string> };
 
 const RECORDED = {
-  version: "2026-11-02-kazoku-header",
-  "scripts/docs-site.mjs": "0135d1ad6d8635ba10d648f36eb788ea9d471c67792e2efd20f456ed791a2af0",
-  "e2e/docs-site.demo.mjs": "6119efc290d197bb2d90cdd8eaf9dc2364bc485973c4b6f0e6da64c543594564",
+  version: "2026-11-03-guide-images",
+  "scripts/docs-site.mjs": "8c827fce376b6a4622d610f325e0f92936208a68566d9abed8d96ccdace8096a",
+  "e2e/docs-site.demo.mjs": "915d74e4017cf117f8322b712ab2f1fa55058d654ff0fca0e476af85bce5fbf6",
 };
 
 test("the generator and its browser test are the recorded files, byte for byte", () => {
