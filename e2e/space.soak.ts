@@ -46,6 +46,8 @@ async function rest(page: Page): Promise<void> {
   await page.locator(SPACE).evaluate((el) => {
     Reflect.set(el, "speed", 0);
     Reflect.set(el, "scale", "compressed");
+    // the time it opened at: the moons of Saturn and Jupiter are in the view or not by where they are on that day, so the count at rest is only comparable on the same day
+    Reflect.set(el, "time", Date.parse("2026-11-02T18:00:00Z"));
     (el as unknown as { setSatellites(n: string, g: null): void; selectSatellite(r: null): void }).selectSatellite(null);
   });
   await removeMany(page);
