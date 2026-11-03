@@ -8,7 +8,7 @@ test.describe.configure({ mode: "serial" });
 
 const SPACE = "chikyu-space";
 const T = "2026-11-03T13:00Z";
-// the GPS group has one satellite whose elements are 24 days old at the time the tests look at: placed, but drawn dimmer
+// the GPS group has one satellite whose elements are 25 days old at the time the tests look at: placed, but drawn dimmer
 const old = madeUp("gps", 1, "2026-10-10T00:00:00", 700_000).map((set) => ({ ...set, OBJECT_NAME: "MADE-UP GPS OLD" }));
 const built = buildAll((group) => ({ raw: [...madeUp(group, group.id === "starlink" ? 50 : group.id === "gps" ? 5 : 4, "2026-11-03T12:00:00"), ...(group.id === "gps" ? old : [])], retrieved: "2026-11-03T12:30Z" }));
 const files: Record<string, unknown> = { ...built.files, "manifest.json": built.manifest };
@@ -116,7 +116,7 @@ test("a satellite whose elements are more than 14 days from the time shown is dr
   await expect(page.locator("#sat-note")).toContainText("ago");
   await page.locator("#sat-search").fill("made-up gps old");
   await page.locator("#sat-results button").first().dispatchEvent("click");
-  await expect(page.locator("#sat-info")).toContainText("24 days old");
+  await expect(page.locator("#sat-info")).toContainText("25 days old");
   await expect(page.locator("#sat-info")).toContainText("less exact and it is drawn dimmer");
   await page.locator("#sat-search").fill("made-up gps 2");
   await page.locator("#sat-results button").first().dispatchEvent("click");
