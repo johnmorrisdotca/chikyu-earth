@@ -30,10 +30,11 @@ test("line: drag the globe far off, press Centre, and it is back in the middle",
   const box = (await page.locator("#globe").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 900, box.y + box.height / 2 + 700, { steps: 12 });
+  // far off, and still inside the page's window, where the pointer's moves are delivered on every machine
+  await page.mouse.move(box.x + box.width / 2 + 280, box.y + box.height / 2 + 140, { steps: 12 });
   await page.mouse.up();
   const off = await stateOf(page);
-  expect(Math.hypot(off.panX, off.panY), `the globe was dragged away (${JSON.stringify(off)})`).toBeGreaterThan(100);
+  expect(Math.hypot(off.panX, off.panY), `the globe was dragged away (${JSON.stringify(off)}, view ${JSON.stringify(box)} in ${JSON.stringify(page.viewportSize())})`).toBeGreaterThan(100);
   expect(Math.abs(off.panX), "but the pan is held, so the globe cannot be lost").toBeLessThanOrEqual(box.width * off.zoom);
   await expect(page.locator(`${CONTROLS} [data-b="centre"]`)).toBeVisible();
 
