@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The README opens with the package's thumbnail, and the demo carries it as its link preview (og:image) and publishes the card, a dark card and an icon on Pages at `thumbnail.png`, `thumbnail-dark.png` and `icon.png`.
+
 ## 0.10.0
 
 Three fixes for a page that puts the Earth behind something else.

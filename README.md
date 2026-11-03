@@ -1,3 +1,5 @@
+<p align="center"><a href="https://johnmorrisdotca.github.io/chikyu-earth/"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/johnmorrisdotca/chikyu-earth/main/docs/images/thumbnail-dark.png"><img src="https://raw.githubusercontent.com/johnmorrisdotca/chikyu-earth/main/docs/images/thumbnail.png" alt="Chikyu Earth: the globe as a line drawing over Europe and Africa, and as the realistic Earth over Asia with evening in the east." width="1200"></picture></a></p>
+
 <h1 align="center">Chikyu Earth <sub>地球</sub></h1>
 
 <p align="center"><strong>A line-drawn globe that turns at the Earth's own rate, and opens centred on where you are.</strong><br>

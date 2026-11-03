@@ -1,15 +1,61 @@
 // The README and docs pictures: `pnpm screenshots` builds the demo, serves it on 8202 and saves docs/images/*.png.
+// The family's thumbnail, dark thumbnail and icon come last (scripts/family-thumbnail.mjs); `pnpm screenshots --thumbnail` takes only those three.
 import { spawn } from "node:child_process";
-import { chromium } from "@playwright/test";
+import { chromium, type Browser, type Page } from "@playwright/test";
+import { captureDrawing, composeThumbnails } from "./family-thumbnail.mjs";
 
 const port = 8202;
 const server = spawn(process.execPath, ["scripts/dev.ts"], { env: { ...process.env, PORT: String(port) }, stdio: "ignore" });
 const out = (name: string) => new URL(`../docs/images/${name}.png`, import.meta.url).pathname;
 
+// The family's thumbnail: the globe in its two looks side by side, the line drawing over Europe and Africa and the
+// realistic Earth over Asia with the dusk line and the night's lights, on the family's paper and its black cloth; the
+// icon is the realistic Earth alone. The globes only, never the page.
+const REALISTIC = { center: "105,28", time: "2026-11-02T08:15Z" };
+async function stage(page: Page, withLine: boolean, size: number): Promise<Buffer> {
+  // The demo's realistic look loads three.js and the element; then the page is replaced by the globes alone.
+  await page.goto(`http://127.0.0.1:${port}/chikyu-earth/?look=realistic&time=${REALISTIC.time}&center=${REALISTIC.center}`);
+  await page.waitForSelector("chikyu-earth-realistic[data-state=live]", { timeout: 120_000 });
+  await page.evaluate(
+    ({ withLine, size, real }) => {
+      const row = document.createElement("div");
+      row.id = "thumbnail-stage";
+      row.style.cssText = "display:flex;align-items:center;gap:64px;padding:8px;width:max-content";
+      if (withLine) {
+        const line = document.createElement("chikyu-earth");
+        for (const [name, value] of Object.entries({ center: "15,25", style: "line", size: String(size) })) line.setAttribute(name, value);
+        line.style.cssText = `display:block;width:${size}px;height:${size}px`;
+        row.append(line);
+      }
+      const earth = document.createElement("chikyu-earth-realistic");
+      for (const [name, value] of Object.entries({ center: real.center, time: real.time, "texture-base": "textures/" })) earth.setAttribute(name, value);
+      earth.style.cssText = `display:block;width:${size}px;height:${size}px`;
+      row.append(earth);
+      document.body.replaceChildren(row);
+    },
+    { withLine, size, real: REALISTIC },
+  );
+  if (withLine) await page.waitForSelector("#thumbnail-stage chikyu-earth svg");
+  await page.waitForSelector("#thumbnail-stage chikyu-earth-realistic[data-state=live]", { timeout: 120_000 });
+  await page.waitForTimeout(4000);
+  return captureDrawing(page, "#thumbnail-stage");
+}
+async function thumbnails(browser: Browser): Promise<void> {
+  const taken: Record<string, Buffer> = {};
+  for (const [kind, scheme] of [["light", "light"], ["dark", "dark"], ["icon", "light"]] as const) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2, colorScheme: scheme, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    taken[kind] = kind === "icon" ? await stage(page, false, 460) : await stage(page, true, 440);
+    if (kind === "icon") for (const picture of await composeThumbnails({ page, light: taken["light"]!, dark: taken["dark"]!, icon: taken["icon"]!, label: "Chikyu Earth 地球" })) console.log(picture.file, `${Math.round(picture.bytes / 1024)} KB`);
+    await context.close();
+  }
+}
+
 try {
   await new Promise((resolve) => setTimeout(resolve, 800));
   // WebGL is drawn in software, never on the machine's graphics card (the family's rule).
-  const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+  const onlyThumbnail = process.argv.includes("--thumbnail");
+  const browser = await chromium.launch({ args: ["--headless=new", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--disable-gpu-compositing", "--ignore-gpu-blocklist"] });
   const shots: [string, { width: number; height: number }, string, string?][] = [
     ["line-desk", { width: 1280, height: 900 }, ""],
     ["line-phone", { width: 390, height: 844 }, ""],
@@ -29,6 +75,7 @@ try {
     ["realistic-night", { width: 1280, height: 900 }, "?look=realistic&time=2026-11-02T22:00Z&center=10,45&zoom=1.4"],
   ];
   for (const [name, viewport, query, jump] of shots) {
+    if (onlyThumbnail) break;
     const context = await browser.newContext({ viewport, reducedMotion: "reduce", deviceScaleFactor: 1 });
     const page = await context.newPage();
     await page.goto(`http://127.0.0.1:${port}/chikyu-earth/${query}`);
@@ -52,6 +99,7 @@ try {
     await page.screenshot({ path: out(name) });
     await context.close();
   }
+  await thumbnails(browser);
   await browser.close();
 } finally {
   server.kill();
