@@ -2,9 +2,10 @@
 
 ## Unreleased
 
+- Documentation: an architecture guide with its Japanese twin, a code builder page (`builder.html`), a longer README whose examples run (`pnpm test:readme`), and every release of this changelog dated. No behaviour changed.
 - The README opens with the package's thumbnail, and the demo carries it as its link preview (og:image) and publishes the card, a dark card and an icon on Pages at `thumbnail.png`, `thumbnail-dark.png` and `icon.png`.
 
-## 0.10.0
+## 0.10.0 - 2026-11-03
 
 Three fixes for a page that puts the Earth behind something else.
 
@@ -13,7 +14,7 @@ Three fixes for a page that puts the Earth behind something else.
 - **A strict Content-Security-Policy no longer refuses the elements' styles** (MODULES-180). `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` wrote a `<style>` into their shadow roots, which `style-src 'self'` blocks. They now adopt a constructable stylesheet (shared by every element with the same text), and where a browser has none, a `<style>` carrying the element's `nonce`. Test (`e2e/csp.gl.ts`): each element in a page served with `style-src 'self'` reports no violation, its styles apply, and no `<style>` is written.
 - **`setSharedRenderer(renderer)`** (`@johnmorrisdotca/chikyu-earth/realistic/element`; MODULES-171): the page hands the Earth and the space view a renderer made with kazoku-ui's `createSharedRenderer`, so a page that draws other things with it keeps one WebGL context. The page owns it: its `maxRatio` and `onContext` apply and the elements never dispose it. Call it before the first element connects (it throws while one is in the page). Unit-tested (`test/shared.test.ts`).
 
-## 0.9.1
+## 0.9.1 - 2026-11-02
 
 The ground now follows the pointer, in every look and when riding.
 
@@ -23,7 +24,7 @@ The ground now follows the pointer, in every look and when riding.
 - **The demo keeps the address's yaw and tilt when it opens on a ride** (it set both to 0 as the ride began), and **an address with `ride` and no `look` opens the space look**, so the reported address rides the ISS.
 - **Tests**: `e2e/drag.gl.ts` drags with a real pointer, presses the arrow keys and runs Auto-turn in the line, thick, realistic and space looks, riding the ISS (down and at the horizon) and the Moon, and behind the ISS and the Moon, and checks which way the ground moved by sliding the first picture over the second; and that a ride opens with the address's turn, a drag writes it back and the address brings the same picture back; and the reported address. All fail on 0.9.0. Unit tests for `ridePose` and the view's signs.
 
-## 0.9.0
+## 0.9.0 - 2026-11-02
 
 Ride along: the camera on the ISS, a Starlink satellite, the Moon or a planet, looking at the Earth.
 
@@ -44,7 +45,7 @@ Ride along: the camera on the ISS, a Starlink satellite, the Moon or a planet, l
 - **Docs**: a ride-along guide in English and Japanese, a page for it (docs/ride-along.md) and every new export with TSDoc and an example, usage examples run by `pnpm test:usage` (a Vite page that rides the ISS and is opened in a browser; `ridePose` in Node), README section, screenshots. The space view has no markers (those belong to the flat and the realistic globes), so the ticket's "markers stay on the ground" has nothing to do here.
 - The names beside the bodies are not drawn for the body being ridden (the camera is inside it) and the Earth's is not drawn when riding at a body.
 
-## 0.8.0
+## 0.8.0 - 2026-11-02
 
 Satellites on the space view, the space view in the embed, and the demo's space controls in Japanese.
 
@@ -72,7 +73,7 @@ Satellites on the space view, the space view in the embed, and the demo's space 
 - `ThreeParts` has an optional `Points`: a three.js subset handed over by `setThreeLoader` needs it only for satellites (the demo's `three-subset.ts` has it).
 - The CHANGELOG of 0.7.0, whose published tarball showed the family-parts notes under the 0.6.0 heading, is as fixed in 6f26012; this entry is under its own heading.
 
-## 0.7.0
+## 0.7.0 - 2026-11-02
 
 The space view can look at any body, bodies can be chosen, and how the Sun and the planets are drawn is a seam another package can fill.
 
@@ -95,7 +96,7 @@ Chikyu Earth now has what every package of the family has, and it was missing fr
 - **The family's must-have list**, checked: `scripts/check-standard.mjs` (kazoku-ui's, unchanged) fails `pnpm check` when a package lacks its demo, embed page, docs site with Japanese twins, family files or tested usage.
 - **Family files**: `family-template.mjs` and `family-readme.mjs` of 2026-11-02 with Chikyu Earth added to the family's list (33 packages), `family.css`, and the README's "The family" block. Added to the list here only; the other packages take the new files when they are next touched.
 
-## 0.6.0 (never published on its own: it ships in 0.7.0)
+## 0.6.0 - 2026-11-02 (never published on its own: it ships in 0.7.0)
 
 The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, under the same performance budget as the Earth from space.
 
@@ -114,7 +115,7 @@ The Sun, the Moon and the planets: `<chikyu-space>`, an optional entry point, un
 - **Research, no code** ([docs/satellite-sources.md](docs/satellite-sources.md), MODULES-85): CelesTrak (grey), Space-Track (red for a package), the r/SpaceX API (archived, offline), Launch Library 2 (grey), Wikipedia and Wikidata
   (green) for launches; the recommendation is a satellite view that takes elements the page supplies. John chooses before MODULES-86 and MODULES-87 start.
 
-## 0.5.0
+## 0.5.0 - 2026-11-02
 
 The Earth from space, and markers for any place on either globe, both under a hard performance budget.
 
@@ -150,7 +151,7 @@ An optional realistic look, drawn with three.js through kazoku-ui's shared rende
 - `pnpm test:soak` (`SOAK_MINUTES`, 10 by default; CI runs 1) turns, zooms, re-times and toggles for that long and compares the heap, the GPU objects and the draw rate with the start.
 - `pnpm screenshots` also makes the realistic pictures; `scripts/make-textures.py` makes the textures from NASA's sources.
 
-## 0.4.0
+## 0.4.0 - 2026-11-02
 
 The outlines now come from chizu, the controls from kazoku-ui 0.9, and the release from the family's shared workflow.
 
@@ -170,7 +171,7 @@ The outlines now come from chizu, the controls from kazoku-ui 0.9, and the relea
 - **AGENTS.md** is kazoku-ui's template (Facts: board `modules`, area `chikyu-earth`, ports 8200 to 8299).
 - A still picture of the demo opens the README; `pnpm screenshots` makes the pictures in `docs/images/`.
 
-## 0.3.0
+## 0.3.0 - 2026-11-01
 
 The shared-controls integration is documented and covered in every motion preference, and the future of the
 country data is written down.
@@ -183,7 +184,7 @@ country data is written down.
   data later.
 - The demo and test servers move to this work's port block, 8200–8299.
 
-## 0.2.0
+## 0.2.0 - 2026-11-01
 
 The globe now uses the family's shared view controls.
 
@@ -196,7 +197,7 @@ The globe now uses the family's shared view controls.
 - Browser tests now cover Chromium and WebKit at desk and phone sizes, including drag, pinch, zoom, Fit and the
   continuing Earth-rate turn.
 
-## 0.1.0
+## 0.1.0 - 2026-11-01
 
 The first scaffold, and the first working globe.
 

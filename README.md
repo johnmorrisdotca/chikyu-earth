@@ -15,6 +15,24 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
 
 <p align="center"><img alt="The line-drawn globe, Europe and Africa in view, with the shared control bar" src="docs/images/line-desk.png" width="640"></p>
 
+## Who it is for
+
+- **A developer who wants a globe on a page** with one tag, no build step, no canvas, and an SVG that prints sharply.
+- **A site with a place on it**: a team, a venue, a flight, a satellite pass. Markers move with the globe and gather into clusters.
+- **A teacher or writer** who wants the Earth turning at its own rate, and the Sun, Moon and planets where they are on a date.
+- **A maker of tools** who wants countries as data: outlines, English and Japanese names and two-letter codes, with no network.
+
+## Features
+
+- A line-drawn globe as one SVG: country outlines on an orthographic disc, in two looks (`line`, `thick`), with an optional graticule.
+- It opens centred on where the reader is, or where you say. Auto-turn runs at the Earth's own rate: one sidereal day a turn.
+- The Earth from space (`/realistic`): day and night by the real Sun, city lights, sun glint, clouds and the atmosphere, drawn with three.js through one shared WebGL context.
+- The Sun, the Moon and the planets where they are on a date and time (`/space`), and satellites at the places SGP4 puts them (`/satellites`), with a camera that rides along.
+- Markers with labels, groups, clusters and events (`/markers`), on either globe.
+- Pure parts that run on a server: `globe()`, the rotation and view maths, `COUNTRIES` and `countryList()`.
+- The shared kazoku-ui view controls: drag, tilt, zoom, pan, pinch, Front and Fit, with the view kept in the address.
+- Names in English and Japanese, and a strict content security policy is enough.
+
 ## Install and use
 
 ```sh
@@ -244,6 +262,188 @@ countryList().find((c) => c.alpha2 === "JP"); // { name: "Japan", ja: "日本", 
 ```
 
 To take newer outlines, update `@johnmorrisdotca/chizu`; there is no data file in this repository.
+
+## Examples
+
+Every `ts` block in this README that is not marked `no-run` is type-checked and run against the package as npm packs it (`pnpm test:readme`).
+
+```ts
+import { COUNTRIES, countryList } from "@johnmorrisdotca/chikyu-earth";
+
+COUNTRIES.features.length; // 177
+countryList().find((country) => country.alpha2 === "CA")?.ja; // "カナダ"
+```
+
+A globe with a graticule, centred on Tokyo, as a string:
+
+```ts
+import { globe } from "@johnmorrisdotca/chikyu-earth";
+
+const svg = globe({ size: 240, style: "thick", centre: { lon: 139.7, lat: 35.7 }, graticule: true });
+if (!svg.startsWith("<svg")) throw new Error("not an SVG");
+```
+
+The turn of the Earth, from the time:
+
+```ts
+import { centreRotation, rotationAt, SIDEREAL_DAY_MS, spinAt } from "@johnmorrisdotca/chikyu-earth";
+
+const tokyo = { lon: 139.7, lat: 35.7 };
+console.log(centreRotation(tokyo), rotationAt(tokyo, SIDEREAL_DAY_MS / 2, 0), spinAt(SIDEREAL_DAY_MS / 4));
+```
+
+What a shared controller's camera means for the projection:
+
+```ts
+import { HOME_VIEW, projectionView } from "@johnmorrisdotca/chikyu-earth";
+
+const view = projectionView({ lon: 0, lat: 0 }, 400, { ...HOME_VIEW, zoom: 2 });
+console.log(view.scale, view.translate);
+```
+
+A look that does not exist falls back to the default instead of failing:
+
+```ts
+import { cleanStyle, STYLE_NAMES } from "@johnmorrisdotca/chikyu-earth";
+
+console.log(STYLE_NAMES, cleanStyle("neon"));
+```
+
+The globe with a graticule and the realistic Earth, side by side in HTML:
+
+```html
+<chikyu-earth center="-79.38,43.65" look="line" graticule size="240"></chikyu-earth>
+<chikyu-earth-realistic center="-79.38,43.65" time="2026-06-21T12:00Z" style="display: block; width: 240px"></chikyu-earth-realistic>
+```
+
+A page that cannot run script uses an iframe of the embed page:
+
+```html
+<iframe src="https://johnmorrisdotca.github.io/chikyu-earth/embed.html?look=thick&center=10,30&graticule=1" title="The Earth" width="320" height="320" style="border:0"></iframe>
+```
+
+## The code builder
+
+[The code builder](https://johnmorrisdotca.github.io/chikyu-earth/builder.html) is one screen: choose the place to centre on, the look, the graticule and the size, then pick how your page is made (HTML from a CDN, a module, React or an iframe) and copy the code. It writes the same text the guides show.
+
+<p align="center"><img alt="The code builder: rows of places, looks, graticule and size, tabs for each way a page is made, a preview and the code to copy" src="docs/images/builder-desk.png" width="640"></p>
+
+## API
+
+The reference is a site, made from the source's own doc comments: every export has a summary, its parameters, what it returns and an example that runs when the site is built. [Open the reference](https://johnmorrisdotca.github.io/chikyu-earth/docs/).
+
+| Entry point | What it gives |
+| --- | --- |
+| `@johnmorrisdotca/chikyu-earth` | The pure side: `globe`, `COUNTRIES`, `countryList`, the looks, the rotation and view maths. No browser. |
+| `.../element` | `<chikyu-earth>`. |
+| `.../realistic`, `.../realistic/element` | The Earth from space; `three` for the element. |
+| `.../markers` | `attachMarkers` and the pure projection, clusters and labels. |
+| `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
+| `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
+
+## Guides
+
+Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-started.md).
+
+| Guide | What it is for |
+| --- | --- |
+| [Getting started](docs/guides/getting-started.md) | A globe on a page |
+| [HTML and CDN](docs/guides/html-and-cdn.md) | A script tag from jsDelivr or unpkg |
+| [Bundlers](docs/guides/bundlers.md) | Vite and webpack |
+| [Frameworks](docs/guides/frameworks.md) | React, Vue, Svelte, Angular |
+| [Embed in an iframe](docs/guides/embed-in-an-iframe.md) | No script of your own |
+| [TypeScript and Node](docs/guides/typescript-and-node.md) | Types and the pure side |
+| [The realistic Earth and markers](docs/guides/realistic-and-markers.md) | The Earth from space, markers |
+| [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
+| [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
+| [How it stays light](docs/guides/how-it-works.md) | The budget |
+| [Architecture](docs/guides/architecture.md) | How the layers fit |
+| [Troubleshooting](docs/guides/troubleshooting.md) | Something does not appear |
+| [Upgrading](docs/guides/upgrading.md) | What to act on between versions |
+
+## Limits
+
+- The outlines are Natural Earth 1:110m: good for a globe, not for a street map. `COUNTRIES` has 177 features, Antarctica included.
+- Three places have no two-letter code (`alpha2` is `null`), and Kosovo is `XK`.
+- The Earth from space and the space view need WebGL; without it the line globe is drawn.
+- Satellite elements are a day's snapshot you supply; the package fetches nothing. The positions are SGP4's, good for a picture, not for pointing an antenna.
+
+```ts
+import { countryList } from "@johnmorrisdotca/chikyu-earth";
+
+console.log(countryList().filter((country) => country.alpha2 === null).map((country) => country.name));
+```
+
+## Accessibility
+
+- A reader who prefers reduced motion gets a still globe, and the riding-along camera draws at most one frame a second.
+- The view takes the keyboard through the shared controls, and the markers' labels are real buttons.
+- Names are available in English and Japanese.
+
+```html
+<div id="globe" tabindex="0" role="group" aria-label="The Earth"><chikyu-earth size="420"></chikyu-earth></div>
+```
+
+## Browser and runtime support
+
+- The package needs Node 24 or later. The pure side runs in Node and in any current browser; the elements need a current browser.
+- The Earth from space and the space view need WebGL and `three` `>=0.160.0` (an optional peer); the space view also needs `astronomy-engine`, and satellites `satellite.js`:
+
+```sh
+npm install three astronomy-engine satellite.js
+```
+
+- The tests run the demo in Chromium and WebKit at a phone's width and a desk's, with WebGL drawn in software.
+
+## Languages
+
+The countries have English and Japanese names (`countryList()` gives `name` and `ja`), the demo is in both, and every guide in [docs/guides](docs/guides) has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-started.md), one language to a page.
+
+```ts
+import { countryList } from "@johnmorrisdotca/chikyu-earth";
+
+console.log(countryList().find((country) => country.alpha2 === "JP"));
+```
+
+## Architecture
+
+One small core and four optional layers, each its own entry point. The core is a pure function that returns an SVG string; the layers add the Earth from space, markers, the space view and satellites. [Architecture](docs/guides/architecture.md) has the layers.
+
+```ts
+import { DEGREES_PER_MS } from "@johnmorrisdotca/chikyu-earth";
+
+console.log((DEGREES_PER_MS * 1000).toFixed(6), "degrees a second");
+```
+
+## Development
+
+```sh
+pnpm install
+pnpm check         # lint, types, unit tests, the build and the packed package
+pnpm test:readme   # the README's ts blocks, type-checked and run against the packed package
+pnpm test:usage    # every way of using it, built or run
+pnpm docs:check    # the reference site's checks
+pnpm test:demo     # the demo, the embed page and the docs site in a real browser
+pnpm dev           # the demo on http://127.0.0.1:8200/chikyu-earth/
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Work in a git worktree from `origin/main`, one branch per change:
+
+```sh
+git worktree add ../chikyu-work -b my-change origin/main
+```
+
+The rules that matter most: draw from public facts and cite them, no data of our own, a look changes lines and fills and never the geometry, and a fact with no source is left out.
+
+## Changes
+
+[CHANGELOG.md](CHANGELOG.md) lists every release with its date.
+
+## Licence
+
+MIT: see [LICENSE](LICENSE). The outlines are Natural Earth's (public domain), and the realistic Earth's pictures are made from NASA Earth Observatory images: [NOTICE.md](NOTICE.md) says what each rests on.
 
 ## The name
 

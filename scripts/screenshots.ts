@@ -74,8 +74,10 @@ try {
     ["space-ride-horizon", { width: 1280, height: 900 }, "?look=space&time=2026-11-03T07:30Z&speed=0&center=25,-31&sats=stations&ride=iss&rlook=horizon"],
     ["realistic-night", { width: 1280, height: 900 }, "?look=realistic&time=2026-11-02T22:00Z&center=10,45&zoom=1.4"],
   ];
+  // `ONLY=builder-desk pnpm screenshots` takes just the pictures named, and no thumbnail
+  const only = process.env["ONLY"]?.split(",");
   for (const [name, viewport, query, jump] of shots) {
-    if (onlyThumbnail) break;
+    if (onlyThumbnail || (only !== undefined && !only.includes(name))) continue;
     const context = await browser.newContext({ viewport, reducedMotion: "reduce", deviceScaleFactor: 1 });
     const page = await context.newPage();
     await page.goto(`http://127.0.0.1:${port}/chikyu-earth/${query}`);
@@ -99,7 +101,20 @@ try {
     await page.screenshot({ path: out(name) });
     await context.close();
   }
-  await thumbnails(browser);
+  // the code builder
+  if (!onlyThumbnail && (only === undefined || only.includes("builder-desk"))) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 1000 }, reducedMotion: "reduce", deviceScaleFactor: 1 });
+    const page = await context.newPage();
+    await page.goto(`http://127.0.0.1:${port}/chikyu-earth/builder.html`);
+    await page.waitForSelector('html[data-ready="true"]');
+    await page.locator('[data-testid="place-london"]').click();
+    await page.locator('[data-testid="kind-react"]').click();
+    await page.waitForSelector('[data-testid="builder-preview"] chikyu-earth svg');
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: out("builder-desk") });
+    await context.close();
+  }
+  if (only === undefined || only.includes("thumbnail")) await thumbnails(browser);
   await browser.close();
 } finally {
   server.kill();
