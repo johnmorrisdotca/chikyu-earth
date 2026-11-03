@@ -41,6 +41,8 @@ async function sample(page: Page, t0: number) {
 
 /** Back to the opening state: paused at the Earth, the larger pictures freed. */
 async function rest(page: Page): Promise<void> {
+  // in sight: a view out of sight draws nothing, and what is let go is let go at a draw
+  await page.locator(SPACE).scrollIntoViewIfNeeded();
   await page.locator(SPACE).evaluate((el) => {
     Reflect.set(el, "speed", 0);
     Reflect.set(el, "scale", "compressed");
@@ -59,6 +61,8 @@ async function rest(page: Page): Promise<void> {
   let since = Date.now();
   const giveUp = Date.now() + 40_000;
   while (Date.now() - since < 5000 && Date.now() < giveUp) {
+    // a view at rest draws nothing, and what is let go is let go at a draw: ask for one
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "time", (Reflect.get(el, "time") as number) + 1));
     const now = alive(await counts(page), "Program");
     if (now !== seen) {
       seen = now;
@@ -92,6 +96,15 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   // look at the planets once, so three's own empty texture is made before the baseline
   await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).dispatchEvent("click");
   await settle(page, 1500);
+  // and at every body once, near: a body's shader is made the first time it is drawn and kept, so a body first met after the baseline would be one more program that is not a leak (the moons are let go again, which is checked)
+  for (const body of ["Moon", "Sun", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Earth"]) {
+    await page.locator(`[data-body="${body}"]`).first().dispatchEvent("click");
+    await settle(page, 1000);
+  }
+  for (const name of ["Jupiter and its moons", "Saturn and its moons", "Earth"]) {
+    await page.getByRole("group", { name: "Go to" }).getByRole("button", { name, exact: true }).dispatchEvent("click");
+    await settle(page, 1500);
+  }
 
   const t0 = Date.now();
   const end = t0 + MINUTES * 60_000;
