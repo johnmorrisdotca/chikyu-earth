@@ -18,6 +18,7 @@ uniform sampler2D nightMap;
 uniform sampler2D waterMap;
 uniform vec3 sunDir;
 uniform float lights;
+uniform float boost;
 uniform float ortho;
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -41,6 +42,7 @@ void main() {
   vec3 night = texture2D(nightMap, vUv).rgb;
   night = night * night * vec3(1.6, 1.5, 1.3) * lights + night * 0.25;
   vec3 col = mix(night, lit, day);
+  col += pow(albedo, vec3(0.75)) * boost * 0.65 * (1.0 - day);
 
   float rim = pow(1.0 - clamp(dot(n, toEye), 0.0, 1.0), 3.0);
   float sunSide = 0.12 + 0.88 * smoothstep(-0.25, 0.5, ndl);

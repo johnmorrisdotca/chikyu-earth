@@ -73,14 +73,15 @@ test("a drag turns the globe", async ({ page }) => {
   await expect.poll(() => markup(page)).not.toBe(before);
 });
 
-test("zoom out, zoom in, 2x and Fit work", async ({ page }) => {
+test("zoom out, zoom in and Fit work", async ({ page }) => {
   await ready(page);
   await page.locator(`${CONTROLS} [data-b="in"]`).click();
   expect((await stateOf(page)).zoom).toBeGreaterThan(1);
   await page.locator(`${CONTROLS} [data-b="out"]`).click();
   expect((await stateOf(page)).zoom).toBe(1);
-  await page.locator(`${CONTROLS} [data-b="two"]`).click();
-  expect((await stateOf(page)).zoom).toBe(2);
+  await page.locator(`${CONTROLS} [data-b="in"]`).click();
+  await page.locator(`${CONTROLS} [data-b="in"]`).click();
+  expect((await stateOf(page)).zoom).toBeGreaterThan(1.5);
   await page.locator(`${CONTROLS} [data-b="fit"]`).click();
   expect((await stateOf(page)).zoom).toBe(1);
   expect((await stateOf(page)).panX).toBe(0);

@@ -4,7 +4,7 @@
 import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
-import { createEarthItem, lookAt, newModel, type EarthModel, type ThreeParts } from "./earth.ts";
+import { createEarthItem, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
@@ -39,6 +39,9 @@ const readCentre = (value: string | null): GeoPoint | null => {
   if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon!) > 180 || Math.abs(lat!) > 90) return null;
   return { lon: lon!, lat: lat! };
 };
+
+/** A `light` attribute: `lit` or `boost`, else the true sun. */
+const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
 
 const readRatio = (value: string | null): number | undefined => {
   const ratio = Number(value);
@@ -79,7 +82,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["center", "time", "clouds", "lights", "live-seconds"];
+  static observedAttributes = ["center", "time", "clouds", "lights", "light", "live-seconds"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -106,6 +109,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.time = this.#mode === "now" ? Date.now() : this.#mode;
     this.#model.clouds = this.getAttribute("clouds") !== "off";
     this.#model.lights = this.getAttribute("lights") !== "off";
+    this.#model.light = readLight(this.getAttribute("light"));
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
@@ -178,6 +182,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "time") this.time = readTime(value);
     else if (name === "clouds") this.clouds = value !== "off";
     else if (name === "lights") this.lights = value !== "off";
+    else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
   }
 
@@ -220,6 +225,15 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
   set clouds(value: boolean) {
     this.#model.clouds = value;
+    this.#gate?.soon();
+  }
+
+  /** How the Earth is lit: `sun` (true, the default), `lit` (always lit: the night side is never a black frame) or `boost` (the true terminator with the night side raised). */
+  get light(): LightMode {
+    return this.#model.light;
+  }
+  set light(value: LightMode) {
+    this.#model.light = value;
     this.#gate?.soon();
   }
 

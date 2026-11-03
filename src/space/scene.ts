@@ -6,6 +6,7 @@ import { ATMOSPHERE_OUTER, sphere } from "../realistic/earth.ts";
 import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, BODY_FRAG, CLOUD_FRAG, GLOW_FRAG, GLOW_VERT, SURFACE_FRAG, SURFACE_VERT } from "../realistic/shaders.ts";
 import { createTextureSet, type ThreeParts } from "../realistic/textures.ts";
 import type { Layer } from "../realistic/tiers.ts";
+import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
@@ -99,6 +100,8 @@ export interface SpaceModel {
   stepMs: number;
   /** The body the camera looks at, and (in `zoom`) fills the view with at 1x. */
   focus: BodyName;
+  /** How the Earth is lit (see `LightMode`); the Sun, the Moon and the planets keep their true places either way. */
+  light: LightMode;
   /** How the painter draws the Sun, the planets and their moons (one of its `looks`, or `plain` for the sphere in the right colour); empty for its first. */
   bodies: string;
   /** Filled at each draw. */
@@ -139,6 +142,7 @@ export const newSpaceModel = (): SpaceModel => ({
   stepMs: 1000,
   focus: "Earth",
   bodies: "",
+  light: "sun",
   drawn: null,
   painted: { bodies: 0, moons: 0 },
   lookups: 0,
@@ -354,7 +358,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const earthMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: SURFACE_FRAG,
-        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir: sunEarth, lights: { value: 1 }, ortho: { value: 0 } },
+        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir: sunEarth, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 0 } },
       });
       const cloudShift = { value: 0 };
       const cloudMaterial = new three.ShaderMaterial({
@@ -498,7 +502,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const toSun = unit(frame.sun);
           sunEarth.value.set(toSun[0], toSun[1], toSun[2]);
           cloudShift.value = -(((model.time / 3_600_000) * 1.5) % 360) / 360;
-          earthMaterial.uniforms["lights"]!.value = 1;
+          earthMaterial.uniforms["lights"]!.value = model.light === "lit" ? 0 : 1;
+          earthMaterial.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
 
           // the Moon, with its near side to the Earth
           moon.position.set(moonPos[0], moonPos[1], moonPos[2]);
@@ -643,6 +648,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           camera.aspect = size.width / Math.max(1, size.height);
           camera.updateProjectionMatrix();
           camera.updateMatrixWorld();
+          // always lit: the light comes from the camera's side of the Earth (the Sun, Moon and planets stay where they are)
+          if (model.light === "lit") sunEarth.value.set(camera.position.x, camera.position.y, camera.position.z).normalize();
           sunView.value.copy(sunEarth.value).transformDirection(camera.matrixWorldInverse);
           const pose = model.pose;
           pose.p[0] = camera.position.x;

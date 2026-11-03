@@ -6,6 +6,7 @@ import type { GeoPoint } from "../types.ts";
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
+import type { LightMode } from "../realistic/earth.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
@@ -126,6 +127,8 @@ export interface Riding {
 
 type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
+/** A `light` attribute: `lit` or `boost`, else the true sun. */
+const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
 const RAD = Math.PI / 180;
 /** The Earth's own turn, degrees a second. */
 const EARTH_RATE = 360 / 86_164.0905;
@@ -162,7 +165,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits", "bodies"];
+  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits", "bodies", "light"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -193,6 +196,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.labels = this.getAttribute("labels") !== "off";
     this.#model.orbits = this.getAttribute("orbits") !== "off";
     this.#model.bodies = this.getAttribute("bodies") ?? "";
+    this.#model.light = readLight(this.getAttribute("light"));
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
     this.#model.speed = this.#speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
@@ -266,6 +270,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "labels") this.labels = value !== "off";
     else if (name === "orbits") this.orbits = value !== "off";
     else if (name === "bodies") this.bodies = value ?? "";
+    else if (name === "light") this.light = readLight(value);
   }
 
   get centre(): GeoPoint {
@@ -328,6 +333,15 @@ export class ChikyuSpace extends HTMLElement {
   }
   set bodies(value: string) {
     this.#model.bodies = value;
+    this.#gate?.request();
+  }
+
+  /** How the Earth is lit: `sun` (true, the default), `lit` (always lit, as if by daylight from the camera's side, so a ride on the night side is never a black frame) or `boost` (the true terminator, with the night side raised). The Sun, the Moon and the planets keep their true places. */
+  get light(): LightMode {
+    return this.#model.light;
+  }
+  set light(value: LightMode) {
+    this.#model.light = value;
     this.#gate?.request();
   }
 

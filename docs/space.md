@@ -51,6 +51,11 @@ backwards. Setting `time` points the camera at the same place on the ground agai
 by Greenwich sidereal time, the Moon shows its near side to the Earth (its libration, up to 8 degrees, is not drawn), and each planet is lit from the Sun, so Venus has its crescent and
 the Moon its quarter.
 
+## Lighting
+
+`element.light` (attribute `light`) is `sun` (the true light, the night side dark, the default), `lit` (the Earth lit as if by daylight from the camera's side: the day picture, no city lights, never a black frame on the night side of a ride) or `boost`
+(the true terminator with the night side raised so land and coasts read). The Sun, the Moon and the planets keep their true places in every mode; `<chikyu-earth-realistic>` takes the same attribute.
+
 ## Looking at a body, and choosing one
 
 `element.body = "Jupiter"` points the camera at a body (Earth, Moon, Sun, Mercury to Neptune, and Pluto); at zoom 1 it fills the view. The name beside each body is a button (Tab, Enter) and a press on a body

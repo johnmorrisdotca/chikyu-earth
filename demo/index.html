@@ -53,6 +53,14 @@
             <button type="button" class="fam-button" id="clouds" aria-pressed="true" data-say="clouds">Clouds</button>
             <button type="button" class="fam-button" id="lights" aria-pressed="true" data-say="lights">City lights</button>
           </div>
+          <div class="fam-row" id="light-controls" hidden data-help-en="Sun is the true light: the night side is dark. Always lit shows the day picture lit from the camera's side, so a ride on the night side is never a black frame. Night boost keeps the true day and night but raises the night side so land and coasts show." data-help-ja="「太陽」は本物の光で、夜の側は暗くなります。「いつも明るい」は、カメラの側から昼の画像を照らすので、夜の側を回っても真っ暗になりません。「夜を明るく」は、昼と夜はそのままで、夜の側を持ち上げて陸と海岸が見えるようにします。">
+            <span class="fam-label" data-say="light">Light</span>
+            <div class="group fam-seg" role="group" aria-label="Light" data-say-label="light">
+              <button type="button" data-light="sun" class="on" data-say="light_sun">Sun</button>
+              <button type="button" data-light="lit" data-say="light_lit">Always lit</button>
+              <button type="button" data-light="boost" data-say="light_boost">Night boost</button>
+            </div>
+          </div>
           <div class="fam-row" id="time-controls" hidden>
             <label class="field">
               <span data-say="when">Date and time</span>

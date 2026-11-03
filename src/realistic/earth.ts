@@ -28,6 +28,20 @@ const CLOUD_RADIUS = 1.006;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water"];
 
 /** What the scene reads at each draw; the element changes it and asks for a draw. */
+/**
+ * How the Earth is lit: `sun` (the true light, with the night side dark and the city lights on it), `lit` (always lit, as if by daylight from the camera's side, the day picture and no city lights: the night side is never a black frame)
+ * or `boost` (the true terminator, with the night side raised so the land and coasts read).
+ *
+ * @example
+ * ```ts
+ * import type { LightMode } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const modes: LightMode[] = ["sun", "lit", "boost"];
+ * console.log(modes.join(", "));
+ * ```
+ */
+export type LightMode = "sun" | "lit" | "boost";
+
 export interface EarthModel {
   /** The home centre; the shared controls' yaw and tilt are added to it as in the flat globe. */
   centre: GeoPoint;
@@ -36,6 +50,8 @@ export interface EarthModel {
   time: number;
   clouds: boolean;
   lights: boolean;
+  /** How the Earth is lit (see `LightMode`). */
+  light: LightMode;
   /** Where the camera looked at the last draw (the element decides from it whether a new draw is worth it). */
   drawn: { view: GlobeView; time: number; radius: number; centre: GeoPoint } | null;
   /** The pixel ratio the textures are chosen for. */
@@ -63,6 +79,7 @@ export const newModel = (): EarthModel => ({
   time: Date.now(),
   clouds: true,
   lights: true,
+  light: "sun",
   drawn: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
@@ -138,7 +155,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       const surface = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: SURFACE_FRAG,
-        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir, lights: { value: 1 }, ortho: { value: 1 } },
+        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 1 } },
       });
       const cloudShift = { value: 0 };
       const cloudMaterial = new three.ShaderMaterial({
@@ -181,9 +198,11 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           turned.rotation.set(look.lat * RAD, -look.lon * RAD, 0, "XYZ");
           const [sx, sy, sz] = unitVector(subsolarPoint(model.time));
           sunDir.value.set(sx, sy, sz).applyEuler(turned.rotation);
+          if (model.light === "lit") sunDir.value.set(0, 0, 1);
           cloudShift.value = -(((model.time / 3_600_000) * deps.drift) % 360) / 360;
           clouds.visible = model.clouds;
-          surface.uniforms["lights"]!.value = model.lights ? 1 : 0;
+          surface.uniforms["lights"]!.value = model.lights && model.light !== "lit" ? 1 : 0;
+          surface.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
           const radius = discRadius(size.width, size.height, view.zoom);
           camera.left = (-size.width / 2 - view.panX) / radius;
           camera.right = (size.width / 2 - view.panX) / radius;

@@ -6,6 +6,7 @@
 //   &time=2026-06-21T12:00Z      the realistic look's moment (the real Sun at that time); now by default
 //   &clouds=off &lights=off      the realistic look's layers
 //   &speed=0                     the space look's clock: game seconds a second (0 holds still, the default; 1 is real time, 86400 a day a second)
+//   &light=sun|lit|boost   how the Earth is lit: the true Sun, always lit (no black night side), or the true terminator with the night side raised
 //   &bodies=realistic|painted|plain   how the Sun, planets, Pluto and moons are drawn (realistic by default; plain is the sphere in the right colour)
 //   &scale=true &orbits=off &labels=1   the space look's scale, the planets' paths, and the names beside the bodies
 //   &satellites=stations,starlink &sat=25544   the space look's satellites (this site's own snapshot of CelesTrak's lists) and the one marked
@@ -58,6 +59,7 @@ if (look === "realistic") {
   if (time && Number.isFinite(Date.parse(time))) element.setAttribute("time", time);
   if (query.get("clouds") === "off") element.setAttribute("clouds", "off");
   if (query.get("lights") === "off") element.setAttribute("lights", "off");
+  if (query.get("light") === "lit" || query.get("light") === "boost") element.setAttribute("light", query.get("light")!);
   element.addEventListener("chikyu-unavailable", () => {
     element.remove();
     flat.hidden = false;
@@ -86,6 +88,7 @@ if (look === "space") {
   element.setAttribute("center", centre === "me" ? "0,20" : centre);
   element.setAttribute("texture-base", "textures/");
   if (query.get("bodies") === "painted") element.setAttribute("bodies", "painted");
+  if (query.get("light") === "lit" || query.get("light") === "boost") element.setAttribute("light", query.get("light")!);
   const time = query.get("time");
   if (time && Number.isFinite(Date.parse(time))) element.setAttribute("time", time);
   const speed = query.get("speed");

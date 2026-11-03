@@ -239,3 +239,54 @@ test("zoomed in on Jupiter its moons are there, at the places the ephemeris give
   await expect.poll(async () => (await statsOf(page)).distance, { timeout: 15_000 }).toBeGreaterThan(0);
   expect((await bodiesOf(page)).contexts).toBe(1);
 });
+
+/** The share of the pixels of the Earth's disc (the middle of the view) that are not nearly black. */
+const brightShare = async (page: Page): Promise<number> => {
+  const png = (await page.locator(SPACE).screenshot()).toString("base64");
+  return page.evaluate(async (data) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const size = Math.floor(bitmap.width * 0.4);
+    const { data: px } = context.getImageData(Math.floor((bitmap.width - size) / 2), Math.floor((bitmap.height - size) / 2), size, size);
+    let bright = 0;
+    for (let i = 0; i < px.length; i += 4) if (px[i]! + px[i + 1]! + px[i + 2]! > 60) bright += 1;
+    return bright / (px.length / 4);
+  }, png);
+};
+
+test("the night side: the true Sun leaves it dark, Always lit and Night boost show the land", async ({ page }) => {
+  // 14:00 UTC on 2 November: it is night over the Pacific and Asia (the Earth fills the middle of the view)
+  await open(page, `time=${NOV2}&speed=0&center=140,10`);
+  const dark = await brightShare(page);
+  expect(dark, "the true Sun: the night side is dark").toBeLessThan(0.25);
+  const choose = (name: string): Promise<void> => page.getByRole("group", { name: "Light", exact: true }).getByRole("button", { name, exact: true }).dispatchEvent("click");
+  await choose("Always lit");
+  await expect.poll(() => brightShare(page), { timeout: 20_000, message: "Always lit shows the surface" }).toBeGreaterThan(0.6);
+  await choose("Night boost");
+  await expect.poll(() => brightShare(page), { timeout: 20_000, message: "Night boost raises the night side" }).toBeGreaterThan(dark + 0.1);
+  await expect(page).toHaveURL(/light=boost/);
+  await choose("Sun");
+  await expect.poll(() => brightShare(page), { timeout: 20_000 }).toBeLessThan(0.25);
+  await expect(page).not.toHaveURL(/[?&]light=/);
+});
+
+test("the realistic Earth takes the same lighting from its attribute and the address", async ({ page }) => {
+  await page.addInitScript(COUNT_SCRIPT);
+  await page.goto(`/chikyu-earth/embed.html?look=realistic&time=${NOV2}&center=140,10&light=lit`);
+  await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
+  await settle(page, 1500);
+  const png = (await page.locator("chikyu-earth-realistic").screenshot()).toString("base64");
+  const share = await page.evaluate(async (data) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const { data: px } = context.getImageData(Math.floor(bitmap.width * 0.3), Math.floor(bitmap.height * 0.3), Math.floor(bitmap.width * 0.4), Math.floor(bitmap.height * 0.4));
+    let bright = 0;
+    for (let i = 0; i < px.length; i += 4) if (px[i]! + px[i + 1]! + px[i + 2]! > 60) bright += 1;
+    return bright / (px.length / 4);
+  }, png);
+  expect(share, "always lit: the night side of the realistic Earth is not black").toBeGreaterThan(0.6);
+});

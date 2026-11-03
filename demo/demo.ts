@@ -28,6 +28,7 @@ if (flat && controls && stage) {
   const address = createAddressState({ defaults: { look: "line" } });
   const status = document.querySelector<HTMLElement>("#status");
   const realControls = document.querySelector<HTMLElement>("#real-controls");
+  const lightControls = document.querySelector<HTMLElement>("#light-controls");
   const timeControls = document.querySelector<HTMLElement>("#time-controls");
   const speedControls = document.querySelector<HTMLElement>("#speed-controls");
   const spaceControls = document.querySelector<HTMLElement>("#space-controls");
@@ -110,7 +111,7 @@ if (flat && controls && stage) {
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
-    for (const box of [realControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
+    for (const box of [realControls, lightControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
     if (placesBox) placesBox.hidden = false;
     if (pickedNote) pickedNote.hidden = false;
   }
@@ -316,6 +317,20 @@ if (flat && controls && stage) {
     });
   }
 
+  let lightMode = ["lit", "boost"].includes(address.get("light") ?? "") ? (address.get("light") as string) : "sun";
+  const lightButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-light]")];
+  const markLight = (): void => {
+    for (const b of lightButtons) b.classList.toggle("on", b.dataset["light"] === lightMode);
+    address.set("light", lightMode === "sun" ? null : lightMode);
+  };
+  for (const button of lightButtons) {
+    button.addEventListener("click", () => {
+      lightMode = button.dataset["light"] ?? "sun";
+      for (const element of [real, space]) element?.setAttribute("light", lightMode);
+      markLight();
+    });
+  }
+  markLight();
   let planetsTried = false;
   let planetsHere = false;
   let bodiesLook = ["realistic", "painted", "plain"].includes(address.get("bodies") ?? "") ? (address.get("bodies") as string) : "realistic";
@@ -359,6 +374,7 @@ if (flat && controls && stage) {
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
       element.setAttribute("texture-base", "textures/");
       element.setAttribute("bodies", bodiesLook);
+      if (lightMode !== "sun") element.setAttribute("light", lightMode);
       const scale = address.get("scale");
       const speed = address.get("speed");
       const startTime = address.get("time");
@@ -396,6 +412,7 @@ if (flat && controls && stage) {
       element.setView(state());
     }
     if (realControls) realControls.hidden = true;
+    if (lightControls) lightControls.hidden = false;
     for (const box of [timeControls, speedControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
     markBodies();
     markRide();
@@ -429,6 +446,7 @@ if (flat && controls && stage) {
       const when = address.get("time");
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
+      if (lightMode !== "sun") element.setAttribute("light", lightMode);
       if (when && Number.isFinite(Date.parse(when))) element.setAttribute("time", when);
       element.addEventListener("chikyu-unavailable", () => {
         notice(say("noWebgl"));
@@ -442,6 +460,7 @@ if (flat && controls && stage) {
       mountMarkers(element);
     }
     if (realControls) realControls.hidden = false;
+    if (lightControls) lightControls.hidden = false;
     if (timeControls) timeControls.hidden = false;
     for (const box of [speedControls, spaceControls, scaleNote]) if (box) box.hidden = true;
     return true;
