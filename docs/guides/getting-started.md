@@ -47,7 +47,7 @@ The package draws; the shared [kazoku-ui](https://github.com/johnmorrisdotca/kaz
 
       const earth = document.querySelector("chikyu-earth");
       document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (event) => {
-        earth.setView(event.detail, event.detail.final);
+        earth.setView(event.detail, event.detail.final, event.detail.reason !== "auto");
       });
     </script>
   </head>
@@ -60,7 +60,7 @@ The package draws; the shared [kazoku-ui](https://github.com/johnmorrisdotca/kaz
 </html>
 ```
 
-`setView(view, final)` takes the controls' camera. `final` is false while a gesture is moving, which makes only a cheap transform, and true when it settles, which redraws the orthographic projection. Auto-turn runs at the Earth's own rate, `0.004178` degrees a second: one revolution per sidereal day. The controls leave it still for a reader who prefers reduced motion.
+`setView(view, final, live)` takes the controls' camera. `final` is false while a gesture is moving, which makes only a cheap transform, and true when it settles, which redraws the orthographic projection. `live` says a hand is on the view (anything but the Auto-turn): the projection is then redrawn while it turns, at most 30 times a second, so the globe follows the pointer; the Auto-turn is drawn about once a second. Auto-turn runs at the Earth's own rate, `0.004178` degrees a second: one revolution per sidereal day. The controls leave it still for a reader who prefers reduced motion.
 
 ## 3. Where next
 

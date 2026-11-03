@@ -1,6 +1,6 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Chikyu Earth 地球 — A line-drawn globe for the web: country outlines that turn at the Earth's own rate, centred on where you are, with an optional realistic Earth from space (three.js), the Sun, Moon and planets, satellites on their orbits, and markers for any place. A web component and an SVG string.",
   "keywords": [
     "earth",
@@ -146,7 +146,8 @@
     "@johnmorrisdotca/kazoku-ui": ">=0.9.0",
     "three": ">=0.160.0",
     "astronomy-engine": ">=2.1.0",
-    "satellite.js": ">=6.0.0"
+    "satellite.js": ">=6.0.0",
+    "@johnmorrisdotca/wakusei-planets": ">=0.5.0"
   },
   "peerDependenciesMeta": {
     "@johnmorrisdotca/kazoku-ui": {
@@ -160,6 +161,9 @@
     },
     "satellite.js": {
       "optional": true
+    },
+    "@johnmorrisdotca/wakusei-planets": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -168,7 +172,8 @@
     "@angular/core": "^22.2.4",
     "@angular/platform-browser": "^22.2.4",
     "@eslint/js": "^9.0.0",
-    "@johnmorrisdotca/kazoku-ui": "^0.9.0",
+    "@johnmorrisdotca/kazoku-ui": "^0.12.0",
+    "@johnmorrisdotca/wakusei-planets": "^0.5.0",
     "@playwright/test": "1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/d3-geo": "^3.1.0",

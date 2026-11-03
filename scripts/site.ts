@@ -27,6 +27,8 @@ await rm(at("site/kazoku-parts.src.js"));
 await cp(at("demo/demo.css"), at("site/demo.css"));
 await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
+// the pictures of the Sun, planets and moons (wakusei-planets, an optional peer the demo draws them with): the two smaller widths ship in its package, the sharpest come from the repository by jsDelivr
+await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("site/planets"), { recursive: true });
 await cp(at("demo/celestrak-snapshot.json"), at("site/celestrak-snapshot.json"));
 // The family's card in the demo's <head> (og:image, twitter:image, the icon), and the three pictures published beside it.
 const ALT = "Chikyu Earth: the globe as a line drawing over Europe and Africa, and as the realistic Earth over Asia with evening in the east.";

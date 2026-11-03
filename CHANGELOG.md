@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 - 2026-11-03
 
+The real Sun, planets, Pluto and moons in the space view.
+
+- **`<chikyu-space>` draws the real bodies through its `BodyPainter` seam with [wakusei-planets](https://github.com/johnmorrisdotca/wakusei-planets) 0.5.0** (an optional peer): `setBodyPainter(painter)` with `painter` from `@johnmorrisdotca/wakusei-planets/painter`, and `bodies="realistic"` or `bodies="painted"` (`plain` for the old spheres) on the element, the Sun with its glow, banded Jupiter, Saturn with Cassini's rings, Mars, Venus, Mercury, Uranus, Neptune and Pluto, lit from the Sun in the scene's own axes. One WebGL context, nothing drawn at rest, bodies drawn at the view's rate cap; a picture arriving later asks for a redraw; sharper pictures are fetched only for a body that is big on the screen and let go when it is not. The demo draws them by default (Planets: Shaded, Painted, Plain), the ride along too; the embed takes `&bodies=painted`.
+- **Pluto** joins the planets: `PLANETS`, `BODY_NAMES` (the names beside the bodies and `body = "Pluto"`), its orbit, its size in both scales.
+- **The moons, at their planets, when the camera is near.** A painter's optional `moons(planet, ms)` says where they are (wakusei-planets: Mars's two, Jupiter's four, Saturn's seven, Uranus's five, Neptune's three, Pluto's three, from JPL's mean elements); the view shows them once the planet is 4 pixels across, at least 2 pixels each, in their order round it, and lets them go four seconds after they leave the view. `zoomFor("Jupiter-moons")` is the zoom that frames a planet with its nearer moons. `stats.bodies` counts what the painter made.
+- **The seam grew, and kept its old shape**: `make(three, name, context)` may return a promise; a drawing may have `update({ toSun, ms, radiusPx })` and `dispose`; `BodyPainter` has optional `moons` and `looks`; new types `BodyMoon` and `PaintContext`. A painter written for 0.10 still works.
+- **The embed page shows the space view** when asked for it: the globe it hides stayed in the page (an author `display: block` beat the `hidden` attribute), so `embed.html?look=space` and `look=realistic` showed the line globe and left the real view below it, out of sight.
+- **kazoku-ui 0.11.0** for the demo: the Centre button, a pan that keeps the object in sight and `grab-radius="fit"`.
+- **A drag turns the globe while it is going on** (MODULES-254). The line and thick globe redrew its projection only when the pointer was let go (a move made only a cheap transform), so it stayed still and jumped on release. `setView(view, final, live)`: with `live` (a hand is on the view, which is anything but the Auto-turn) the projection is also redrawn while it turns, at most 30 times a second. The demo, the embed page and the guides pass `event.detail.reason !== "auto"`. Test: `e2e/hold.gl.ts`, a real pointer that goes down, moves and is not let go, in the line, thick, realistic and space looks with the Auto-turn on and off.
+- **kazoku-ui 0.12.0** for the demo (MODULES-234): the Centre button, the zoom slider and exact grab (`grab-radius="fit"`).
+- A guide, "The real Sun, planets, Pluto and moons", in English and Japanese.
 - Documentation: an architecture guide with its Japanese twin, a code builder page (`builder.html`), a longer README whose examples run (`pnpm test:readme`), and every release of this changelog dated. No behaviour changed.
 - The README opens with the package's thumbnail, and the demo carries it as its link preview (og:image) and publishes the card, a dark card and an icon on Pages at `thumbnail.png`, `thumbnail-dark.png` and `icon.png`.
 

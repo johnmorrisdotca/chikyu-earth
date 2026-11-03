@@ -10,7 +10,7 @@
 
       const earth = document.querySelector("chikyu-earth");
       document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (event) => {
-        earth.setView(event.detail, event.detail.final);
+        earth.setView(event.detail, event.detail.final, event.detail.reason !== "auto");
       });
     </script>
   </head>

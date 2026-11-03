@@ -157,3 +157,37 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   // The shared renderer lets the context go a moment after the last view leaves, and takes its canvas with it.
   await expect.poll(async () => page.evaluate(() => document.querySelectorAll("canvas").length + [...document.querySelectorAll("*")].filter((el) => el.shadowRoot?.querySelector("canvas:not(.cm-canvas)")).length), { timeout: 15_000 }).toBe(0);
 });
+
+test("the planets: the Sun, planets, Pluto and moons painted, the looks switched and the moons shown, nothing grows and nothing is drawn at rest", async ({ page }) => {
+  await page.addInitScript(COUNT_SCRIPT);
+  await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T14:00Z&speed=0&bodies=painted&center=10,20`);
+  await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+  const bodies = () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { bodies: { look: string; painted: number; moons: number } }).bodies);
+  await expect.poll(async () => (await bodies()).painted, { timeout: 30_000 }).toBe(9);
+  expect((await bodies()).look).toBe("painted");
+  // a planet with its moons at the zoom that shows them
+  await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Jupiter and its moons", exact: true }).dispatchEvent("click");
+  await expect.poll(async () => (await bodies()).moons, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(3000);
+  const rest = await bounded(page, 2500, "space");
+  expect(rest.draws, "nothing is drawn at rest, planets and moons included").toBe(0);
+  expect(rest.requests).toBe(0);
+  const counts: number[] = [];
+  const pick = (name: string) => page.getByRole("group", { name: "Planets", exact: true }).getByRole("button", { name, exact: true }).dispatchEvent("click");
+  for (let round = 0; round < 4; round += 1) {
+    for (const [name, look] of [["Shaded", "realistic"], ["Painted", "painted"], ["Plain", "plain"], ["Painted", "painted"]] as const) {
+      await pick(name);
+      await expect.poll(async () => (await bodies()).look, { timeout: 15_000 }).toBe(look);
+      await page.waitForTimeout(500);
+    }
+    await page.waitForTimeout(1500);
+    const c = await readCounts(page);
+    counts.push(gpuObjects(c));
+    expect(c.contexts, "one WebGL context for the page").toBe(1);
+  }
+  console.log(`live GPU objects after each round of looks: ${counts.join(", ")}`);
+  expect(Math.max(...counts.slice(1)), "no more GPU objects after four rounds than after the second").toBeLessThanOrEqual(counts[1]! + 8);
+  // far from any planet the moons are let go
+  await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).dispatchEvent("click");
+  await expect.poll(async () => (await bodies()).moons, { timeout: 15_000 }).toBe(0);
+});

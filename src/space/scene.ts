@@ -18,10 +18,15 @@ const RAD = Math.PI / 180;
 export const FIT_DISTANCE = 3.4;
 const FOV = 35;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water", "moon"];
+/** The moons of a planet are shown once the planet is this many CSS pixels across its radius, and each is drawn at least this many pixels across its radius. */
+const MOON_MIN_PLANET_PX = 4;
+const MOON_MIN_PX = 2.2;
+/** A moon that has been out of sight this long is let go (its pictures too). */
+const MOON_KEEP_MS = 4000;
 
-const PLAIN_COLOR = (name: PlanetName | "Sun"): string => (name === "Sun" ? "#ffb347" : COLORS[name]);
+const PLAIN_COLOR = (name: string): string => (name === "Sun" ? "#ffb347" : (COLORS as Record<string, string>)[name] ?? "#9a948b");
 /**
- * The ten bodies the space view places, names and lets a reader choose: the Earth, the Sun, the Moon and the seven other planets.
+ * The eleven bodies the space view places, names and lets a reader choose: the Earth, the Sun, the Moon, the seven other planets and Pluto.
  *
  * @example
  * ```ts no-run
@@ -45,8 +50,8 @@ export const BODY_NAMES = ["Earth", "Sun", "Moon", ...PLANETS] as const;
  */
 export type BodyName = (typeof BODY_NAMES)[number];
 
-const COLORS: Record<PlanetName, string> = { Mercury: "#a79f96", Venus: "#e3c98a", Mars: "#c1593a", Jupiter: "#d2b48c", Saturn: "#e4d4a0", Uranus: "#9fd6dc", Neptune: "#4a6bd6" };
-const ORBIT_COLORS: Record<PlanetName, string> = { Mercury: "#6b655f", Venus: "#8c7c55", Mars: "#7a4034", Jupiter: "#85735a", Saturn: "#8d8567", Uranus: "#5f8a8e", Neptune: "#34499a" };
+const COLORS: Record<PlanetName, string> = { Mercury: "#a79f96", Venus: "#e3c98a", Mars: "#c1593a", Jupiter: "#d2b48c", Saturn: "#e4d4a0", Uranus: "#9fd6dc", Neptune: "#4a6bd6", Pluto: "#c9b8a6" };
+const ORBIT_COLORS: Record<PlanetName, string> = { Mercury: "#6b655f", Venus: "#8c7c55", Mars: "#7a4034", Jupiter: "#85735a", Saturn: "#8d8567", Uranus: "#5f8a8e", Neptune: "#34499a", Pluto: "#7d7468" };
 
 /**
  * What a camera can ride along with: the name of one of the bodies, or a satellite of a group (`{ group, index }`).
@@ -94,8 +99,12 @@ export interface SpaceModel {
   stepMs: number;
   /** The body the camera looks at, and (in `zoom`) fills the view with at 1x. */
   focus: BodyName;
+  /** How the painter draws the Sun, the planets and their moons (one of its `looks`, or `plain` for the sphere in the right colour); empty for its first. */
+  bodies: string;
   /** Filled at each draw. */
   drawn: { frame: Frame; distance: number; radiusPx: number } | null;
+  /** What the painter has made now: the Sun and planets with a drawing, and the moons shown (set at each draw). */
+  painted: { bodies: number; moons: number };
   /** How many times astronomy-engine has been asked for a frame. */
   lookups: number;
   /** Game seconds a second (the clock's speed). */
@@ -129,7 +138,9 @@ export const newSpaceModel = (): SpaceModel => ({
   labels: true,
   stepMs: 1000,
   focus: "Earth",
+  bodies: "",
   drawn: null,
+  painted: { bodies: 0, moons: 0 },
   lookups: 0,
   speed: 1,
   ride: null,
@@ -166,14 +177,58 @@ export interface BodyDrawing {
   object: THREE.Object3D;
   /** Told at each draw the unit direction from the body to the Sun, in scene axes (x to the vernal equinox, y north). */
   light?(toSun: Vec3): void;
+  /** Told at each draw, after the object is placed and scaled: the direction to the Sun, the moment shown, and how many CSS pixels across its radius the body is (a sharper picture is worth fetching only for a big one). */
+  update?(info: { toSun: Vec3; ms: number; radiusPx: number }): void;
   /** True to have the scene turn the object to face the camera (a disc or a glow). */
   billboard?: boolean;
   dispose(): void;
 }
 
 /**
- * The seam for drawing the Sun and the planets. The space view places them, sizes them, lights them and labels them; a painter only makes what is drawn at
- * each place. The default (`plainPainter`) is a sphere in the body's colour, and a glow for the Sun. Another package can supply better looking ones.
+ * What the scene tells a painter when it makes a body.
+ *
+ * @example
+ * ```ts no-run
+ * import type { PaintContext } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const context: PaintContext = { look: "painted", invalidate: () => undefined, ratio: 2, maxTexture: 2048 };
+ * console.log(context.look);
+ * ```
+ */
+export interface PaintContext {
+  /** The look asked for: one of the painter's `looks`, or empty for its first. */
+  look: string;
+  /** Ask for a new draw (a picture has arrived). */
+  invalidate(): void;
+  /** Device pixels to a CSS pixel. */
+  ratio: number;
+  /** The widest picture, in pixels, the GPU should be given. */
+  maxTexture: number;
+}
+
+/**
+ * One moon of a planet at a moment: its name, where it is from the planet's centre and how big it is, both in radii of the planet, in scene axes.
+ *
+ * @example
+ * ```ts no-run
+ * import type { BodyMoon } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const io: BodyMoon = { name: "Io", offset: [5.9, 0, 0], radius: 0.0255 };
+ * console.log(io.name);
+ * ```
+ */
+export interface BodyMoon {
+  name: string;
+  offset: Readonly<Vec3>;
+  radius: number;
+}
+
+/**
+ * The seam for drawing the Sun, the planets and their moons. The space view places them, sizes them, lights them and labels them; a painter only makes what is drawn at
+ * each place. The default (`plainPainter`) is a sphere in the body's colour, and a glow for the Sun. Another package can supply better looking ones:
+ * `@johnmorrisdotca/wakusei-planets/painter` draws the real Sun, planets, Pluto and moons.
+ * `make` may return a drawing at once or later (a promise); a drawing may update itself and ask for a redraw when a picture arrives. `moons` is optional: the moons the painter can
+ * draw for a planet at a moment, which the view shows round the planet when it is near enough to see them. `looks` names what `context.look` may be.
  *
  * @example
  * ```ts no-run
@@ -184,7 +239,9 @@ export interface BodyDrawing {
  * ```
  */
 export interface BodyPainter {
-  make(three: ThreeParts, name: PlanetName | "Sun"): BodyDrawing;
+  make(three: ThreeParts, name: string, context?: PaintContext): BodyDrawing | Promise<BodyDrawing>;
+  moons?(planet: PlanetName, ms: number): readonly BodyMoon[];
+  looks?: readonly string[];
 }
 
 export interface SpaceDeps {
@@ -204,8 +261,10 @@ export interface SpaceDeps {
   onRideLost?: () => void;
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
-  /** How the Sun and the planets are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
+  /** How the Sun, the planets and their moons are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
   painter?: BodyPainter;
+  /** The painter could not make a body (the three.js parts handed over lack something it needs); the body is drawn plain instead. */
+  onPainterError?: (error: unknown) => void;
 }
 
 /** An inertial direction from the Earth's centre, in scene axes, for right ascension and declination in degrees. */
@@ -234,7 +293,7 @@ function quad(three: Three): THREE.BufferGeometry {
  * console.log(typeof plainPainter.make);
  * ```
  */
-export const plainPainter: BodyPainter = {
+export const plainPainter: { make(three: ThreeParts, name: string): BodyDrawing } & BodyPainter = {
   make(three, name) {
     if (name === "Sun") {
       const geometry = quad(three);
@@ -332,20 +391,70 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const painter = deps.painter ?? plainPainter;
       const scene = new three.Scene();
       scene.add(earth, clouds, glow, moon);
-      const sunDrawing = painter.make(three, "Sun");
-      scene.add(sunDrawing.object);
-      type Planet = { drawing: BodyDrawing; orbit: THREE.LineLoop; positions: Float32Array; samples: Vec3[]; epoch: number };
+
+      // the Sun, the planets and the moons are made by the painter, one slot each: a slot is filled again when the look changes, and may be filled later (a painter may be slow)
+      let ended = false;
+      interface Slot {
+        name: string;
+        drawing: BodyDrawing | undefined;
+        look: string | null;
+        token: number;
+        plain: boolean;
+      }
+      const newSlot = (name: string): Slot => ({ name, drawing: undefined, look: null, token: 0, plain: false });
+      const lookNow = (): string => model.bodies || painter.looks?.[0] || "";
+      const empty = (slot: Slot): void => {
+        slot.token += 1;
+        if (!slot.drawing) return;
+        scene.remove(slot.drawing.object);
+        slot.drawing.dispose();
+        slot.drawing = undefined;
+      };
+      const fill = (slot: Slot, isMoon = false): void => {
+        const look = lookNow();
+        if (slot.look === look) return;
+        empty(slot);
+        slot.look = look;
+        const token = slot.token;
+        const arrive = (made: BodyDrawing): void => {
+          if (ended || slot.token !== token) {
+            made.dispose();
+            return;
+          }
+          slot.drawing = made;
+          scene.add(made.object);
+          deps.invalidate();
+        };
+        const fail = (error: unknown): void => {
+          if (ended || slot.token !== token) return;
+          deps.onPainterError?.(error);
+          if (!isMoon && !slot.plain) {
+            slot.plain = true;
+            slot.look = null;
+            fill(slot);
+          }
+        };
+        try {
+          const made = (slot.plain || look === "plain" ? plainPainter : painter).make(three, slot.name, { look, invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap() });
+          if (typeof (made as Promise<BodyDrawing>).then === "function") (made as Promise<BodyDrawing>).then(arrive, fail);
+          else arrive(made as BodyDrawing);
+        } catch (error) {
+          fail(error);
+        }
+      };
+      const sunSlot = newSlot("Sun");
+      type Planet = { slot: Slot; orbit: THREE.LineLoop; positions: Float32Array; samples: Vec3[]; epoch: number; toSun: Vec3 };
       const planets = new Map<PlanetName, Planet>();
       for (const name of PLANETS) {
-        const drawing = painter.make(three, name);
         const positions = new Float32Array(96 * 3);
         const lineGeometry = new three.BufferGeometry();
         lineGeometry.setAttribute("position", new three.BufferAttribute(positions, 3));
         const orbit = new three.LineLoop(lineGeometry, new three.LineBasicMaterial({ color: ORBIT_COLORS[name], transparent: true, opacity: 0.7 }));
         orbit.frustumCulled = false;
-        scene.add(drawing.object, orbit);
-        planets.set(name, { drawing, orbit, positions, samples: [], epoch: Number.NaN });
+        scene.add(orbit);
+        planets.set(name, { slot: newSlot(name), orbit, positions, samples: [], epoch: Number.NaN, toSun: [1, 0, 0] });
       }
+      const moonSlots = new Map<string, { slot: Slot; seen: number }>();
 
       let layer: SatelliteLayer | undefined;
       const rideState = new Float64Array(6);
@@ -405,14 +514,22 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const radiusOf = (name: BodyName): number => (name === "Earth" ? 1 : RADIUS[name]![mode]);
 
           // the Sun and the planets, drawn by the painter, and the planets' orbits round the Sun
-          sunDrawing.object.position.set(sunPos[0], sunPos[1], sunPos[2]);
-          sunDrawing.object.scale.setScalar(radiusOf("Sun"));
-          if (sunDrawing.billboard) sunDrawing.object.quaternion.copy(camera.quaternion);
+          fill(sunSlot);
+          const sunDrawing = sunSlot.drawing;
+          if (sunDrawing) {
+            sunDrawing.object.position.set(sunPos[0], sunPos[1], sunPos[2]);
+            sunDrawing.object.scale.setScalar(radiusOf("Sun"));
+            if (sunDrawing.billboard) sunDrawing.object.quaternion.copy(camera.quaternion);
+          }
           for (const name of PLANETS) {
             const p = planets.get(name)!;
-            p.drawing.object.position.set(pos[name][0], pos[name][1], pos[name][2]);
-            p.drawing.object.scale.setScalar(radiusOf(name));
-            p.drawing.light?.(unit([frame.sun[0] - frame.planets[name][0], frame.sun[1] - frame.planets[name][1], frame.sun[2] - frame.planets[name][2]]));
+            fill(p.slot);
+            p.toSun = unit([frame.sun[0] - frame.planets[name][0], frame.sun[1] - frame.planets[name][1], frame.sun[2] - frame.planets[name][2]]);
+            if (p.slot.drawing) {
+              p.slot.drawing.object.position.set(pos[name][0], pos[name][1], pos[name][2]);
+              p.slot.drawing.object.scale.setScalar(radiusOf(name));
+              p.slot.drawing.light?.(p.toSun);
+            }
             p.orbit.visible = model.orbits;
             if (model.orbits) {
               if (!Number.isFinite(p.epoch) || Math.abs(model.time - p.epoch) > 365 * 86_400_000) {
@@ -472,8 +589,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           const hidden = rideFrom?.hidden ?? null;
           moon.visible = hidden !== "Moon";
-          sunDrawing.object.visible = hidden !== "Sun";
-          for (const [name, p] of planets) p.drawing.object.visible = hidden !== name;
+          if (sunDrawing) sunDrawing.object.visible = hidden !== "Sun";
+          for (const [name, p] of planets) if (p.slot.drawing) p.slot.drawing.object.visible = hidden !== name;
 
           let fovNow = FOV;
           let distance = 0;
@@ -550,6 +667,55 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const px = {} as Record<BodyName, number>;
           for (const name of BODY_NAMES) px[name] = radiusPxOf(name);
           model.drawn = { frame, distance, radiusPx: px.Earth };
+          let paintedBodies = sunSlot.drawing ? 1 : 0;
+          for (const p of planets.values()) if (p.slot.drawing) paintedBodies += 1;
+          let paintedMoons = 0;
+          for (const held of moonSlots.values()) if (held.slot.drawing?.object.visible) paintedMoons += 1;
+          model.painted = { bodies: paintedBodies, moons: paintedMoons };
+          const sunToSun = unit([-frame.sun[0], -frame.sun[1], -frame.sun[2]]);
+          sunDrawing?.update?.({ toSun: sunToSun, ms: model.time, radiusPx: px.Sun });
+          for (const name of PLANETS) {
+            const p = planets.get(name)!;
+            p.slot.drawing?.update?.({ toSun: p.toSun, ms: model.time, radiusPx: px[name] });
+          }
+          if (painter.moons && lookNow() !== "plain") {
+            const now = performance.now();
+            const seen = new Set<string>();
+            for (const name of PLANETS) {
+              const p = planets.get(name)!;
+              const planet = p.slot.drawing;
+              if (!planet || !planet.object.visible || px[name] < MOON_MIN_PLANET_PX) continue;
+              const radius = radiusOf(name);
+              for (const site of painter.moons(name, model.time)) {
+                const at: Vec3 = [pos[name][0] + site.offset[0] * radius, pos[name][1] + site.offset[1] * radius, pos[name][2] + site.offset[2] * radius];
+                projected.set(at[0], at[1], at[2]).project(camera);
+                if (projected.z > 1 || Math.abs(projected.x) > 1.25 || Math.abs(projected.y) > 1.25) continue;
+                let held = moonSlots.get(site.name);
+                if (!held) moonSlots.set(site.name, (held = { slot: newSlot(site.name), seen: now }));
+                held.seen = now;
+                seen.add(site.name);
+                fill(held.slot, true);
+                const drawing = held.slot.drawing;
+                if (!drawing) continue;
+                const away = Math.hypot(at[0] - camera.position.x, at[1] - camera.position.y, at[2] - camera.position.z);
+                const drawn = Math.max(site.radius * radius, (away * half * MOON_MIN_PX) / (size.height / 2));
+                drawing.object.visible = true;
+                drawing.object.position.set(at[0], at[1], at[2]);
+                drawing.object.scale.setScalar(drawn);
+                const moonPx = away <= drawn * 1.001 ? 1e5 : ((size.height / 2) * (drawn / Math.sqrt(away * away - drawn * drawn))) / half;
+                drawing.light?.(p.toSun);
+                drawing.update?.({ toSun: p.toSun, ms: model.time, radiusPx: moonPx });
+              }
+            }
+            for (const [key, held] of moonSlots) {
+              if (seen.has(key)) continue;
+              if (held.slot.drawing) held.slot.drawing.object.visible = false;
+              if (now - held.seen > MOON_KEEP_MS) {
+                empty(held.slot);
+                moonSlots.delete(key);
+              }
+            }
+          }
           const ratio = model.ratio();
           const earthPx = Math.min(px.Earth, 1e5) * ratio;
           textures.sync({ day: earthPx, night: earthPx, clouds: earthPx, water: earthPx, moon: Math.min(px.Moon, 1e5) * ratio });
@@ -577,9 +743,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           layer?.dispose();
           model.pick = null;
           textures.dispose();
-          sunDrawing.dispose();
+          ended = true;
+          empty(sunSlot);
+          for (const held of moonSlots.values()) empty(held.slot);
+          moonSlots.clear();
           for (const p of planets.values()) {
-            p.drawing.dispose();
+            empty(p.slot);
             p.orbit.geometry.dispose();
             (p.orbit.material as THREE.Material).dispose();
           }

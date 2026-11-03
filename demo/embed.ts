@@ -6,10 +6,11 @@
 //   &time=2026-06-21T12:00Z      the realistic look's moment (the real Sun at that time); now by default
 //   &clouds=off &lights=off      the realistic look's layers
 //   &speed=0                     the space look's clock: game seconds a second (0 holds still, the default; 1 is real time, 86400 a day a second)
+//   &bodies=realistic|painted|plain   how the Sun, planets, Pluto and moons are drawn (realistic by default; plain is the sphere in the right colour)
 //   &scale=true &orbits=off &labels=1   the space look's scale, the planets' paths, and the names beside the bodies
 //   &satellites=stations,starlink &sat=25544   the space look's satellites (this site's own snapshot of CelesTrak's lists) and the one marked
 //   &ride=iss|css|starlink|Moon|Mars &rview=follow &rlook=horizon   the space look's camera riding along with a body, from it (default) or behind it, looking down (default) or at the horizon
-//   &body=Mars &zoom=moon        the space look's camera: the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system)
+//   &body=Mars &zoom=moon        the space look's camera (a number is the zoom itself): the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system, or Jupiter-moons, Saturn-moons ...)
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
 import { createViewController, type ViewState } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import "../src/element.ts";
@@ -70,11 +71,21 @@ if (look === "realistic") {
 }
 
 if (look === "space") {
-  const { setThreeLoader } = await import("../src/space/element.ts");
+  const { setThreeLoader, setBodyPainter } = await import("../src/space/element.ts");
   setThreeLoader(() => import("./three-subset.ts"));
+  // the real Sun, planets, Pluto and moons come from wakusei-planets (an optional peer); without it they are plain spheres
+  if (query.get("bodies") !== "plain") {
+    try {
+      const { createPainter } = await import("@johnmorrisdotca/wakusei-planets/painter");
+      setBodyPainter(createPainter({ textureBase: "planets/" }) as unknown as import("../src/space/index.ts").BodyPainter);
+    } catch {
+      // plain spheres
+    }
+  }
   const element = document.createElement("chikyu-space") as ChikyuSpace;
   element.setAttribute("center", centre === "me" ? "0,20" : centre);
   element.setAttribute("texture-base", "textures/");
+  if (query.get("bodies") === "painted") element.setAttribute("bodies", "painted");
   const time = query.get("time");
   if (time && Number.isFinite(Date.parse(time))) element.setAttribute("time", time);
   const speed = query.get("speed");
@@ -96,7 +107,8 @@ if (look === "space") {
   const body = query.get("body");
   if (body) element.body = body as BodyName;
   const preset = query.get("zoom");
-  if (preset) startZoom = element.zoomFor(preset as SpacePreset);
+  if (preset?.endsWith("-moons") && !body) element.body = preset.slice(0, -6) as BodyName;
+  if (preset) startZoom = Number.isFinite(Number(preset)) && Number(preset) > 0 ? Number(preset) : element.zoomFor(preset as SpacePreset);
   element.setView({ yaw: 0, tilt: 0, zoom: startZoom });
 
   const listed = (query.get("satellites") ?? "").split(",").filter((name): name is "stations" | "starlink" => name === "stations" || name === "starlink");
@@ -156,7 +168,7 @@ if (interactive) {
       const now = performance.now();
       const auto = info.reason === "auto" && now - drawnAt >= AUTO_REDRAW_MS;
       if (auto) drawnAt = now;
-      (earth as ChikyuEarth).setView(detail, info.final || auto);
+      (earth as ChikyuEarth).setView(detail, info.final || auto, info.reason !== "auto");
     },
   });
   view.bind(frame);

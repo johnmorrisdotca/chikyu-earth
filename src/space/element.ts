@@ -9,10 +9,10 @@ import type { ThreeParts } from "../realistic/textures.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
-import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt } from "./ephemeris.ts";
+import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
 import type { RideLook } from "./ride.ts";
-import { placeAround, placeMoon, placeSun, type ScaleMode } from "./scale.ts";
+import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SpaceModel } from "./scene.ts";
 
 export { BODY_NAMES, type BodyName, type RideTarget };
@@ -38,7 +38,7 @@ export function setBodyPainter(next: BodyPainter | undefined): void {
 }
 
 /** Mean radii in kilometres (IAU), for what a click tells. */
-const RADIUS_KM: Record<BodyName, number> = { Sun: 695_700, Mercury: 2439.7, Venus: 6051.8, Earth: 6371, Moon: 1737.4, Mars: 3389.5, Jupiter: 69_911, Saturn: 58_232, Uranus: 25_362, Neptune: 24_622 };
+const RADIUS_KM: Record<BodyName, number> = { Sun: 695_700, Mercury: 2439.7, Venus: 6051.8, Earth: 6371, Moon: 1737.4, Mars: 3389.5, Jupiter: 69_911, Saturn: 58_232, Uranus: 25_362, Neptune: 24_622, Pluto: 1188.3 };
 
 /**
  * What a page can tell a reader about a body now.
@@ -74,7 +74,7 @@ type Three = ThreeParts;
  */
 export type SpaceState = "loading" | "live" | "unavailable" | "lost" | "idle";
 /**
- * A named distance for `zoomFor`: the Earth, the Moon, the Sun, the inner planets or the whole solar system.
+ * A named distance for `zoomFor`: the Earth, the Moon, the Sun, the inner planets, the whole solar system, or a planet with its nearer moons (`Jupiter-moons`: the zoom that shows them, when a body painter that draws moons is set).
  *
  * @example
  * ```ts no-run
@@ -84,7 +84,7 @@ export type SpaceState = "loading" | "live" | "unavailable" | "lost" | "idle";
  * console.log(typeof zoomTo);
  * ```
  */
-export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system";
+export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | `${Exclude<PlanetName, "Mercury" | "Venus">}-moons`;
 
 /**
  * How a ride along is done: `view` `from` (the default) puts the camera at the body looking at the Earth, `follow` keeps it a fixed distance from the body looking at it (`distanceKm`, 3000 by default,
@@ -162,7 +162,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits"];
+  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits", "bodies"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -192,6 +192,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.mode = this.getAttribute("scale") === "true" ? "true" : "compressed";
     this.#model.labels = this.getAttribute("labels") !== "off";
     this.#model.orbits = this.getAttribute("orbits") !== "off";
+    this.#model.bodies = this.getAttribute("bodies") ?? "";
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
     this.#model.speed = this.#speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
@@ -228,6 +229,7 @@ export class ChikyuSpace extends HTMLElement {
       onRideLost: () => this.#rideLost(),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       ...(painter ? { painter } : {}),
+      onPainterError: (error) => this.dispatchEvent(new CustomEvent("chikyu-bodies-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
     });
     this.#view = taken.renderer.view(this.#stage, item, { still: null });
     this.#set("loading");
@@ -263,6 +265,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "scale") this.scale = value === "true" ? "true" : "compressed";
     else if (name === "labels") this.labels = value !== "off";
     else if (name === "orbits") this.orbits = value !== "off";
+    else if (name === "bodies") this.bodies = value ?? "";
   }
 
   get centre(): GeoPoint {
@@ -314,6 +317,23 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.labels = value;
     if (!value) for (const label of this.#pool.values()) label.hidden = true;
     this.#gate?.request();
+  }
+
+  /**
+   * How the Sun, the planets, Pluto and their moons are drawn: one of the `looks` of the body painter set with `setBodyPainter` (wakusei-planets has `realistic` and `painted`), or `plain` (the sphere in the right colour, no moons); empty for the painter's first.
+   * With no painter they are plain spheres and this does nothing. Changing it draws the bodies again with the new look.
+   */
+  get bodies(): string {
+    return this.#model.bodies;
+  }
+  set bodies(value: string) {
+    this.#model.bodies = value;
+    this.#gate?.request();
+  }
+
+  /** The looks the body painter offers (empty with no painter), for a page to build its choice from. */
+  get bodyLooks(): readonly string[] {
+    return painter?.looks ?? [];
   }
 
   get orbits(): boolean {
@@ -490,6 +510,13 @@ export class ChikyuSpace extends HTMLElement {
 
   /** The zoom that shows a part of the sky: the Earth alone, the Moon's orbit, the Sun, the planets out to Mars, or all of them, at this scale and moment. */
   zoomFor(preset: SpacePreset): number {
+    if (preset.endsWith("-moons")) {
+      const name = preset.slice(0, -6) as PlanetName;
+      const sites = painter?.moons?.(name, this.#model.time) ?? [];
+      const reach = Math.max(1, ...sites.map((site) => Math.hypot(...site.offset)).filter((r) => r <= 22));
+      const radius = RADIUS[name]![this.#model.mode];
+      return Math.min(1, (FIT_DISTANCE * radius) / ((reach * radius * 1.15) / Math.tan(17.5 * RAD)));
+    }
     const frame = this.#model.drawn?.frame ?? frameAt(this.#model.time);
     const mode = this.#model.mode;
     const sun = placeSun(mode, frame.sun);
@@ -500,7 +527,7 @@ export class ChikyuSpace extends HTMLElement {
       sun: Math.hypot(...sun),
       inner: Math.max(around("Mercury"), around("Venus"), around("Mars"), Math.hypot(...sun)),
       "solar-system": Math.max(...(Object.keys(frame.planets) as (keyof typeof frame.planets)[]).map(around), Math.hypot(...sun)),
-    }[preset];
+    }[preset as Exclude<SpacePreset, `${string}-moons`>];
     return preset === "earth" ? 1 : FIT_DISTANCE / Math.max(FIT_DISTANCE, reach * 3.4);
   }
 
@@ -519,6 +546,8 @@ export class ChikyuSpace extends HTMLElement {
     ride: { riding: boolean; lost: boolean; gliding: boolean };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, and its field of view in degrees. */
     camera: { position: [number, number, number]; fov: number };
+    /** What the body painter has made at the last draw: the Sun and planets with a drawing, and the moons shown round a planet that is near. */
+    bodies: { look: string; painted: number; moons: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -534,6 +563,7 @@ export class ChikyuSpace extends HTMLElement {
       satellites: this.#satelliteStats(),
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], fov: this.#model.pose.fov },
+      bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
     };
   }
 

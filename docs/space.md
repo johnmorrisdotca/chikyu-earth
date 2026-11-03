@@ -53,16 +53,18 @@ the Moon its quarter.
 
 ## Looking at a body, and choosing one
 
-`element.body = "Jupiter"` points the camera at a body (Earth, Moon, Sun, Mercury to Neptune); at zoom 1 it fills the view. The name beside each body is a button (Tab, Enter) and a press on a body
+`element.body = "Jupiter"` points the camera at a body (Earth, Moon, Sun, Mercury to Neptune, and Pluto); at zoom 1 it fills the view. The name beside each body is a button (Tab, Enter) and a press on a body
 that is not a drag fires `chikyu-body-click` (`chikyu-body-focus` for the keyboard) with `{ name, radiusKm, distanceKm }`; `element.bodyInfo(name)` gives the same. What happens next is the page's: the demo looks at the body
 and prints a line about it.
 
 ## The seam for drawing the bodies
 
-The Earth and the Moon keep their pictures here. The Sun and the planets are plain spheres in the right colours (and a glow for the Sun), drawn by a `BodyPainter`
-(`@johnmorrisdotca/chikyu-earth/space`: `plainPainter`, `BodyPainter`, `BodyDrawing`, and `setBodyPainter` from the element module). The view decides where each body is, how big it is (the real ratio in true scale),
-which way the Sun lights it, and what it is called; a painter's `make(three, name)` returns an object of radius 1 and, optionally, `light(toSun)` (called at each draw) and `billboard: true`. Another package can
-supply bodies with surface maps and rings without this one carrying them.
+The Earth and the Moon keep their pictures here. The Sun, the planets and Pluto are drawn by a `BodyPainter` (`@johnmorrisdotca/chikyu-earth/space`: `plainPainter`, `BodyPainter`, `BodyDrawing`, `BodyMoon`,
+`PaintContext`, and `setBodyPainter` from the element module). Left alone they are plain spheres in the right colours (and a glow for the Sun). With `@johnmorrisdotca/wakusei-planets/painter` (an optional peer)
+they are the real ones, in a `realistic` or `painted` look (`bodies="painted"`), with Saturn's rings, and with the moons round a planet once it is a few pixels across (`zoomFor("Jupiter-moons")`): see the
+guide [The real Sun, planets, Pluto and moons](guides/the-real-planets.md). The view decides where each body is, how big it is (the real ratio in true scale), which way the Sun lights it, and what it is called;
+a painter's `make(three, name, context)` returns an object of radius 1 (or a promise of one) and, optionally, `update({ toSun, ms, radiusPx })` (called at each draw), `light(toSun)`, `billboard: true` and `dispose()`; its
+optional `moons(planet, ms)` places a planet's moons in planet radii and `looks` names what `bodies` may be.
 
 ## Satellites
 

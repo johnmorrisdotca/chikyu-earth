@@ -15,6 +15,8 @@ const readCentre = (value: string | null): GeoPoint | null => {
   return { lon, lat };
 };
 
+/** The least time between two redraws of the projection while a hand is turning the globe: 30 a second at most. */
+const LIVE_MS = 1000 / 30;
 const STYLE = ":host{display:block;position:relative}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}";
 
 /**
@@ -39,6 +41,8 @@ export class ChikyuEarth extends HTMLElement {
   #listeners = new Set<(pose: OverlayPose) => void>();
   #overlay: HTMLElement | undefined;
   #pose: OverlayPose | null = null;
+  #liveTimer: ReturnType<typeof setTimeout> | undefined;
+  #liveAt = 0;
 
   /** Where the view is centred now: the `center` attribute, else the reader's place once the browser has answered. */
   get centre(): GeoPoint {
@@ -58,6 +62,11 @@ export class ChikyuEarth extends HTMLElement {
     };
   }
 
+  disconnectedCallback(): void {
+    clearTimeout(this.#liveTimer);
+    this.#liveTimer = undefined;
+  }
+
   connectedCallback(): void {
     this.#centre = readCentre(this.getAttribute("center")) ?? { lon: 0, lat: 0 };
     this.#render();
@@ -71,12 +80,27 @@ export class ChikyuEarth extends HTMLElement {
 
   /**
    * Apply a shared controller's camera. Every event updates the state; `final: false` makes only the cheap
-   * relative transform, and `final: true` redraws the orthographic projection.
+   * relative transform, and `final: true` redraws the orthographic projection. `live: true` says a hand is on the view (a drag, a pinch, a key held):
+   * the projection is then also redrawn while it turns, at most 30 times a second, so the globe follows the pointer instead of jumping when it is let go.
+   * The automatic turn leaves `live` off and is drawn about once a second.
    */
-  setView(view: GlobeView, final = true): void {
+  setView(view: GlobeView, final = true, live = false): void {
     this.#view = { ...view };
-    if (final) this.#render();
-    else this.#transform();
+    if (final) {
+      clearTimeout(this.#liveTimer);
+      this.#liveTimer = undefined;
+      this.#render();
+      return;
+    }
+    this.#transform();
+    if (live && (view.yaw !== this.#drawn.yaw || view.tilt !== this.#drawn.tilt) && this.#liveTimer === undefined) {
+      const wait = Math.max(0, LIVE_MS - (performance.now() - this.#liveAt));
+      this.#liveTimer = setTimeout(() => {
+        this.#liveTimer = undefined;
+        this.#liveAt = performance.now();
+        this.#render();
+      }, wait);
+    }
   }
 
   #locate(): void {

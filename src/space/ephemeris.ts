@@ -25,9 +25,9 @@ export type Vec3 = [number, number, number];
  * console.log(PLANETS.join(", "));
  * ```
  */
-export const PLANETS = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"] as const;
+export const PLANETS = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"] as const;
 /**
- * One of the seven planets drawn, by name.
+ * One of the planets drawn (Pluto too), by name.
  *
  * @example
  * ```ts
@@ -208,7 +208,7 @@ export function createTrack(initialStepMs = 1000) {
  * ```
  */
 export function orbitPath(name: PlanetName, ms: number, count = 96): Vec3[] {
-  const periodDays = { Mercury: 87.97, Venus: 224.7, Mars: 686.98, Jupiter: 4332.6, Saturn: 10759, Uranus: 30688, Neptune: 60182 }[name];
+  const periodDays = { Mercury: 87.97, Venus: 224.7, Mars: 686.98, Jupiter: 4332.6, Saturn: 10759, Uranus: 30688, Neptune: 60182, Pluto: 90560 }[name];
   const points: Vec3[] = [];
   for (let i = 0; i <= count; i += 1) points.push(scene(HelioVector(Body[name], new Date(ms + (i / count) * periodDays * 86_400_000))));
   return points;

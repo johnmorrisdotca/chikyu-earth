@@ -26,7 +26,8 @@ async function open(page: Page, query = `time=${NOV2}&speed=0&center=-100,40`): 
   await settle(page);
 }
 
-const jump = (page: Page, name: string): Promise<void> => page.getByRole("group", { name: "Go to" }).getByRole("button", { name, exact: true }).click();
+// a click that does not scroll the page: a view scrolled out of sight is rightly not drawn
+const jump = (page: Page, name: string): Promise<void> => page.getByRole("group", { name: "Go to" }).getByRole("button", { name, exact: true }).dispatchEvent("click");
 
 test("the Earth is lit from where the Sun is: its east side by day at 14:00 UTC over North America, in one context", async ({ page }) => {
   await open(page);
@@ -45,8 +46,9 @@ test("the Moon is drawn half lit, and the Sun, the Moon and the planets are name
   expect(names).toEqual(expect.arrayContaining(["Earth", "Moon"]));
   await jump(page, "Solar system");
   await settle(page, 1200);
-  const all = await page.locator(SPACE).evaluate((el) => [...el.shadowRoot!.querySelectorAll(".sp-label:not([hidden])")].map((n) => n.textContent));
-  for (const name of ["Sun", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Neptune"]) expect(all, name).toContain(name);
+  const named = (): Promise<(string | null)[]> => page.locator(SPACE).evaluate((el) => [...el.shadowRoot!.querySelectorAll(".sp-label:not([hidden])")].map((n) => n.textContent));
+  // the planets are drawn in software, shaded: the labels follow the draw, which may take a while
+  await expect.poll(named, { timeout: 20_000 }).toEqual(expect.arrayContaining(["Sun", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Neptune", "Pluto"]));
 });
 
 test("paused, nothing is drawn and no frame is asked for; at real time, at most one draw in 6 seconds", async ({ page }) => {
@@ -209,4 +211,31 @@ test.describe("the controls' Auto-turn", () => {
     expect(c1.rafCallbacks - c0.rafCallbacks, "the controls themselves are turning").toBeGreaterThan(100);
     expect(after.draws - before.draws).toBeLessThanOrEqual(1);
   });
+});
+
+interface Bodies {
+  bodies: { look: string; painted: number; moons: number };
+  contexts: number;
+}
+const bodiesOf = (page: Page): Promise<Bodies> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as Bodies);
+
+test("the Sun, the planets and Pluto are drawn by wakusei-planets, painted or realistic, and a plain sphere is one click away", async ({ page }) => {
+  await open(page, `time=${NOV2}&speed=0&center=-100,40&bodies=painted`);
+  await expect.poll(async () => (await bodiesOf(page)).bodies.painted, { timeout: 30_000 }).toBe(9);
+  expect((await bodiesOf(page)).bodies.look).toBe("painted");
+  expect((await readCounts(page)).contexts).toBe(1);
+  await page.getByRole("group", { name: "Planets", exact: true }).getByRole("button", { name: "Shaded", exact: true }).dispatchEvent("click");
+  await expect.poll(async () => (await bodiesOf(page)).bodies.look).toBe("realistic");
+  await page.getByRole("group", { name: "Planets", exact: true }).getByRole("button", { name: "Plain", exact: true }).dispatchEvent("click");
+  await expect.poll(async () => (await bodiesOf(page)).bodies.look).toBe("plain");
+  await expect.poll(async () => (await bodiesOf(page)).bodies.painted, { timeout: 15_000 }).toBe(9);
+});
+
+test("zoomed in on Jupiter its moons are there, at the places the ephemeris gives, and Pluto is a body to look at", async ({ page }) => {
+  await open(page, `time=${NOV2}&speed=0&center=-100,40&bodies=realistic`);
+  await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Jupiter and its moons", exact: true }).dispatchEvent("click");
+  await expect.poll(async () => (await bodiesOf(page)).bodies.moons, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+  await page.getByRole("group", { name: "Look at" }).getByRole("button", { name: "Pluto", exact: true }).dispatchEvent("click");
+  await expect.poll(async () => (await statsOf(page)).distance, { timeout: 15_000 }).toBeGreaterThan(0);
+  expect((await bodiesOf(page)).contexts).toBe(1);
 });

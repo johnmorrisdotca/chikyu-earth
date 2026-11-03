@@ -24,6 +24,7 @@
         tilt-max="90"
         speed="0.004178"
         autoplay
+        grab-radius="fit"
       ></kazoku-view-controls>
 
       <div class="fam-panels">
@@ -76,6 +77,12 @@
               <button type="button" data-scale="compressed" class="on" data-say="scale_compressed">Compressed</button>
               <button type="button" data-scale="true" data-say="scale_true">True scale</button>
             </div>
+            <span class="fam-label" data-say="bodiesLook" id="bodies-label">Planets</span>
+            <div class="group fam-seg" id="bodies-look" role="group" aria-label="Planets" data-say-label="bodiesLook">
+              <button type="button" data-bodies="realistic" class="on" data-say="bodies_realistic">Shaded</button>
+              <button type="button" data-bodies="painted" data-say="bodies_painted">Painted</button>
+              <button type="button" data-bodies="plain" data-say="bodies_plain">Plain</button>
+            </div>
             <span class="fam-label" data-say="goTo">Go to</span>
             <div class="group fam-seg" role="group" aria-label="Go to" data-say-label="goTo">
               <button type="button" data-jump="earth" data-say="body_Earth">Earth</button>
@@ -83,6 +90,8 @@
               <button type="button" data-jump="sun" data-say="body_Sun">Sun</button>
               <button type="button" data-jump="inner" data-say="jump_inner">Inner planets</button>
               <button type="button" data-jump="solar-system" data-say="jump_solar">Solar system</button>
+              <button type="button" data-jump="Jupiter-moons" data-say="jump_jupiter">Jupiter and its moons</button>
+              <button type="button" data-jump="Saturn-moons" data-say="jump_saturn">Saturn and its moons</button>
             </div>
             <span class="fam-label" data-say="lookAt">Look at</span>
             <div class="group fam-seg" role="group" aria-label="Look at" data-say-label="lookAt">
@@ -96,6 +105,7 @@
               <button type="button" data-body="Saturn" data-say="body_Saturn">Saturn</button>
               <button type="button" data-body="Uranus" data-say="body_Uranus">Uranus</button>
               <button type="button" data-body="Neptune" data-say="body_Neptune">Neptune</button>
+              <button type="button" data-body="Pluto" data-say="body_Pluto">Pluto</button>
             </div>
             <button type="button" class="fam-button" id="orbits" aria-pressed="true" data-say="orbits">Orbits</button>
             <button type="button" class="fam-button" id="labels" aria-pressed="true" data-say="names">Names</button>
@@ -120,6 +130,7 @@
               <button type="button" data-ride="starlink" data-say="ride_starlink">A Starlink satellite</button>
               <button type="button" data-ride="Moon" data-say="body_Moon">Moon</button>
               <button type="button" data-ride="Mars" data-say="body_Mars">Mars</button>
+              <button type="button" data-ride="Jupiter" data-say="body_Jupiter">Jupiter</button>
               <button type="button" data-ride="none" data-say="ride_none">Stop</button>
             </div>
             <span class="fam-label" data-say="rideView">View</span>

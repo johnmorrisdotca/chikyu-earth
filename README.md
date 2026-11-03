@@ -79,7 +79,7 @@ The [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls turn
 
       const earth = document.querySelector("chikyu-earth");
       document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (event) => {
-        earth.setView(event.detail, event.detail.final);
+        earth.setView(event.detail, event.detail.final, event.detail.reason !== "auto");
       });
     </script>
   </head>
@@ -149,7 +149,7 @@ at most 30 times a second while it does, in one WebGL context, with textures tha
 
 ## The Sun, the Moon and the planets
 
-`<chikyu-space>` (`@johnmorrisdotca/chikyu-earth/space/element`) places the Earth, the Moon, the Sun and the planets where they are at a date and time, with the Moon's phase and the Earth's day side
+`<chikyu-space>` (`@johnmorrisdotca/chikyu-earth/space/element`) places the Earth, the Moon, the Sun, the planets and Pluto (the real ones, with their moons, when [wakusei-planets](https://github.com/johnmorrisdotca/wakusei-planets) is installed: [guide](docs/guides/the-real-planets.md)) where they are at a date and time, with the Moon's phase and the Earth's day side
 from the light, a compressed scale you can read (and a true one that shows how empty it is), time that runs forwards or backwards, and a zoom from the Earth to the solar system. Positions are
 computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/space.md](docs/space.md).
 

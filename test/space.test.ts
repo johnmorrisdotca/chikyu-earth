@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AU_IN_EARTH_RADII, blend, createTrack, frameAt, orbitPath, PLANETS, type Vec3 } from "../src/space/ephemeris.ts";
-import { compress, placeAround, placeMoon, placeSun, SUN_COMPRESSED, truePosition } from "../src/space/scale.ts";
+import { compress, placeAround, placeMoon, placeSun, RADIUS, SUN_COMPRESSED, truePosition } from "../src/space/scale.ts";
 
 const len = (v: Vec3): number => Math.hypot(v[0], v[1], v[2]);
 const near = (a: number, b: number, tol: number, what: string): void => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a} vs ${b}`);
@@ -123,4 +123,22 @@ test("the default painter makes a sphere in a colour for each planet and a facin
     drawing.dispose();
   }
   assert.ok(made.length >= 2 * (names.length + 1), "each drawing frees its geometry and its material");
+});
+
+test("Pluto is a planet of the view: nearly 40 astronomical units from the Sun in 2026, outside Neptune, with a radius and an orbit", () => {
+  assert.ok((PLANETS as readonly string[]).includes("Pluto"));
+  const f = frameAt(Date.UTC(2026, 10, 2, 12));
+  const helio = (v: Vec3): Vec3 => [v[0] - f.sun[0], v[1] - f.sun[1], v[2] - f.sun[2]];
+  const au = len(helio(f.planets.Pluto));
+  assert.ok(au > 30 && au < 50, `Pluto ${au} au from the Sun`);
+  assert.ok(au > len(helio(f.planets.Neptune)));
+  const sun = placeSun("compressed", f.sun);
+  const placed = placeAround("compressed", sun, helio(f.planets.Pluto));
+  const pluto = Math.hypot(placed[0] - sun[0], placed[1] - sun[1], placed[2] - sun[2]);
+  const neptune = placeAround("compressed", sun, helio(f.planets.Neptune));
+  assert.ok(pluto > Math.hypot(neptune[0] - sun[0], neptune[1] - sun[1], neptune[2] - sun[2]), "outside Neptune's orbit");
+  assert.ok(RADIUS["Pluto"]!.compressed < RADIUS["Mercury"]!.compressed && RADIUS["Pluto"]!.true < 0.2, "the smallest");
+  const orbit = orbitPath("Pluto", f.ms, 12);
+  assert.equal(orbit.length, 13);
+  assert.ok(len(orbit[0]!) > 25);
 });

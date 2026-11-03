@@ -10,6 +10,7 @@ import { WORDS } from "./words.js";
 import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
 import type { RideTarget } from "../src/space/element.ts";
+import type { BodyPainter } from "../src/space/index.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
 
@@ -93,7 +94,7 @@ if (flat && controls && stage) {
     const now = performance.now();
     const auto = detail.reason === "auto" && now - autoDrawnAt >= AUTO_REDRAW_MS;
     if (auto) autoDrawnAt = now;
-    flat.setView(detail, detail.final || auto);
+    flat.setView(detail, detail.final || auto, detail.reason !== "auto");
   });
 
   const state = (): ViewChangeDetail => Reflect.get(controls, "state") as ViewChangeDetail;
@@ -315,15 +316,49 @@ if (flat && controls && stage) {
     });
   }
 
+  let planetsTried = false;
+  let planetsHere = false;
+  let bodiesLook = ["realistic", "painted", "plain"].includes(address.get("bodies") ?? "") ? (address.get("bodies") as string) : "realistic";
+  const bodiesButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-bodies]")];
+  const markBodies = (): void => {
+    for (const b of bodiesButtons) {
+      b.classList.toggle("on", b.dataset["bodies"] === bodiesLook);
+      b.hidden = !planetsHere && b.dataset["bodies"] !== "plain";
+    }
+    const label = document.querySelector<HTMLElement>("#bodies-label");
+    if (label) label.hidden = !planetsHere;
+    for (const b of bodiesButtons) if (!planetsHere) b.parentElement!.hidden = true;
+    address.set("bodies", bodiesLook === "realistic" ? null : bodiesLook);
+  };
+  for (const button of bodiesButtons) {
+    button.addEventListener("click", () => {
+      bodiesLook = button.dataset["bodies"] ?? "realistic";
+      space?.setAttribute("bodies", bodiesLook);
+      markBodies();
+    });
+  }
+
   async function enterSpace(): Promise<boolean> {
-    const [{ setThreeLoader }] = await Promise.all([import("../src/space/element.ts")]);
+    const [{ setThreeLoader, setBodyPainter }] = await Promise.all([import("../src/space/element.ts")]);
     setThreeLoader(() => import("./three-subset.ts"));
+    // the Sun, the planets, Pluto and their moons are wakusei-planets' (an optional peer): the real ones, or plain spheres where it is not there
+    if (!planetsTried) {
+      planetsTried = true;
+      try {
+        const { createPainter } = await import("@johnmorrisdotca/wakusei-planets/painter");
+        setBodyPainter(createPainter({ textureBase: "planets/" }) as unknown as BodyPainter);
+        planetsHere = true;
+      } catch {
+        planetsHere = false;
+      }
+    }
     if (!space) {
       leave3d();
       const element = document.createElement("chikyu-space") as ChikyuSpace;
       const centre = flat!.centre;
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
       element.setAttribute("texture-base", "textures/");
+      element.setAttribute("bodies", bodiesLook);
       const scale = address.get("scale");
       const speed = address.get("speed");
       const startTime = address.get("time");
@@ -362,6 +397,7 @@ if (flat && controls && stage) {
     }
     if (realControls) realControls.hidden = true;
     for (const box of [timeControls, speedControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
+    markBodies();
     markRide();
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
     for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
@@ -506,9 +542,11 @@ if (flat && controls && stage) {
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-jump]")) {
     button.addEventListener("click", () => {
       if (!space) return;
-      space.body = "Earth";
-      for (const b of bodyButtons) b.classList.toggle("on", b.dataset["body"] === "Earth");
-      Reflect.get(controls, "controller").set({ zoom: space.zoomFor((button.dataset["jump"] ?? "earth") as SpacePreset) }, true, "jump");
+      const jump = (button.dataset["jump"] ?? "earth") as SpacePreset;
+      const focus = (jump.endsWith("-moons") ? jump.slice(0, -6) : "Earth") as BodyName;
+      space.body = focus;
+      for (const b of bodyButtons) b.classList.toggle("on", b.dataset["body"] === focus);
+      Reflect.get(controls, "controller").set({ zoom: space.zoomFor(jump) }, true, "jump");
     });
   }
   const orbits = document.querySelector<HTMLButtonElement>("#orbits");

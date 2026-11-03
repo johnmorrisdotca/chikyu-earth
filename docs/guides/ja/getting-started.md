@@ -47,7 +47,7 @@ description: ページに地球儀を置き、中心を決め、見る人が回�
 
       const earth = document.querySelector("chikyu-earth");
       document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (event) => {
-        earth.setView(event.detail, event.detail.final);
+        earth.setView(event.detail, event.detail.final, event.detail.reason !== "auto");
       });
     </script>
   </head>
@@ -60,7 +60,7 @@ description: ページに地球儀を置き、中心を決め、見る人が回�
 </html>
 ```
 
-`setView(view, final)` は、コントロールのカメラを受け取ります。操作の途中は `final` が false で、軽い変形だけを行います。操作が落ち着くと true になり、正射図法をもう一度描きます。自動で回る速さは、地球と同じ毎秒 `0.004178` 度で、恒星日で1回転します。動きを減らす設定の人には、コントロールが止めたままにします。
+`setView(view, final, live)` は、コントロールのカメラを受け取ります。操作の途中は `final` が false で、軽い変形だけを行います。操作が落ち着くと true になり、正射図法をもう一度描きます。`live` は、手がビューに触れていること (自動で回るとき以外) を伝えます。その間は回している最中も正射図法を描き直し、1秒に30回までなので、地球儀はポインターについてきます。自動で回るときは、約1秒に1回描きます。自動で回る速さは、地球と同じ毎秒 `0.004178` 度で、恒星日で1回転します。動きを減らす設定の人には、コントロールが止めたままにします。
 
 ## 3. 次に読むもの
 

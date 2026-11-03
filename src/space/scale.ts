@@ -156,4 +156,5 @@ export const RADIUS: Record<string, { true: number; compressed: number }> = {
   Saturn: { true: 9.14, compressed: 1.6 },
   Uranus: { true: 3.98, compressed: 1.0 },
   Neptune: { true: 3.86, compressed: 1.0 },
+  Pluto: { true: 0.186, compressed: 0.4 },
 };

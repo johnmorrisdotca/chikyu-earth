@@ -31,8 +31,11 @@ importers:
         specifier: ^9.0.0
         version: 9.39.5
       '@johnmorrisdotca/kazoku-ui':
-        specifier: ^0.9.0
-        version: 0.9.0(three@0.186.1)
+        specifier: ^0.12.0
+        version: 0.12.0(three@0.186.1)
+      '@johnmorrisdotca/wakusei-planets':
+        specifier: ^0.5.0
+        version: 0.5.0(three@0.186.1)
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
@@ -391,12 +394,33 @@ packages:
     resolution: {integrity: sha512-CHSstlPSGORP71Hw/2v0FVnAgvv5o3OafgZL5M9oZLeOqxcQNoEnoV7k5h+CqT4S+pw4arSM69v0foJfosEbrA==}
     engines: {node: '>=22'}
 
-  '@johnmorrisdotca/kazoku-ui@0.9.0':
-    resolution: {integrity: sha512-v1iElgBp49xU0spvGZ49CHS5kbXQEwVHBxxj2FZGcXYAYNDS6zYOXnMCohoZjXINiBb2gHrwRTZkyaT9BTc6yw==}
+  '@johnmorrisdotca/kazoku-ui@0.11.0':
+    resolution: {integrity: sha512-2kB+VxkHw9oTHnjL0O2UKo0JkI9ci6KvzwKJnhxNr5Hoeg6/A3Tiaoiiwo7cShrr/VRQISRYv3QhdzLeJKN6Bw==}
     engines: {node: '>=22'}
     peerDependencies:
       three: '>=0.160.0'
     peerDependenciesMeta:
+      three:
+        optional: true
+
+  '@johnmorrisdotca/kazoku-ui@0.12.0':
+    resolution: {integrity: sha512-1lwzvgUfV+D5UsvR+swBGQHyQ3YO7zt/9se+fMck9gflO7NB0Ele+dFsbi9y0V4M2g7OhVgub8sifaEFd32iHQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      three: '>=0.160.0'
+    peerDependenciesMeta:
+      three:
+        optional: true
+
+  '@johnmorrisdotca/wakusei-planets@0.5.0':
+    resolution: {integrity: sha512-bmjQfnXlf9nrqNzq3CeS1E6VlbMrY2kEc5XEr8faABXuZPHRyFZVoHNEjqkjJbWWJ/bt6rS+wdEG7O68vYXJnQ==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      '@johnmorrisdotca/chikyu-earth': '>=0.10.0'
+      three: '>=0.160.0'
+    peerDependenciesMeta:
+      '@johnmorrisdotca/chikyu-earth':
+        optional: true
       three:
         optional: true
 
@@ -1826,7 +1850,17 @@ snapshots:
 
   '@johnmorrisdotca/chizu@1.6.0': {}
 
-  '@johnmorrisdotca/kazoku-ui@0.9.0(three@0.186.1)':
+  '@johnmorrisdotca/kazoku-ui@0.11.0(three@0.186.1)':
+    optionalDependencies:
+      three: 0.186.1
+
+  '@johnmorrisdotca/kazoku-ui@0.12.0(three@0.186.1)':
+    optionalDependencies:
+      three: 0.186.1
+
+  '@johnmorrisdotca/wakusei-planets@0.5.0(three@0.186.1)':
+    dependencies:
+      '@johnmorrisdotca/kazoku-ui': 0.11.0(three@0.186.1)
     optionalDependencies:
       three: 0.186.1
 

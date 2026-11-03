@@ -1,10 +1,12 @@
-// The parts of three.js the realistic Earth uses, and nothing else: the demo hands this to the element so the bundle holds a few
+// The parts of three.js the realistic Earth, the space view and wakusei-planets' bodies use, and nothing else: the demo hands this to the element so the bundle holds a few
 // hundred kilobytes of three instead of all of it. A page does the same with `setThreeLoader(() => import("./three-subset"))`.
 export {
+  AdditiveBlending,
   BackSide,
   BufferAttribute,
   BufferGeometry,
   Color,
+  DataTexture,
   DoubleSide,
   ClampToEdgeWrapping,
   Group,
@@ -13,13 +15,20 @@ export {
   LineBasicMaterial,
   LineLoop,
   Mesh,
+  NoColorSpace,
   OrthographicCamera,
   PerspectiveCamera,
+  PlaneGeometry,
   Points,
   RepeatWrapping,
+  RGBAFormat,
+  RingGeometry,
   Scene,
   ShaderMaterial,
+  SphereGeometry,
   Texture,
+  TextureLoader,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
