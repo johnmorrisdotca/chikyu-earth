@@ -37,18 +37,22 @@ const ORBIT_REFRESH_WALL_MS = 1000;
 
 const POINT_VERT = /* glsl */ `
 uniform float size;
+attribute float dim;
+varying float vDim;
 void main() {
+  vDim = dim;
   gl_PointSize = size;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 const POINT_FRAG = /* glsl */ `
 uniform vec3 tint;
 uniform float ring;
+varying float vDim;
 void main() {
   float d = length(gl_PointCoord - vec2(0.5));
   if (d > 0.5) discard;
   float a = ring > 0.5 ? smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d)) : smoothstep(0.5, 0.2, d);
-  gl_FragColor = vec4(tint, a);
+  gl_FragColor = vec4(tint, a * (1.0 - 0.7 * vDim));
 }`;
 
 interface Drawn {
@@ -58,6 +62,8 @@ interface Drawn {
   material: THREE.ShaderMaterial;
   positions: Float32Array;
   attribute: THREE.BufferAttribute;
+  dim: THREE.BufferAttribute;
+  dimVersion: number;
   lines: { loop: THREE.LineLoop; geometry: THREE.BufferGeometry; positions: Float32Array }[];
   linesAt: number;
   linesWall: number;
@@ -87,6 +93,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Scene, state: Sa
   const selectedPosition = new Float32Array(3);
   const selectedGeometry = new three.BufferGeometry();
   selectedGeometry.setAttribute("position", new three.BufferAttribute(selectedPosition, 3));
+  selectedGeometry.setAttribute("dim", new three.BufferAttribute(new Float32Array(1), 1));
   const selectedPoints = new Points(selectedGeometry, selectedMaterial);
   selectedPoints.frustumCulled = false;
   selectedPoints.renderOrder = 6;
@@ -166,12 +173,14 @@ export function createSatelliteLayer(three: Three, scene: THREE.Scene, state: Sa
           const geometry = new three.BufferGeometry();
           const attribute = new three.BufferAttribute(positions, 3);
           geometry.setAttribute("position", attribute);
+          const dim = new three.BufferAttribute(group.satellites.dimmed, 1);
+          geometry.setAttribute("dim", dim);
           const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 } }, transparent: true, depthWrite: false });
           const points = new Points(geometry, material);
           points.frustumCulled = false;
           points.renderOrder = 5;
           scene.add(points);
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, lines: [], linesAt: Number.NaN, linesWall: 0, style: "" };
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "" };
           drawn.set(name, entry);
         }
         const style = `${group.color}|${group.size}|${ratio()}`;
@@ -189,6 +198,10 @@ export function createSatelliteLayer(three: Three, scene: THREE.Scene, state: Sa
         group.satellites.setStep(step);
         group.satellites.at(time, entry.positions);
         entry.attribute.needsUpdate = true;
+        if (entry.dimVersion !== group.satellites.dimVersion) {
+          entry.dimVersion = group.satellites.dimVersion;
+          entry.dim.needsUpdate = true;
+        }
         placed += group.satellites.placed;
         orbitsOf(entry, group, time, started);
       }

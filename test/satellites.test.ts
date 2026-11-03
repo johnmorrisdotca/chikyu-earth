@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { frameAt } from "../src/space/ephemeris.ts";
-import { createSatellites, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
+import { createSatellites, DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
+import { madeUp } from "./madeup-elements.ts";
 
 interface Snapshot {
   fields: string[];
   groups: Record<string, (string | number)[][]>;
 }
-const snapshot = JSON.parse(readFileSync(new URL("../demo/celestrak-snapshot.json", import.meta.url), "utf8")) as Snapshot;
+const snapshot = JSON.parse(readFileSync(new URL("./recorded/celestrak-snapshot-2026-11-02.json", import.meta.url), "utf8")) as Snapshot;
 const setsOf = (group: string): ElementSet[] => snapshot.groups[group]!.map((row) => Object.fromEntries(snapshot.fields.map((field, index) => [field, row[index]])) as unknown as ElementSet);
 const stations = setsOf("stations");
 const starlink = setsOf("starlink");
@@ -134,3 +135,35 @@ test("6,000 satellites are propagated in a batch that a second can afford", () =
   assert.ok(MAX_SATELLITE_SPEED >= 60);
 });
 
+
+test("a satellite whose elements are more than 14 days from the moment shown is placed but flagged to be drawn dimmer, and one past 30 days is left out", () => {
+  const sets = madeUp("gps", 3, "2026-11-01T00:00:00") as unknown as ElementSet[];
+  const epoch = Date.parse("2026-11-01T00:00:00Z");
+  const group = createSatellites(sets);
+  assert.equal(group.dimAfterDays, DEFAULT_DIM_AFTER_DAYS);
+  assert.equal(group.maxAgeDays, DEFAULT_MAX_AGE_DAYS);
+  const out = new Float32Array(group.count * 3);
+  group.at(epoch + 10 * 86_400_000, out);
+  assert.equal(group.placed, 3);
+  assert.deepEqual([...group.dimmed], [0, 0, 0]);
+  const before = group.dimVersion;
+  group.at(epoch + 10 * 86_400_000 + 1000, out);
+  assert.equal(group.dimVersion, before, "nothing changed, so the version did not move");
+  group.at(epoch + 16 * 86_400_000, out);
+  assert.equal(group.placed, 3);
+  assert.deepEqual([...group.dimmed], [1, 1, 1]);
+  assert.ok(group.dimVersion > before);
+  group.at(epoch + 40 * 86_400_000, out);
+  assert.equal(group.placed, 0);
+});
+
+test("an old element set mixed with fresh ones is the only one dimmed", () => {
+  const fresh = madeUp("gps", 2, "2026-11-03T00:00:00");
+  const old = madeUp("gps", 1, "2026-10-10T00:00:00", 800_000);
+  const group = createSatellites([...fresh, ...old] as unknown as ElementSet[]);
+  const out = new Float32Array(group.count * 3);
+  group.at(Date.parse("2026-11-03T12:00:00Z"), out);
+  assert.equal(group.placed, 3);
+  const names = group.sets.map((set) => set.NORAD_CAT_ID);
+  assert.deepEqual(names.map((id, i) => (group.dimmed[i] === 1 ? id : 0)).filter(Boolean), [806_000]);
+});

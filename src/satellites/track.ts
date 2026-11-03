@@ -1,7 +1,7 @@
 // SGP4 for a group of satellites, kept cheap: the whole group is run at two moments a step apart and every position in between is an interpolation, so the cost is one batch a step
 // (about once a second), never one a frame. satellite.js (MIT) does the SGP4 itself; this file never touches the screen and imports on a server.
 import { json2satrec, sgp4 } from "satellite.js";
-import { DEFAULT_MAX_AGE_DAYS } from "./limits.ts";
+import { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS } from "./limits.ts";
 import type { ElementSet, RefusedElementSet, SatelliteInfo, Satellites } from "./types.ts";
 
 /** The Earth's mean radius in kilometres: the unit of every position here (the same as the space view's). */
@@ -17,13 +17,15 @@ const MAX_STEP_MS = 60_000;
  * ```ts
  * import type { SatellitesOptions } from "@johnmorrisdotca/chikyu-earth/satellites";
  *
- * const options: SatellitesOptions = { maxAgeDays: 7 };
+ * const options: SatellitesOptions = { dimAfterDays: 7, maxAgeDays: 21 };
  * console.log(options.maxAgeDays);
  * ```
  */
 export interface SatellitesOptions {
-  /** The oldest an element set may be at the moment shown, in days (14 by default). */
+  /** The oldest an element set may be at the moment shown, in days, before the satellite is left out (30 by default). */
   maxAgeDays?: number;
+  /** The age, in days, past which a satellite is drawn dimmer because its place is less exact (14 by default). */
+  dimAfterDays?: number;
 }
 
 type Rec = ReturnType<typeof json2satrec>;
@@ -36,7 +38,7 @@ const epochOf = (text: string): number => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test
  * It needs satellite.js (MIT, an optional peer dependency) and imports in a browser or on a server.
  *
  * @param sets - Element sets in CelesTrak's JSON format (`ElementSet`), fetched by your page.
- * @param options - `maxAgeDays`: the oldest an element set may be at the moment shown.
+ * @param options - `maxAgeDays`: the oldest an element set may be at the moment shown; `dimAfterDays`: the age past which it is drawn dimmer.
  * @returns The group: `at(ms, out)` for positions, `exact`, `orbit`, `info`, and counters.
  *
  * @example
@@ -67,6 +69,8 @@ const epochOf = (text: string): number => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test
 export function createSatellites(sets: readonly ElementSet[], options: SatellitesOptions = {}): Satellites {
   const maxAgeDays = options.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
   const maxAgeMs = maxAgeDays * DAY_MS;
+  const dimAfterDays = options.dimAfterDays ?? DEFAULT_DIM_AFTER_DAYS;
+  const dimAfterMs = dimAfterDays * DAY_MS;
   const recs: Rec[] = [];
   const usable: ElementSet[] = [];
   const epochs: number[] = [];
@@ -99,6 +103,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   let okA = new Uint8Array(n);
   let okB = new Uint8Array(n);
   const shown = new Uint8Array(n);
+  const dimmed = new Float32Array(n);
+  let dimVersion = 0;
   let aMs = 0;
   let bMs = 0;
   let ready = false;
@@ -152,6 +158,11 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     sets: usable,
     refused,
     maxAgeDays,
+    dimAfterDays,
+    dimmed,
+    get dimVersion() {
+      return dimVersion;
+    },
     get propagations() {
       return propagations;
     },
@@ -193,6 +204,11 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       let count = 0;
       for (let i = 0; i < n; i += 1) {
         const k = i * 3;
+        const dim = Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
+        if (dim !== dimmed[i]) {
+          dimmed[i] = dim;
+          dimVersion += 1;
+        }
         if (okA[i] === 1 && okB[i] === 1) {
           out[k] = a[k]! + (b[k]! - a[k]!) * t;
           out[k + 1] = a[k + 1]! + (b[k + 1]! - a[k + 1]!) * t;

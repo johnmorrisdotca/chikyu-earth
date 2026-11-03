@@ -122,7 +122,7 @@ export interface RefusedElementSet {
 /**
  * A group of satellites, ready to give positions for any moment: what `createSatellites` returns, and what `<chikyu-space>` takes in `setSatellites`.
  * Positions are in Earth radii (6371 km) from the Earth's centre, in the space view's axes (x to the vernal equinox, y north); a satellite whose elements
- * are older than `maxAgeDays` at the moment asked about is not placed (its place stays at the centre and `visible(index)` is false).
+ * are older than `maxAgeDays` at the moment asked about is not placed (its place stays at the centre and `visible(index)` is false); one older than `dimAfterDays` is placed and flagged in `dimmed`.
  *
  * @example
  * ```ts
@@ -141,6 +141,12 @@ export interface Satellites {
   readonly refused: readonly RefusedElementSet[];
   /** The oldest an element set may be at the moment shown, in days. */
   readonly maxAgeDays: number;
+  /** The age, in days, past which a satellite is drawn dimmer. */
+  readonly dimAfterDays: number;
+  /** One number for each satellite, set by `at`: 1 when its elements are more than `dimAfterDays` from the moment shown (draw it dimmer), 0 when not. */
+  readonly dimmed: Float32Array;
+  /** Goes up each time `at` changes any of `dimmed`, so a drawing can copy the numbers only when they changed. */
+  readonly dimVersion: number;
   /** SGP4 calls made so far, for a page or a test to count. */
   readonly propagations: number;
   /** Milliseconds the last batch of SGP4 took, and the longest so far. */
