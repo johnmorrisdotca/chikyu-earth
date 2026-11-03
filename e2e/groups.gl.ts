@@ -126,8 +126,9 @@ test("a satellite whose elements are more than 14 days from the time shown is dr
   expect(dimmed.filter((v) => v === 1)).toHaveLength(1);
 });
 
+// Set without scrolling: filling a box below the globe scrolls the globe out of sight, where it rightly draws nothing and the satellites are not placed.
 const load = async (page: Page, url: string): Promise<void> => {
-  await page.locator("#sat-source").fill(url);
+  await page.locator("#sat-source").evaluate((el, value) => Reflect.set(el, "value", value), url);
   await page.locator("#sat-source-go").dispatchEvent("click");
 };
 
