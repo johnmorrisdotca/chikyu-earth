@@ -53,7 +53,7 @@ The demo's file `demo/celestrak-snapshot.json` (the demo site only, not the npm 
 18th Space Defense Squadron's general-perturbation (GP) data and, for Starlink, SpaceX's own supplemental elements. It is one download of the `stations` list and one of the `starlink` list on 2026-11-02
 (about 17:07 UTC), within CelesTrak's usage policy (https://celestrak.org/usage-policy.php, read 2026-11-02: one download per update per list, nothing fetched at a visitor's request), with every fifth Starlink satellite
 kept (2,232 of 11,156), as numbers only. CelesTrak states no licence or credit rule for the data; it is credited on the demo page, and the demo shows the age of the elements. The tier is "grey" in John's
-terms: a snapshot with credit, never a live fetch. Space-Track's data are not used: its user agreement does not let an account holder pass the data on.
+terms: a snapshot with credit, never a live fetch. Space-Track's data are not used (it needs an account; its user agreement allows passing on basic data such as TLEs and OMMs only with a citation). docs/satellite-sources.md has every source's terms, read 2026-11-03.
 
 ## Sun position
 
