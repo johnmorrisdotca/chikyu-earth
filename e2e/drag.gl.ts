@@ -4,6 +4,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { COUNT_SCRIPT, settle } from "./gl.ts";
 import { changedShare, dragBy, groundShift } from "./ground.ts";
+import { routeElements } from "./recorded.ts";
 
 const FIXED = "time=2026-11-03T07:30Z&speed=0&center=25,-31";
 const GLOBE = "#globe";
@@ -81,6 +82,8 @@ async function followsTheHand(page: Page): Promise<void> {
   });
   expect(turn.x, `Auto-turn moves the ground right (moved ${turn.x},${turn.y})`).toBeGreaterThan(MIN);
 }
+
+test.beforeEach(({ page }) => routeElements(page));
 
 test("the line globe: the ground follows a drag, the arrows and Auto-turn", async ({ page }) => {
   await open(page, `look=line&${FIXED}`, "flat");

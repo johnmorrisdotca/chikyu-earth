@@ -127,6 +127,9 @@
               <button type="button" data-sat-find="48274" data-say="sat_css">Tiangong</button>
             </div>
             <input type="search" id="sat-search" class="fam-field" autocomplete="off" spellcheck="false" aria-label="Find a satellite" data-say-label="satSearch" placeholder="Hubble, GPS, 25544" data-say-placeholder="satSearchHint" aria-controls="sat-results" />
+            <span class="fam-label" data-say="satSource">Your own source</span>
+            <input type="url" id="sat-source" class="fam-field" autocomplete="off" spellcheck="false" inputmode="url" aria-label="Address of your own elements" data-say-label="satSourceLabel" placeholder="https://example.org/elements.json" data-say-placeholder="satSourceHint" aria-describedby="sat-source-note" />
+            <button type="button" class="fam-button" id="sat-source-go" data-say="satSourceLoad">Load</button>
             <div class="group fam-seg" id="sat-results" role="group" aria-label="Matches" data-say-label="satMatches" hidden></div>
           </div>
           <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
@@ -155,6 +158,7 @@
           </div>
           <p class="fam-fine" id="ride-info" role="status" hidden></p>
           <p class="fam-fine" id="sat-info" role="status" hidden></p>
+          <p class="fam-fine" id="sat-source-note" role="status" hidden></p>
           <p class="fam-fine" id="sat-about" hidden></p>
           <p class="fam-fine" id="sat-note" hidden></p>
           <p class="fam-fine" id="body-info" role="status" hidden></p>

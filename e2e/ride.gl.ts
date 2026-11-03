@@ -4,6 +4,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createSatellites, type ElementSet } from "../src/satellites/index.ts";
 import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
+import { routeElements } from "./recorded.ts";
+
+test.beforeEach(({ page }) => routeElements(page));
 
 test.describe.configure({ mode: "serial" });
 
@@ -37,7 +40,7 @@ const setSpeed = async (page: Page, speed: number): Promise<void> => {
   await page.locator(SPACE).evaluate((el, value) => Reflect.set(el, "speed", value), speed);
 };
 
-const snapshot = JSON.parse(readFileSync(new URL("../demo/celestrak-snapshot.json", import.meta.url), "utf8")) as { fields: string[]; groups: Record<string, (string | number)[][]> };
+const snapshot = JSON.parse(readFileSync(new URL("../test/recorded/celestrak-snapshot-2026-11-02.json", import.meta.url), "utf8")) as { fields: string[]; groups: Record<string, (string | number)[][]> };
 const stations = snapshot.groups["stations"]!.map((row) => Object.fromEntries(snapshot.fields.map((field, index) => [field, row[index]])) as unknown as ElementSet);
 const group = createSatellites(stations);
 const issIndex = group.sets.findIndex((set) => set.NORAD_CAT_ID === 25544);

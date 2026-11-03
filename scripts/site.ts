@@ -29,7 +29,6 @@ await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
 // the pictures of the Sun, planets and moons (wakusei-planets, an optional peer the demo draws them with): the two smaller widths ship in its package, the sharpest come from the repository by jsDelivr
 await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("site/planets"), { recursive: true });
-await cp(at("demo/celestrak-snapshot.json"), at("site/celestrak-snapshot.json"));
 await cp(at("demo/elements"), at("site/elements"), { recursive: true });
 // The family's card in the demo's <head> (og:image, twitter:image, the icon), and the three pictures published beside it.
 const ALT = "Chikyu Earth: the globe as a line drawing over Europe and Africa, and as the realistic Earth over Asia with evening in the east.";
@@ -38,4 +37,4 @@ await writeFile(at("site/index.html"), renderIndex().replace("  </head>", `    $
 publishThumbnails(at(""), at("site/"));
 await writeFile(at("site/embed.html"), renderEmbed(), "utf8");
 await cp(at("demo/builder.html"), at("site/builder.html"));
-console.log("site built: index.html, embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, celestrak-snapshot.json");
+console.log("site built: index.html, embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/");

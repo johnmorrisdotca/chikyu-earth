@@ -1,10 +1,20 @@
-# Publishes the demo to GitHub Pages on every push to main. Nothing here costs
+# Publishes the demo to GitHub Pages on every push to main, and every six hours with fresh satellite elements. Nothing here costs
 # anything on a public repository.
+# The satellites: a push carries over the element files already on the live site (it asks CelesTrak for nothing). The scheduled run (and a manual run with "refresh" ticked)
+# downloads each CelesTrak list once, a pause between lists, and stops at the first answer that is not 200 (CelesTrak's usage policy, read 2026-11-03: a list is
+# downloaded once per update, and an update comes every two hours). A list is not asked for again within 110 minutes. No server runs per view: the visitor's browser reads files on Pages.
 name: Pages
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      refresh:
+        description: Download new satellite elements from CelesTrak (a list is not asked for again within 110 minutes)
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 */6 * * *"
 permissions:
   contents: read
   pages: write
@@ -26,7 +36,15 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Satellites, the files already on the site
+        run: node scripts/elements.ts previous https://johnmorrisdotca.github.io/chikyu-earth/elements
+      - name: Satellites, new elements from CelesTrak (every six hours)
+        if: github.event_name == 'schedule' || inputs.refresh
+        run: node scripts/elements.ts fetch
+      - name: Satellites, the files are fit to publish
+        run: node scripts/elements.ts check demo/elements
       - run: pnpm check
+        if: github.event_name != 'schedule'
       - run: pnpm site
       - run: pnpm docs:site
       - uses: actions/configure-pages@v6

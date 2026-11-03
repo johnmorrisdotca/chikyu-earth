@@ -2,10 +2,12 @@
 // 2,000 Starlink and a group of 6,000 added and taken away) shown, chosen and run past their speed limit, for SOAK_MINUTES (10 by default); it must end where it began: the JS heap flat, no GPU object more than at the start, one WebGL context, the canvas in budget, draws within 30 a second.
 import { expect, test, type Page } from "@playwright/test";
 import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
+import { routeElements } from "./recorded.ts";
 
 const MINUTES = Number(process.env.SOAK_MINUTES ?? 10);
 // A reader who asked for reduced motion gets one step a second; the soak is for everyone else, at the full 30 frames a second.
 test.use({ reducedMotion: "no-preference" });
+test.beforeEach(({ page }) => routeElements(page));
 const SPACE = "chikyu-space";
 
 interface SpaceStats {

@@ -9,7 +9,7 @@
 //   &light=sun|lit|boost   how the Earth is lit: the true Sun, always lit (no black night side), or the true terminator with the night side raised
 //   &bodies=realistic|painted|plain   how the Sun, planets, Pluto and moons are drawn (realistic by default; plain is the sphere in the right colour)
 //   &scale=true &orbits=off &labels=1   the space look's scale, the planets' paths, and the names beside the bodies
-//   &satellites=stations,starlink &sat=25544   the space look's satellites (this site's own snapshot of CelesTrak's lists) and the one marked
+//   &satellites=stations,starlink,gps,weather ... &sat=25544   the space look's satellites (any group of the catalogue, from this site's own files, refreshed from CelesTrak's lists every few hours) and the one marked
 //   &ride=iss|css|starlink|Moon|Mars &rview=follow &rlook=horizon   the space look's camera riding along with a body, from it (default) or behind it, looking down (default) or at the horizon
 //   &body=Mars &zoom=moon        the space look's camera (a number is the zoom itself): the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system, or Jupiter-moons, Saturn-moons ...)
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
@@ -18,6 +18,7 @@ import "../src/element.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
+import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 import type { GlobeView } from "../src/types.ts";
 import { discRadius } from "../src/realistic/earth.ts";
 
@@ -41,8 +42,8 @@ function mount(): ChikyuEarth | ChikyuEarthRealistic {
   return flat;
 }
 
-/** The place of a station in its group, by NORAD number (the group is in the snapshot's order, and all of them start). */
-const groupIndex = (data: { groups: Record<string, (string | number)[][]> }, noradId: number): number => data.groups["stations"]!.findIndex((row) => row[0] === noradId);
+/** The place of a satellite in its group's file, by NORAD number (the group is in the file's order, and all of them start). */
+const groupIndex = (file: GroupFile, noradId: number): number => file.rows.findIndex((row) => row[0] === noradId);
 
 const flat = mount();
 let earth: ChikyuEarth | ChikyuEarthRealistic | ChikyuSpace = flat;
@@ -115,29 +116,29 @@ if (look === "space") {
   if (preset) startZoom = Number.isFinite(Number(preset)) && Number(preset) > 0 ? Number(preset) : element.zoomFor(preset as SpacePreset);
   element.setView({ yaw: 0, tilt: 0, zoom: startZoom });
 
-  const listed = (query.get("satellites") ?? "").split(",").filter((name): name is "stations" | "starlink" => name === "stations" || name === "starlink");
+  const listed = (query.get("satellites") ?? "").split(",").filter((name) => name in GROUP_STYLE);
   const rideKey = query.get("ride");
   const rideGroup: "stations" | "starlink" | null = rideKey === "starlink" ? "starlink" : rideKey === "iss" || rideKey === "css" ? "stations" : null;
   const groups = rideGroup && !listed.includes(rideGroup) ? [...listed, rideGroup] : listed;
   if (groups.length > 0) {
     try {
-      const [{ createSatellites }, data] = await Promise.all([
-        import("../src/satellites/index.ts"),
-        fetch("celestrak-snapshot.json").then((response) => (response.ok ? (response.json() as Promise<{ retrieved: string; fields: string[]; groups: Record<string, (string | number)[][]> }>) : Promise.reject(new Error(String(response.status))))),
-      ]);
-      // The elements are one day's snapshot: if that is too old for the date shown (and the address did not ask for one), show the day they were downloaded.
-      if (!time && Math.abs(Date.now() - Date.parse(data.retrieved)) > 14 * 86_400_000) element.time = Date.parse(data.retrieved);
+      const [{ createSatellites }, ...files] = await Promise.all([import("../src/satellites/index.ts"), ...groups.map((name) => fetchGroup(name))]);
+      const fileOf = new Map(groups.map((name, i) => [name, files[i]!]));
+      // The elements are a snapshot: if it is too old for the date shown (and the address did not ask for one), show the day it was downloaded.
+      const retrieved = Math.min(...files.map((file) => Date.parse(file.retrieved)));
+      if (!time && Math.abs(Date.now() - retrieved) > 14 * 86_400_000) element.time = retrieved;
       for (const name of groups) {
-        const sets = data.groups[name]!.map((row) => Object.fromEntries(data.fields.map((field, index) => [field, row[index]])) as never);
-        element.setSatellites(name, createSatellites(sets), name === "stations" ? { color: "#ffd54f", size: 6, orbits: true } : { color: "#7fd4ff", size: 2.5 });
+        element.setSatellites(name, createSatellites(setsOfGroup(fileOf.get(name)!)), GROUP_STYLE[name]!);
         // a group that is only there to be ridden along with is not drawn
         if (!listed.includes(name)) element.showSatellites(name, false);
       }
       const chosen = Number(query.get("sat"));
-      const index = chosen ? groupIndex(data, chosen) : -1;
-      if (index >= 0 && groups.includes("stations")) element.selectSatellite({ group: "stations", index });
+      if (chosen) {
+        const home = groups.find((name) => groupIndex(fileOf.get(name)!, chosen) >= 0);
+        if (home) element.selectSatellite({ group: home, index: groupIndex(fileOf.get(home)!, chosen) });
+      }
       if (rideKey === "iss" || rideKey === "css") {
-        const at = groupIndex(data, rideKey === "iss" ? 25544 : 48274);
+        const at = groupIndex(fileOf.get("stations")!, rideKey === "iss" ? 25544 : 48274);
         if (at >= 0) element.ride({ group: "stations", index: at }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
       } else if (rideKey === "starlink") element.ride({ group: "starlink", index: 0 }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
     } catch {

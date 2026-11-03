@@ -3,6 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { readFileSync } from "node:fs";
 import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
+import { routeElements } from "./recorded.ts";
+
+test.beforeEach(({ page }) => routeElements(page));
 
 test.describe.configure({ mode: "serial" });
 
@@ -67,7 +70,7 @@ async function measure(page: Page, ms: number) {
 }
 
 // The ISS over the middle of the view: the view is centred on the ground point under the ISS at 18:00 UTC, worked out here with satellite.js, so the ISS must be drawn in the middle of the Earth's disc.
-const snapshot = JSON.parse(readFileSync(new URL("../demo/celestrak-snapshot.json", import.meta.url), "utf8")) as { fields: string[]; groups: Record<string, (string | number)[][]> };
+const snapshot = JSON.parse(readFileSync(new URL("../test/recorded/celestrak-snapshot-2026-11-02.json", import.meta.url), "utf8")) as { fields: string[]; groups: Record<string, (string | number)[][]> };
 const issRow = snapshot.groups["stations"]!.find((row) => row[0] === 25544)!;
 const issSet = Object.fromEntries(snapshot.fields.map((field, index) => [field, issRow[index]]));
 function issSubpoint(ms: number): { lon: number; lat: number } {

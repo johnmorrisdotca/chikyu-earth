@@ -1,6 +1,9 @@
 // The embed page on the realistic look: one WebGL context, a canvas inside its budget, nothing drawn once it rests.
 import { expect, test } from "@playwright/test";
 import { COUNT_SCRIPT, counts, EARTH, NOON, settle, statsOf } from "./gl.ts";
+import { routeElements } from "./recorded.ts";
+
+test.beforeEach(({ page }) => routeElements(page));
 
 test("the realistic embed is one context, a capped canvas, and rests", async ({ page }) => {
   await page.addInitScript(COUNT_SCRIPT);
