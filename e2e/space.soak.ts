@@ -25,11 +25,12 @@ const addMany = (page: Page): Promise<void> =>
     const sets = Array.from({ length: 6000 }, (_, i) => ({ ...base[i % base.length]!, NORAD_CAT_ID: 100_000 + i, MEAN_ANOMALY: ((base[i % base.length]!["MEAN_ANOMALY"] as number) + i * 0.37) % 360 }));
     (document.querySelector("chikyu-space") as unknown as { setSatellites(n: string, g: unknown, s?: unknown): void }).setSatellites("many", tools.createSatellites(sets), { size: 2 });
   });
-// Pressed by dispatching the click: a real click scrolls the page to the button and the globe out of sight.
+// Buttons are pressed by dispatching the click: a real click scrolls the page to the button and the globe out of sight, where it draws nothing and lets its GPU objects go.
 const rideButton = (page: Page, name: string) => ({ click: () => page.getByRole("group", { name: "Ride along" }).getByRole("button", { name, exact: true }).dispatchEvent("click") });
 const removeMany = (page: Page): Promise<void> => page.locator(SPACE).evaluate((el) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites("many", null));
 
 async function sample(page: Page, t0: number) {
+  await page.locator(SPACE).scrollIntoViewIfNeeded();
   await page.evaluate(() => (globalThis as unknown as { gc(): void }).gc());
   const heap = await page.evaluate(() => (performance as unknown as { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize);
   const c = await counts(page);
@@ -49,7 +50,8 @@ async function rest(page: Page): Promise<void> {
   await rideButton(page, "Stop").click();
   await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ zoom: 1, yaw: 0, tilt: 0 }, true, "soak"));
   await expect.poll(async () => Object.values((await statsOf(page)).tiers).every((w) => w === 1024), { timeout: 15_000 }).toBe(true);
-  await settle(page, 2500);
+  // the moons and the sharper body pictures are let go four seconds after they leave the view
+  await settle(page, 6000);
 }
 
 test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
@@ -74,7 +76,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   }
   await removeMany(page);
   // look at the planets once, so three's own empty texture is made before the baseline
-  await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).click();
+  await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).dispatchEvent("click");
   await settle(page, 1500);
 
   const t0 = Date.now();
@@ -96,7 +98,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     step += 1;
     const n = step;
     await page.locator("kazoku-view-controls").evaluate((el, [yaw, tilt]) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ yaw, tilt }, true, "soak"), [(random() - 0.5) * 360, (random() - 0.5) * 120] as const);
-    if (n % 3 === 0) await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: jumps[Math.floor(random() * jumps.length)]!, exact: true }).click();
+    if (n % 3 === 0) await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: jumps[Math.floor(random() * jumps.length)]!, exact: true }).dispatchEvent("click");
     await page.locator(SPACE).evaluate(
       (el, [k, speed]) => {
         const e = el as unknown as { scale: string; orbits: boolean; labels: boolean; speed: number; time: unknown };
