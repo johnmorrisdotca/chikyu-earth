@@ -27,7 +27,7 @@ npm install @johnmorrisdotca/chikyu-earth three @johnmorrisdotca/kazoku-ui astro
 - [Space-Track](https://www.space-track.org) も同じ要素を、承認されたアカウントに配信しています。ログインが必要で、ページには持たせられません。利用規約では、基本のデータ (TLE と OMM) は出典を書けば他の人に渡せます。[SatNOGS DB](https://db.satnogs.org) は公開のライセンス (CC BY-SA 4.0) ですが、別のサイトからの読み込みを許す設定がないので、ブラウザーからは直接頼めません。
 - [docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) に、各サイトの規約の引用と、使ってよい場所 (訪問者のブラウザー、自分のサイトの写し、パッケージ) があります。
 
-軌道要素は古くなります。SGP4 の誤差は、1日に数キロメートルずつ増えます。表示している日時から14日より離れた要素の衛星は、表示から外します (`maxAgeDays`)。要素の古さは `info(index, ms).ageDays` でわかります。デモは、2026年11月3日の CelesTrak の14のリスト (Starlink は5機に1機、ほかはすべて) を取得した写しを使い、ページに出典を書き、要素の古さを表示します。
+軌道要素は古くなります。SGP4 の誤差は、1日に数キロメートルずつ増えます。表示している日時から14日より離れた要素の衛星は、位置は出しますが、`group.dimmed` に印がつき、うすく描きます (`dimAfterDays`)。30日より離れると表示から外します (`maxAgeDays`)。要素の古さは `info(index, ms).ageDays` でわかります。デモのサイトは、CelesTrak の14のリスト (Starlink は5機に1機、ほかはすべて) を、スケジュールされたビルドで6時間おきに取得し直します。ページに出典を書き、取得してからの時間、衛星ごとの要素の古さ、うすく表示する理由を表示します。見る人が来たときに動くものはなく、ファイルを読むだけです。
 
 ## 表示する
 
@@ -96,6 +96,47 @@ console.log(findInCatalogue("sentinel 2").map((entry) => entry.name).join(", "))
 ```
 
 `findInCatalogue(text)` は、名前、番号、衛星の役目 ("weather"、"telescope" など) に合う項目を、大文字小文字や記号を無視して探します。デモの「探す」欄はこれを使い、そのあと、読み込んだ衛星の名前の中も探します。
+
+## 自分の取得元
+
+`fetchElements(url)` は、**あなたが選んだ**アドレスに、訪問者のブラウザーから、OMM の JSON、OMM の CSV、または TLE の文字を頼み、`createSatellites` に渡せる軌道要素にして返します。パッケージには初めから決まったアドレスはありません。どこに頼むか、その規約を読むのは、あなたです ([docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) に、CelesTrak や Space-Track などの規約があります)。礼儀正しい利用者としての決まりを守ります。
+
+- `https` だけです (`localhost` だけは `http`)。Cookie も参照元も送らず、リダイレクトにも従いません。
+- 同じアドレスには、2時間以内に頼み直しません (`minIntervalMs`)。すでに読んだ答えを返します (ページの中、または `localStorage` から。`fromCache: true`)。
+- 200 以外の答え、または答えがないときは、そこで止めます。そのアドレスは1時間そっとしておき (`blockedMs`)、状態コードと、次に頼める時刻を持つ `ElementSourceError` を投げます。すでに読んだ答えがあれば、その間はそれを使います。
+- 2,000万バイトより大きい答え、または5万機より多い答えは断ります。数字が足りない、TLE のチェックサムが違う、あり得ない軌道の軌道要素は、除いて、理由つきで `skipped` に並べます。
+- 取得元が、ページから読むための見出し (CORS) を送っている必要があります。CelesTrak は送っています。送らないところは、ページからは読めず、ここには回避する方法もありません。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, fetchElements, ElementSourceError } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const space = document.querySelector("chikyu-space")!;
+try {
+  // 自分で選び、規約を読んだアドレス (これは作り物です)
+  const source = await fetchElements("https://example.org/my-elements.json");
+  space.setSatellites("mine", createSatellites(source.sets), { color: "#ffffff", size: 4 });
+  console.log(`${source.sets.length} satellites, ${source.skipped.length} left out, ${source.fromCache ? "kept from earlier" : "just asked"}`);
+} catch (error) {
+  if (error instanceof ElementSourceError) console.log(error.message, error.status, error.retryAt);
+}
+```
+
+`parseElements(text)` は、読み取りだけです。頼む動作はなく、すでに手元にある文字に使えます (サーバーでも動きます)。
+
+```js
+import { parseElements } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const tle = [
+  "0 MADE-UP 1",
+  "1 30001U 26001A   26307.50000000  .00001000  00000-0  10000-3 0  9991",
+  "2 30001  53.0000   0.0000 0002000  90.0000   0.0000  2.00570000123454",
+].join("\n");
+const { sets, skipped, format } = parseElements(tle);
+console.log(format, sets.length, skipped.length);
+```
+
+デモには「自分の取得元」の欄があります。アドレスを貼って「読み込む」を押します。ページ自身のアドレスから頼むことはなく、訪問者がボタンを押したときだけです。
 
 ## サーバーで
 

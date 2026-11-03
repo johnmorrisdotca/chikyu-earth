@@ -4,7 +4,7 @@ The documentation site, with every export's page, the guides in English and Japa
 
 - **The Earth from space** — [realistic.md](realistic.md): `<chikyu-earth-realistic>`, its pictures, the Sun, the budget and how each part of it is tested.
 - **The space view** — [space.md](space.md): `<chikyu-space>`, the Sun, the Moon and the planets, both scales, time, and the budget. [satellite-sources.md](satellite-sources.md) is the research on satellite and launch data (no code).
-- **Satellites** — [satellites.md](satellites.md): `createSatellites(elements)` and `setSatellites` on the space view, the rules for getting elements, the budget and how each part is tested; [guides/satellites.md](guides/satellites.md) is the guide.
+- **Satellites** — [satellites.md](satellites.md): `createSatellites(elements)` and `setSatellites` on the space view, the catalogue of groups and famous satellites, `fetchElements` and `parseElements` for a source of your own, the demo's six-hourly refresh, the budget and how each part is tested; [guides/satellites.md](guides/satellites.md) is the guide, and [satellite-sources.md](satellite-sources.md) has every source's terms read and quoted.
 - **Riding along** — [ride-along.md](ride-along.md): `element.ride(target)`, the camera at a satellite, the Moon or a planet; [guides/ride-along.md](guides/ride-along.md) is the guide.
 - **Markers** — [markers.md](markers.md): `attachMarkers(element)`, groups, clusters, labels, events and the budget.
 - **The element** — `<chikyu-earth>` and its attributes are in the [README](../README.md#the-element).

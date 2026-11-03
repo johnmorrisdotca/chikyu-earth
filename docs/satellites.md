@@ -11,8 +11,9 @@ has the example and the rules; this page is the design and the budget.
 SGP4 (satellite.js 6, MIT, 10 KB gzipped, an optional peer) is run for a whole group at two moments a step apart and every position in between is an interpolation, so a steady clock costs **one batch a step** and every
 frame in between is arithmetic. The step is a second of wall time of the clock's speed: 1 second at real time, up to 60 seconds at 60 times real time (the interpolation's error is then at most a few kilometres, a pixel
 or less on the Earth's disc). Above 60 times real time the groups are **hidden and SGP4 is not run** (`MAX_SATELLITE_SPEED`); a satellite that was chosen is still placed exactly, one SGP4 call a frame.
-Elements older than 14 days at the moment shown (`maxAgeDays`) are left out, because SGP4's error grows by a few kilometres a day; the demo shows the age of the snapshot and moves its date to the snapshot's own day
-when it is too old for today.
+Elements more than 14 days from the moment shown (`dimAfterDays`) are placed but drawn dimmer, because SGP4's error grows by a few kilometres a day; past 30 days (`maxAgeDays`) they are left out. `Satellites.dimmed` is one
+number a satellite (1: dimmer) that `at` keeps up to date, and `dimVersion` goes up only when one changes, so a drawing copies the numbers to the graphics card only then. The demo shows each satellite's age, says why a dimmer one
+is dimmer, and says how long ago the files were downloaded.
 
 Positions are in the space view's axes (TEME's x, z, -y: x to the vernal equinox, y north) in Earth radii (6371 km), which is the Earth's own frame there: a unit test checks that a satellite's longitude from these axes and the
 scene's sidereal time agrees with satellite.js's own geodetic longitude within 0.02 degree, and an end-to-end test centres the view under the ISS and finds it in the middle.
@@ -44,7 +45,22 @@ The numbers are from the software drawing the tests use on a laptop; on a graphi
 `demo/elements/` (demo site only, never in the npm package): one file for each of the fourteen groups of the catalogue (`SATELLITE_GROUPS`), made from one download of each CelesTrak list on 2026-11-03, with every
 fifth Starlink satellite (2,231 of 11,155), as rows of numbers; `manifest.json` says what exists and when it was retrieved, `index.json` holds every name for the demo's Find box. `scripts/elements.ts from-dir` makes the files from
 downloaded lists and fetches nothing. Credit and the policy: [NOTICE.md](../NOTICE.md). A page that wants live elements fetches them itself, at most once every two hours for a list, and stops on any answer that is not 200
-([satellite-sources.md](satellite-sources.md) has every source's terms and where each may go). `demo/celestrak-snapshot.json` (the stations and every fifth Starlink satellite of 2026-11-02) is what the embed page and the older tests still read.
+([satellite-sources.md](satellite-sources.md) has every source's terms and where each may go). The recorded stations and Starlink of 2026-11-02 are in `test/recorded/` and are what the browser tests are served (`e2e/recorded.ts`), so their positions do not move as the demo's files are refreshed.
+
+## Your own source (`src/satellites/source.ts`)
+
+`parseElements(text)` reads OMM JSON (an array or one object), OMM CSV (a header row) and TLE (two or three lines, checksums checked, the epoch, the implied-decimal fields and the designator turned into OMM's fields), and lists what it left out with the reason. `fetchElements(url, options)` asks one address, in
+the visitor's browser: https only (http on localhost), no cookies or referrer, no redirects; not again within two hours (the answer kept in the page and in `localStorage`, up to 2 MB); anything but a 200, or no answer, leaves the address alone for an hour and throws an `ElementSourceError` with the status and `retryAt`
+(the answer kept is used meanwhile); 20 million bytes and 50,000 sets at most. It has no default address, ships no source and sends no custom header. The tests (`test/source.test.ts`) use a made-up `fetch` that counts what it was asked, and a made-up TLE writer with real checksums; the demo's box is tested in
+`e2e/groups.gl.ts` against a made-up address that the test serves, and fails if the page asks anything else.
+
+## The refresh
+
+`.github/workflows/pages.yml` runs every six hours (`17 */6 * * *`) as well as on each push. A push carries over the files already on the live site (`scripts/elements.ts previous`) and asks CelesTrak for nothing. The scheduled run (and a manual run with
+"refresh" ticked) runs `scripts/elements.ts fetch`: one download of each list (13 lists and 5 single satellites, 18 asks), a six-second pause between asks, a user agent that names the repository and a contact, a list not asked for again within 110
+minutes, and a stop at the first answer that is not 200, keeping every other group's last file. `scripts/elements.ts check` then refuses to publish a set with an empty or missing group, other fields, or a group retrieved more than 30 days ago.
+Nothing runs per view: the visitor's browser reads files on Pages. GitHub Actions on a public repository cost nothing; four runs a day is far inside CelesTrak's rules (a list changes every two hours). `test/elements.test.ts` tests all of this
+with a made-up CelesTrak: no test makes a request to any other site.
 
 ## The catalogue
 

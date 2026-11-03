@@ -27,7 +27,7 @@ The format is the "GP" JSON that [CelesTrak](https://celestrak.org) serves, one 
 - [Space-Track](https://www.space-track.org) serves the same elements to approved accounts. It needs a login, which a page cannot hold; its user agreement lets basic data (TLEs and OMMs) be passed on with a citation. [SatNOGS DB](https://db.satnogs.org) has an open licence (CC BY-SA 4.0) but no cross-origin header, so a browser cannot ask it directly.
 - [docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) has every source's terms, quoted, with where each may go: your visitor's browser, a snapshot on your site, or a package.
 
-Elements go stale: SGP4's error grows by a few kilometres a day. A satellite whose elements are more than 14 days from the moment shown (`maxAgeDays`) is left out, and `info(index, ms).ageDays` tells you how old they are. The demo uses a snapshot of fourteen of CelesTrak's lists from 3 November 2026 (every fifth Starlink satellite, all the others whole), credited on its page, and shows the age of the elements.
+Elements go stale: SGP4's error grows by a few kilometres a day. A satellite whose elements are more than 14 days from the moment shown (`dimAfterDays`) is still placed but flagged in `group.dimmed` so that it is drawn dimmer, one more than 30 days away (`maxAgeDays`) is left out, and `info(index, ms).ageDays` tells you how old they are. The demo's site refreshes its files from fourteen of CelesTrak's lists every six hours with a scheduled build (every fifth Starlink satellite, all the others whole), credited on its page; it shows how long ago they were downloaded, each satellite's age, and why a dimmer one is dimmer. Nothing runs when someone looks: they read files.
 
 ## Show them
 
@@ -96,6 +96,47 @@ console.log(findInCatalogue("sentinel 2").map((entry) => entry.name).join(", "))
 ```
 
 `findInCatalogue(text)` matches names, numbers and what a satellite does ("weather", "telescope"), ignoring case and punctuation. The demo's Find box uses it, then looks in the names of the satellites it has loaded.
+
+## Your own source
+
+`fetchElements(url)` asks an address **you** choose, in the visitor's browser, for OMM JSON, OMM CSV or TLE text, and gives back element sets for `createSatellites`. The package has no address of its own: you pick the source and you read its terms ([docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) has what CelesTrak, Space-Track and the others say). It keeps the rules a polite client keeps:
+
+- Only `https` (`http` on `localhost`), with no cookies and no referrer sent, and no redirects followed.
+- The same address is not asked again within two hours (`minIntervalMs`): the answer already read is returned, from the page or from `localStorage`, with `fromCache: true`.
+- Any answer that is not 200, or no answer, stops the asking: the address is left alone for an hour (`blockedMs`), a `ElementSourceError` with the status and the time it may be asked again is thrown, and the answer already read, if there is one, is used meanwhile.
+- An answer of more than 20 million bytes or 50,000 element sets is refused. An element set with a missing number, a wrong TLE checksum or an impossible orbit is left out and listed in `skipped` with the reason.
+- The source must send the headers a browser needs to let a page read it (CORS). CelesTrak does; one that does not cannot be read from a page, and nothing here works round that.
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, fetchElements, ElementSourceError } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const space = document.querySelector("chikyu-space")!;
+try {
+  // An address you chose, whose terms you have read (this one is made up).
+  const source = await fetchElements("https://example.org/my-elements.json");
+  space.setSatellites("mine", createSatellites(source.sets), { color: "#ffffff", size: 4 });
+  console.log(`${source.sets.length} satellites, ${source.skipped.length} left out, ${source.fromCache ? "kept from earlier" : "just asked"}`);
+} catch (error) {
+  if (error instanceof ElementSourceError) console.log(error.message, error.status, error.retryAt);
+}
+```
+
+`parseElements(text)` is the reading alone, with no request, for text you already have (it runs on a server too):
+
+```js
+import { parseElements } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const tle = [
+  "0 MADE-UP 1",
+  "1 30001U 26001A   26307.50000000  .00001000  00000-0  10000-3 0  9991",
+  "2 30001  53.0000   0.0000 0002000  90.0000   0.0000  2.00570000123454",
+].join("\n");
+const { sets, skipped, format } = parseElements(tle);
+console.log(format, sets.length, skipped.length);
+```
+
+The demo has a box for it ("Your own source"): paste an address and press Load. The address is never asked for from the page's own address, only when the visitor presses the button.
 
 ## On a server
 
