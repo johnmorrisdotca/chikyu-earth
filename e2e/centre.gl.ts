@@ -27,6 +27,8 @@ test("line: drag the globe far off, press Centre, and it is back in the middle",
   await expect.poll(async () => (await stateOf(page)).zoom, { message: "zoomed in" }).toBeGreaterThan(2);
   await page.locator(`${CONTROLS} [data-b="move"]`).click();
   await expect.poll(async () => (await stateOf(page)).drag, { message: "a drag moves the picture now" }).toBe("move");
+  // the clicks on the zoom buttons scrolled the page; the drag needs the globe in the window
+  await page.locator("#globe").scrollIntoViewIfNeeded();
   const box = (await page.locator("#globe").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
