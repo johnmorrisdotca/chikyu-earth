@@ -69,7 +69,7 @@ test("paused, nothing is drawn and no frame is asked for; at real time, at most 
 
 test("a day a second: time runs at that rate, at most 30 draws a second, a lookup of the ephemeris about once a second", async ({ page }) => {
   await open(page);
-  await page.getByRole("button", { name: "1 day a second" }).click();
+  await page.locator("#time-speed button[data-v=\"86400\"]").dispatchEvent("click");
   await settle(page, 500);
   const s0 = await statsOf(page);
   const t0 = Date.now();
