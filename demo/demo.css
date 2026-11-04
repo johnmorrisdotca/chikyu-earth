@@ -27,4 +27,4 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
 .more .fam-actions .fam-button { color: inherit; }
 #sat-groups button::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent); flex: none; }
 #embed-panel .fam-seg button[aria-checked="true"] { background: var(--ink); color: var(--surface); }
-#embed-panel .fam-seg button { min-height: 48px; }
+#embed-panel .fam-seg button, .embed-places .fam-button { min-height: 48px; }

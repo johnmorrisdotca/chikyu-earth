@@ -1,7 +1,7 @@
 // "Put it in your page": the family's <kazoku-embed-panel>, filled with this package's choices (a place, a look, the graticule, a size) and its code for every way a page is made.
 // The index page and the code builder share it. `flatPreview` puts the picture in a frame of the embed page, at a flat look, so a page that already runs the realistic Earth never runs a second WebGL view and has one `<chikyu-earth>` of its own.
 import "@johnmorrisdotca/kazoku-ui/embed-panel/define";
-import type { EmbedChangeDetail, EmbedPanelElement } from "@johnmorrisdotca/kazoku-ui/embed-panel/element";
+import type { EmbedPanelElement } from "@johnmorrisdotca/kazoku-ui/embed-panel/element";
 import "../src/element.ts";
 import { centreOf, creditOf, embedCode, embedQuery, LOOKS, PLACES, SIZES, START, type Choice, type Look } from "./embed-code.ts";
 import type { EmbedKind } from "@johnmorrisdotca/kazoku-ui/embed-panel";
@@ -22,26 +22,32 @@ export interface SectionOptions {
 
 export function mountEmbedSection(panel: EmbedPanelElement, options: SectionOptions): Section {
   const say = options.say ?? ((_key: string, fallback: string) => fallback);
-  const state = { look: START.look, graticule: START.graticule };
-  const choice = (): Choice => ({ place: panel.value || START.place, look: state.look, graticule: state.graticule, size: panel.size });
+  const state = { place: START.place, look: START.look, graticule: START.graticule };
+  const choice = (): Choice => ({ place: state.place, look: state.look, graticule: state.graticule, size: panel.size });
   panel.sizes = SIZES;
   panel.size = START.size;
-  const items = PLACES.map((place) => ({ id: place.id, label: place.label }));
-  const offer = (): void => {
-    panel.items = items;
-    panel.value = START.place;
-  };
-  // The panel scrolls its chosen place into view when it first draws the places, which would carry a page that has the panel low down to it on load: here the places are offered once the panel is in sight.
-  if (options.flatPreview && typeof IntersectionObserver === "function") {
-    const watch = new IntersectionObserver((seen) => {
-      if (!seen.some((one) => one.isIntersecting)) return;
-      watch.disconnect();
-      offer();
-    });
-    watch.observe(panel);
-  } else offer();
-  panel.setAttribute("no-search", "");
   panel.setAttribute("docs-href", "docs/");
+
+  // The places are this page's own buttons in the panel's `picker` slot: the panel's built-in picker scrolls the page to itself every time it draws.
+  const places = document.createElement("div");
+  places.slot = "picker";
+  places.className = "fam-row embed-places";
+  places.setAttribute("role", "group");
+  places.setAttribute("aria-label", say("embedPlace", "Centred on"));
+  for (const place of PLACES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "fam-button";
+    button.textContent = place.label;
+    button.dataset["id"] = place.id;
+    button.dataset["testid"] = `embed-place-${place.id}`;
+    button.addEventListener("click", () => {
+      state.place = place.id;
+      draw();
+    });
+    places.append(button);
+  }
+  panel.append(places);
 
   const row = (id: string, title: string): { box: HTMLElement; set(choices: readonly { id: string; label: string }[], chosen: string, on: (id: string) => void): void } => {
     const holder = document.createElement("div");
@@ -100,6 +106,8 @@ export function mountEmbedSection(panel: EmbedPanelElement, options: SectionOpti
     );
     (looks.box.firstElementChild as HTMLElement).textContent = say("look", "Look");
     (graticules.box.firstElementChild as HTMLElement).textContent = say("graticule", "Graticule");
+    for (const button of places.querySelectorAll("button")) button.setAttribute("aria-pressed", String(button.dataset["id"] === state.place));
+    places.setAttribute("aria-label", say("embedPlace", "Centred on"));
     panel.setAttribute("lang", options.lang?.() ?? "en");
     panel.openHref = `embed.html?${embedQuery(choice())}`;
     panel.update();
@@ -130,9 +138,6 @@ export function mountEmbedSection(panel: EmbedPanelElement, options: SectionOpti
   };
   panel.note = ({ kind }) => (kind === "iframe" ? say("embedFrameNote", "One iframe, no script of your own. The address chooses what it shows: look, centre, graticule.") : "");
   panel.credits = () => creditOf(state.look);
-  panel.addEventListener("kazoku-embedchange", (event) => {
-    if ((event as CustomEvent<EmbedChangeDetail>).detail.reason === "pick") draw();
-  });
   draw();
   return { update: draw };
 }

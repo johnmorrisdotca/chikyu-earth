@@ -14,7 +14,7 @@ test("the code builder writes the code for exactly what is chosen, and nothing s
   await page.goto("/chikyu-earth/builder.html");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
   await expect(code(page)).toContainText('center="139.7,35.7"');
-  await page.locator(`${PANEL} [part="item"][data-id="london"]`).click();
+  await page.locator('[data-testid="embed-place-london"]').click();
   await page.locator('[data-testid="embed-looks-line"]').click();
   await page.locator('[data-testid="embed-graticules-off"]').click();
   await page.locator(`${PANEL} [part="size-button"]`, { hasText: "420" }).click();
@@ -41,9 +41,8 @@ for (const [name, url] of [["the code builder", "/chikyu-earth/builder.html"], [
   test(`${name} keeps everything its panel had: ten places, three looks, the graticule, four sizes, seven ways, Copy, the two links and the credit`, async ({ page }) => {
     await page.goto(url);
     const panel = page.locator(PANEL);
-    await panel.scrollIntoViewIfNeeded();
-    await expect(panel.locator('[part="item"]')).toHaveCount(10);
-    await expect(panel.locator('[part="item"]')).toHaveText(["Tokyo", "Toronto", "London", "New York", "São Paulo", "Cairo", "Nairobi", "Mumbai", "Sydney", "Reykjavik"]);
+    await expect(page.locator('[data-testid^="embed-place-"]')).toHaveCount(10);
+    await expect(page.locator('[data-testid^="embed-place-"]')).toHaveText(["Tokyo", "Toronto", "London", "New York", "São Paulo", "Cairo", "Nairobi", "Mumbai", "Sydney", "Reykjavik"]);
     await expect(page.locator('[data-testid^="embed-looks-"]')).toHaveText(["Line", "Thick", "Realistic"].map((one) => new RegExp(`^${one}$`, "i")));
     await expect(page.locator('[data-testid^="embed-graticules-"]')).toHaveText(["On", "Off"]);
     await expect(panel.locator('[part="size-button"]')).toHaveText(["240", "320", "420", "560"]);
@@ -62,9 +61,12 @@ for (const [name, url] of [["the code builder", "/chikyu-earth/builder.html"], [
   });
 }
 
-test("the page does not move when it opens: the panel's chosen place is not scrolled into view", async ({ page }) => {
+test("the page stays still when it opens and when the language changes, whatever the panel draws", async ({ page }) => {
   await page.goto("/chikyu-earth/");
   await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await page.locator("kazoku-language-picker").evaluate((el) => el.dispatchEvent(new CustomEvent("kazoku-languagechange", { detail: { lang: "ja" }, bubbles: true })));
+  await page.waitForTimeout(500);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
