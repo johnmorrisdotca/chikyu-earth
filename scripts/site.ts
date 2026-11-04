@@ -8,6 +8,7 @@ import { renderEmbed, renderIndex } from "./page.ts";
 
 const at = (path: string) => new URL(`../${path}`, import.meta.url).pathname;
 
+const pkg = JSON.parse(readFileSync(at("package.json"), "utf8"));
 await rm(at("site/"), { recursive: true, force: true });
 await mkdir(at("site/"), { recursive: true });
 await build({
@@ -18,6 +19,7 @@ await build({
   minify: true,
   outdir: at("site/"),
   chunkNames: "[name]-[hash]",
+  define: { __CHIKYU_VERSION__: JSON.stringify(pkg.version) },
   logLevel: "silent",
 });
 // The family header's language picker and theme switch: one small module for every page of the site.
@@ -32,7 +34,6 @@ await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("
 await cp(at("demo/elements"), at("site/elements"), { recursive: true });
 // The family's card in the demo's <head> (og:image, twitter:image, the icon), and the three pictures published beside it.
 const ALT = "Chikyu Earth: the globe as a line drawing over Europe and Africa, and as the realistic Earth over Asia with evening in the east.";
-const pkg = JSON.parse(readFileSync(at("package.json"), "utf8"));
 await writeFile(at("site/index.html"), renderIndex().replace("  </head>", `    ${thumbnailHead(pkg, { alt: ALT })}\n  </head>`), "utf8");
 publishThumbnails(at(""), at("site/"));
 await writeFile(at("site/embed.html"), renderEmbed(), "utf8");

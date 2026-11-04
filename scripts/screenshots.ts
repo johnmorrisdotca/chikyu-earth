@@ -107,9 +107,9 @@ try {
     const page = await context.newPage();
     await page.goto(`http://127.0.0.1:${port}/chikyu-earth/builder.html`);
     await page.waitForSelector('html[data-ready="true"]');
-    await page.locator('[data-testid="place-london"]').click();
-    await page.locator('[data-testid="kind-react"]').click();
-    await page.waitForSelector('[data-testid="builder-preview"] chikyu-earth svg');
+    await page.locator('#embed-panel [part="item"][data-id="london"]').click();
+    await page.locator('#embed-panel button[data-kind="react"]').click();
+    await page.waitForSelector('#embed-panel [part="preview"] chikyu-earth svg');
     await page.waitForTimeout(800);
     await page.screenshot({ path: out("builder-desk") });
     await context.close();

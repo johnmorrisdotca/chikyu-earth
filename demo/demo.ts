@@ -4,6 +4,8 @@ import type { SpeedButtonsElement } from "@johnmorrisdotca/kazoku-ui/speed-butto
 import { createAddressState } from "@johnmorrisdotca/kazoku-ui/address-state";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import "../src/element.ts";
+import type { EmbedPanelElement } from "@johnmorrisdotca/kazoku-ui/embed-panel/element";
+import { mountEmbedSection } from "./embed-section.ts";
 import { attachMarkers, type MarkerEventDetail, type Markers } from "../src/markers/index.ts";
 import { crowd, PLACES } from "./places.ts";
 import type { ChikyuEarth } from "../src/element.ts";
@@ -843,4 +845,10 @@ if (flat && controls && stage) {
   markGrab("line");
   if (first === "thick" || first === "realistic" || first === "space") void setLook(first);
   new ResizeObserver(() => markGrab(shownLook)).observe(stage);
+}
+
+const embedPanel = document.querySelector<EmbedPanelElement>("#embed-panel");
+if (embedPanel) {
+  const section = mountEmbedSection(embedPanel, { flatPreview: true, say: (key) => say(key), lang: () => (say("locale").startsWith("ja") ? "ja" : "en") });
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(section.update));
 }

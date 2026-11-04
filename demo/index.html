@@ -163,16 +163,10 @@
 
       <section class="more" id="embed" aria-labelledby="embed-h">
         <h2 id="embed-h" data-say="embedTitle">Put it in your page</h2>
-        <p data-say="embedText">One iframe, no script of your own. The address chooses what it shows: look, centre, graticule, and whether it turns by itself.</p>
+        <p data-say="embedText">Choose a place and a look, pick how your page is made and copy the code. The picture beside the code is made from the same choices.</p>
         <div class="fam-panels">
           <div class="fam-panel">
-            <iframe class="embed-frame" title="Chikyu Earth" loading="lazy" src="embed.html?look=thick&amp;center=10,30&amp;graticule=1"></iframe>
-            <pre><code>&lt;iframe src="https://johnmorrisdotca.github.io/chikyu-earth/embed.html?look=thick&amp;center=10,30"
-        title="The Earth" width="420" height="420" loading="lazy"&gt;&lt;/iframe&gt;</code></pre>
-            <div class="fam-actions">
-              <a class="fam-button" href="embed.html" data-say="embedLink">Open the embed page</a>
-              <a class="fam-button" href="docs/" data-say="docsLink">Read the docs</a>
-            </div>
+            <kazoku-embed-panel id="embed-panel" data-testid="embed-panel"></kazoku-embed-panel>
           </div>
         </div>
       </section>

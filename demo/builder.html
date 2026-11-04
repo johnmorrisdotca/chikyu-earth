@@ -4,26 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Chikyu Earth code builder</title>
-    <meta name="description" content="Choose a place, how the globe is drawn and its size, and copy the code that puts exactly that in your page: HTML, a module, React or an iframe." />
+    <meta name="description" content="Choose a place, how the globe is drawn and its size, and copy the code that puts exactly that in your page: HTML, a module, React, Vue, Angular, Svelte or an iframe." />
     <link rel="stylesheet" href="family.css" />
     <style>
-      .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 8px 0 0; }
-      .chips:empty { display: none; }
-      .chips button { min-height: 48px; min-width: 48px; padding: 0 16px; border: 1px solid var(--rule); border-radius: 999px; background: #06080d; color: #c9d4e3; font: inherit; font-size: .9rem; cursor: pointer; }
-      .chips button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-      .chips button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
-      .embed-grid { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 16px; align-items: start; }
-      @media (max-width: 720px) { .embed-grid { grid-template-columns: minmax(0, 1fr); } }
-      .embed-preview { display: grid; place-items: center; min-height: 160px; max-width: 100%; overflow: hidden; border: 1px solid var(--rule); border-radius: 12px; background: #06080d; }
-      .embed-preview iframe { max-width: 100%; border: 0; }
-      .codebox { margin: 0; padding: 12px; overflow: auto; max-height: 340px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); font-size: .8rem; line-height: 1.45; tab-size: 2; }
-      .codebox:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       main.builder { max-width: 1040px; margin: 0 auto; padding: 16px 12px 40px; }
       .builder h1 { margin: 8px 0 4px; font-size: 1.6rem; }
       .builder .lede { margin: 0 0 14px; color: var(--muted); }
-      .builder .rows { display: grid; gap: 10px; }
-      .builder .row { display: grid; gap: 4px; }
-      .builder .row .chips { justify-content: flex-start; margin: 0; }
+      .builder .fam-seg button { min-height: 48px; min-width: 48px; font: inherit; }
+      .builder .fam-seg button[aria-checked="true"] { background: var(--ink); color: var(--surface); }
     </style>
   </head>
   <body>
@@ -32,27 +20,7 @@
       <p class="lede">Choose a place, how the globe is drawn and its size. Copy the code that puts exactly that in your page. <a href="./">The full demo</a> · <a href="docs/index.html">The documentation</a></p>
       <div class="fam-panels">
         <div class="fam-panel">
-          <div class="rows">
-            <div class="row"><span class="fam-label" id="place-title">Centred on</span><div class="chips" id="places" role="group" aria-labelledby="place-title"></div></div>
-            <div class="row"><span class="fam-label" id="look-title">Look</span><div class="chips" id="looks" role="group" aria-labelledby="look-title"></div></div>
-            <div class="row"><span class="fam-label" id="graticule-title">Graticule</span><div class="chips" id="graticules" role="group" aria-labelledby="graticule-title"></div></div>
-            <div class="row"><span class="fam-label" id="size-title">Size</span><div class="chips" id="sizes" role="group" aria-labelledby="size-title"></div></div>
-          </div>
-        </div>
-        <div class="fam-panel embed-panel">
-          <div class="fam-tabs" role="tablist" id="kinds" aria-label="How your page is made"></div>
-          <div class="embed-grid">
-            <div class="embed-preview" id="preview" data-testid="builder-preview" aria-live="off"></div>
-            <div class="embed-code">
-              <pre class="codebox" tabindex="0"><code id="code" data-testid="builder-code"></code></pre>
-              <div class="fam-actions">
-                <button type="button" class="fam-button" data-primary="true" id="copy" data-testid="builder-copy">Copy</button>
-                <a class="fam-button" id="open" data-testid="builder-open" href="embed.html">Open the embed page</a>
-                <span class="fam-fine" id="status" role="status" aria-live="polite"></span>
-              </div>
-              <p class="fam-fine" id="credit" data-testid="builder-credit"></p>
-            </div>
-          </div>
+          <kazoku-embed-panel id="embed-panel" data-testid="embed-panel"></kazoku-embed-panel>
         </div>
       </div>
     </main>

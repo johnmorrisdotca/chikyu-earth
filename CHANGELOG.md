@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+"Put it in your page" is the family's embed panel, on the demo and on the code builder (MODULES-348). No change to the package's drawings.
+
+- **The demo's "Put it in your page" and the code builder are kazoku-ui's `<kazoku-embed-panel>`** (kazoku-ui ^0.15.1). Nothing they had is gone, and a test counts it: the ten places, the three looks, the graticule, the four sizes (240, 320, 420, 560), HTML, module, React and iframe tabs with the same code, Copy (now "Copy code"), Open the embed page, Read the docs, the credit line, and the picture of the globe beside the code (on the builder the realistic look is shown by the embed page in a frame, as before).
+- **Added by the panel**: Vue, Angular and Svelte tabs, a picker for the places, and a note on the iframe tab ("One iframe, no script of your own"). The demo's page, which had one fixed iframe and no Copy button, now has the whole panel; the realistic look shows there as the flat globe, so the page never runs a second WebGL view.
+- **The code**: `demo/embed-code.ts` writes every tab (the shared snippets with this package's element and attributes) and `test/embed-code.test.ts` runs the module against a stand-in page, compiles the React, Vue, Angular and Svelte code, and holds every import to the package's exports and every attribute to ones the element reads. The HTML tab is now the script tags and the tag (it was a whole page), and the CDN address carries the version.
+- `scripts/check-standard.mjs` is kazoku-ui 0.15's (the `embed-panel` item); the demo moves to `@johnmorrisdotca/kazoku-ui` ^0.15.1.
+
 ## 0.14.0 - 2026-11-03
 
 The family's speed buttons, in the demo's two places that run time (KAZOKU-UI-46).

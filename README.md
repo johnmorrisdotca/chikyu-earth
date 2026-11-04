@@ -324,9 +324,9 @@ A page that cannot run script uses an iframe of the embed page:
 
 ## The code builder
 
-[The code builder](https://johnmorrisdotca.github.io/chikyu-earth/builder.html) is one screen: choose the place to centre on, the look, the graticule and the size, then pick how your page is made (HTML from a CDN, a module, React or an iframe) and copy the code. It writes the same text the guides show.
+[The code builder](https://johnmorrisdotca.github.io/chikyu-earth/builder.html) is one screen, and the demo's "Put it in your page" is the same panel (the family's `<kazoku-embed-panel>`): choose the place to centre on, the look, the graticule and the size, then pick how your page is made (HTML from a CDN, a module, React, Vue, Angular, Svelte or an iframe) and copy the code. The picture beside the code is made from the same choices; Open the embed page, Read the docs and the credit line are under it. It writes the same text the guides show.
 
-<p align="center"><img alt="The code builder: rows of places, looks, graticule and size, tabs for each way a page is made, a preview and the code to copy" src="docs/images/builder-desk.png" width="640"></p>
+<p align="center"><img alt="The code builder: the ten places, the three looks, the graticule, four sizes, seven tabs for each way a page is made, a picture of the globe and the code to copy" src="docs/images/builder-desk.png" width="640"></p>
 
 ## API
 

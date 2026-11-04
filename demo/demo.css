@@ -23,7 +23,8 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
 .controls #picked { min-height: 1.3em; }
 
 .more .fam-panel { justify-items: start; }
-.embed-frame { width: min(420px, 100%); aspect-ratio: 1; border: 1px solid var(--rule); border-radius: 12px; }
 .credits { margin-top: 20px; }
 .more .fam-actions .fam-button { color: inherit; }
 #sat-groups button::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent); flex: none; }
+#embed-panel .fam-seg button[aria-checked="true"] { background: var(--ink); color: var(--surface); }
+#embed-panel .fam-seg button { min-height: 48px; }

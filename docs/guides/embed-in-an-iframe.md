@@ -7,7 +7,7 @@ description: Put the globe in any page with one iframe and no script, and choose
 
 The demo site has a page made to be framed, `embed.html`. It draws what its address says and fetches nothing but its own files, so it needs no script, no build and no package on your side:
 
-![The code builder: rows of places, looks, graticule and size, tabs for each way a page is made, a preview and the code to copy.](../images/builder-desk.png)
+![The code builder: the ten places, the three looks, the graticule, four sizes, seven tabs for each way a page is made, a picture of the globe and the code to copy.](../images/builder-desk.png)
 
 ```html
 <!doctype html>

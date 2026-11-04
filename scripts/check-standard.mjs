@@ -8,7 +8,7 @@
 //
 //   "family": { "notApplicable": { "angular": "a data package with no element", "embed": "no view to frame" } }
 //
-// The items: demo, pages, homepage, embed, family-files, docs-site, ja-guides, usage-tested, usage-in-ci, and the README's (or a guide's) usage for script-tag,
+// The items: demo, pages, homepage, embed, embed-panel, family-files, docs-site, ja-guides, usage-tested, usage-in-ci, and the README's (or a guide's) usage for script-tag,
 // esm, bundlers, react, vue, svelte, angular, iframe and typescript.
 import console from "node:console";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -17,7 +17,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 /** The day this file was last changed, in every repository at once. A test in each repository records the file's hash beside it. */
-export const STANDARD_VERSION = "2026-11-02";
+export const STANDARD_VERSION = "2026-11-03";
 
 const OWNER = "johnmorrisdotca";
 
@@ -40,6 +40,7 @@ export const ITEMS = {
   pages: "a GitHub Pages workflow, .github/workflows/pages.yml, that deploys it",
   homepage: `package.json's homepage is the demo (https://${OWNER}.github.io/<package>/) and the README links it`,
   embed: "an embed page, demo/embed.html (or demo/embed/index.html)",
+  "embed-panel": "the demo's \"Put it in your page\" is kazoku-ui's <kazoku-embed-panel> (a package that draws nothing gives it the code tabs only)",
   "family-files": "the family's files, unedited: scripts/family-template.mjs (listing this package, with the kazoku-ui language picker and theme switch in the header), scripts/family-readme.mjs and demo/family.css",
   "docs-site": "a documentation site: scripts/docs-site.mjs, docs/site.json and at least one guide in docs/guides/",
   "ja-guides": "a Japanese twin in docs/guides/ja/ for every guide, one language to a page",
@@ -79,6 +80,9 @@ export function standardOf(root = ".") {
   const home = `https://${OWNER}.github.io/${id}/`;
   need("homepage", String(pkg.homepage ?? "").replace(/\/?$/, "/") === home && readme.includes(home), `set "homepage": "${home}" in package.json, link it from the README, and set it on the repository: gh repo edit ${OWNER}/${id} --homepage ${home}`);
   need("embed", existsSync(at(root, "demo", "embed.html")) || existsSync(at(root, "demo", "embed", "index.html")), "add demo/embed.html: a page made to sit in an iframe, drawing what its address says");
+
+  const pages_ = existsSync(at(root, "demo")) ? readdirSync(at(root, "demo")).filter((name) => name.endsWith(".html")) : [];
+  need("embed-panel", pages_.some((name) => /<kazoku-embed-panel\b/.test(read(at(root, "demo", name)))), "put kazoku-ui's <kazoku-embed-panel> in the demo (import \"@johnmorrisdotca/kazoku-ui/embed-panel/define\"), filled with the package's own choices and code; docs/embed-panel-survey.md and the kazoku-ui guide \"embed-panel\" say how");
 
   const template = existsSync(at(root, "scripts", "family-template.mjs")) ? read(at(root, "scripts", "family-template.mjs")) : "";
   need(
