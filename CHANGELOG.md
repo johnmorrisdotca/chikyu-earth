@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 - 2026-11-04
 
 "Put it in your page" is the family's embed panel, on the demo and on the code builder (MODULES-348). No change to the package's drawings.
 
