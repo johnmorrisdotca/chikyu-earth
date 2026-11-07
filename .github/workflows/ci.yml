@@ -32,6 +32,30 @@ jobs:
       - name: The package as npm packs it installs and imports
         run: pnpm test:package
   demo:
+    # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium, then in WebKit. Every test still runs once.
+    name: demo (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "realistic Earth 1 of 3", browser: chromium, projects: "--project=chromium-gl --shard=1/3" }
+          - { name: "realistic Earth 2 of 3", browser: chromium, projects: "--project=chromium-gl --shard=2/3" }
+          - { name: "realistic Earth 3 of 3", browser: chromium, projects: "--project=chromium-gl --shard=3/3" }
+          - { name: "desk and phone, Chromium", browser: chromium, projects: "--project=chromium-desk --project=chromium-phone" }
+          - { name: "desk and phone, WebKit", browser: webkit, projects: "--project=webkit-desk --project=webkit-phone" }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - name: The demo, played in ${{ matrix.name }}
+        run: pnpm test:demo:one ${{ matrix.projects }}
+  usage:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,9 +65,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: The demo, played in Chromium and WebKit at a phone's width and a desk's
-        run: pnpm test:demo
+      - run: pnpm exec playwright install --with-deps chromium
       - name: Every way to use it (a script tag, Vite, webpack, React, Vue, Svelte, Angular, an iframe, TypeScript, Node), from the package as npm packs it
         run: pnpm test:usage
       - name: The realistic Earth's soak, one minute (ten minutes by hand with pnpm test:soak)

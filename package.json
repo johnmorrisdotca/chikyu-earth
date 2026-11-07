@@ -129,6 +129,7 @@
     "test:demo": "pnpm site && node scripts/docs-site.mjs build && playwright test --project=chromium-desk --project=chromium-phone --project=webkit-desk --project=webkit-phone --project=chromium-gl",
     "screenshots": "pnpm site && node scripts/screenshots.ts",
     "textures": "python3 scripts/make-textures.py",
+    "test:demo:one": "pnpm site && node scripts/docs-site.mjs build && playwright test",
     "test:soak": "pnpm site && playwright test --project=soak",
     "docs:site": "pnpm build && node scripts/docs-site.mjs build",
     "docs:check": "pnpm build && node scripts/docs-site.mjs check",
