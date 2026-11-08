@@ -9,6 +9,7 @@ const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile:
 
 export default defineConfig({
   testDir: "e2e",
+  globalSetup: "@johnmorrisdotca/kazoku-ui/testing/global-setup",
   testMatch: "*.demo.{ts,mjs}",
   fullyParallel: true,
   forbidOnly: true,
