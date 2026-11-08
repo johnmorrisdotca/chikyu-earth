@@ -52,6 +52,7 @@ test("a Hubble flight puts the orbiter and the telescope on the globe at liftoff
 });
 
 test("Play runs the flight forward at the chosen speed and Pause stops it; Back to liftoff goes to the start", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await open(page);
   await chip(page, "sts-61").dispatchEvent("click");
   await expect(page.locator("#mission-info")).toContainText("STS-61");
@@ -67,7 +68,7 @@ test("Play runs the flight forward at the chosen speed and Pause stops it; Back 
   await expect.poll(async () => Math.abs((await time(page)) - Date.parse("1993-12-02T09:27:00Z"))).toBeLessThan(5000);
 });
 
-test("the address brings back the flight and the moment, in Japanese too", async ({ page }) => {
+test("the address brings back the flight and the moment", async ({ page }) => {
   const outside = await open(page, "&mission=sts-1&time=1981-04-13T00:00Z");
   await expect(page.locator("#mission-info")).toContainText("STS-1: Columbia");
   expect(Math.abs((await time(page)) - Date.parse("1981-04-13T00:00:00Z"))).toBeLessThan(5000);
@@ -90,4 +91,13 @@ test("leaving the space look takes the row and the craft away", async ({ page })
   await page.locator("[data-style=\"line\"]").dispatchEvent("click");
   await expect(page.locator("#mission-controls")).toBeHidden();
   await expect(page.locator("#mission-info")).toBeHidden();
+});
+
+test("a reader who asked for reduced motion gets no autoplay: Play does nothing, and the time can still be set", async ({ page }) => {
+  await open(page, "&mission=sts-1");
+  const start = await time(page);
+  await play(page).dispatchEvent("click");
+  await page.waitForTimeout(800);
+  expect(await time(page)).toBe(start);
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
 });
