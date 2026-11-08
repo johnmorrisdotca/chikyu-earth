@@ -150,7 +150,7 @@ test("your own source: an address of OMM JSON or TLE is read in the browser, bec
   expect(asked, "the second Load asked nothing").toEqual(["/ok.json"]);
   await load(page, `https://${SOURCE}/ok.tle`);
   await expect(page.locator("#sat-source-note")).toContainText(`5 satellites from ${SOURCE}`);
-  expect(asked).toEqual(["/ok.json", "/ok.tle"]);
+  await expect.poll(() => asked, { message: "the new address is asked once" }).toEqual(["/ok.json", "/ok.tle"]);
   await expect.poll(() => new URL(page.url()).searchParams.get("src")).toBe(`https://${SOURCE}/ok.tle`);
   expect(outside).toEqual([]);
 });
