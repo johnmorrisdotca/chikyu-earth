@@ -20,7 +20,7 @@ const pkg = JSON.parse(read("package.json")) as { description: string; scripts: 
 const RECORDED = {
   version: "2026-11-03-guide-images",
   "scripts/docs-site.mjs": "8c827fce376b6a4622d610f325e0f92936208a68566d9abed8d96ccdace8096a",
-  "e2e/docs-site.demo.mjs": "915d74e4017cf117f8322b712ab2f1fa55058d654ff0fca0e476af85bce5fbf6",
+  "e2e/docs-site.demo.mjs": "4e5120792d4808f9785b333ae4b8a77c995bc0b3f2b57686f931adacf1ae3a5e",
 };
 
 test("the generator and its browser test are the recorded files, byte for byte", () => {

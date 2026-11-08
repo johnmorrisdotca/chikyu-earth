@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Why two packages** (MODULES-521): a guide in English and Japanese (`docs/guides/two-packages.md`), a README section and a Guides row say that chikyu-earth is for the Earth only, that the solar system is wakusei-planets', and that the dependency runs one way. Two tested examples: the two packages on one page (`examples/together/`, built and opened by `pnpm test:usage`) and every entry point bundled with wakusei-planets missing.
+- Tests: the ride's glide is measured on the page's own clock, not the machine's; the docs site's browser test is the family's newer one (WebKit on a Mac is pressed with Alt+Tab) (MODULES-629).
 
 ## 0.16.0 - 2026-11-08
 

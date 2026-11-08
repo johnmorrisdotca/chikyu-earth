@@ -162,24 +162,28 @@ test.describe("moving", () => {
   });
 
   test("switching bodies glides, in about a second and a bit, and ends at rest", async ({ page }) => {
+    // The glide is a function of the page's clock and ends on the first frame drawn after it, so the test owns the clock: how long a busy machine takes to draw a frame cannot change what is measured.
+    await page.clock.install();
     await open(page);
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    const glideFor = (ms: number): Promise<void> => page.clock.runFor(ms);
     await rideButton(page, "ISS").click();
-    await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
-    await settle(page, 500);
+    await glideFor(1500);
+    expect((await statsOf(page)).ride.gliding, "the first ride has glided").toBe(false);
+    await glideFor(500);
     const from = (await statsOf(page)).camera.position;
-    const started = Date.now();
     await rideButton(page, "Moon").click();
-    await expect.poll(async () => (await statsOf(page)).ride.gliding).toBe(true);
-    await page.waitForTimeout(500);
+    expect((await statsOf(page)).ride.gliding).toBe(true);
+    await glideFor(500);
     const during = (await statsOf(page)).camera.position;
     const moved = Math.hypot(during[0] - from[0], during[1] - from[1], during[2] - from[2]);
     expect(moved, "part of the way after half a second").toBeGreaterThan(0.2);
     expect(Math.hypot(...during), "not yet at the Moon").toBeLessThan(9.5);
-    await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 4000 }).toBe(false);
-    const took = Date.now() - started;
-    console.log(`the glide from the ISS to the Moon took ${took} ms`);
-    expect(took).toBeGreaterThan(900);
-    expect(took).toBeLessThan(2500);
+    await glideFor(500);
+    expect((await statsOf(page)).ride.gliding, "still gliding after a second").toBe(true);
+    await glideFor(900);
+    expect((await statsOf(page)).ride.gliding, "ended by 1.9 s").toBe(false);
+    await page.clock.resume();
     await settle(page, 600);
     expect(Math.hypot(...(await statsOf(page)).camera.position)).toBeCloseTo(10, 0);
     // the pictures the ISS's view needed are let go four seconds after it (the texture tiers' own rule): those frames are not the ride's
