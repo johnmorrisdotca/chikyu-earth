@@ -26,8 +26,8 @@ test("in Japanese no control or name of the space view is left in English", asyn
   await open(page, "ja");
   const words = await shownWords(page);
   expect(words.length).toBeGreaterThan(28);
-  // Names and units that are the same in both languages: the ISS, Starlink, GPS, GLONASS, OneWeb, CelesTrak, SGP4 and kilometres.
-  const english = words.filter((word) => /[A-Za-z]{2,}/.test(word.replace(/\b(ISS|Starlink|GPS|GLONASS|OneWeb|CelesTrak|SGP4|km)\b/g, "")));
+  // Names and units that are the same in both languages: the ISS, Starlink, GPS, GLONASS, OneWeb, CelesTrak, SGP4, the Shuttle flights' STS names and kilometres.
+  const english = words.filter((word) => /[A-Za-z]{2,}/.test(word.replace(/\b(ISS|STS|Starlink|GPS|GLONASS|OneWeb|CelesTrak|SGP4|km)\b/g, "")));
   expect(english, "words still in English").toEqual([]);
   await expect(page.getByRole("group", { name: "見る天体" })).toBeVisible();
   await page.getByRole("group", { name: "見る天体" }).getByRole("button", { name: "木星", exact: true }).click();
