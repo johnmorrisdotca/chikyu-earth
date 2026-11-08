@@ -151,6 +151,10 @@ await step("node-satellites", () => {
   if (!/^ISS \(ZARYA\): \d+ km up, 7\.\d\d km\/s$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-missions", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "missions.mjs")], { cwd: usage, encoding: "utf8" }).trim();
+  if (!/^135 flights; STS-1 Columbia, 2 crew: \d+ km up over -?\d+ degrees$/.test(out)) throw new Error(`unexpected output: ${out}`);
+});
 await step("node-ride", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "ride.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (out !== "The horizon is 70 degrees from straight down; the camera looks -0.53, 0.00, -0.85.") throw new Error(`unexpected output: ${out}`);
@@ -356,6 +360,7 @@ const FILES: Record<string, string[]> = {
   "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/index.html": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/main.ts": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
