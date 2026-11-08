@@ -44,7 +44,7 @@ export function loginFrom(env: Record<string, string | undefined> = process.env,
 
 /** `fetch` with the family's user agent, answering the shape `Send` wants. */
 export const realSend: Send = async (url, init = {}) => {
-  const headers: Record<string, string> = { "user-agent": "chikyu-earth-demo (+https://github.com/johnmorrisdotca/chikyu-earth; john@johnmorris.ca)" };
+  const headers: Record<string, string> = { "user-agent": "chikyu-earth-demo (+https://github.com/johnmorrisdotca/chikyu-earth)" };
   if (init.body !== undefined) headers["content-type"] = "application/x-www-form-urlencoded";
   if (init.cookie) headers["cookie"] = init.cookie;
   const answer = await fetch(url, { method: init.method ?? "GET", body: init.body, headers, redirect: "manual" });

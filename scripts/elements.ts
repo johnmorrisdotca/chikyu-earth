@@ -24,7 +24,7 @@ export const SPACETRACK_MIN_AGE_MS = 22 * 3_600_000;
 export const MIN_AGE_MS = 110 * 60_000;
 /** The pause between two downloads. */
 export const SPACING_MS = 6000;
-export const USER_AGENT = "chikyu-earth-demo (+https://github.com/johnmorrisdotca/chikyu-earth; john@johnmorris.ca)";
+export const USER_AGENT = "chikyu-earth-demo (+https://github.com/johnmorrisdotca/chikyu-earth)";
 
 export interface GroupFile {
   id: string;
