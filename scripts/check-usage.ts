@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { extname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, type Browser, type Page } from "@playwright/test";
+import { acquireBrowserLock } from "@johnmorrisdotca/kazoku-ui/testing";
 import { build as esbuild } from "esbuild";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -120,6 +121,7 @@ const unpkgAnswer = async (pathname: string): Promise<string | null> => {
 const pageOf = (file: string) => readFileSync(file, "utf8");
 
 // WebGL is drawn in software, never on the machine's graphics card (the family's rule; kazoku-ui 0.9.1 exports these as `SOFTWARE_GL_ARGS`).
+await acquireBrowserLock();
 const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 
 await step("readme", () => {

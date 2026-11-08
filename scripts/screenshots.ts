@@ -2,6 +2,7 @@
 // The family's thumbnail, dark thumbnail and icon come last (scripts/family-thumbnail.mjs); `pnpm screenshots --thumbnail` takes only those three.
 import { spawn } from "node:child_process";
 import { chromium, type Browser, type Page } from "@playwright/test";
+import { acquireBrowserLock } from "@johnmorrisdotca/kazoku-ui/testing";
 import { captureDrawing, composeThumbnails } from "./family-thumbnail.mjs";
 
 const port = 8202;
@@ -54,6 +55,7 @@ async function thumbnails(browser: Browser): Promise<void> {
 try {
   await new Promise((resolve) => setTimeout(resolve, 800));
   // WebGL is drawn in software, never on the machine's graphics card (the family's rule).
+  await acquireBrowserLock();
   const onlyThumbnail = process.argv.includes("--thumbnail");
   const browser = await chromium.launch({ args: ["--headless=new", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--disable-gpu-compositing", "--ignore-gpu-blocklist"] });
   const shots: [string, { width: number; height: number }, string, string?][] = [
