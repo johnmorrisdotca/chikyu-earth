@@ -24,7 +24,7 @@ npm install @johnmorrisdotca/chikyu-earth three @johnmorrisdotca/kazoku-ui astro
 - データは、早くても2時間おきにしか更新されません。リストは、訪問者ごとではなく、更新ごとに1回だけ頼みます。決まった間隔でサーバーから取得して保存し、その写しを配信してください。
 - 200 以外の応答が返ったら、そこで止めてください。2時間に50回より多くエラーになると、あなたのアドレスが CelesTrak のファイアウォールに入ります。
 - Starlink などのグループは、全体リストの一部です。取得するのはどちらか一方です。
-- [Space-Track](https://www.space-track.org) も同じ要素を、承認されたアカウントに配信しています。ログインが必要で、ページには持たせられません。利用規約では、基本のデータ (TLE と OMM) は出典を書けば他の人に渡せます。[SatNOGS DB](https://db.satnogs.org) は公開のライセンス (CC BY-SA 4.0) ですが、別のサイトからの読み込みを許す設定がないので、ブラウザーからは直接頼めません。
+- [Space-Track](https://www.space-track.org) も同じ要素を、承認されたアカウントに配信しています。ログインが必要で、ページには持たせられません。利用規約では、基本のデータ (TLE と OMM) は出典を書けば他の人に渡せます。デモサイトの定期ビルドは、CelesTrak の要素が古いままのグループがあるとき、Space-Track を第二の取得元として使い、出典 (`Data from Space-Track.org (USSPACECOM)`) を書いています。[SatNOGS DB](https://db.satnogs.org) は公開のライセンス (CC BY-SA 4.0) ですが、別のサイトからの読み込みを許す設定がないので、ブラウザーからは直接頼めません。
 - [docs/satellite-sources.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellite-sources.md) に、各サイトの規約の引用と、使ってよい場所 (訪問者のブラウザー、自分のサイトの写し、パッケージ) があります。
 
 軌道要素は古くなります。SGP4 の誤差は、1日に数キロメートルずつ増えます。表示している日時から14日より離れた要素の衛星は、位置は出しますが、`group.dimmed` に印がつき、うすく描きます (`dimAfterDays`)。30日より離れると表示から外します (`maxAgeDays`)。要素の古さは `info(index, ms).ageDays` でわかります。デモのサイトは、CelesTrak の14のリスト (Starlink は5機に1機、ほかはすべて) を、スケジュールされたビルドで6時間おきに取得し直します。ページに出典を書き、取得してからの時間、衛星ごとの要素の古さ、うすく表示する理由を表示します。見る人が来たときに動くものはなく、ファイルを読むだけです。

@@ -92,6 +92,7 @@ export const WORDS = {
     ride_chosen: "The chosen satellite",
     ride_group: "One from the last group",
     rideChoose: "Choose a satellite first: press a dot, find one by name, or switch a group on.",
+    satSpaceTrack: "Some of these element sets are from Space-Track.org because CelesTrak did not answer. Data from Space-Track.org (USSPACECOM).",
     satOld: "Those elements are {days} days old, too old to trust for today, so the date is set to the day they were downloaded: {date}.",
     satFact: "{name}: {altitude} km up, {speed} km/s, one orbit in {period} minutes. Its elements are {age}.",
     satAgeHours: "{n} hours old",
@@ -123,7 +124,7 @@ export const WORDS = {
     embedOff: "Off",
     embedLink: "Open the embed page",
     docsLink: "Read the docs",
-    credits: "Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain). Satellites: orbital elements from CelesTrak (celestrak.org), positions by SGP4 (satellite.js, MIT). Details in",
+    credits: "Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Realistic look: NASA Blue Marble, Black Marble and cloud maps (public domain). Satellites: orbital elements from CelesTrak (celestrak.org) and, when it does not answer, Space-Track.org (USSPACECOM), positions by SGP4 (satellite.js, MIT). Details in",
   },
   ja: {
     pitch: "世界の国の輪郭を線で描いた地球儀です。地球と同じ速さで回ります。宇宙から見たような地球と、好きな場所の目印も使えます。",
@@ -216,6 +217,7 @@ export const WORDS = {
     ride_chosen: "選んだ衛星",
     ride_group: "いま出したグループの1機",
     rideChoose: "先に衛星を選んでください。点を押すか、名前で探すか、グループを表示します。",
+    satSpaceTrack: "CelesTrak から取得できなかったため、一部の軌道要素は Space-Track.org のものです。Data from Space-Track.org (USSPACECOM)。",
     satOld: "この軌道要素は {days} 日前のもので、今日の位置を出すには古すぎます。そのため、ダウンロードした日 ({date}) を表示しています。",
     satFact: "{name}: 高さ {altitude} km、速さ 毎秒 {speed} km、1周 {period} 分。軌道要素は{age}のものです。",
     satAgeHours: "{n} 時間前",
@@ -247,6 +249,6 @@ export const WORDS = {
     embedOff: "オフ",
     embedLink: "埋め込みページを開く",
     docsLink: "ドキュメントを読む",
-    credits: "輪郭と名前: chizu (Natural Earth、パブリックドメイン。名前は kuni)。投影: d3-geo。リアルな見た目: NASA の Blue Marble、Black Marble、雲の地図 (パブリックドメイン)。人工衛星: 軌道要素は CelesTrak (celestrak.org)、位置の計算は SGP4 (satellite.js、MIT)。くわしくは",
+    credits: "輪郭と名前: chizu (Natural Earth、パブリックドメイン。名前は kuni)。投影: d3-geo。リアルな見た目: NASA の Blue Marble、Black Marble、雲の地図 (パブリックドメイン)。人工衛星: 軌道要素は CelesTrak (celestrak.org) と、CelesTrak が答えないときは Space-Track.org (USSPACECOM)、位置の計算は SGP4 (satellite.js、MIT)。くわしくは",
   },
 };

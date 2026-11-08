@@ -62,6 +62,8 @@ minutes, and a stop at the first answer that is not 200, keeping every other gro
 Nothing runs per view: the visitor's browser reads files on Pages. GitHub Actions on a public repository cost nothing; four runs a day is far inside CelesTrak's rules (a list changes every two hours). `test/elements.test.ts` tests all of this
 with a made-up CelesTrak: no test makes a request to any other site.
 
+The same step then asks Space-Track for any group CelesTrak left more than 12 hours old, once a day for each group, when the secrets `SPACETRACK_USER` and `SPACETRACK_PASSWORD` are set (`scripts/spacetrack.ts`, `test/spacetrack.test.ts` on a recorded answer and a made-up Space-Track); without them it says "CelesTrak only". The terms, the exact sentence and the citation are in [satellite-sources.md](satellite-sources.md) and [NOTICE.md](../NOTICE.md).
+
 ## The catalogue
 
 `SATELLITE_GROUPS` (fourteen groups, each with its CelesTrak list or catalogue numbers, an orbit kind, whether it sits still, and a line in English and Japanese) and `CATALOGUE` (about forty satellites by NORAD number, with a line each)

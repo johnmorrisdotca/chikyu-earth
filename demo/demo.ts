@@ -247,7 +247,7 @@ if (flat && controls && stage) {
     const oldest = Math.min(...shown.map((id) => Date.parse(filesOf.get(id)!.retrieved)));
     const dim = shown.reduce((sum, id) => sum + made.get(id)!.sets.filter((set) => Math.abs(space!.time - Date.parse(`${set.EPOCH}Z`)) > DEFAULT_DIM_AFTER_DAYS * 86_400_000).length, 0);
     const locale = say("locale");
-    satNote.textContent = [say("satNote", { ago: ago(oldest), shown: shown.reduce((sum, id) => sum + made.get(id)!.count, 0).toLocaleString(locale), all: shown.reduce((sum, id) => sum + filesOf.get(id)!.all, 0).toLocaleString(locale), limit: 60 }), dim ? say("satDim", { n: dim, days: DEFAULT_DIM_AFTER_DAYS }) : ""].filter(Boolean).join(" ");
+    satNote.textContent = [say("satNote", { ago: ago(oldest), shown: shown.reduce((sum, id) => sum + made.get(id)!.count, 0).toLocaleString(locale), all: shown.reduce((sum, id) => sum + filesOf.get(id)!.all, 0).toLocaleString(locale), limit: 60 }), dim ? say("satDim", { n: dim, days: DEFAULT_DIM_AFTER_DAYS }) : "", shown.some((id) => filesOf.get(id)!.source === "spacetrack") ? say("satSpaceTrack") : ""].filter(Boolean).join(" ");
   };
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(noteSatellites));
   const noteGroup = (): void => {
