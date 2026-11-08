@@ -68,6 +68,12 @@ What the build does with it (`scripts/spacetrack.ts`, `scripts/elements.ts`):
 
 Tests use a recorded answer (`test/recorded/spacetrack-gp-2026-11-08.json`, three sets) and a made-up Space-Track, so no test makes a request.
 
+## Historic missions (MODULES-623, read 2026-11-08)
+
+The Space Shuttle flights' facts are NASA's mission pages (public domain, each URL and the read date in NOTICE.md). Their element sets are Space-Track's `gp_history` class, which is basic SSA data under the same blanket approval and citation as above ("Data from Space-Track.org (USSPACECOM)"). The documentation page lists `gp_history` at "1 / lifetime" and says not to use it for current elements, to ask for many objects in one comma-separated list instead of hundreds of single queries, and to keep what was downloaded. So `scripts/missions.ts elements` asks once: one SATCAT query, then three `gp_history` asks of 40 numbers each and six for the Hubble Space Telescope's days, four seconds apart, in one login; the answers are kept in `demo/missions/` and never asked for again.
+
+**Where they live: site files, not the package.** Redistribution of basic SSA data is allowed with the citation, so the package could carry them, but the files are about 410 kB (180 kB compressed) and the package ships no elements (above); a visitor's page reads `missions/<id>.json` from the demo site and passes the sets to `missionPosition`. If John wants them in the package, they would be a data entry of their own (`./missions-data`), the same files and the same citation.
+
 ## What the package does and does not do
 
 1. **The package fetches nothing by itself.** It takes elements the page passes in (`createSatellites`) and, from 0.12, a **catalogue** of names, numbers and our own words (`CATALOGUE`, `SATELLITE_GROUPS`).

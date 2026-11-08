@@ -40,4 +40,6 @@ const station = satellites.createSatellites([
 ]);
 const height = station.info(0, Date.UTC(2026, 10, 2, 12))?.altitudeKm ?? 0;
 if (station.count !== 1 || height < 380 || height > 470) throw new Error(`createSatellites is off: ${height} km`);
+const flights = satellites.missions();
+if (flights.length !== 135 || satellites.missionOf("STS-31")?.hubble !== "deployment" || satellites.missionOf(51)?.name !== "STS-51") throw new Error("the missions are off");
 console.log("satellites ok");
