@@ -126,6 +126,15 @@
             <button type="button" class="fam-button" id="sat-source-go" data-say="satSourceLoad">Load</button>
             <div class="group fam-seg" id="sat-results" role="group" aria-label="Matches" data-say-label="satMatches" hidden></div>
           </div>
+          <div class="fam-row" id="mission-controls" role="group" aria-label="Space Shuttle flights" data-say-label="missions" hidden data-help-en="Replay a Space Shuttle flight: pick an orbiter (or the Hubble visits), then a flight, and press Play. The orbiter is placed from the element sets Space-Track kept at the time, over the days of the flight; the Hubble Space Telescope is placed too on the flights that carried it, deployed it or serviced it." data-help-ja="スペースシャトルの飛行を再生します。オービター (またはハッブル望遠鏡の訪問) を選び、次に飛行を選んで「再生」を押します。オービターは、当時 Space-Track が保存していた軌道要素から、飛行の日数にわたって位置を出します。ハッブル宇宙望遠鏡を運んだ、放出した、修理した飛行では、望遠鏡も表示します。">
+            <span class="fam-label" data-say="missions">Space Shuttle flights</span>
+            <div class="group fam-seg" id="mission-orbiters" role="group" aria-label="Orbiter" data-say-label="missionOrbiter"></div>
+            <div class="group fam-seg" id="mission-list" role="group" aria-label="Flight" data-say-label="missionFlight"></div>
+            <kazoku-replay-bar id="mission-replay" steps="600 3600 21600" speed="3600"></kazoku-replay-bar>
+          </div>
+          <p class="fam-fine" id="mission-info" role="status" hidden></p>
+          <output class="fam-fine" id="mission-clock" hidden></output>
+          <p class="fam-fine" id="mission-note" hidden></p>
           <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
             <span class="fam-label" data-say="rideAlong">Ride along</span>
             <div class="group fam-seg" role="group" aria-label="Ride along" data-say-label="rideAlong">

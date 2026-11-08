@@ -19,6 +19,7 @@ import type { RideTarget } from "../src/space/element.ts";
 import type { BodyPainter } from "../src/space/index.ts";
 import { discRadius } from "../src/realistic/earth.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../src/satellites/limits.ts";
+import { mountMissions } from "./missions.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
 
@@ -112,6 +113,7 @@ if (flat && controls && stage) {
     if (!real && !space) return;
     real?.remove();
     space?.remove();
+    missionRow?.leave();
     real = null;
     space = null;
     controls!.removeAttribute("zoom-min");
@@ -124,6 +126,7 @@ if (flat && controls && stage) {
     if (pickedNote) pickedNote.hidden = false;
   }
 
+  let missionRow: ReturnType<typeof mountMissions> = null;
   const bodyInfo = document.querySelector<HTMLElement>("#body-info");
   let infoOf: { name: BodyName; facts: BodyInfo } | null = null;
   const describe = (name: BodyName, facts: BodyInfo): string => {
@@ -625,6 +628,7 @@ if (flat && controls && stage) {
     if (realControls) realControls.hidden = true;
     if (lightControls) lightControls.hidden = false;
     for (const box of [timeControls, speedControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
+    missionRow?.enter();
     markBodies();
     markRide();
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
@@ -755,6 +759,19 @@ if (flat && controls && stage) {
     if (timeSpeed && timeSpeed.value !== value) timeSpeed.value = value;
     address.set("speed", value === 1 ? null : String(value));
   };
+  missionRow = mountMissions({
+    space: () => space,
+    say,
+    address,
+    holdClock: () => {
+      if (space) space.speed = 0;
+      now?.setAttribute("aria-pressed", "false");
+      markSpeed(0);
+    },
+    notice,
+    select: showSatellite,
+  });
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(() => missionRow?.relabel()));
   const nameTimeSpeed = (): void => timeSpeed?.setAttribute("label", say("timeSpeed"));
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(nameTimeSpeed));
   nameTimeSpeed();
