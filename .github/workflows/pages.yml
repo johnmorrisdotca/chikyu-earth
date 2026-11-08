@@ -3,6 +3,8 @@
 # The satellites: a push carries over the element files already on the live site (it asks CelesTrak for nothing). The scheduled run (and a manual run with "refresh" ticked)
 # downloads each CelesTrak list once, a pause between lists, and stops at the first answer that is not 200 (CelesTrak's usage policy, read 2026-11-03: a list is
 # downloaded once per update, and an update comes every two hours). A list is not asked for again within 110 minutes. No server runs per view: the visitor's browser reads files on Pages.
+# A group CelesTrak has left more than 12 hours old is asked of Space-Track instead (its GP class, once a day for each group), when the secrets SPACETRACK_USER and SPACETRACK_PASSWORD are set;
+# without them the step says "CelesTrak only" and the groups keep their last files. The login is only ever passed in the environment of that one step.
 name: Pages
 on:
   push:
@@ -38,8 +40,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Satellites, the files already on the site
         run: node scripts/elements.ts previous https://johnmorrisdotca.github.io/chikyu-earth/elements
-      - name: Satellites, new elements from CelesTrak (every six hours)
+      - name: Satellites, new elements from CelesTrak, Space-Track when it does not answer (every six hours)
         if: github.event_name == 'schedule' || inputs.refresh
+        env:
+          SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
+          SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
         run: node scripts/elements.ts fetch
       - name: Satellites, the files are fit to publish
         run: node scripts/elements.ts check demo/elements

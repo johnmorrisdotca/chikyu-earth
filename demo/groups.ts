@@ -20,6 +20,8 @@ export const GROUP_STYLE: Record<string, { color: string; size: number; orbits: 
 export interface GroupFile {
   id: string;
   retrieved: string;
+  /** Present, as "spacetrack", when the elements came from Space-Track because CelesTrak did not answer. */
+  source?: string;
   all: number;
   fields: string[];
   rows: (string | number)[][];

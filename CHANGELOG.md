@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Space-Track.org as the scheduled build's second satellite source** (MODULES-614). After CelesTrak's round, a group whose file is more than 12 hours old is asked of Space-Track's GP class for the catalogue numbers it already holds, at most once in 22 hours for each group, in one login with a six-second pause between asks, stopping at the first answer that is not 200. The login is the Actions secrets `SPACETRACK_USER` and `SPACETRACK_PASSWORD` (locally the same variables or `~/.config/spacetrack/spacetrack.env`), sent only in the login request's body and never printed or stored; without them the build says "CelesTrak only". A group's file and `manifest.json` carry `"source": "spacetrack"` and the demo says so under the globe with the citation "Data from Space-Track.org (USSPACECOM)". Terms and the section read: `docs/satellite-sources.md`, `NOTICE.md`. Demo site only: the package still ships no elements. Tests: `test/spacetrack.test.ts` on a recorded answer and a made-up Space-Track.
+- The browser tests and the Chromium scripts take kazoku-ui's browser lock (kazoku-ui ^0.20.0, MODULES-619).
+
 ## 0.15.0 - 2026-11-04
 
 "Put it in your page" is the family's embed panel, on the demo and on the code builder (MODULES-348). No change to the package's drawings.
