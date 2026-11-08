@@ -1,5 +1,5 @@
 // docs-site.demo.mjs: the documentation site (scripts/docs-site.mjs) in a real browser, the same file in every package of the
-// family, held to one hash by src/docs-site.test.js. `pnpm test:demo` builds the demo and the docs, then runs it with the
+// family, held to one hash by each package's test/docs-site.test.ts. `pnpm test:demo` builds the demo and the docs, then runs it with the
 // demo's own tests. It serves site/ to the page without a port, and reads which pages there are from the files.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -107,8 +107,13 @@ test.describe("the documentation site", () => {
   test("the skip link is the first thing Tab reaches, and takes focus to the content", async ({ page }, testInfo) => {
     test.skip(testInfo.project.use.hasTouch === true, "a keyboard test");
     await serve(page);
-    await page.goto(`${origin}/docs/index.html`);
-    await page.keyboard.press("Tab");
+    // WebKit on a Mac does not Tab to links unless Safari's "Press Tab to highlight each item" is on; it does with Alt held. Each way is tried on a fresh page, plain Tab where that is how the browser works.
+    const keys = testInfo.project.name.startsWith("webkit") && process.platform === "darwin" ? ["Tab", "Alt+Tab"] : ["Tab"];
+    for (const key of keys) {
+      await page.goto(`${origin}/docs/index.html`);
+      await page.keyboard.press(key);
+      if (await page.locator("a.docs-skip").evaluate((link) => link === link.ownerDocument.activeElement)) break;
+    }
     await expect(page.locator("a.docs-skip")).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.locator("main#content")).toBeFocused();
