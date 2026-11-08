@@ -131,6 +131,22 @@ export function ChikyuEarth({ center = "139.7,35.7", look = "thick" }: { center?
 
 The guides are also in Japanese (日本語), one language to a page: [docs/guides/ja/](docs/guides/ja/getting-started.md).
 
+## Two packages: the Earth here, the rest in wakusei-planets
+
+Chikyu Earth is for someone who cares about the Earth only: the countries, day and night, city lights, clouds, markers and the satellites round it. The Sun, the other planets and the moons, where each one is on a date, and the solar system as a scene are [wakusei-planets](https://github.com/johnmorrisdotca/wakusei-planets). The dependency runs one way: wakusei-planets may use chikyu-earth, and chikyu-earth never needs wakusei-planets. A page about a city or a flight installs only this one, a page about Saturn only the other, and a page about the Earth in the solar system both; with both, wakusei-planets' line Earth is this package's globe with the countries:
+
+```sh
+npm install @johnmorrisdotca/chikyu-earth @johnmorrisdotca/wakusei-planets
+```
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/element";
+import "@johnmorrisdotca/wakusei-planets/element";
+import "@johnmorrisdotca/wakusei-planets/earth";
+```
+
+The full page, the rule and what lives where, each example run by `pnpm test:usage`: [Why two packages](docs/guides/two-packages.md).
+
 ## The Earth from space
 
 An optional second look, for a page with room for a real picture: day and night by the real Sun, cities' lights, a sun glint on the sea, a cloud layer and the
@@ -153,7 +169,7 @@ at most 30 times a second while it does, in one WebGL context, with textures tha
 
 `<chikyu-space>` (`@johnmorrisdotca/chikyu-earth/space/element`) places the Earth, the Moon, the Sun, the planets and Pluto (the real ones, with their moons, when [wakusei-planets](https://github.com/johnmorrisdotca/wakusei-planets) is installed: [guide](docs/guides/the-real-planets.md)) where they are at a date and time, with the Moon's phase and the Earth's day side
 from the light, a compressed scale you can read (and a true one that shows how empty it is), time that runs forwards or backwards, and a zoom from the Earth to the solar system. Positions are
-computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/space.md](docs/space.md).
+computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/space.md](docs/space.md). The solar system is wakusei-planets' to own, so this view is moving there; this package keeps the Earth and its satellites ([why two packages](docs/guides/two-packages.md)).
 
 <p align="center"><img alt="The solar system on 2 November 2026 in the compressed scale: orbits round the Sun, the planets named" src="docs/images/space-solar.png" width="420"></p>
 
@@ -358,6 +374,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [The realistic Earth and markers](docs/guides/realistic-and-markers.md) | The Earth from space, markers |
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
+| [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |
 | [How it stays light](docs/guides/how-it-works.md) | The budget |
 | [Architecture](docs/guides/architecture.md) | How the layers fit |
 | [Troubleshooting](docs/guides/troubleshooting.md) | Something does not appear |

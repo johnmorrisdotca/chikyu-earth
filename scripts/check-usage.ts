@@ -3,7 +3,7 @@
 // which must show a globe. The guides and the README must hold these files' text, word for word, so what a reader copies is what was tested.
 // `pnpm test:usage` (builds the package and the site first). One browser, one page at a time.
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { extname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -296,6 +296,30 @@ await step("ride", async () => {
   });
 });
 
+await step("together", async () => {
+  // chikyu-earth and wakusei-planets on one page, built by Vite from the package as npm packs it: the Earth's line look must be chikyu-earth's globe with the countries, and Mars must stay wakusei-planets' own line drawing.
+  // wakusei-planets sits beside chikyu-earth in node_modules as npm would put it (a copy, not pnpm's link into its store), because it loads chikyu-earth's element by name.
+  const wakusei = join(usage, "node_modules", "@johnmorrisdotca", "wakusei-planets");
+  cpSync(realpathSync(require.resolve("@johnmorrisdotca/wakusei-planets/package.json", { paths: [root] }).replace(/package\.json$/, "")), wakusei, { recursive: true });
+  const out = join(usage, "out", "together");
+  await viteBuild({ root: examples("together"), logLevel: "warn", build: { outDir: out, emptyOutDir: true }, base: "./", configFile: false });
+  await opened(browser, async (page) => {
+    await serve(page, "https://app.test", out);
+    await page.goto("https://app.test/");
+    await page.waitForFunction(() => (document.querySelector('wakusei-body[body="earth"]')?.shadowRoot?.querySelector("chikyu-earth")?.shadowRoot?.querySelectorAll("svg path").length ?? 0) > 50, undefined, { timeout: 30_000 });
+    await page.waitForFunction(() => document.querySelector('wakusei-body[body="mars"]')?.shadowRoot?.querySelector("#stage svg") != null, undefined, { timeout: 30_000 });
+    if (await page.locator('wakusei-body[body="mars"]').evaluate((el) => el.shadowRoot?.querySelector("chikyu-earth") != null)) throw new Error("Mars was drawn as a globe");
+  });
+});
+
+await step("earth-only", async () => {
+  // Every entry point of chikyu-earth bundles with wakusei-planets missing: nothing in the package imports it.
+  const refuse = { name: "no-wakusei", setup: (build: import("esbuild").PluginBuild) => build.onResolve({ filter: /wakusei-planets/ }, (args) => ({ errors: [{ text: `${args.importer} imports ${args.path}` }] })) };
+  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "space/element.js"]) {
+    await esbuild({ entryPoints: [modules(entry)], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [refuse], external: ["three", "astronomy-engine", "satellite.js", "@johnmorrisdotca/kazoku-ui", "@johnmorrisdotca/kazoku-ui/*", "three/*"] });
+  }
+});
+
 await step("react-ssr", async () => {
   const script = join(usage, "ssr-react.tsx");
   writeFileSync(script, `import { renderToString } from "react-dom/server";\nimport { ChikyuEarth } from "./examples/react/ChikyuEarth";\nconst html = renderToString(<ChikyuEarth />);\nif (!html.includes("<chikyu-earth")) throw new Error("no element in " + html);\nconsole.log(html);\n`);
@@ -345,7 +369,7 @@ const FILES: Record<string, string[]> = {
   "controls.html": ["README.md", "docs/guides/getting-started.md", "docs/guides/ja/getting-started.md"],
   "cdn-unpkg.html": ["docs/guides/html-and-cdn.md", "docs/guides/ja/html-and-cdn.md"],
   "iframe.html": ["docs/guides/embed-in-an-iframe.md", "docs/guides/ja/embed-in-an-iframe.md"],
-  "vite/main.ts": ["docs/guides/bundlers.md", "docs/guides/ja/bundlers.md"],
+  "vite/main.ts": ["docs/guides/bundlers.md", "docs/guides/ja/bundlers.md", "docs/guides/two-packages.md", "docs/guides/ja/two-packages.md"],
   "vite/index.html": ["docs/guides/bundlers.md", "docs/guides/ja/bundlers.md"],
   "webpack/src/index.js": ["docs/guides/bundlers.md", "docs/guides/ja/bundlers.md"],
   "webpack/webpack.config.mjs": ["docs/guides/bundlers.md", "docs/guides/ja/bundlers.md"],
@@ -364,6 +388,8 @@ const FILES: Record<string, string[]> = {
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/index.html": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/main.ts": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
+  "together/index.html": ["docs/guides/two-packages.md", "docs/guides/ja/two-packages.md"],
+  "together/main.ts": ["docs/guides/two-packages.md", "docs/guides/ja/two-packages.md"],
 };
 const normal = (text: string) => text.replace(/\r\n/g, "\n").trim();
 for (const [file, places] of everything ? Object.entries(FILES) : []) {

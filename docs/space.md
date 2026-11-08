@@ -1,5 +1,7 @@
 # The space view
 
+The solar system belongs to [wakusei-planets](https://github.com/johnmorrisdotca/wakusei-planets); this view is moving there, and this package keeps the Earth and its satellites. [Why two packages](guides/two-packages.md) has the rule.
+
 `@johnmorrisdotca/chikyu-earth/space/element` registers `<chikyu-space>`: the Earth, the Moon, the Sun and the planets in their places for a date and time, with the
 Moon's phase and the Earth's sunlit side coming out of the light, not out of a table. Zoom from the Earth out to the whole solar system and back; run time forwards or
 backwards. It is an optional entry point: the line globe and the Earth from space need neither it nor its ephemeris library.

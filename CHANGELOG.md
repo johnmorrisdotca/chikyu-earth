@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Why two packages** (MODULES-521): a guide in English and Japanese (`docs/guides/two-packages.md`), a README section and a Guides row say that chikyu-earth is for the Earth only, that the solar system is wakusei-planets', and that the dependency runs one way. Two tested examples: the two packages on one page (`examples/together/`, built and opened by `pnpm test:usage`) and every entry point bundled with wakusei-planets missing.
+
 ## 0.16.0 - 2026-11-08
 
 - **Space Shuttle flights and the Hubble visits** (MODULES-623), in `@johnmorrisdotca/chikyu-earth/satellites`: `missions()` (the 135 flights, STS-1 to STS-135, with orbiter, liftoff and landing in UTC, the people NASA lists, the main payload in English and Japanese, the catalogue number, and `hubble` on STS-31, 61, 82, 103, 109 and 125), `missionOf(id)` (`"STS-31"`, `"31"`, `31`), `missionElements(file)` and `missionPosition(sets, ms, flight?)` (latitude, longitude, height and speed of the craft at a moment, from the element set nearest in time, by the same SGP4 as `createSatellites`; nothing before liftoff or after landing; nothing from elements over two days away). New types `Mission`, `MissionPosition`, `MissionFile`, `Orbiter` and `HubbleVisit`. Facts: NASA's mission pages (public domain, read 2026-11-08, listed in NOTICE.md).
