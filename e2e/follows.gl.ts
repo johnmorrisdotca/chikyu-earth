@@ -2,7 +2,7 @@
 // and Auto-turn goes west to east; on the flat and the realistic globe (exact grab) the touched point stays under the pointer.
 import { expect, test, type Page } from "@playwright/test";
 import { COUNT_SCRIPT } from "./gl.ts";
-import { checkExactGrab, checkFollowsTheHand } from "./ground.mjs";
+import { checkExactGrab, checkFollowsTheHand, movedBy } from "./ground.mjs";
 
 test.describe.configure({ mode: "serial" });
 
@@ -23,10 +23,33 @@ async function open(page: Page, look: string, ready: string): Promise<void> {
   await page.waitForTimeout(1500);
 }
 
+/** Auto-turn goes west to east: turned by a fixed angle (read from the controller, never from a stopwatch), the ground has moved right, however slowly this machine draws. */
+async function autoTurnGoesRight(page: Page): Promise<void> {
+  const turn = await movedBy(page, page.locator("#globe"), async () => {
+    await page.locator(CONTROLS).evaluate(
+      (el) =>
+        new Promise<void>((resolve) => {
+          const controls = el as unknown as { controller: { speed: number; state: { yaw: number }; play(): void }; pause(): void };
+          const start = controls.controller.state.yaw;
+          controls.controller.speed = 6;
+          controls.controller.play();
+          const wait = (): void => {
+            if (Math.abs(controls.controller.state.yaw - start) < 9) return void requestAnimationFrame(wait);
+            controls.pause();
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          };
+          wait();
+        }),
+    );
+  });
+  expect(turn.x, `Auto-turn moves the ground right (moved ${turn.x},${turn.y})`).toBeGreaterThan(8);
+}
+
 for (const { look, ready, grab } of LOOKS) {
   test(`${look}: the ground follows the hand${grab ? " and the touched point stays under the pointer" : ""}`, async ({ page }) => {
     await open(page, look, ready);
-    await checkFollowsTheHand(page, { view: "#globe", controls: CONTROLS, autoTurn: "right" });
+    await checkFollowsTheHand(page, { view: "#globe", controls: CONTROLS, autoTurn: false });
+    await autoTurnGoesRight(page);
     if (grab) {
       const radius = await page.locator("#globe").evaluate((el) => el.ownerDocument.querySelector("kazoku-view-controls")!.getAttribute("grab-radius"));
       expect(radius, "the controls carry the globe's radius").not.toBeNull();
