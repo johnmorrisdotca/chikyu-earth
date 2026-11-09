@@ -1,7 +1,8 @@
 import "@johnmorrisdotca/kazoku-ui/view-controls/define";
 import "@johnmorrisdotca/kazoku-ui/speed-buttons/define";
+import "@johnmorrisdotca/kazoku-ui/replay-bar/define";
 import "@johnmorrisdotca/kazoku-ui/wide-layout/define";
-import type { SpeedButtonsElement } from "@johnmorrisdotca/kazoku-ui/speed-buttons/element";
+import type { ReplayBarElement, ReplayDetail } from "@johnmorrisdotca/kazoku-ui/replay-bar/element";
 import { createAddressState } from "@johnmorrisdotca/kazoku-ui/address-state";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import "../src/element.ts";
@@ -40,7 +41,7 @@ if (flat && controls && stage) {
   const realControls = document.querySelector<HTMLElement>("#real-controls");
   const lightControls = document.querySelector<HTMLElement>("#light-controls");
   const timeControls = document.querySelector<HTMLElement>("#time-controls");
-  const speedControls = document.querySelector<HTMLElement>("#speed-controls");
+  const replay = document.querySelector<ReplayBarElement>("#replay")!;
   const spaceControls = document.querySelector<HTMLElement>("#space-controls");
   const scaleNote = document.querySelector<HTMLElement>("#scale-note");
   const satControls = document.querySelector<HTMLElement>("#sat-controls");
@@ -112,6 +113,7 @@ if (flat && controls && stage) {
 
   function leave3d(): void {
     if (!real && !space) return;
+    settleClock();
     real?.remove();
     space?.remove();
     missionRow?.leave();
@@ -121,11 +123,19 @@ if (flat && controls && stage) {
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
-    for (const box of [realControls, lightControls, timeControls, speedControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
+    for (const box of [realControls, lightControls, timeControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
     if (placesBox) placesBox.hidden = false;
     if (pickedNote) pickedNote.hidden = false;
   }
 
+  const DEFAULT_SPEED = 3600;
+  const askedSpeed = Number(address.get("speed"));
+  const clock = {
+    /** Playing: the space view's clock runs from the date shown at `speed` times real time. A link from before the bar that names a speed other than 0 and has no `play` keeps running. */
+    play: address.get("play") === "on" || (address.get("play") === null && Number.isFinite(askedSpeed) && askedSpeed !== 0),
+    /** Times real time while playing; no speed, or `speed=0`, gets an hour a second. */
+    speed: Number.isFinite(askedSpeed) && askedSpeed !== 0 ? askedSpeed : DEFAULT_SPEED,
+  };
   let missionRow: ReturnType<typeof mountMissions> = null;
   const bodyInfo = document.querySelector<HTMLElement>("#body-info");
   let infoOf: { name: BodyName; facts: BodyInfo } | null = null;
@@ -513,7 +523,13 @@ if (flat && controls && stage) {
     address.set("rview", rideView === "follow" ? "follow" : null);
     address.set("rlook", rideLook === "horizon" ? "horizon" : null);
   }
-  for (const button of rideButtons) button.addEventListener("click", () => void startRide(button.dataset["ride"] === "group" ? `group:${lastGroup ?? ""}` : (button.dataset["ride"] ?? "none")));
+  // riding along is for watching it go by: a ride starts the clock (Play), and the date box moves with it
+  for (const button of rideButtons) {
+    button.addEventListener("click", () => {
+      void startRide(button.dataset["ride"] === "group" ? `group:${lastGroup ?? ""}` : (button.dataset["ride"] ?? "none"));
+      if (button.dataset["ride"] !== "none") setPlaying(true);
+    });
+  }
   for (const button of viewButtons) {
     button.addEventListener("click", () => {
       rideView = button.dataset["rideView"] === "follow" ? "follow" : "from";
@@ -588,10 +604,10 @@ if (flat && controls && stage) {
       element.setAttribute("bodies", bodiesLook);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       const scale = address.get("scale");
-      const speed = address.get("speed");
       const startTime = address.get("time");
       if (scale === "true") element.setAttribute("scale", "true");
-      if (speed !== null && Number.isFinite(Number(speed))) element.setAttribute("speed", speed);
+      // the clock runs only while Play is on; a held space view draws nothing
+      element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
@@ -608,9 +624,14 @@ if (flat && controls && stage) {
         notice(say("rideLost"));
         stopRide();
       });
-      element.addEventListener("chikyu-time", (e) => {
-        const ms = (e as CustomEvent<{ time: number }>).detail.time;
-        if (when && document.activeElement !== when) when.value = localValue(ms);
+      // the clock: the element tells the date while time runs (a few times a second) and once when it holds
+      element.addEventListener("chikyu-timechange", (e) => {
+        const { time, running } = (e as CustomEvent<{ time: number; running: boolean }>).detail;
+        if (when && document.activeElement !== when) when.value = localValue(time);
+        if (running) return;
+        // the clock holds: the date it stopped on is the date shown, and the address keeps it
+        address.set("time", isoSecond(time));
+        now?.setAttribute("aria-pressed", "false");
       });
       markers?.detach();
       markers = null;
@@ -619,13 +640,15 @@ if (flat && controls && stage) {
       stage!.append(element);
       barFor(element);
       space = element;
+      markClock();
       speakSpace();
       Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
       element.setView(state());
     }
     if (realControls) realControls.hidden = true;
     if (lightControls) lightControls.hidden = false;
-    for (const box of [timeControls, speedControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
+    for (const box of [timeControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
+    markClock();
     missionRow?.enter();
     markBodies();
     markRide();
@@ -652,11 +675,15 @@ if (flat && controls && stage) {
       element.setAttribute("tiles", "tiles/");
       const clouds = address.get("clouds");
       const lights = address.get("lights");
-      const when = address.get("time");
+      const startTime = address.get("time");
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
-      if (when && Number.isFinite(Date.parse(when))) element.setAttribute("time", when);
+      if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
+      // with the date "now" the Sun is put right once a minute, and the date box follows
+      element.addEventListener("chikyu-timechange", (e) => {
+        if (when && document.activeElement !== when) when.value = localValue((e as CustomEvent<{ time: number }>).detail.time);
+      });
       element.addEventListener("chikyu-unavailable", () => {
         notice(say("noWebgl"));
         if (realisticButton) realisticButton.disabled = true;
@@ -672,7 +699,8 @@ if (flat && controls && stage) {
     if (realControls) realControls.hidden = false;
     if (lightControls) lightControls.hidden = false;
     if (timeControls) timeControls.hidden = false;
-    for (const box of [speedControls, spaceControls, scaleNote]) if (box) box.hidden = true;
+    replay.hidden = true;
+    for (const box of [spaceControls, scaleNote]) if (box) box.hidden = true;
     return true;
   }
 
@@ -753,37 +781,96 @@ if (flat && controls && stage) {
   toggle(clouds, "clouds");
   toggle(lights, "lights");
 
-  // The time speed is the family's speed buttons, in multiples of real time; the demo keeps the choice in its own address.
-  const timeSpeed = document.querySelector<SpeedButtonsElement>("#time-speed");
-  const markSpeed = (value: number): void => {
-    if (timeSpeed && timeSpeed.value !== value) timeSpeed.value = value;
-    address.set("speed", value === 1 ? null : String(value));
+  // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
+  // Play runs the clock from the date shown; Pause holds it there and writes the date reached to the address (`time`); Back goes to the date the reader chose. `play=on` and `speed` stay in the address.
+  // The space view opens held: a link with no `play` and `speed=0` (or no speed) stays held, and one from before the bar that names a speed other than 0 keeps running, as it did.
+  const missionBar = document.querySelector<ReplayBarElement>("#mission-replay");
+  /** The date the reader chose (the address, the box or Now): Back returns to it. */
+  let origin = Number.isFinite(Date.parse(address.get("time") ?? "")) ? Date.parse(address.get("time")!) : Date.now();
+  /** The clock's speed on the space view: nothing runs while Play is off, and a held view draws nothing. */
+  const runClock = (): void => {
+    if (space) space.speed = clock.play ? clock.speed : 0;
   };
+  /** Show the clock's state: the bar (Play comes out off for a reader who prefers reduced motion), its words, and the address, while the space view is on. */
+  function markClock(): void {
+    if (replay.playing !== clock.play) replay.playing = clock.play;
+    clock.play = replay.playing;
+    if (replay.getAttribute("speed") !== String(clock.speed)) replay.setAttribute("speed", String(clock.speed));
+    replay.setAttribute("lang", say("locale").startsWith("ja") ? "ja" : "en");
+    replay.words = { group: say("time"), start: say("back") };
+    replay.hidden = !space;
+    if (!space) return;
+    address.set("play", clock.play ? "on" : null);
+    address.set("speed", clock.speed === DEFAULT_SPEED ? null : String(clock.speed));
+  }
+  /** Leaving the space view while it runs: the date it had reached is the date the next view shows, and Play is off. */
+  function settleClock(): void {
+    if (!space) return;
+    if (clock.play) address.set("time", isoSecond(space.time));
+    clock.play = false;
+    replay.playing = false;
+    address.set("play", null);
+  }
+  /** Play or Pause. Play starts from the date shown: a date that follows "now" becomes that moment, so the clock does not jump to a later now. */
+  function setPlaying(on: boolean): void {
+    if (!space) return;
+    if (on && missionBar?.playing) missionBar.playing = false;
+    if (on && address.get("time") === null) {
+      const at = space.time;
+      space.time = at;
+      address.set("time", isoSecond(at));
+    }
+    clock.play = on;
+    markClock();
+    runClock();
+  }
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(markClock));
+  replay.addEventListener("kazoku-replay", (event) => {
+    const { action, playing, reason } = (event as CustomEvent<ReplayDetail>).detail;
+    if (reason !== "user" || action === "repeat" || !space) return;
+    if (action === "start") {
+      // Back: the date the reader chose, held
+      clock.play = false;
+      markClock();
+      runClock();
+      space.time = origin;
+      address.set("time", isoSecond(origin));
+      now?.setAttribute("aria-pressed", "false");
+      if (when) when.value = localValue(origin);
+      return;
+    }
+    setPlaying(playing);
+  });
+  replay.addEventListener("kazoku-speedchange", (event) => {
+    const { value, reason } = (event as CustomEvent<{ value: number; reason: string }>).detail;
+    if (reason !== "user") return;
+    clock.speed = value;
+    markClock();
+    runClock();
+  });
+  // leaving while the clock runs: the date it had reached goes into the address, so a returning reader is where they were
+  addEventListener("pagehide", () => {
+    if (!space || !clock.play) return;
+    address.set("time", isoSecond(space.time));
+    address.flush();
+  });
   missionRow = mountMissions({
     space: () => space,
     say,
     address,
     holdClock: () => {
       if (space) space.speed = 0;
+      clock.play = false;
+      markClock();
       now?.setAttribute("aria-pressed", "false");
-      markSpeed(0);
+    },
+    dated: (ms) => {
+      if (when && document.activeElement !== when) when.value = localValue(ms);
     },
     notice,
     select: showSatellite,
   });
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(() => missionRow?.relabel()));
-  const nameTimeSpeed = (): void => timeSpeed?.setAttribute("label", say("timeSpeed"));
-  document.addEventListener("kazoku-languagechange", () => queueMicrotask(nameTimeSpeed));
-  nameTimeSpeed();
-  timeSpeed?.addEventListener("kazoku-speedchange", (event) => {
-    const { value, reason } = (event as CustomEvent<{ value: number; reason: string }>).detail;
-    if (reason !== "user") return;
-    if (space) {
-      space.speed = value;
-      if (value !== 1) now?.setAttribute("aria-pressed", "false");
-    }
-    markSpeed(value);
-  });
   const scaleButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-scale]")];
   for (const button of scaleButtons) {
     button.addEventListener("click", () => {
@@ -815,6 +902,7 @@ if (flat && controls && stage) {
     });
   }
 
+  const isoSecond = (ms: number): string => new Date(ms).toISOString().slice(0, 19) + "Z";
   const localValue = (ms: number): string => {
     const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
     return d.toISOString().slice(0, 16);
@@ -823,19 +911,17 @@ if (flat && controls && stage) {
     const ms = new Date(when.value).getTime();
     if (!Number.isFinite(ms)) return;
     now?.setAttribute("aria-pressed", "false");
+    origin = ms;
     if (real) real.time = ms;
     if (space) space.time = ms;
-    address.set("time", new Date(ms).toISOString().slice(0, 16) + "Z");
+    address.set("time", isoSecond(ms));
   });
   now?.addEventListener("click", () => {
     now.setAttribute("aria-pressed", "true");
-    if (when) when.value = localValue(Date.now());
+    origin = Date.now();
+    if (when) when.value = localValue(origin);
     if (real) real.time = "now";
-    if (space) {
-      space.time = "now";
-      space.speed = 1;
-      markSpeed(1);
-    }
+    if (space) space.time = "now";
     address.set("time", null);
   });
 
@@ -856,7 +942,7 @@ if (flat && controls && stage) {
   if (opened["scale"] === "true") {
     for (const b of scaleButtons) b.classList.toggle("on", b.dataset["scale"] === "true");
   }
-  if (opened["speed"] !== undefined && Number.isFinite(Number(opened["speed"]))) markSpeed(Number(opened["speed"]));
+  markClock();
   if (opened["orbits"] === "off") orbits?.setAttribute("aria-pressed", "false");
   if (opened["labels"] === "off") names?.setAttribute("aria-pressed", "false");
   markGrab("line");

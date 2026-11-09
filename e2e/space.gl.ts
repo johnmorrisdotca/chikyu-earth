@@ -67,23 +67,6 @@ test("paused, nothing is drawn and no frame is asked for; at real time, at most 
   expect(later.draws - real.draws).toBeLessThanOrEqual(6);
 });
 
-test("a day a second: time runs at that rate, at most 30 draws a second, a lookup of the ephemeris about once a second", async ({ page }) => {
-  // the test owns the clock: a second here is exactly a second of the page's time, however slowly this machine draws
-  await ownClock(page);
-  await open(page);
-  await page.locator("#time-speed button[data-v=\"86400\"]").dispatchEvent("click");
-  await settle(page, 500);
-  const { before: s0, after: s1, seconds } = await timed(page, 5000, () => statsOf(page));
-  const perSecond = (s1.time - s0.time) / 86_400_000 / seconds;
-  const draws = (s1.draws - s0.draws) / seconds;
-  const lookups = (s1.lookups - s0.lookups) / seconds;
-  console.log(`1 day a second: ${perSecond.toFixed(2)} days a second, ${draws.toFixed(1)} draws a second, ${lookups.toFixed(2)} ephemeris lookups a second`);
-  expect(perSecond).toBeGreaterThan(0.8);
-  expect(perSecond).toBeLessThan(1.25);
-  expect(draws).toBeLessThanOrEqual(31);
-  expect(lookups, "lookups come in pairs, once a game-second span").toBeLessThanOrEqual(2.6);
-});
-
 test("the pictures follow the zoom and go back after it, and nothing is held twice", async ({ page }) => {
   await open(page);
   // three makes one empty texture of its own the first time a body with no picture is drawn: look at the planets once before counting.
@@ -102,20 +85,45 @@ test("the pictures follow the zoom and go back after it, and nothing is held twi
   expect(alive(await counts(page), "Texture"), "the larger pictures are freed again").toBe(base);
 });
 
-test("out of sight or hidden, a game clock running at a day a second draws nothing", async ({ page }) => {
-  await open(page, `time=${NOV2}&speed=86400&center=-100,40`);
-  await page.evaluate(() => {
-    const spacer = document.createElement("div");
-    spacer.style.height = "4000px";
-    document.body.prepend(spacer);
+// The clock runs only while Play is on, and the replay bar leaves Play off for a reader who prefers reduced motion (the config's default): the tests that run time are of a reader with no preference.
+// The page's own Auto-turn runs for such a reader too, so the tests of a held view stay with the config's default above.
+test.describe("a reader with no motion preference", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("a day a second: time runs at that rate, at most 30 draws a second, a lookup of the ephemeris about once a second", async ({ page }) => {
+    // the test owns the clock: a second here is exactly a second of the page's time, however slowly this machine draws
+    await ownClock(page);
+    await open(page);
+    await page.locator("#replay button[data-v=\"86400\"]").dispatchEvent("click");
+    await page.locator("#replay [data-act=\"play\"]").dispatchEvent("click");
+    await settle(page, 500);
+    const { before: s0, after: s1, seconds } = await timed(page, 5000, () => statsOf(page));
+    const perSecond = (s1.time - s0.time) / 86_400_000 / seconds;
+    const draws = (s1.draws - s0.draws) / seconds;
+    const lookups = (s1.lookups - s0.lookups) / seconds;
+    console.log(`1 day a second: ${perSecond.toFixed(2)} days a second, ${draws.toFixed(1)} draws a second, ${lookups.toFixed(2)} ephemeris lookups a second`);
+    expect(perSecond).toBeGreaterThan(0.8);
+    expect(perSecond).toBeLessThan(1.25);
+    expect(draws).toBeLessThanOrEqual(31);
+    expect(lookups, "lookups come in pairs, once a game-second span").toBeLessThanOrEqual(2.6);
   });
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(800);
-  const before = await counts(page);
-  await page.waitForTimeout(2500);
-  const after = await counts(page);
-  expect(after.draws).toBe(before.draws);
-  expect(after.rafRequests).toBe(before.rafRequests);
+
+  test("out of sight or hidden, a game clock running at a day a second draws nothing", async ({ page }) => {
+    await open(page, `time=${NOV2}&play=on&speed=86400&center=-100,40`);
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await page.evaluate(() => {
+      const spacer = document.createElement("div");
+      spacer.style.height = "4000px";
+      document.body.prepend(spacer);
+    });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(800);
+    const before = await counts(page);
+    await page.waitForTimeout(2500);
+    const after = await counts(page);
+    expect(after.draws).toBe(before.draws);
+    expect(after.rafRequests).toBe(before.rafRequests);
+  });
 });
 
 test("taking the element away frees what it held", async ({ page }) => {

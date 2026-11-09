@@ -35,7 +35,14 @@ async function open(page: Page, query = ""): Promise<void> {
 }
 
 // Pressed by dispatching the click, not by a real one: a real click scrolls the page to the button, and a globe scrolled out of sight is (rightly) not drawn.
-const rideButton = (page: Page, name: string) => ({ click: () => page.getByRole("group", { name: "Ride along" }).getByRole("button", { name, exact: true }).dispatchEvent("click") });
+// A ride starts the page's clock (Play), for the date box to move with it (e2e/date-play.demo.ts): these tests are about the ride and set the clock themselves, so Play is put back to Pause.
+const rideButton = (page: Page, name: string) => ({
+  click: async () => {
+    await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name, exact: true }).dispatchEvent("click");
+    const play = page.locator('#replay [data-act="play"]');
+    if ((await play.getAttribute("aria-pressed")) === "true") await play.dispatchEvent("click");
+  },
+});
 const setSpeed = async (page: Page, speed: number): Promise<void> => {
   await page.locator(SPACE).evaluate((el, value) => Reflect.set(el, "speed", value), speed);
 };

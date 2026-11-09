@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The family's speed buttons in the demo: the Earth's Auto-turn (0.5×, 1×, 2× of the real rate) in the view controls, and the space view's time speed (multiples of real time).
+// The family's speed buttons in the demo: the Earth's Auto-turn (0.5×, 1×, 2× of the real rate) in the view controls, and the space view's replay bar (Play, Back to the date and the speeds, multiples of real time).
 // The pages open with reduced motion (the config's default), so the buttons stepping here is the reduced-motion check too.
 const CONTROLS = "kazoku-view-controls";
 const speedButton = (page: Page, value: number) => page.locator(`${CONTROLS} kazoku-speed-buttons button[data-v="${value}"]`);
@@ -20,13 +20,16 @@ test("Auto-turn has the family's 0.5×, 1× and 2×, kept in the attribute and t
   await expect(page).not.toHaveURL(/pace=/);
 });
 
-test("the time speed row is the same speed buttons, in multiples of real time, and the page keeps no buttons of its own for it", async ({ page }) => {
-  await page.goto("/chikyu-earth/?look=space&speed=86400&time=2026-11-02T14:00Z");
-  const time = page.locator("#time-speed");
-  await expect(time.locator("button")).toHaveText(["0×", "1×", "3600×", "86400×", "−3600×"]);
-  await expect(time.locator('button[data-v="86400"]')).toHaveAttribute("aria-pressed", "true");
+test("the time row is the family's replay bar: Play, Back to the date and the speeds in multiples of real time, and the page keeps no buttons of its own for it", async ({ page }) => {
+  await page.goto("/chikyu-earth/?look=space&play=on&speed=86400&time=2026-11-02T14:00Z");
+  const bar = page.locator("#replay");
+  await expect(bar.locator("button[data-act]:visible")).toHaveText(["Play", "Back to the date"]);
+  await expect(bar.locator("button[data-v]")).toHaveText(["1×", "3600×", "86400×", "−3600×"]);
+  await expect(bar.locator('button[data-v="86400"]')).toHaveAttribute("aria-pressed", "true");
   expect(await page.locator("[data-speed]").count()).toBe(0);
-  await expect(time.locator("[role='group']")).toHaveAttribute("aria-label", "Time speed");
+  // the config's reduced motion is on: Play is left off, even from an address that asks for it
+  await expect(bar.locator('[data-act="play"]')).toHaveAttribute("aria-pressed", "false");
   await page.locator("kazoku-language-picker").evaluate((el) => el.dispatchEvent(new CustomEvent("kazoku-languagechange", { detail: { lang: "ja" }, bubbles: true })));
-  await expect(time.locator("[role='group']")).not.toHaveAttribute("aria-label", "Time speed");
+  await expect(bar.locator('[data-act="start"]')).toHaveText("もとの日付へ");
+  await expect(bar.locator('[data-act="play"]')).toHaveText("再生");
 });

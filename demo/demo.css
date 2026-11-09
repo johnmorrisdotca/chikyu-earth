@@ -13,7 +13,9 @@
 chikyu-earth, chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
 chikyu-earth svg { display: block; width: 100%; height: 100%; }
 kazoku-view-controls { display: block; margin: 0 auto; }
-kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
+kazoku-view-controls, kazoku-speed-buttons, #replay { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
+/* The date row's bar is Play, Pause and Back with the speeds: a loop makes no sense for a date */
+#replay::part(repeat) { display: none; }
 
 .controls .fam-seg button, .controls .fam-button, .controls .fam-field { min-height: 48px; min-width: 48px; }
 .controls .fam-button, .controls .fam-seg button { font-family: inherit; }

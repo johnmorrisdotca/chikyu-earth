@@ -12,6 +12,8 @@ export interface MissionHost {
   address: { get(key: string): string | null | undefined; set(key: string, value: string | null): void };
   /** Hold the page's own clock still (the replay moves the time itself). */
   holdClock(): void;
+  /** The moment the replay has reached, for the page's date box (a few times a second, and when the reader moves it). */
+  dated?(ms: number): void;
   notice(text: string | null): void;
   select(ref: SatelliteRef | null): void;
 }
@@ -140,6 +142,7 @@ export function mountMissions(host: MissionHost): { enter(): void; leave(): void
     const now = performance.now();
     if (force || now - clockShown > 250) {
       clockShown = now;
+      host.dated?.(clock);
       const minutes = Math.round((clock - start()) / 60_000);
       readout!.textContent = say("missionClock", { elapsed: `${Math.floor(minutes / 1440)}:${String(Math.floor((minutes % 1440) / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`, at: stamp(clock) });
     }

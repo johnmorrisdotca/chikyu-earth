@@ -237,3 +237,28 @@ test("the planets: the Sun, planets, Pluto and moons painted, the looks switched
   await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).dispatchEvent("click");
   await expect.poll(async () => (await bodies()).moons, { timeout: 15_000 }).toBe(0);
 });
+
+test.describe("the space view's clock", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("Play at a day a second draws at most thirty frames a second, one frame at a time, a lookup about once a second, and Pause leaves nothing drawn", async ({ page }) => {
+    await open(page, "space");
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await page.locator('#replay button[data-v="86400"]').dispatchEvent("click");
+    await page.locator('#replay [data-act="play"]').dispatchEvent("click");
+    await page.waitForTimeout(1500);
+    const s0 = await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { draws: number; lookups: number }));
+    const running = await bounded(page, 4000, "space");
+    const s1 = await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { draws: number; lookups: number }));
+    expect(running.frames, "frames drawn while it runs").toBeGreaterThan(0);
+    expect(running.frames).toBeLessThanOrEqual(4 * 31);
+    expect((s1.lookups - s0.lookups) / 4).toBeLessThanOrEqual(2.6);
+    expect(running.requests - running.callbacks, "one frame at a time").toBeLessThanOrEqual(1);
+    await page.locator('#replay [data-act="play"]').dispatchEvent("click");
+    await page.waitForTimeout(1000);
+    const paused = await bounded(page, 3000, "space");
+    expect(paused.draws, "nothing drawn while paused").toBe(0);
+    expect(paused.frames).toBe(0);
+    expect(paused.requests, "no frame asked for while paused").toBeLessThanOrEqual(1);
+  });
+});

@@ -67,16 +67,13 @@
                     <button type="button" data-light="boost" data-say="light_boost">Night boost</button>
                   </div>
                 </div>
-                <div class="fam-row" id="time-controls" hidden>
+                <div class="fam-row" id="time-controls" hidden data-help-en="Choose the date and time, or go back to now. In the space view, Play runs the clock from the date shown and the date follows it; Pause holds it there; Back to the date returns to the date you chose. The speeds are multiples of real time: 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="日付と時刻を選びます。「今」にもどすこともできます。宇宙の見た目では、「再生」で表示している日時から時計が進み、日付もいっしょに進みます。「一時停止」で止まり、「もとの日付へ」で選んだ日付にもどります。速さは実際の時間の何倍かです。3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。速さを 86400 (1秒で1日) にすると、地球が回り、月が動くのが見えます。">
                   <label class="field">
                     <span data-say="when">Date and time</span>
                     <input type="datetime-local" id="when" class="fam-field" />
                   </label>
                   <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
-                </div>
-                <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" data-say-label="timeSpeed" hidden data-help-en="Run time faster than real time, hold it still, or run it backwards. The buttons are multiples of real time: 0 holds it still, 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="時間を実際より速く進めたり、止めたり、逆に戻したりします。ボタンは実際の時間の何倍かを表します。0は止まり、3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。「1秒で1日」にすると、地球が回り、月が動くのが見えます。">
-                  <span class="fam-label" data-say="time">Time</span>
-                  <kazoku-speed-buttons id="time-speed" data-testid="time-speed" steps="0 1 3600 86400 -3600" value="1" no-label></kazoku-speed-buttons>
+                  <kazoku-replay-bar id="replay" data-testid="replay" steps="1 3600 86400 -3600" speed="3600" hidden></kazoku-replay-bar>
                 </div>
               </div>
               <div class="box" data-box="space">

@@ -46,7 +46,7 @@ test("in Japanese no control or name of the space view is left in English", asyn
 test("in English the same controls say what they did before, and switching language changes the names beside the bodies", async ({ page }) => {
   await open(page, "en");
   const words = await shownWords(page);
-  expect(words).toEqual(expect.arrayContaining(["Space", "Time", "Compressed", "True scale", "Inner planets", "Solar system", "Jupiter", "Orbits", "Names"]));
+  expect(words).toEqual(expect.arrayContaining(["Space", "Date and time", "Compressed", "True scale", "Inner planets", "Solar system", "Jupiter", "Orbits", "Names"]));
   await page.locator("kazoku-language-picker").evaluate((el) => el.dispatchEvent(new CustomEvent("kazoku-languagechange", { detail: { lang: "ja" }, bubbles: true })));
   await expect(page.getByRole("group", { name: "移動先" })).toBeVisible();
   const names = await page.locator("chikyu-space").evaluate((el) => [...el.shadowRoot!.querySelectorAll(".sp-label:not([hidden])")].map((n) => n.textContent));
