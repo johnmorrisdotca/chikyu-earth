@@ -103,3 +103,7 @@ also by John Morris, under the MIT licence. Its shared 3D renderer draws the rea
 No country flags, emblems, coats of arms or other official marks are drawn. Country names appear only
 as plain descriptive words. All trademarks belong to their owners; this project is not affiliated with,
 sponsored by or endorsed by any of them.
+
+## The printable sheets
+
+The sheets (`src/sheets/`) are drawn from the package's own data: the outlines above, the Sun's place by `subsolarPoint` (the low-precision formulas of NOAA's solar calculator, Meeus, Astronomical Algorithms, chapter 25) and the Earth's tilt (23.4393 degrees, the IAU's obliquity of the ecliptic at J2000). Nothing is traced from a map or a flag. The few figures written into the facts are the Earth's mean diameter (12,742 km, the IAU's nominal radius 6,371 km) and equatorial circumference (40,075 km, WGS84), and that the Pacific Ocean (about 165 million square kilometres, NOAA's National Ocean Service) is bigger than all the land (about 149 million). The share of the land each continent has is worked out from the outlines. The demo's sheets page takes each country's capital from kuni (MIT, by John Morris) and a flag, to check a drawing against, from hata (MIT, by John Morris; each flag's own licence is in hata's NOTICE.md); neither is on a sheet and neither is a dependency of the package.

@@ -194,6 +194,18 @@ document.querySelector("chikyu-space")!.setSatellites("stations", createSatellit
 as the body moves along its orbit; switch to another body and the camera glides there. Straight down or toward the horizon, from the body or following it at a distance, time faster or slower. It animates continuously, so it keeps to the
 same budget: at most 30 frames a second (one a second for reduced motion), nothing drawn while paused, out of sight or hidden. [Ride along guide](docs/guides/ride-along.md), [docs/ride-along.md](docs/ride-along.md).
 
+## Printable sheets
+
+`@johnmorrisdotca/chikyu-earth/sheets` draws five printable sheets for children and everyone as SVG strings measured in millimetres, with no browser and no dependency: the globe to colour (the continents in thick outlines, the continents and oceans named; three sides), a world map, a "my country" sheet (the outline, the capital as a star, a box to draw the flag), day and night for a date and time (the line between them from the package's own sun position, the night hatched so black and white prints well) and the seasons (the Earth at four points round the Sun, tilted 23.4 degrees). A4, US Letter, A3 or Tabloid, English or Japanese, thick lines and big type (`kid`) or thin and small (`normal`). The demo's [sheets page](https://johnmorrisdotca.github.io/chikyu-earth/kids.html) puts kazoku-ui's header (the brand, the title, a Name box) and footer (credits, version, a QR code) round them and has Print / save PDF, and the Pages build makes [ready-made PDFs](https://johnmorrisdotca.github.io/chikyu-earth/pdf/). [Guide](docs/guides/printable-sheets.md).
+
+```ts
+import { dayNightSvg, globeSheetSvg, terminator } from "@johnmorrisdotca/chikyu-earth/sheets";
+
+const room = { widthMm: 184.6, heightMm: 180 };
+console.log(globeSheetSvg("americas", { ...room, lang: "en" }).includes("North"));
+console.log(dayNightSvg(Date.UTC(2026, 5, 21, 12), room).includes('data-sun="0.'), terminator(Date.UTC(2026, 5, 21, 12), 12).length);
+```
+
 ## Markers
 
 Mark any place at `[lon, lat]` with a label, colour or icon, in groups you can show or hide, on either look. Chikyu ships no places; yours move with the globe, fade on the far side, make room
@@ -387,6 +399,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
+| [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |
 | [How it stays light](docs/guides/how-it-works.md) | The budget |
 | [Architecture](docs/guides/architecture.md) | How the layers fit |

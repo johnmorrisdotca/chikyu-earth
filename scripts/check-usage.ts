@@ -160,6 +160,11 @@ await step("node-missions", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "missions.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (!/^135 flights; STS-1 Columbia, 2 crew: \d+ km up over -?\d+ degrees$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
+await step("node-sheets", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "sheets.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  if (out[0] !== "globe map japan night seasons true") throw new Error(`unexpected output: ${out.join("|")}`);
+  if (!/^(-?\d+,-?\d+ ){5}-?\d+,-?\d+$/.test(out[1] ?? "")) throw new Error(`unexpected output: ${out.join("|")}`);
+});
 await step("node-ride", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "ride.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (out !== "The horizon is 70 degrees from straight down; the camera looks -0.53, 0.00, -0.85.") throw new Error(`unexpected output: ${out}`);
@@ -404,6 +409,7 @@ const FILES: Record<string, string[]> = {
   "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],
+  "node/sheets.mjs": ["docs/guides/printable-sheets.md", "docs/guides/ja/printable-sheets.md"],
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/index.html": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/main.ts": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
