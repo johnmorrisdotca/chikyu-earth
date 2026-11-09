@@ -48,8 +48,18 @@ jobs:
         run: node scripts/elements.ts fetch
       - name: Satellites, the files are fit to publish
         run: node scripts/elements.ts check demo/elements
+      - run: python3 -m pip install pillow
+        if: github.event_name != 'schedule'
       - run: pnpm check
         if: github.event_name != 'schedule'
+      - name: The Earth tiles, cut from NASA's big maps (kept between runs while the script is the same); pnpm site copies them to site/tiles
+        uses: actions/cache@v6
+        id: tiles
+        with:
+          path: .cache/earth-tiles-out
+          key: earth-tiles-${{ hashFiles('scripts/make-earth-tiles.py') }}
+      - if: steps.tiles.outputs.cache-hit != 'true'
+        run: python3 -m pip install pillow && python3 -I scripts/make-earth-tiles.py build
       - run: pnpm site
       - run: pnpm docs:site
       - uses: actions/configure-pages@v6

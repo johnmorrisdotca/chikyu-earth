@@ -1,6 +1,6 @@
 // Build the demo into site/ for GitHub Pages, served at /chikyu-earth/: the page and the embed frame (made by page.ts from the family's shared header and footer), their scripts
 // (split, so three.js is its own file fetched only when the realistic look is chosen), the stylesheets, the textures, and the kazoku-ui parts the header uses.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { publishThumbnails, thumbnailHead } from "./family-thumbnail.mjs";
@@ -29,6 +29,8 @@ await rm(at("site/kazoku-parts.src.js"));
 await cp(at("demo/demo.css"), at("site/demo.css"));
 await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
+// the Earth tile pyramid (made by `pnpm tiles`, never committed): served beside the demo when it has been built
+if (existsSync(at(".cache/earth-tiles-out/manifest.json"))) await cp(at(".cache/earth-tiles-out"), at("site/tiles"), { recursive: true });
 // the pictures of the Sun, planets and moons (wakusei-planets, an optional peer the demo draws them with): the two smaller widths ship in its package, the sharpest come from the repository by jsDelivr
 await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("site/planets"), { recursive: true });
 await cp(at("demo/elements"), at("site/elements"), { recursive: true });

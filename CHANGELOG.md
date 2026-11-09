@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Earth tile pyramid, the data** (MODULES-645, first phase): `scripts/make-earth-tiles.py` (`pnpm tiles`, `pnpm test:tiles`) cuts NASA's Blue Marble Next Generation (September 2004, with bathymetry, 21600 x 10800) and Black Marble 2016 (3 km, 13500 x 6750) into 512 px WebP tiles, day to level 4 (16384 x 8192), night to level 3 (8192 x 4096): 852 tiles, 10.3 MB. Seamless at the antimeridian, tested on a made-up map in CI. Built by `pages.yml` and served at `/tiles/` beside the demo; never in git, never in the npm package. Guide in English and Japanese (`docs/guides/earth-tiles.md`); sources and terms in NOTICE.md.
 - **Why two packages** (MODULES-521): a guide in English and Japanese (`docs/guides/two-packages.md`), a README section and a Guides row say that chikyu-earth is for the Earth only, that the solar system is wakusei-planets', and that the dependency runs one way. Two tested examples: the two packages on one page (`examples/together/`, built and opened by `pnpm test:usage`) and every entry point bundled with wakusei-planets missing.
 - Tests: the ride's glide is measured on the page's own clock, and the Auto-turn step of the drag-rule test turns by an angle read from the controller, not by a 1.5 s stopwatch; the docs site's browser test is the family's newer one (WebKit on a Mac is pressed with Alt+Tab) (MODULES-629).
 

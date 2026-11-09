@@ -33,6 +33,19 @@ material, so no other licence applies. This package is not endorsed by NASA and 
 The credit names are NASA's usual lines for these series; the Visible Earth pages (now at science.nasa.gov/earth/earth-observatory) did not show a credit line in the
 text read on 2026-11-02, so check them if you need the exact wording for print.
 
+## The Earth tiles
+
+`scripts/make-earth-tiles.py` cuts two bigger NASA maps into a pyramid of 512 px WebP tiles (docs/guides/earth-tiles.md). The tiles are built in CI and served by GitHub Pages beside the demo at `/tiles/`; they are not in git and not in the npm package. Terms, read on 2026-11-08 at https://www.nasa.gov/nasa-brand-center/images-and-media/ (NASA Images and Media Usage Guidelines): "NASA content – images, audio, video, and media files used in the rendition of 3-dimensional models, such as texture maps and polygon data in any format – generally are not subject to copyright in the United States." and "NASA should be acknowledged as the source of the material." The same page says third-party material NASA uses with permission is marked as copyright protected with the holder's name; neither source below is marked so. Not endorsed by NASA; no NASA insignia or logotype is used.
+
+| Layer | Source | Credit |
+|---|---|---|
+| `day` (levels 0 to 4, up to 16384 x 8192) | Blue Marble: Next Generation with topography and bathymetry, September 2004, 21600 x 10800 (https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x10800.jpg, SHA-256 863036b622ba3dab4eb4ffb7149730b02cfa433ce49672e9b7267022051e04a2); the same month as `day-*.webp` | "NASA Earth Observatory": the page https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/ (read 2026-11-08) says "Anyone using or republishing Blue Marble: Next Generation please credit “NASA Earth Observatory.”" It was produced by Reto Stöckli, NASA Earth Observatory (NASA Goddard Space Flight Center). |
+| `night` (levels 0 to 3, up to 8192 x 4096) | Earth at Night, Black Marble 2016 colour map at 3 km, 13500 x 6750 (https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_3km.jpg, SHA-256 230aac448ae68c358be433dd518888cccb3a85ccf66f7b44326441c324ad6725; page https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/, read 2026-11-08) | NASA Earth Observatory, Suomi NPP VIIRS data (the page names no further credit line in its text; check it for print) |
+
+The bathymetry-free Blue Marble maps (base map, and base map with topography, on the same Blue Marble page) fall under the same NASA terms; the tiles use the one with bathymetry, as `day-*.webp` does. The clouds are not tiled: NASA's sharper cloud files (Visible Earth 57747, once at eoimages.gsfc.nasa.gov) are no longer served, and the Blue Marble 2002 page (https://science.nasa.gov/earth/earth-observatory/the-blue-marble-true-color-global-imagery-at-1km-resolution/) offers only the 2048 picture already in `clouds-2048.webp`.
+
+Where the pyramid is hosted: GitHub Pages of this public repository, which costs nothing (docs/guides/earth-tiles.md). It adds 852 files and 10.3 MB to the site.
+
 ## The Moon's picture
 
 `moon-*.webp` is made by `scripts/make-textures.py` from NASA's Scientific Visualization Studio item 4720, "Moon: LROC colour mosaic" (https://svs.gsfc.nasa.gov/4720/,
