@@ -125,7 +125,7 @@ export function mountEmbedSection(panel: EmbedPanelElement, options: SectionOpti
       frame.width = String(now.size);
       frame.height = String(now.size);
       frame.style.border = "0";
-      frame.src = `embed.html?${embedQuery({ ...now, look: frameLook })}&turn=1`;
+      frame.src = `embed.html?${embedQuery({ ...now, look: frameLook })}`;
       return frame;
     }
     if (kind === "iframe") return undefined;

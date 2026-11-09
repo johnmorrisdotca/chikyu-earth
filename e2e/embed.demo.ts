@@ -16,7 +16,7 @@ test("the embed page draws the globe the address asks for, and nothing else", as
   expect(asked.every((path) => path.startsWith("/chikyu-earth/"))).toBe(true);
 });
 
-test("by default it is still and has no controls and no geolocation prompt", async ({ page }) => {
+test("by default it draws no controls, asks for no location and stays still until moved", async ({ page }) => {
   let asked = false;
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "geolocation", { value: { getCurrentPosition: () => ((globalThis as { __asked?: boolean }).__asked = true) }, configurable: true });
@@ -34,7 +34,7 @@ test("by default it is still and has no controls and no geolocation prompt", asy
 test.describe("turning", () => {
   test.use({ reducedMotion: "no-preference" });
 
-  test("turn=auto turns it by itself, and turn=1 only by hand", async ({ page }) => {
+  test("turn=auto turns it by itself, and without it only by hand", async ({ page }) => {
     await page.goto(`${EMBED}?turn=auto&center=0,0`);
     const holder = page.locator("chikyu-earth");
     await expect(holder.locator("svg")).toBeVisible();
@@ -42,7 +42,7 @@ test.describe("turning", () => {
     await page.waitForTimeout(2600);
     expect(await holder.evaluate((el) => el.shadowRoot?.innerHTML ?? "")).not.toBe(before);
 
-    await page.goto(`${EMBED}?turn=1&center=0,0`);
+    await page.goto(`${EMBED}?center=0,0`);
     await expect(page.locator("chikyu-earth svg")).toBeVisible();
     const still = await page.locator("chikyu-earth").evaluate((el) => el.shadowRoot?.innerHTML ?? "");
     await page.waitForTimeout(1500);

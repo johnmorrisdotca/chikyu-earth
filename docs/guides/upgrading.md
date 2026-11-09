@@ -16,7 +16,7 @@ The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Eac
 - You set `zoom-min` and `zoom-max` on the bar to keep a range: the element's own range is now 0.1 to 20 (line), 0.1 to 5 or 20 with tiles (realistic) and a millionth to 2.5 (space); the bar's attributes still win. See [zoom, pan and turn](zoom-and-pan.md).
 - You install without kazoku-ui: it is now a dependency (it was an optional peer), because the elements import its `view-controls`.
 
-The embed page is still by default; `turn=1` or `turn=auto` gives it the hands.
+The embed page (`embed.html`) now takes the hands by default, so an iframe you already have can be dragged and zoomed (a plain wheel at Fit still scrolls your page). Add `hands=0` to the address for a still picture; `turn=auto` still turns it by itself, and `turn=1` is accepted and does nothing more.
 
 ## To 0.9: riding along, and a quieter Auto-turn
 

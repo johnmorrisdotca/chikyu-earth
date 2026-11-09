@@ -19,7 +19,7 @@ The demo site has a page made to be framed, `embed.html`. It draws what its addr
   </head>
   <body>
     <iframe
-      src="https://johnmorrisdotca.github.io/chikyu-earth/embed.html?look=thick&center=139.7,35.7&turn=1"
+      src="https://johnmorrisdotca.github.io/chikyu-earth/embed.html?look=thick&center=139.7,35.7"
       title="The Earth, centred on Tokyo"
       width="420"
       height="420"
@@ -39,7 +39,8 @@ The globe fills the frame (square, at the smaller of its width and height), with
 | `look` | `line`, `thick`, `realistic`, `space` (the last two need WebGL; they fall back to `thick` without it) | `line` |
 | `center` | `lon,lat`, or `me` to ask the browser for the reader's place | `0,20` |
 | `graticule` | `1` | off |
-| `turn` | `0` still, `1` turned by hand (drag, wheel, pinch, arrow keys), `auto` turns by itself at the Earth's own rate | `0` |
+| `hands` | `0` makes the frame a still picture with no hands | on |
+| `turn` | `auto` also turns it by itself at the Earth's own rate (`1` is accepted and does nothing more) | still |
 | `time` | the moment the realistic and space looks show, for example `2026-06-21T12:00Z` | now |
 | `clouds`, `lights` | `off` to hide that layer on the realistic look | on |
 | `speed` | the space look's clock in seconds of game time a second: `0` holds still, `1` is real time, `86400` runs a day a second, negative runs backwards | `0` |
@@ -49,7 +50,7 @@ The globe fills the frame (square, at the smaller of its width and height), with
 | `ride`, `rview`, `rlook` | the space look's camera riding along with `iss`, `css` (Tiangong), `starlink` (one satellite), `Moon` or `Mars`; `rview=follow` keeps behind it instead of at it; `rlook=horizon` tips the camera towards the horizon (with a satellite, give a `speed` too, or the Earth stays still) | not riding |
 | `orbits`, `labels` | the space look's planet paths (`off` hides them) and the names beside the bodies (`1` shows them) | paths on, names off |
 
-By default the frame is still, has no controls and never asks for the reader's location. The space look holds still too (`speed=0`), and draws at most 30 times a second when you give it a speed. It draws only when something changes, and nothing while it is off screen or its tab is hidden.
+By default the frame can be turned, zoomed and moved by hand, with no bar: drag, two-finger pinch, Ctrl and the wheel, the arrow keys (a plain wheel at Fit scrolls your page, so the frame is never a trap; the zoom range is in [zoom, pan and turn](zoom-and-pan.md)). A small frame, under about 240 pixels, takes the hands too. It draws no controls and never asks for the reader's location, and it stays still until the reader moves it or you add `turn=auto`; `hands=0` makes it a still picture. The space look holds still too (`speed=0`), and draws at most 30 times a second when you give it a speed. It draws only when something changes, and nothing while it is off screen or its tab is hidden.
 
 ## Size and accessibility
 

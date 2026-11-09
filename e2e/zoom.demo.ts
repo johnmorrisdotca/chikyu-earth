@@ -22,8 +22,8 @@ test("the code builder's preview carries its own hands", async ({ page }) => {
   await checkHands(page, { selector: preview, read: readElement(page, preview), limits: LINE, tall: true, touch: true });
 });
 
-test("the embed page is still by default, and with turn=1 the element carries its hands", async ({ page }) => {
-  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20");
+test("the embed page takes the hands by default, and hands=0 makes it a still picture", async ({ page }) => {
+  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20&hands=0");
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   await expect(page.locator("chikyu-earth")).toHaveAttribute("controls", "none");
   const still = await page.locator("chikyu-earth").evaluate((el) => el.shadowRoot?.innerHTML ?? "");
@@ -34,14 +34,21 @@ test("the embed page is still by default, and with turn=1 the element carries it
   await page.mouse.up();
   expect(await page.locator("chikyu-earth").evaluate((el) => el.shadowRoot?.innerHTML ?? ""), "a drag on a still embed does nothing").toBe(still);
 
-  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20&turn=1");
+  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20");
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   await expect(page.locator("chikyu-earth")).not.toHaveAttribute("controls", "none");
   await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), limits: LINE, wheel: "event", touch: true });
 });
 
+test("a small frame takes the hands too", async ({ page }) => {
+  await page.setViewportSize({ width: 220, height: 220 });
+  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20");
+  await expect(page.locator("chikyu-earth svg")).toBeVisible();
+  await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), limits: LINE, wheel: "event" });
+});
+
 test("controls=none takes the hands off a line globe, and zoom-max sets its range", async ({ page }) => {
-  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20&turn=1");
+  await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20");
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   await page.locator("chikyu-earth").evaluate((el) => el.setAttribute("zoom-max", "8"));
   await expect.poll(async () => (await readElement(page, "chikyu-earth")()).zoomMax).toBe(8);

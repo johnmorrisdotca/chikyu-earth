@@ -2,7 +2,8 @@
 //   ?look=line|thick|realistic|space   the drawing (line by default; realistic and space need WebGL and fall back to thick)
 //   &center=lon,lat              where it is centred (0,20 by default; `me` asks the browser for the reader's place)
 //   &graticule=1                 the lines of longitude and latitude
-//   &turn=0|1|auto               still (default), turned, zoomed and moved by hand (drag, pinch, Ctrl and the wheel, the keys), or also turning by itself at the Earth's own rate
+//   &hands=0                     the frame is a still picture; by default it can be turned, zoomed and moved by hand (drag, pinch, Ctrl and the wheel, the keys; a plain wheel at Fit scrolls the host page)
+//   &turn=auto                   it also turns by itself at the Earth's own rate
 //   &time=2026-06-21T12:00Z      the realistic look's moment (the real Sun at that time); now by default
 //   &clouds=off &lights=off      the realistic look's layers
 //   &speed=0                     the space look's clock: game seconds a second (0 holds still, the default; 1 is real time, 86400 a day a second)
@@ -22,12 +23,12 @@ import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.t
 const query = new URLSearchParams(location.search);
 const frame = document.getElementById("frame")!;
 const turn = query.get("turn");
-const interactive = turn === "1" || turn === "auto";
+const interactive = query.get("hands") !== "0";
 
 const centre = query.get("center") ?? "0,20";
 const look = query.get("look");
 
-/** Still, unless the address asks for hands: the elements carry them, and `controls="none"` takes them off. */
+/** The elements carry the hands; `hands=0` takes them off with `controls="none"`. */
 const still = (element: HTMLElement): void => {
   if (!interactive) element.setAttribute("controls", "none");
 };

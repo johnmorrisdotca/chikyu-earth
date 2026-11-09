@@ -28,19 +28,19 @@ test("the demo's space view: the bar's hands, and the element's range of a milli
 });
 
 test("the embed page's realistic Earth carries its own hands", async ({ page }) => {
-  await page.goto(`/chikyu-earth/embed.html?look=realistic&time=${NOON}&center=10,20&turn=1`);
+  await page.goto(`/chikyu-earth/embed.html?look=realistic&time=${NOON}&center=10,20`);
   await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
   await checkHands(page, { selector: "chikyu-earth-realistic", read: readElement(page, "chikyu-earth-realistic"), limits: REAL, wheel: "event" });
 });
 
 test("the embed page's space view carries its own hands", async ({ page }) => {
-  await page.goto(`/chikyu-earth/embed.html?look=space&time=${NOON}&speed=0&center=10,20&turn=1`);
+  await page.goto(`/chikyu-earth/embed.html?look=space&time=${NOON}&speed=0&center=10,20`);
   await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
   await checkHands(page, { selector: "chikyu-space", read: readElement(page, "chikyu-space"), limits: SPACE, wheel: "event" });
 });
 
 test("riding from a body holds the space view's zoom to 0.5 to 6, and the range comes back when the ride stops", async ({ page }) => {
-  await page.goto("/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&speed=0&center=10,20&turn=1&ride=iss");
+  await page.goto("/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&speed=0&center=10,20&ride=iss");
   await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
   const stats = (): Promise<{ ride: { riding: boolean; gliding: boolean } }> => page.locator("chikyu-space").evaluate((el) => Reflect.get(el, "stats") as { ride: { riding: boolean; gliding: boolean } });
   await expect.poll(async () => (await stats()).ride.riding, { timeout: 30_000 }).toBe(true);
@@ -54,7 +54,7 @@ test("riding from a body holds the space view's zoom to 0.5 to 6, and the range 
 });
 
 test("a zoom-max the page sets is not overridden while riding", async ({ page }) => {
-  await page.goto("/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&speed=0&center=10,20&turn=1");
+  await page.goto("/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&speed=0&center=10,20");
   await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
   await page.locator("chikyu-space").evaluate((el) => el.setAttribute("zoom-max", "1.5"));
   await expect.poll(async () => (await readElement(page, "chikyu-space")()).zoomMax).toBe(1.5);
