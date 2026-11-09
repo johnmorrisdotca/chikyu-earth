@@ -3,7 +3,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createSatellites, type ElementSet } from "../src/satellites/index.ts";
-import { COUNT_SCRIPT, alive, counts, ownClock, settle, timed } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, freezeClock, ownClock, settle, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -51,6 +51,14 @@ const issAt = (ms: number): [number, number, number] => {
   return [out[0]!, out[1]!, out[2]!];
 };
 const angle = (a: number[], b: number[]): number => (Math.acos((a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!) / (Math.hypot(...(a as [number, number, number])) * Math.hypot(...(b as [number, number, number])))) * 180) / Math.PI;
+
+/** On an owned clock: let the glide to a ride's camera run its course (it takes about a second of the page's time, a little more for a far body), and check it ended. */
+async function glided(page: Page): Promise<void> {
+  await freezeClock(page);
+  await page.clock.runFor(2500);
+  await page.clock.resume();
+  expect((await statsOf(page)).ride.gliding, "the glide has ended").toBe(false);
+}
 
 async function measure(page: Page, ms: number) {
   const { before, after, seconds } = await timed(page, ms, async () => ({ c: await counts(page), s: await statsOf(page) }));
@@ -107,7 +115,7 @@ test.describe("moving", () => {
     await ownClock(page);
     await open(page);
     await rideButton(page, "ISS").click();
-    await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
+    await glided(page);
     const results: string[] = [];
     for (const [speed, least, most] of [[1, 5, 30.5], [60, 5, 30.5]] as const) {
       await setSpeed(page, speed);
@@ -120,7 +128,7 @@ test.describe("moving", () => {
       expect(m.glDraws / Math.max(1, m.s1.draws - m.s0.draws), "GL draw calls a frame").toBeLessThanOrEqual(45);
     }
     await rideButton(page, "Mars").click();
-    await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
+    await glided(page);
     await setSpeed(page, 86_400);
     await settle(page, 700);
     const mars = await measure(page, 4000);
