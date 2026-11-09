@@ -28,7 +28,8 @@ test("a zoom that needs finer pictures asks for the tiles in view, at the level 
   expect(magenta(before) || cyan(before), "the package's own picture is on the screen to begin with").toBe(false);
   expect((await statsOf(page)).tiles).toMatchObject({ level: null, held: 0, requested: 0 });
   expect(log.tiles, "nothing is fetched while the package's pictures are sharp enough").toEqual([]);
-  expect(await page.locator("kazoku-view-controls").getAttribute("zoom-max"), "the tiles lift the zoom limit").toBe("20");
+  expect(await page.locator(EARTH).getAttribute("zoom-max"), "the tiles lift the element's zoom limit").toBe("20");
+  await expect.poll(() => page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { limits: { zoomMax: number } }).limits.zoomMax), { message: "and the bar for it follows" }).toBe(20);
 
   const base = alive(await counts(page), "Texture");
   await setView(page, await zoomFor(page, 1000));

@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, type Browser, type Page } from "@playwright/test";
 import { acquireBrowserLock } from "@johnmorrisdotca/kazoku-ui/testing";
 import { build as esbuild } from "esbuild";
+import { checkHands, readElement } from "../e2e/hands.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const at = (...parts: string[]) => join(root, ...parts);
@@ -65,8 +66,9 @@ const serve = async (page: Page, origin: string, folder: string, prefix = ""): P
   });
 };
 
-const opened = async (browser: Browser, run: (page: Page, errors: string[]) => Promise<void>): Promise<void> => {
-  const context = await browser.newContext({ viewport: { width: 800, height: 700 }, reducedMotion: "reduce" });
+const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
+const opened = async (browser: Browser, run: (page: Page, errors: string[]) => Promise<void>, phone = false): Promise<void> => {
+  const context = await browser.newContext({ ...(phone ? PHONE : { viewport: { width: 800, height: 700 } }), reducedMotion: "reduce" });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -120,6 +122,9 @@ const unpkgAnswer = async (pathname: string): Promise<string | null> => {
 
 const pageOf = (file: string) => readFileSync(file, "utf8");
 
+/** The globe on the page carries its own hands: drag, wheel, keys and its range (0.1 to 20 times). */
+const hands = (page: Page): Promise<unknown> => checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), tall: true, limits: { zoomMin: 0.1, zoomMax: 20 } });
+
 // WebGL is drawn in software, never on the machine's graphics card (the family's rule; kazoku-ui 0.9.1 exports these as `SOFTWARE_GL_ARGS`).
 await acquireBrowserLock();
 const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
@@ -168,19 +173,27 @@ await step("typescript", () => {
   if (!/\d+ Japan 177/.test(run)) throw new Error(`unexpected output: ${run}`);
 });
 
-await step("cdn-jsdelivr", async () => {
-  await opened(browser, async (page) => {
-    await page.route("https://cdn.jsdelivr.net/**", async (route) => {
-      const { pathname } = new URL(route.request().url());
-      if (pathname !== "/npm/@johnmorrisdotca/chikyu-earth/element/+esm") return route.fulfill({ status: 404, body: "" });
-      return route.fulfill({ body: await bundleOf(modules("element.js")), contentType: "text/javascript" });
-    });
-    await page.route("https://page.test/**", (route) => route.fulfill({ body: pageOf(join(examples(""), "cdn-jsdelivr.html")), contentType: "text/html" }));
-    await page.goto("https://page.test/");
-    await seesGlobe(page);
-    if ((await page.locator("chikyu-earth").getAttribute("center")) !== "139.7,35.7") throw new Error("the element lost its attributes");
+// The one script tag and the one element: with nothing else on the page it zooms, drags and takes the keys, at a desk's size and a phone's.
+for (const [name, phone] of [["cdn-jsdelivr", false], ["cdn-jsdelivr-phone", true]] as const) {
+  await step(name, async () => {
+    await opened(
+      browser,
+      async (page) => {
+        await page.route("https://cdn.jsdelivr.net/**", async (route) => {
+          const { pathname } = new URL(route.request().url());
+          if (pathname !== "/npm/@johnmorrisdotca/chikyu-earth/element/+esm") return route.fulfill({ status: 404, body: "" });
+          return route.fulfill({ body: await bundleOf(modules("element.js")), contentType: "text/javascript" });
+        });
+        await page.route("https://page.test/**", (route) => route.fulfill({ body: pageOf(join(examples(""), "cdn-jsdelivr.html")), contentType: "text/html" }));
+        await page.goto("https://page.test/");
+        await seesGlobe(page);
+        if ((await page.locator("chikyu-earth").getAttribute("center")) !== "139.7,35.7") throw new Error("the element lost its attributes");
+        await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), tall: true, limits: { zoomMin: 0.1, zoomMax: 20 }, touch: phone });
+      },
+      phone,
+    );
   });
-});
+}
 
 await step("cdn-unpkg", async () => {
   await opened(browser, async (page) => {
@@ -224,7 +237,7 @@ await step("controls", async () => {
     await seesGlobe(page);
     await page.locator("kazoku-view-controls .bar").waitFor({ timeout: 20_000 });
     const before = await page.locator("chikyu-earth").evaluate((el) => el.shadowRoot?.innerHTML ?? "");
-    await page.locator("#globe").focus();
+    await page.locator("chikyu-earth").focus();
     for (let at = 0; at < 4; at += 1) await page.keyboard.press("ArrowRight");
     await page.waitForFunction((was) => document.querySelector("chikyu-earth")?.shadowRoot?.innerHTML !== was, before, { timeout: 10_000 });
   });
@@ -252,6 +265,7 @@ const viteApp = async (name: string, plugins: unknown[] = []): Promise<void> => 
     await serve(page, "https://app.test", out);
     await page.goto("https://app.test/");
     await seesGlobe(page);
+    await hands(page);
   });
 };
 
@@ -273,6 +287,7 @@ await step("satellites", async () => {
     await page.goto("https://app.test/");
     await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
     await page.waitForFunction(() => (Reflect.get(document.querySelector("chikyu-space")!, "stats") as { satellites: { placed: number } }).satellites.placed === 1, undefined, { timeout: 20_000 });
+    await checkHands(page, { selector: "chikyu-space", read: readElement(page, "chikyu-space"), tall: true, limits: { zoomMin: 0.000001, zoomMax: 2.5 } });
   });
 });
 
@@ -293,6 +308,8 @@ await step("ride", async () => {
       const height = (Math.hypot(...(stats.camera.position as [number, number, number])) - 1) * 6371;
       return stats.ride.riding && height > 380 && height < 470;
     }, undefined, { timeout: 20_000 });
+    await page.waitForFunction(() => (Reflect.get(document.querySelector("chikyu-space")!, "controller") as { limits: { zoomMin: number } }).limits.zoomMin === 0.5, undefined, { timeout: 5000 });
+    await checkHands(page, { selector: "chikyu-space", read: readElement(page, "chikyu-space"), tall: true, limits: { zoomMin: 0.5, zoomMax: 6 } });
   });
 });
 
@@ -343,6 +360,7 @@ await step("webpack", async () => {
     await serve(page, "https://app.test", out);
     await page.goto("https://app.test/");
     await seesGlobe(page);
+    await hands(page);
   });
 });
 
@@ -356,6 +374,7 @@ await step("angular", async () => {
     await serve(page, "https://app.test", out);
     await page.goto("https://app.test/");
     await seesGlobe(page);
+    await hands(page);
   });
 });
 
