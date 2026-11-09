@@ -37,7 +37,7 @@ test.describe("the layout", () => {
     expect(Math.abs(globe.width - globe.height)).toBeLessThan(1);
   });
 
-  test("Wide gives the view the whole width, puts the panel below, and the globe grows and stays round", async ({ page }) => {
+  test("Wide is theatre mode: the view takes the page's column, centred, the panel goes below, and the globe grows and stays round", async ({ page }) => {
     await open(page);
     const normal = await rect(page, "#globe");
     const mainBox = await rect(page, "main");
@@ -48,8 +48,11 @@ test.describe("the layout", () => {
     const side = await rect(page, ".kazoku-side");
     const globe = await rect(page, "#globe");
     const viewport = page.viewportSize()!;
-    expect(view.width, "the view takes the page's whole width").toBeGreaterThan(viewport.width - 40);
-    expect(view.width).toBeGreaterThan(mainBox.width - 1);
+    const wideMain = await rect(page, "main");
+    const pad = await page.locator("main").evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    expect(wideMain.width, "the page keeps its width (Wide is not the window's width)").toBeCloseTo(mainBox.width, 0);
+    expect(view.width, "the view takes the page's own column").toBeCloseTo(wideMain.width - 2 * pad, 0);
+    expect(Math.abs(view.x - wideMain.x - (wideMain.x + wideMain.width - view.x - view.width)), "and is centred").toBeLessThanOrEqual(1);
     expect(view.height, "no taller than 80vh").toBeLessThanOrEqual(viewport.height * 0.8 + 1);
     expect(bar.y, "the bar stays with the view, under it").toBeGreaterThanOrEqual(view.y + view.height - 1);
     expect(side.y, "the panel is below the bar").toBeGreaterThanOrEqual(bar.y + bar.height - 1);

@@ -41,7 +41,8 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
 #paper-inner { transform-origin: 0 0; width: max-content; }
 #paper-inner .kazoku-sheet { display: flex; flex-direction: column; gap: 6mm; }
 
-/* The Wide layout (kazoku-ui's wide-layout, whose rule is wide.css): a stage of the globe's felt, its bar under it, and the side panel. */
+/* The Wide layout (kazoku-ui's wide-layout, whose rule is wide.css): a stage of the globe's felt, its bar under it, and the side panel.
+   Wide is theatre mode: the globe takes the page's own column, out to where the panel was, and the panel moves below. The page keeps its width. */
 .stage-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .kazoku-stage { grid-template-rows: auto 1fr; row-gap: 12px; margin-bottom: 8px; }
 .kazoku-stage > .kazoku-view { grid-column: 1; grid-row: 1; }
@@ -55,7 +56,6 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
   .kazoku-stage > .kazoku-view, .kazoku-stage > kazoku-view-controls, .kazoku-stage > .kazoku-side { grid-column: 1; grid-row: auto; }
 }
 @media (min-width: 641px) {
-  [data-wide="on"] main { max-width: none; }
   [data-wide="on"] .kazoku-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   [data-wide="on"] .kazoku-stage > .kazoku-view, [data-wide="on"] .kazoku-stage > kazoku-view-controls, [data-wide="on"] .kazoku-stage > .kazoku-side { grid-column: 1; grid-row: auto; }
   /* the whole width: wide.css's 16:9 with a greatest height would otherwise narrow the view to 16:9 of that height, and leave it at the left */
