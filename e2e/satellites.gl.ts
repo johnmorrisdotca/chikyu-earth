@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { readFileSync } from "node:fs";
-import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, ownClock, settle, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -47,13 +47,8 @@ const setSpeed = async (page: Page, speed: number): Promise<void> => {
 
 /** What a stretch of time cost: frames drawn, GL draw calls, animation frames asked for, SGP4 calls, JS time in the satellites. */
 async function measure(page: Page, ms: number) {
-  const c0 = await counts(page);
-  const s0 = await statsOf(page);
-  const t0 = Date.now();
-  await page.waitForTimeout(ms);
-  const s1 = await statsOf(page);
-  const c1 = await counts(page);
-  const seconds = (Date.now() - t0) / 1000;
+  const { before, after, seconds } = await timed(page, ms, async () => ({ c: await counts(page), s: await statsOf(page) }));
+  const [c0, c1, s0, s1] = [before.c, after.c, before.s, after.s];
   return {
     seconds,
     frames: (s1.draws - s0.draws) / seconds,
@@ -148,6 +143,7 @@ test("paused with 6,000 satellites on: nothing is drawn, no frame asked for, no 
 });
 
 test("at real time a group on show draws once a second and runs SGP4 once a second, not once a frame", async ({ page }) => {
+  await ownClock(page);
   await open(page, "", "stations,starlink");
   await setSpeed(page, 1);
   await settle(page, 1500);
@@ -160,7 +156,8 @@ test("at real time a group on show draws once a second and runs SGP4 once a seco
 
 test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
-  test("6,000 satellites at 60 times real time: at most 30 frames a second, one SGP4 batch a second, one extra draw call, a few milliseconds of JavaScript a frame", async ({ page }) => {
+  test("6,000 satellites at 60 times real time: at most 30 frames a second, one SGP4 batch a second, one extra draw call", async ({ page }) => {
+    await ownClock(page);
     await open(page, "", "stations,starlink");
     const before = await measure(page, 100);
     await setSpeed(page, 60);
@@ -183,10 +180,19 @@ test.describe("moving", () => {
     const all = 2252 + 6000;
     expect(many.propagations, "SGP4 calls a second").toBeLessThanOrEqual(all * 1.5);
     expect(many.propagations).toBeGreaterThan(all * 0.5);
-    expect(many.stats.satellites.averageUpdateMs, "JavaScript a frame").toBeLessThan(4);
-    expect(many.stats.satellites.maxBatchMs, "one SGP4 batch").toBeLessThan(120);
     expect(many.stats.canvas.pixels).toBeLessThanOrEqual(6_000_000);
     expect(many.stats.contexts).toBe(1);
+  });
+
+  // The page's own stopwatch, not the test's clock: what is measured here is how long the work takes.
+  test("6,000 satellites at 60 times real time: a few milliseconds of JavaScript a frame, one SGP4 batch in well under a frame's worth of a second", async ({ page }) => {
+    await open(page, "", "stations,starlink");
+    await setSpeed(page, 60);
+    await addMany(page);
+    await settle(page, 1500);
+    const many = await measure(page, 6000);
+    expect(many.stats.satellites.averageUpdateMs, "JavaScript a frame").toBeLessThan(4);
+    expect(many.stats.satellites.maxBatchMs, "one SGP4 batch").toBeLessThan(120);
   });
 
   test("faster than 60 times real time the groups are hidden and SGP4 is not run, and the frame rate stays capped", async ({ page }) => {
@@ -232,6 +238,7 @@ test.describe("moving", () => {
   });
 
   test("at 60x the draws are capped at 30 a second; a reader who asked for reduced motion gets one step a second", async ({ page, browser }) => {
+    await ownClock(page);
     await open(page, "", "stations,starlink");
     await setSpeed(page, 60);
     await settle(page, 800);
@@ -242,6 +249,7 @@ test.describe("moving", () => {
 
     const context = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 1280, height: 900 } });
     const reduced = await context.newPage();
+    await ownClock(reduced);
     await open(reduced, "&speed=60", "stations,starlink");
     await setSpeed(reduced, 60);
     await settle(reduced, 800);

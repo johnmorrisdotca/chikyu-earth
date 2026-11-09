@@ -81,11 +81,13 @@ test("ten thousand markers cluster and place labels in a few milliseconds", () =
     ys[i] = (i * 104729) % 400;
     idx[i] = i;
   }
-  const t0 = performance.now();
+  // the processor time this test's own work took, not the wall clock: a busy machine makes the wall clock longer, not the work
+  const t0 = process.cpuUsage();
   const clusters = clusterPoints(idx, n, xs, ys, 28);
   const items = clusters.filter((c) => c.members.length === 1).map((c) => ({ x: c.x, y: c.y, r: 4, w: 50, h: 20, priority: 0 }));
   placeLabels(items, 400, 400, 24);
-  const ms = performance.now() - t0;
+  const used = process.cpuUsage(t0);
+  const ms = (used.user + used.system) / 1000;
   assert.ok(clusters.length <= (Math.ceil(400 / 28) + 1) ** 2);
   assert.ok(ms < 100, `${ms.toFixed(1)} ms`);
 });

@@ -39,8 +39,7 @@ test.describe("turning", () => {
     const holder = page.locator("chikyu-earth");
     await expect(holder.locator("svg")).toBeVisible();
     const before = await holder.evaluate((el) => el.shadowRoot?.innerHTML ?? "");
-    await page.waitForTimeout(2600);
-    expect(await holder.evaluate((el) => el.shadowRoot?.innerHTML ?? "")).not.toBe(before);
+    await expect.poll(() => holder.evaluate((el) => el.shadowRoot?.innerHTML ?? ""), { timeout: 20_000 }).not.toBe(before);
 
     await page.goto(`${EMBED}?center=0,0`);
     await expect(page.locator("chikyu-earth svg")).toBeVisible();

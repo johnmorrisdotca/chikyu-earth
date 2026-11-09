@@ -3,7 +3,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createSatellites, type ElementSet } from "../src/satellites/index.ts";
-import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, ownClock, settle, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -53,13 +53,8 @@ const issAt = (ms: number): [number, number, number] => {
 const angle = (a: number[], b: number[]): number => (Math.acos((a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!) / (Math.hypot(...(a as [number, number, number])) * Math.hypot(...(b as [number, number, number])))) * 180) / Math.PI;
 
 async function measure(page: Page, ms: number) {
-  const c0 = await counts(page);
-  const s0 = await statsOf(page);
-  const t0 = Date.now();
-  await page.waitForTimeout(ms);
-  const s1 = await statsOf(page);
-  const c1 = await counts(page);
-  const seconds = (Date.now() - t0) / 1000;
+  const { before, after, seconds } = await timed(page, ms, async () => ({ c: await counts(page), s: await statsOf(page) }));
+  const [c0, c1, s0, s1] = [before.c, after.c, before.s, after.s];
   return { frames: (s1.draws - s0.draws) / seconds, glDraws: c1.draws - c0.draws, requests: c1.rafRequests - c0.rafRequests, gameSeconds: (s1.time - s0.time) / 1000 / seconds, s0, s1 };
 }
 
@@ -109,6 +104,7 @@ test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
 
   test("it animates continuously but at most 30 frames a second: real time, a minute a second and 60x on the ISS, Mars at a day a second", async ({ page }) => {
+    await ownClock(page);
     await open(page);
     await rideButton(page, "ISS").click();
     await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
@@ -194,6 +190,7 @@ test.describe("moving", () => {
 });
 
 test("a reader who asked for reduced motion gets a jump and one step a second", async ({ page }) => {
+  await ownClock(page);
   await open(page);
   await rideButton(page, "ISS").click();
   expect((await statsOf(page)).ride.gliding, "no glide").toBe(false);

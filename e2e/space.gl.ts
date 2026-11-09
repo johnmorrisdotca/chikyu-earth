@@ -1,6 +1,6 @@
 // The space view in a real browser: the right things in the right places, and the same performance budget as the Earth from space.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT, readCounts, alive, counts, pixelAt, settle } from "./gl.ts";
+import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -68,14 +68,12 @@ test("paused, nothing is drawn and no frame is asked for; at real time, at most 
 });
 
 test("a day a second: time runs at that rate, at most 30 draws a second, a lookup of the ephemeris about once a second", async ({ page }) => {
+  // the test owns the clock: a second here is exactly a second of the page's time, however slowly this machine draws
+  await ownClock(page);
   await open(page);
   await page.locator("#time-speed button[data-v=\"86400\"]").dispatchEvent("click");
   await settle(page, 500);
-  const s0 = await statsOf(page);
-  const t0 = Date.now();
-  await page.waitForTimeout(5000);
-  const s1 = await statsOf(page);
-  const seconds = (Date.now() - t0) / 1000;
+  const { before: s0, after: s1, seconds } = await timed(page, 5000, () => statsOf(page));
   const perSecond = (s1.time - s0.time) / 86_400_000 / seconds;
   const draws = (s1.draws - s0.draws) / seconds;
   const lookups = (s1.lookups - s0.lookups) / seconds;
