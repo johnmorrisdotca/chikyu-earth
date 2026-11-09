@@ -5,24 +5,24 @@ import { checkHands, readBar, readElement } from "./hands.ts";
 
 const LINE = { zoomMin: 0.1, zoomMax: 20 };
 
-test("the demo's line globe: the bar's hands drag, wheel, key and stop at the element's limits", async ({ page }, info) => {
+test("the demo's line globe: the bar's hands drag, wheel, key and stop at the element's limits", async ({ page }) => {
   await page.goto("/chikyu-earth/");
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
   await expect(page.locator("chikyu-earth")).toHaveAttribute("data-kazoku-bar", "");
-  await checkHands(page, { selector: "chikyu-earth", read: readBar(page), limits: LINE, touch: info.project.name === "chromium-phone" });
+  await checkHands(page, { selector: "chikyu-earth", read: readBar(page), limits: LINE, touch: true });
 });
 
-test("the code builder's preview carries its own hands", async ({ page }, info) => {
+test("the code builder's preview carries its own hands", async ({ page }) => {
   await page.goto("/chikyu-earth/builder.html");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
   const preview = '[part="preview"] chikyu-earth';
   await expect(page.locator(preview)).toHaveCount(1);
   await expect(page.locator(preview)).not.toHaveAttribute("data-kazoku-bar", "");
-  await checkHands(page, { selector: preview, read: readElement(page, preview), limits: LINE, tall: true, touch: info.project.name === "chromium-phone" });
+  await checkHands(page, { selector: preview, read: readElement(page, preview), limits: LINE, tall: true, touch: true });
 });
 
-test("the embed page is still by default, and with turn=1 the element carries its hands", async ({ page }, info) => {
+test("the embed page is still by default, and with turn=1 the element carries its hands", async ({ page }) => {
   await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20");
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   await expect(page.locator("chikyu-earth")).toHaveAttribute("controls", "none");
@@ -37,7 +37,7 @@ test("the embed page is still by default, and with turn=1 the element carries it
   await page.goto("/chikyu-earth/embed.html?look=thick&center=0,20&turn=1");
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   await expect(page.locator("chikyu-earth")).not.toHaveAttribute("controls", "none");
-  await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), limits: LINE, wheel: "event", touch: info.project.name === "chromium-phone" });
+  await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), limits: LINE, wheel: "event", touch: true });
 });
 
 test("controls=none takes the hands off a line globe, and zoom-max sets its range", async ({ page }) => {

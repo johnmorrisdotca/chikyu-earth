@@ -60,6 +60,7 @@ test.describe("turning", () => {
     await expect(page.locator("chikyu-earth svg")).toBeVisible();
     await page.evaluate(() => {
       Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await page.waitForTimeout(300);

@@ -188,7 +188,7 @@ for (const [name, phone] of [["cdn-jsdelivr", false], ["cdn-jsdelivr-phone", tru
         await page.goto("https://page.test/");
         await seesGlobe(page);
         if ((await page.locator("chikyu-earth").getAttribute("center")) !== "139.7,35.7") throw new Error("the element lost its attributes");
-        await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), tall: true, limits: { zoomMin: 0.1, zoomMax: 20 }, touch: phone });
+        await checkHands(page, { selector: "chikyu-earth", read: readElement(page, "chikyu-earth"), tall: true, limits: { zoomMin: 0.1, zoomMax: 20 }, touch: true });
       },
       phone,
     );

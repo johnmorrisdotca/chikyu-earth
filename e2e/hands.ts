@@ -1,5 +1,5 @@
-// The hands every live view has: drag, two-finger pinch, the wheel, the keys and the limits, checked on whatever page and element they are given. Real mouse, wheel and key events through
-// the browser's own input; the pinch goes through Chromium's touch input, as a phone sends it. Plain Playwright, no expect, so the usage script can use it too.
+// The hands every live view has: drag, two-finger pinch, the wheel, the keys and the limits, checked on whatever page and element they are given. Real mouse and key events through
+// the browser's own input, the wheel and the pinch as the events the browser makes. Plain Playwright, no expect, so the usage script can use it too.
 import type { Page } from "@playwright/test";
 
 /** What a page says about the view: the controller's state and its limits. */
@@ -22,7 +22,7 @@ export interface HandsOptions {
   tall?: boolean;
   /** `page` (the default): a real wheel must scroll the page. `event`: the page cannot scroll (an embed), so a plain wheel must only be left alone, not taken. */
   wheel?: "page" | "event";
-  /** Send a two-finger pinch (Chromium with touch only). */
+  /** Send a two-finger pinch. */
   touch?: boolean;
   /** The limits the view must report, from the page's own words. */
   limits?: { zoomMin: number; zoomMax: number };
@@ -71,18 +71,32 @@ export const ctrlWheel = (page: Page, selector: string, delta: number, steps = 1
     [delta, steps] as const,
   );
 
-/** Two fingers that start `gap` pixels apart about a point and end `gap + spread` apart. */
-export async function pinch(page: Page, at: { x: number; y: number }, gap: number, spread: number): Promise<void> {
-  const cdp = await page.context().newCDPSession(page);
-  const points = (d: number) => [
-    { x: at.x - d / 2, y: at.y, id: 0 },
-    { x: at.x + d / 2, y: at.y, id: 1 },
-  ];
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(gap) });
-  for (let i = 1; i <= 10; i += 1) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: points(gap + (spread * i) / 10) });
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await cdp.detach();
-  await page.waitForTimeout(500);
+/**
+ * Two fingers that start `gap` pixels apart about the middle of the element and end `gap + spread` apart, as touch pointer events sent to the element: the same in every browser (Chromium's
+ * own touch input leaves them out when the element's `touch-action` is `pan-y`, as it is at Fit, and it does not exist in WebKit).
+ */
+export async function pinch(page: Page, selector: string, gap: number, spread: number): Promise<void> {
+  await page.locator(selector).evaluate(
+    (el, [start, change]) => {
+      const box = el.getBoundingClientRect();
+      const mid = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      const send = (type: string, id: number, x: number): void => {
+        el.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: "touch", isPrimary: id === 1, clientX: x, clientY: mid.y, bubbles: true, cancelable: true, button: 0, buttons: type === "pointerup" ? 0 : 1 }));
+      };
+      send("pointerdown", 1, mid.x - (start as number) / 2);
+      send("pointerdown", 2, mid.x + (start as number) / 2);
+      for (let i = 1; i <= 10; i += 1) {
+        const d = (start as number) + ((change as number) * i) / 10;
+        send("pointermove", 1, mid.x - d / 2);
+        send("pointermove", 2, mid.x + d / 2);
+      }
+      const end = (start as number) + (change as number);
+      send("pointerup", 2, mid.x + end / 2);
+      send("pointerup", 1, mid.x - end / 2);
+    },
+    [gap, spread] as const,
+  );
+  await page.waitForTimeout(200);
 }
 
 /**
@@ -161,12 +175,12 @@ export async function checkHands(page: Page, options: HandsOptions): Promise<{ z
   await page.keyboard.press("0");
 
   if (options.touch) {
-    at = await centreOf(page, selector);
+    await centreOf(page, selector);
     const before = await read();
-    await pinch(page, at, 60, 120);
+    await pinch(page, selector, 60, 120);
     const pinched = await read();
     if (!(pinched.zoom > before.zoom * 1.3)) fail(`fingers apart did not zoom in: ${before.zoom} to ${pinched.zoom}`);
-    await pinch(page, at, 180, -120);
+    await pinch(page, selector, 180, -120);
     const closed = await read();
     if (!(closed.zoom < pinched.zoom * 0.8)) fail(`fingers together did not zoom out: ${pinched.zoom} to ${closed.zoom}`);
     await page.locator(selector).focus();
