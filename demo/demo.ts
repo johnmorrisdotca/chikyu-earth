@@ -29,9 +29,6 @@ const say = (key: string, values: Record<string, string | number> = {}): string 
   return (chooser?.word(key) ?? WORDS.en[key] ?? key).replace(/\{(\w+)\}/g, (all, name: string) => String(values[name] ?? all));
 };
 
-/** The most zoom on the realistic Earth when its tiles are there: 4 times the package pictures' 5x, as the finest tiles are 4 times wider than the widest picture. */
-const TILES_ZOOM_MAX = 20;
-
 const flat = document.querySelector<ChikyuEarth>("chikyu-earth");
 const controls = document.querySelector("kazoku-view-controls");
 const stage = document.querySelector<HTMLElement>("#globe");
@@ -91,9 +88,12 @@ if (flat && controls && stage) {
     status.textContent = text ?? "";
   };
 
-  // A full orthographic redraw is costly; Auto-turn is so slow that one a second is smooth and exact.
-  const AUTO_REDRAW_MS = 1000;
-  let autoDrawnAt = 0;
+  /** The bar's hands are the only ones on the element it is for: the element applies what the bar says. */
+  const barFor = (element: HTMLElement): void => {
+    element.id ||= "earth-view";
+    element.tabIndex = 0;
+    controls.setAttribute("for", element.id);
+  };
   controls.addEventListener("kazoku-viewchange", (event) => {
     const detail = (event as CustomEvent<ViewChangeDetail>).detail;
     if (real) {
@@ -104,10 +104,7 @@ if (flat && controls && stage) {
       space.setView(detail, detail.final);
       return;
     }
-    const now = performance.now();
-    const auto = detail.reason === "auto" && now - autoDrawnAt >= AUTO_REDRAW_MS;
-    if (auto) autoDrawnAt = now;
-    flat.setView(detail, detail.final || auto, detail.reason !== "auto");
+    flat.setView(detail, detail.final, detail.reason !== "auto");
   });
 
   const state = (): ViewChangeDetail => Reflect.get(controls, "state") as ViewChangeDetail;
@@ -119,8 +116,7 @@ if (flat && controls && stage) {
     missionRow?.leave();
     real = null;
     space = null;
-    controls!.setAttribute("zoom-min", "1");
-    controls!.setAttribute("zoom-max", "5");
+    barFor(flat!);
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
@@ -438,10 +434,7 @@ if (flat && controls && stage) {
     for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
     for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
   };
-  const setRideZoom = (riding: boolean, keepTurn = false): void => {
-    // riding at a body, the zoom narrows the view (a little either way); otherwise it is the distance from the Earth
-    controls!.setAttribute("zoom-min", riding && rideView === "from" ? "0.5" : "0.000001");
-    controls!.setAttribute("zoom-max", riding && rideView === "from" ? "6" : "2.5");
+  const setRideZoom = (keepTurn = false): void => {
     Reflect.get(controls!, "controller").set(keepTurn ? { zoom: 1 } : { zoom: 1, yaw: 0, tilt: 0 }, true, "ride");
   };
   const speakRide = (): void => {
@@ -463,7 +456,7 @@ if (flat && controls && stage) {
   function stopRide(keepZoom = false): void {
     rideKey = null;
     space?.ride(null);
-    if (!keepZoom && space) setRideZoom(false);
+    if (!keepZoom && space) setRideZoom();
     markRide();
     speakRide();
     for (const key of ["ride", "rview", "rlook"]) address.set(key, null);
@@ -511,8 +504,8 @@ if (flat && controls && stage) {
       space.selectSatellite(null);
       if (satInfo) satInfo.hidden = true;
     } else if (typeof target !== "string") showSatellite(null);
-    setRideZoom(true, keepTurn);
     space.ride(target, { view: rideView, look: rideLook });
+    setRideZoom(keepTurn);
     speakRide();
     address.set("ride", key);
     address.set("rview", rideView === "follow" ? "follow" : null);
@@ -620,9 +613,8 @@ if (flat && controls && stage) {
       markers = null;
       listening?.abort();
       flat!.hidden = true;
-      controls!.setAttribute("zoom-min", "0.000001");
-      controls!.setAttribute("zoom-max", "2.5");
       stage!.append(element);
+      barFor(element);
       space = element;
       speakSpace();
       Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
@@ -655,10 +647,6 @@ if (flat && controls && stage) {
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
       element.setAttribute("texture-base", "textures/");
       element.setAttribute("tiles", "tiles/");
-      controls!.setAttribute("zoom-min", "1");
-      controls!.setAttribute("zoom-max", "5");
-      // the package's pictures are sharp to about 5x; with the tiles the detail runs 4 times further
-      element.addEventListener("chikyu-tiles", () => controls!.setAttribute("zoom-max", String(TILES_ZOOM_MAX)));
       const clouds = address.get("clouds");
       const lights = address.get("lights");
       const when = address.get("time");
@@ -673,6 +661,7 @@ if (flat && controls && stage) {
       });
       flat!.hidden = true;
       stage!.append(element);
+      barFor(element);
       real = element;
       element.setView(state(), true);
       mountMarkers(element);

@@ -1,6 +1,7 @@
 // <chikyu-space>: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through kazoku-ui's shared renderer. Optional:
 // the line globe and the Earth from space need neither this nor astronomy-engine. It draws only when something changes, at most 30 times a second.
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
+import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "../adopt.ts";
 import type { GeoPoint } from "../types.ts";
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
@@ -136,6 +137,12 @@ const EARTH_RATE = 360 / 86_164.0905;
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
 const REAL_TIME_TICK_MS = 60_000;
+/**
+ * Tilt to the poles. The zoom is the camera's distance: a millionth of Fit takes in the whole solar system (the views of the planets and their distances need that much), and 2.5 times is as close as the Earth's 4096 pixel picture and the body textures stay sharp.
+ * Riding at a body looking at the Earth, the zoom only narrows the camera's field a little either way: 0.5 to 6.
+ */
+const LIMITS = { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 };
+const RIDE_ZOOM = { "zoom-min": "0.5", "zoom-max": "6" };
 
 const readCentre = (value: string | null): GeoPoint | null => {
   if (!value) return null;
@@ -153,6 +160,8 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
+ *
+ * It carries kazoku-ui's controls itself: a drag turns the view, two fingers pinch, Ctrl and the wheel zoom (a plain wheel at Fit scrolls the page) and the arrow keys, + and - work once it is focused. The zoom runs from a millionth of Fit (the whole solar system) to 2.5 times, and from 0.5 to 6 times while riding from a body. `controls="none"` turns the hands off; `zoom-min` and `zoom-max` change the range. A `<kazoku-view-controls for="...">` on the element takes the hands over, and the page applies its events with `setView`.
  *
  * @example
  * ```ts no-run
@@ -186,6 +195,13 @@ export class ChikyuSpace extends HTMLElement {
   #names: Partial<Record<BodyName, string>> = {};
   #hint = "choose to look at it";
   #tiers: Record<string, number> = {};
+  #hands: ElementControls | undefined;
+  #ridden: Partial<Record<keyof typeof RIDE_ZOOM, string>> = {};
+
+  /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
+  get controller(): ViewController | undefined {
+    return this.#hands?.controller;
+  }
 
   connectedCallback(): void {
     this.#model.centre = readCentre(this.getAttribute("center")) ?? this.#model.centre;
@@ -246,11 +262,15 @@ export class ChikyuSpace extends HTMLElement {
     this.#last = performance.now();
     this.#schedule();
     this.addEventListener("pointerdown", this.#down);
+    this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#labelBox.addEventListener("click", this.#labelClick);
     this.#labelBox.addEventListener("focusin", this.#labelFocus);
   }
 
   disconnectedCallback(): void {
+    this.#hands?.unbind();
+    this.#hands = undefined;
+    this.#zoomRange(false);
     this.removeEventListener("pointerdown", this.#down);
     window.removeEventListener("pointerup", this.#up, true);
     clearTimeout(this.#timer);
@@ -413,6 +433,7 @@ export class ChikyuSpace extends HTMLElement {
       if (typeof target === "string" && view === "follow") model.focus = target;
       else if (wasRiding) model.focus = this.#focusBeforeRide;
     }
+    this.#zoomRange(model.ride?.view === "from");
     this.#lostTold = false;
     const pose = model.pose;
     model.transition = (options.smooth ?? true) && !reduced && pose.valid ? { start: performance.now(), duration: 1200, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
@@ -420,6 +441,21 @@ export class ChikyuSpace extends HTMLElement {
     this.#schedule();
     this.#gate?.request();
     this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+  }
+
+  /** From a body the zoom only narrows the field a little, so the range is 0.5 to 6: the `zoom-min` and `zoom-max` attributes, unless the page set them itself. */
+  #zoomRange(from: boolean): void {
+    for (const name of ["zoom-min", "zoom-max"] as const) {
+      const mine = this.#ridden[name];
+      if (this.hasAttribute(name) && this.getAttribute(name) !== mine) continue;
+      if (from) {
+        this.#ridden[name] = RIDE_ZOOM[name];
+        this.setAttribute(name, RIDE_ZOOM[name]);
+      } else {
+        if (mine !== undefined) this.removeAttribute(name);
+        delete this.#ridden[name];
+      }
+    }
   }
 
   /** What the camera is riding along with now, or null. */

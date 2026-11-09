@@ -1,10 +1,11 @@
 // <chikyu-earth-realistic>: the Earth from space as a web component, drawn by kazoku-ui's shared 3D renderer (one WebGL context for the
 // page) with three.js, which is the page's own. Optional entry point: the flat `<chikyu-earth>` needs neither. It draws only when something
 // changes, at most 30 times a second, and nothing at all while it is out of sight or the tab is hidden.
+import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
-import { createEarthItem, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
+import { createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
@@ -33,6 +34,10 @@ const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often while the time is "now": 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
 const MIN_TICK_MS = 1000;
+/** Tilt to the poles; zoom from a tenth of Fit, which leaves the whole Earth small in the view, to 5 times: the package's own pictures are sharp to about 5 times. */
+const LIMITS = { tiltMax: 90, zoomMin: 0.1, zoomMax: 5 };
+/** With the finer tiles the detail runs 4 times further: the finest level is 4 times wider than the widest picture. */
+const TILES_ZOOM_MAX = "20";
 
 const readCentre = (value: string | null): GeoPoint | null => {
   if (!value) return null;
@@ -98,6 +103,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #overlay: HTMLElement | undefined;
   #pose: OverlayPose | null = null;
   #listeners = new Set<(pose: OverlayPose) => void>();
+  #hands: ElementControls | undefined;
+  #reach: string | null = null;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
   };
@@ -142,10 +149,17 @@ export class ChikyuEarthRealistic extends HTMLElement {
       textureBase: () => this.#textureBase(),
       cap: () => this.#textureCap(),
       tiles: () => this.tiles ?? undefined,
-      onTiles: (layers) => this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } })),
+      onTiles: (layers) => {
+        if (!this.hasAttribute("zoom-max") || this.getAttribute("zoom-max") === this.#reach) {
+          this.#reach = TILES_ZOOM_MAX;
+          this.setAttribute("zoom-max", TILES_ZOOM_MAX);
+        }
+        this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } }));
+      },
       drift: 1.5,
       invalidate: () => this.#gate?.soon(),
       onPose: (pose) => {
+        if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
       },
@@ -165,6 +179,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     });
     this.addEventListener("pointerdown", this.#take);
     this.addEventListener("focusin", this.#take);
+    this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#startTick();
     this.#locate();
   }
@@ -172,6 +187,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
   disconnectedCallback(): void {
     this.removeEventListener("pointerdown", this.#take);
     this.removeEventListener("focusin", this.#take);
+    this.#hands?.unbind();
+    this.#hands = undefined;
+    if (this.#reach !== null && this.getAttribute("zoom-max") === this.#reach) this.removeAttribute("zoom-max");
+    this.#reach = null;
     clearInterval(this.#tick);
     this.#tick = undefined;
     this.#gate?.cancel();
@@ -189,6 +208,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
     else if (name === "tiles") this.#gate?.soon();
+  }
+
+  /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
+  get controller(): ViewController | undefined {
+    return this.#hands?.controller;
   }
 
   /** Where the finer map tiles are served from (a folder with `manifest.json`), or `null` for none; the attribute `tiles`. The Earth loads only the tiles in view, over its own pictures. */

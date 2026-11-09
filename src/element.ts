@@ -1,5 +1,6 @@
 // <chikyu-earth>: the globe as a web component. A shared view controller supplies its yaw, tilt, zoom and pan;
 // it opens centred on where you are (the `center` attribute wins over geolocation). Importing registers it once.
+import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "./adopt.ts";
 import { globe } from "./globe.ts";
 import { cleanStyle } from "./styles.ts";
@@ -17,10 +18,15 @@ const readCentre = (value: string | null): GeoPoint | null => {
 
 /** The least time between two redraws of the projection while a hand is turning the globe: 30 a second at most. */
 const LIVE_MS = 1000 / 30;
+/** The automatic turn is slow enough that one redraw a second is smooth. */
+const AUTO_MS = 1000;
+/** Tilt to the poles; zoom from a tenth of Fit, which leaves the whole globe small in the view, to 20 times: the outlines are Natural Earth 1:110m, and past about 20 times their straight segments are longer than the view is wide. */
+const LIMITS = { tiltMax: 90, zoomMin: 0.1, zoomMax: 20 };
 const STYLE = ":host{display:block;position:relative}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}";
 
 /**
  * The `<chikyu-earth>` custom element: the line globe, drawn as SVG in its shadow root. Importing this entry point registers the tag once. It takes the attributes `size` (pixels, 320 by default), `center` (`"lon,lat"`; wins over the browser's location), `look` (`line` or `thick`; `style` is the older name for it, and a framework that reads `style` as CSS cannot use it) and `graticule`, and a shared view controller's camera through `setView`.
+ * It carries kazoku-ui's controls itself: a drag turns it, two fingers pinch, Ctrl and the wheel zoom (a plain wheel at Fit scrolls the page) and the arrow keys, + and - work once it is focused, from a tenth of Fit to 20 times. `controls="none"` turns them off; `zoom-min` and `zoom-max` change the range. A `<kazoku-view-controls for="...">` on the element takes the hands over, and the page applies its events with `setView`.
  *
  * @example
  * ```ts no-run
@@ -43,6 +49,12 @@ export class ChikyuEarth extends HTMLElement {
   #pose: OverlayPose | null = null;
   #liveTimer: ReturnType<typeof setTimeout> | undefined;
   #liveAt = 0;
+  #hands: ElementControls | undefined;
+
+  /** The controller behind the element's own hands (`play`, `set`, `fit`, `state`), while it is in a page. */
+  get controller(): ViewController | undefined {
+    return this.#hands?.controller;
+  }
 
   /** Where the view is centred now: the `center` attribute, else the reader's place once the browser has answered. */
   get centre(): GeoPoint {
@@ -65,12 +77,20 @@ export class ChikyuEarth extends HTMLElement {
   disconnectedCallback(): void {
     clearTimeout(this.#liveTimer);
     this.#liveTimer = undefined;
+    this.#hands?.unbind();
+    this.#hands = undefined;
   }
 
   connectedCallback(): void {
     this.#centre = readCentre(this.getAttribute("center")) ?? { lon: 0, lat: 0 };
     this.#render();
     this.#locate();
+    this.#hands = carryControls(this, {
+      initial: this.#view,
+      grabRadius: "fit",
+      limits: LIMITS,
+      onChange: (state, info) => this.setView(state, info.final, info.reason !== "auto"),
+    });
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -92,12 +112,16 @@ export class ChikyuEarth extends HTMLElement {
       this.#render();
       return;
     }
+    const turned = view.yaw !== this.#drawn.yaw || view.tilt !== this.#drawn.tilt;
+    if (!live && turned && performance.now() - this.#liveAt >= AUTO_MS) {
+      this.#render();
+      return;
+    }
     this.#transform();
-    if (live && (view.yaw !== this.#drawn.yaw || view.tilt !== this.#drawn.tilt) && this.#liveTimer === undefined) {
+    if (live && turned && this.#liveTimer === undefined) {
       const wait = Math.max(0, LIVE_MS - (performance.now() - this.#liveAt));
       this.#liveTimer = setTimeout(() => {
         this.#liveTimer = undefined;
-        this.#liveAt = performance.now();
         this.#render();
       }, wait);
     }
@@ -161,6 +185,7 @@ export class ChikyuEarth extends HTMLElement {
   }
 
   #render(): void {
+    this.#liveAt = performance.now();
     const size = Number(this.getAttribute("size")) || 320;
     const style = cleanStyle(this.getAttribute("look") ?? this.getAttribute("style"));
     const svg = globe({ size, style, centre: this.#centre, view: this.#view, graticule: this.hasAttribute("graticule") });

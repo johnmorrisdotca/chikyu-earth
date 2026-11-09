@@ -12,18 +12,16 @@
 
       <section class="fam-felt earth-stage" aria-labelledby="stage-h">
         <h2 id="stage-h" class="fam-sr" data-say="stage">Earth view</h2>
-        <div id="globe" class="globe-view" tabindex="0" role="group" aria-label="Earth view" data-say-label="stage">
-          <chikyu-earth id="earth" size="420" style="line"></chikyu-earth>
+        <div id="globe" class="globe-view" role="group" aria-label="Earth view" data-say-label="stage">
+          <chikyu-earth id="earth" size="420" style="line" tabindex="0"></chikyu-earth>
         </div>
       </section>
       <kazoku-view-controls
         id="view-controls"
-        for="globe"
+        for="earth"
         layout="horizontal"
         address
         controls="advanced"
-        zoom-min="1"
-        zoom-max="5"
         tilt-max="90"
         speed="0.004178"
         autoplay

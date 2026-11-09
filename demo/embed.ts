@@ -2,7 +2,7 @@
 //   ?look=line|thick|realistic|space   the drawing (line by default; realistic and space need WebGL and fall back to thick)
 //   &center=lon,lat              where it is centred (0,20 by default; `me` asks the browser for the reader's place)
 //   &graticule=1                 the lines of longitude and latitude
-//   &turn=0|1|auto               still (default), turned by hand, or turning by itself at the Earth's own rate
+//   &turn=0|1|auto               still (default), turned, zoomed and moved by hand (drag, pinch, Ctrl and the wheel, the keys), or also turning by itself at the Earth's own rate
 //   &time=2026-06-21T12:00Z      the realistic look's moment (the real Sun at that time); now by default
 //   &clouds=off &lights=off      the realistic look's layers
 //   &speed=0                     the space look's clock: game seconds a second (0 holds still, the default; 1 is real time, 86400 a day a second)
@@ -13,24 +13,32 @@
 //   &ride=iss|css|starlink|Moon|Mars &rview=follow &rlook=horizon   the space look's camera riding along with a body, from it (default) or behind it, looking down (default) or at the horizon
 //   &body=Mars &zoom=moon        the space look's camera (a number is the zoom itself): the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system, or Jupiter-moons, Saturn-moons ...)
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
-import { createViewController, type ViewState } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import "../src/element.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
-import type { GlobeView } from "../src/types.ts";
-import { discRadius } from "../src/realistic/earth.ts";
 
 const query = new URLSearchParams(location.search);
 const frame = document.getElementById("frame")!;
 const turn = query.get("turn");
 const interactive = turn === "1" || turn === "auto";
-frame.dataset["turn"] = interactive ? "1" : "0";
 
 const centre = query.get("center") ?? "0,20";
 const look = query.get("look");
-const AUTO_REDRAW_MS = 1000;
+
+/** Still, unless the address asks for hands: the elements carry them, and `controls="none"` takes them off. */
+const still = (element: HTMLElement): void => {
+  if (!interactive) element.setAttribute("controls", "none");
+};
+
+/** Turn by itself at the Earth's own rate, on the element that is showing. */
+const autoTurn = (): void => {
+  const view = (earth as ChikyuEarth).controller;
+  if (turn !== "auto" || !view) return;
+  view.speed = 0.004178;
+  view.play();
+};
 
 function mount(): ChikyuEarth | ChikyuEarthRealistic {
   const flat = document.createElement("chikyu-earth") as ChikyuEarth;
@@ -38,6 +46,7 @@ function mount(): ChikyuEarth | ChikyuEarthRealistic {
   flat.setAttribute("look", look === "thick" || look === "realistic" ? "thick" : "line");
   if (centre !== "me") flat.setAttribute("center", centre);
   if (query.get("graticule") === "1") flat.setAttribute("graticule", "");
+  still(flat);
   frame.append(flat);
   return flat;
 }
@@ -47,7 +56,6 @@ const groupIndex = (file: GroupFile, noradId: number): number => file.rows.findI
 
 const flat = mount();
 let earth: ChikyuEarth | ChikyuEarthRealistic | ChikyuSpace = flat;
-let real = false;
 let space: ChikyuSpace | undefined;
 let startZoom = 1;
 
@@ -66,12 +74,12 @@ if (look === "realistic") {
     element.remove();
     flat.hidden = false;
     earth = flat;
-    real = false;
+    autoTurn();
   });
   flat.hidden = true;
+  still(element);
   frame.append(element);
   earth = element;
-  real = true;
 }
 
 if (look === "space") {
@@ -102,10 +110,11 @@ if (look === "space") {
     element.remove();
     flat.hidden = false;
     earth = flat;
-    real = false;
     space = undefined;
+    autoTurn();
   });
   flat.hidden = true;
+  still(element);
   frame.append(element);
   earth = element;
   space = element;
@@ -114,7 +123,7 @@ if (look === "space") {
   const preset = query.get("zoom");
   if (preset?.endsWith("-moons") && !body) element.body = preset.slice(0, -6) as BodyName;
   if (preset) startZoom = Number.isFinite(Number(preset)) && Number(preset) > 0 ? Number(preset) : element.zoomFor(preset as SpacePreset);
-  element.setView({ yaw: 0, tilt: 0, zoom: startZoom });
+  element.controller?.set({ zoom: startZoom });
 
   const listed = (query.get("satellites") ?? "").split(",").filter((name) => name in GROUP_STYLE);
   const rideKey = query.get("ride");
@@ -152,53 +161,9 @@ if (look === "space" && (query.get("ride") === "Moon" || query.get("ride") === "
 }
 
 if (interactive) {
-  frame.tabIndex = 0;
   frame.setAttribute("role", "group");
   frame.setAttribute("aria-label", "Earth view");
-  let drawnAt = 0;
-  const view = createViewController({
-    speed: 0.004178,
-    zoom: space ? startZoom : "fit",
-    grabRadius: space ? undefined : real ? discRadius(frame.clientWidth, frame.clientWidth, 1) : "fit",
-    limits: space ? (query.get("ride") && query.get("rview") !== "follow" ? { tiltMax: 90, zoomMin: 0.5, zoomMax: 6 } : { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 }) : { tiltMax: 90, zoomMin: 1, zoomMax: 5 },
-    onChange(state: ViewState, info) {
-      const detail: GlobeView = { yaw: state.yaw, tilt: state.tilt, zoom: state.zoom, panX: state.panX, panY: state.panY };
-      if (space) {
-        space.setView(detail, info.final);
-        return;
-      }
-      if (real) {
-        (earth as ChikyuEarthRealistic).setView(detail, info.final);
-        return;
-      }
-      const now = performance.now();
-      const auto = info.reason === "auto" && now - drawnAt >= AUTO_REDRAW_MS;
-      if (auto) drawnAt = now;
-      (earth as ChikyuEarth).setView(detail, info.final || auto, info.reason !== "auto");
-    },
-  });
-  view.bind(frame);
-  if (real) new ResizeObserver(() => (view.grabRadius = discRadius(frame.clientWidth, frame.clientWidth, 1))).observe(frame);
-  if (turn === "auto") view.play();
-  // Nothing turns while nothing can see it.
-  let seen = true;
-  let shown = !document.hidden;
-  let suspended = false;
-  const settle = (): void => {
-    const idle = !(seen && shown);
-    if (idle === suspended) return;
-    suspended = idle;
-    if (idle) view.suspendTurn();
-    else view.resumeTurn();
-  };
-  new IntersectionObserver((entries) => {
-    seen = entries.some((entry) => entry.isIntersecting);
-    settle();
-  }).observe(frame);
-  document.addEventListener("visibilitychange", () => {
-    shown = !document.hidden;
-    settle();
-  });
+  autoTurn();
 }
 
 document.body.dataset["ready"] = "true";

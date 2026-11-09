@@ -9,7 +9,7 @@
   border-radius: 12px;
 }
 .globe-view[data-grab="1"] { cursor: grabbing; }
-.globe-view:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.globe-view:has(:focus-visible) { outline: 3px solid var(--accent); outline-offset: 3px; }
 chikyu-earth, chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
 chikyu-earth svg { display: block; width: 100%; height: 100%; }
 kazoku-view-controls { display: block; margin: 8px auto 14px; max-width: 560px; }
