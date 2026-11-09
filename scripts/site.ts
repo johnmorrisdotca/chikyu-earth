@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
+import { wideCss } from "@johnmorrisdotca/kazoku-ui/wide-layout";
 import { publishThumbnails, thumbnailHead } from "./family-thumbnail.mjs";
 import { renderEmbed, renderIndex, renderKids } from "./page.ts";
 
@@ -27,6 +28,8 @@ await writeFile(at("site/kazoku-parts.src.js"), `import "@johnmorrisdotca/kazoku
 await build({ entryPoints: [at("site/kazoku-parts.src.js")], outfile: at("site/kazoku-parts.js"), bundle: true, format: "esm", minify: true, logLevel: "silent", absWorkingDir: at("") });
 await rm(at("site/kazoku-parts.src.js"));
 await cp(at("demo/demo.css"), at("site/demo.css"));
+// the Wide layout's rule, from kazoku-ui, as a stylesheet so the page lays out right before any script runs
+await writeFile(at("site/wide.css"), `${wideCss({ side: "22rem" })}\n`, "utf8");
 await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
 // the Earth tile pyramid (made by `pnpm tiles`, never committed): served beside the demo when it has been built

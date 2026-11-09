@@ -1,5 +1,6 @@
 import "@johnmorrisdotca/kazoku-ui/view-controls/define";
 import "@johnmorrisdotca/kazoku-ui/speed-buttons/define";
+import "@johnmorrisdotca/kazoku-ui/wide-layout/define";
 import type { SpeedButtonsElement } from "@johnmorrisdotca/kazoku-ui/speed-buttons/element";
 import { createAddressState } from "@johnmorrisdotca/kazoku-ui/address-state";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
@@ -865,4 +866,12 @@ const embedPanel = document.querySelector<EmbedPanelElement>("#embed-panel");
 if (embedPanel) {
   const section = mountEmbedSection(embedPanel, { flatPreview: true, say: (key) => say(key), lang: () => (say("locale").startsWith("ja") ? "ja" : "en") });
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(section.update));
+}
+
+// The Wide toggle speaks the page's language: the family's chooser sets it, and the toggle's own `lang` follows (it reads the page's only when it starts).
+const wideToggle = document.querySelector("kazoku-wide-toggle");
+if (wideToggle) {
+  const follow = (): void => wideToggle.setAttribute("lang", say("locale").startsWith("ja") ? "ja" : "en");
+  follow();
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(follow));
 }

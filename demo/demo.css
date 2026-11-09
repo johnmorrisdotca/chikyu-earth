@@ -1,5 +1,5 @@
 /* Chikyu's own part of the demo: the globe's stage, the controls and the embed frame. family.css is the shared look. */
-.earth-stage { display: grid; justify-items: center; padding: 18px 12px; margin-bottom: 8px; }
+.earth-stage { display: grid; justify-items: center; align-content: center; padding: 18px 12px; }
 .globe-view {
   width: min(420px, 100%);
   overflow: hidden;
@@ -12,7 +12,7 @@
 .globe-view:has(:focus-visible) { outline: 3px solid var(--accent); outline-offset: 3px; }
 chikyu-earth, chikyu-earth-realistic { display: block; width: 100%; aspect-ratio: 1; }
 chikyu-earth svg { display: block; width: 100%; height: 100%; }
-kazoku-view-controls { display: block; margin: 8px auto 14px; max-width: 560px; }
+kazoku-view-controls { display: block; margin: 0 auto; }
 kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
 
 .controls .fam-seg button, .controls .fam-button, .controls .fam-field { min-height: 48px; min-width: 48px; }
@@ -40,3 +40,34 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
 .kids-paper { position: relative; width: 100%; overflow: hidden; border-radius: 6px; background: #1a2233; }
 #paper-inner { transform-origin: 0 0; width: max-content; }
 #paper-inner .kazoku-sheet { display: flex; flex-direction: column; gap: 6mm; }
+
+/* The Wide layout (kazoku-ui's wide-layout, whose rule is wide.css): a stage of the globe's felt, its bar under it, and the side panel. */
+.stage-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.kazoku-stage { grid-template-rows: auto 1fr; row-gap: 12px; margin-bottom: 8px; }
+.kazoku-stage > .kazoku-view { grid-column: 1; grid-row: 1; }
+.kazoku-stage > kazoku-view-controls { grid-column: 1; grid-row: 2; width: 100%; }
+.kazoku-stage > .kazoku-side { grid-column: 2; grid-row: 1 / span 2; }
+.kazoku-side .fam-panels { margin: 0; }
+.controls .box { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.controls .box:not(:has(> :not([hidden]))) { display: none; }
+@media (max-width: 640px) {
+  .kazoku-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .kazoku-stage > .kazoku-view, .kazoku-stage > kazoku-view-controls, .kazoku-stage > .kazoku-side { grid-column: 1; grid-row: auto; }
+}
+@media (min-width: 641px) {
+  [data-wide="on"] main { max-width: none; }
+  [data-wide="on"] .kazoku-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  [data-wide="on"] .kazoku-stage > .kazoku-view, [data-wide="on"] .kazoku-stage > kazoku-view-controls, [data-wide="on"] .kazoku-stage > .kazoku-side { grid-column: 1; grid-row: auto; }
+  /* the whole width: wide.css's 16:9 with a greatest height would otherwise narrow the view to 16:9 of that height, and leave it at the left */
+  [data-wide="on"] .kazoku-stage > .kazoku-view { width: 100%; }
+  /* the globe takes the largest square the felt holds: its content box, never taller than the view's own 16:9 */
+  [data-wide="on"] .earth-stage { container-type: size; }
+  [data-wide="on"] .globe-view { width: min(100cqw, 100cqh); }
+  [data-wide="on"] kazoku-view-controls { max-width: 1040px; }
+  [data-wide="on"] .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); align-items: start; }
+  /* the panel becomes its boxes: each is its own card */
+  [data-wide="on"] .kazoku-side .fam-panels { border: 0; background: none; overflow: visible; }
+  [data-wide="on"] .controls { padding: 0; }
+  [data-wide="on"] .controls .box { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); padding: 14px; }
+}
+@media (max-width: 640px) { .stage-tools { display: none; } }

@@ -4,170 +4,185 @@
     <!--family:head-->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230b1424'/%3E%3Ccircle cx='50' cy='50' r='34' fill='%2313203a' stroke='%238fa1b8' stroke-width='4'/%3E%3Cpath d='M30 38Q44 30 56 40T70 52M34 60Q46 54 58 66' fill='none' stroke='%238fa1b8' stroke-width='3'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="family.css" />
+    <link rel="stylesheet" href="wide.css" />
     <link rel="stylesheet" href="demo.css" />
   </head>
   <body>
     <main>
       <!--family:header-->
 
-      <section class="fam-felt earth-stage" aria-labelledby="stage-h">
-        <h2 id="stage-h" class="fam-sr" data-say="stage">Earth view</h2>
-        <div id="globe" class="globe-view" role="group" aria-label="Earth view" data-say-label="stage">
-          <chikyu-earth id="earth" size="420" style="line" tabindex="0"></chikyu-earth>
-        </div>
-      </section>
-      <kazoku-view-controls
-        id="view-controls"
-        for="earth"
-        layout="horizontal"
-        address
-        controls="advanced"
-        tilt-max="90"
-        speed="0.004178"
-        autoplay
-      ></kazoku-view-controls>
-
-      <div class="fam-panels">
-        <div class="fam-panel controls">
-          <div class="fam-row" data-help-en="Draw the outlines as thin lines or thick ones, the realistic Earth from space, or Space: the Earth, Moon, Sun and planets in their places (both need WebGL and load a few pictures)." data-help-ja="国の輪郭を細い線か太い線で描きます。「リアル」は宇宙から見たような地球、「宇宙」は地球、月、太陽、惑星の位置を表示します (どちらも WebGL が必要で、画像を少し読み込みます)。">
-            <span class="fam-label" data-say="look">Look</span>
-            <div class="group fam-seg" role="group" aria-label="Look" data-say-label="look">
-              <button type="button" data-style="line" class="on" aria-pressed="true" data-say="look_line">Line</button>
-              <button type="button" data-style="thick" aria-pressed="false" data-say="look_thick">Thick</button>
-              <button type="button" data-style="realistic" aria-pressed="false" data-say="look_realistic">Realistic</button>
-              <button type="button" data-style="space" aria-pressed="false" data-say="look_space">Space</button>
-            </div>
-            <button type="button" class="fam-button" id="grat" aria-pressed="false" data-say="graticule">Graticule</button>
-            <button type="button" class="fam-button" id="locate" data-say="locate">Centre on me</button>
+      <div class="stage-tools"><kazoku-wide-toggle id="wide" address storage="chikyu-wide" data-testid="wide"></kazoku-wide-toggle></div>
+      <div class="kazoku-stage">
+        <section class="fam-felt earth-stage kazoku-view" aria-labelledby="stage-h">
+          <h2 id="stage-h" class="fam-sr" data-say="stage">Earth view</h2>
+          <div id="globe" class="globe-view" role="group" aria-label="Earth view" data-say-label="stage">
+            <chikyu-earth id="earth" size="420" style="line" tabindex="0"></chikyu-earth>
           </div>
-
-          <div class="fam-row" id="places" role="group" aria-label="Places" data-say-label="places" data-help-en="Show or hide a group of markers. The places are examples: the package ships none of its own." data-help-ja="目印のグループを表示したり隠したりします。場所は例で、パッケージ自体は場所のデータを持っていません。">
-            <span class="fam-label" data-say="places">Places</span>
-            <div class="fam-seg">
-              <button type="button" data-group="Cities" aria-pressed="true" data-say="placesCities">Cities</button>
-              <button type="button" data-group="Stadiums" aria-pressed="true" data-say="placesStadiums">Stadiums</button>
+        </section>
+        <kazoku-view-controls
+          id="view-controls"
+          for="earth"
+          layout="horizontal"
+          address
+          controls="advanced"
+          tilt-max="90"
+          speed="0.004178"
+          autoplay
+        ></kazoku-view-controls>
+        <aside class="kazoku-side" aria-label="Controls" data-say-label="controlsBox">
+          <div class="fam-panels">
+            <div class="fam-panel controls">
+              <div class="box" data-box="look">
+                <div class="fam-row" data-help-en="Draw the outlines as thin lines or thick ones, the realistic Earth from space, or Space: the Earth, Moon, Sun and planets in their places (both need WebGL and load a few pictures)." data-help-ja="国の輪郭を細い線か太い線で描きます。「リアル」は宇宙から見たような地球、「宇宙」は地球、月、太陽、惑星の位置を表示します (どちらも WebGL が必要で、画像を少し読み込みます)。">
+                  <span class="fam-label" data-say="look">Look</span>
+                  <div class="group fam-seg" role="group" aria-label="Look" data-say-label="look">
+                    <button type="button" data-style="line" class="on" aria-pressed="true" data-say="look_line">Line</button>
+                    <button type="button" data-style="thick" aria-pressed="false" data-say="look_thick">Thick</button>
+                    <button type="button" data-style="realistic" aria-pressed="false" data-say="look_realistic">Realistic</button>
+                    <button type="button" data-style="space" aria-pressed="false" data-say="look_space">Space</button>
+                  </div>
+                  <button type="button" class="fam-button" id="grat" aria-pressed="false" data-say="graticule">Graticule</button>
+                  <button type="button" class="fam-button" id="locate" data-say="locate">Centre on me</button>
+                </div>
+                <div class="fam-row" id="places" role="group" aria-label="Places" data-say-label="places" data-help-en="Show or hide a group of markers. The places are examples: the package ships none of its own." data-help-ja="目印のグループを表示したり隠したりします。場所は例で、パッケージ自体は場所のデータを持っていません。">
+                  <span class="fam-label" data-say="places">Places</span>
+                  <div class="fam-seg">
+                    <button type="button" data-group="Cities" aria-pressed="true" data-say="placesCities">Cities</button>
+                    <button type="button" data-group="Stadiums" aria-pressed="true" data-say="placesStadiums">Stadiums</button>
+                  </div>
+                </div>
+                <p class="fam-fine" id="picked" role="status" data-say="picked">Hover or tap a place.</p>
+                <p class="fam-fine" id="status" role="status" hidden></p>
+              </div>
+              <div class="box" data-box="light">
+                <div class="fam-row" id="real-controls" hidden data-help-en="The realistic look lights the Earth by the real Sun at this moment. Choose another date and time, or go back to now." data-help-ja="リアルな見た目では、この時刻の本物の太陽で地球を照らします。ほかの日時を選ぶか、「今」に戻せます。">
+                  <button type="button" class="fam-button" id="clouds" aria-pressed="true" data-say="clouds">Clouds</button>
+                  <button type="button" class="fam-button" id="lights" aria-pressed="true" data-say="lights">City lights</button>
+                </div>
+                <div class="fam-row" id="light-controls" hidden data-help-en="Sun is the true light: the night side is dark. Always lit shows the day picture lit from the camera's side, so a ride on the night side is never a black frame. Night boost keeps the true day and night but raises the night side so land and coasts show." data-help-ja="「太陽」は本物の光で、夜の側は暗くなります。「いつも明るい」は、カメラの側から昼の画像を照らすので、夜の側を回っても真っ暗になりません。「夜を明るく」は、昼と夜はそのままで、夜の側を持ち上げて陸と海岸が見えるようにします。">
+                  <span class="fam-label" data-say="light">Light</span>
+                  <div class="group fam-seg" role="group" aria-label="Light" data-say-label="light">
+                    <button type="button" data-light="sun" class="on" data-say="light_sun">Sun</button>
+                    <button type="button" data-light="lit" data-say="light_lit">Always lit</button>
+                    <button type="button" data-light="boost" data-say="light_boost">Night boost</button>
+                  </div>
+                </div>
+                <div class="fam-row" id="time-controls" hidden>
+                  <label class="field">
+                    <span data-say="when">Date and time</span>
+                    <input type="datetime-local" id="when" class="fam-field" />
+                  </label>
+                  <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
+                </div>
+                <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" data-say-label="timeSpeed" hidden data-help-en="Run time faster than real time, hold it still, or run it backwards. The buttons are multiples of real time: 0 holds it still, 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="時間を実際より速く進めたり、止めたり、逆に戻したりします。ボタンは実際の時間の何倍かを表します。0は止まり、3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。「1秒で1日」にすると、地球が回り、月が動くのが見えます。">
+                  <span class="fam-label" data-say="time">Time</span>
+                  <kazoku-speed-buttons id="time-speed" data-testid="time-speed" steps="0 1 3600 86400 -3600" value="1" no-label></kazoku-speed-buttons>
+                </div>
+              </div>
+              <div class="box" data-box="space">
+                <div class="fam-row" id="space-controls" hidden data-help-en="Compressed scale squeezes the distances so everything fits one view; True scale shows how empty space is. Go to zooms to a part of the sky; Look at points the camera at a body." data-help-ja="「縮めた縮尺」は、全体が1つの画面に入るように距離を縮めます。「本当の縮尺」では、宇宙がどれだけ空っぽかがわかります。「移動先」で空の一部にズームし、「見る天体」でカメラを天体に向けます。">
+                  <span class="fam-label" data-say="scale">Scale</span>
+                  <div class="group fam-seg" role="group" aria-label="Scale" data-say-label="scale">
+                    <button type="button" data-scale="compressed" class="on" data-say="scale_compressed">Compressed</button>
+                    <button type="button" data-scale="true" data-say="scale_true">True scale</button>
+                  </div>
+                  <span class="fam-label" data-say="bodiesLook" id="bodies-label">Planets</span>
+                  <div class="group fam-seg" id="bodies-look" role="group" aria-label="Planets" data-say-label="bodiesLook">
+                    <button type="button" data-bodies="realistic" class="on" data-say="bodies_realistic">Shaded</button>
+                    <button type="button" data-bodies="painted" data-say="bodies_painted">Painted</button>
+                    <button type="button" data-bodies="plain" data-say="bodies_plain">Plain</button>
+                  </div>
+                  <span class="fam-label" data-say="goTo">Go to</span>
+                  <div class="group fam-seg" role="group" aria-label="Go to" data-say-label="goTo">
+                    <button type="button" data-jump="earth" data-say="body_Earth">Earth</button>
+                    <button type="button" data-jump="moon" data-say="body_Moon">Moon</button>
+                    <button type="button" data-jump="sun" data-say="body_Sun">Sun</button>
+                    <button type="button" data-jump="inner" data-say="jump_inner">Inner planets</button>
+                    <button type="button" data-jump="solar-system" data-say="jump_solar">Solar system</button>
+                    <button type="button" data-jump="Jupiter-moons" data-say="jump_jupiter">Jupiter and its moons</button>
+                    <button type="button" data-jump="Saturn-moons" data-say="jump_saturn">Saturn and its moons</button>
+                  </div>
+                  <span class="fam-label" data-say="lookAt">Look at</span>
+                  <div class="group fam-seg" role="group" aria-label="Look at" data-say-label="lookAt">
+                    <button type="button" data-body="Earth" class="on" data-say="body_Earth">Earth</button>
+                    <button type="button" data-body="Moon" data-say="body_Moon">Moon</button>
+                    <button type="button" data-body="Sun" data-say="body_Sun">Sun</button>
+                    <button type="button" data-body="Mercury" data-say="body_Mercury">Mercury</button>
+                    <button type="button" data-body="Venus" data-say="body_Venus">Venus</button>
+                    <button type="button" data-body="Mars" data-say="body_Mars">Mars</button>
+                    <button type="button" data-body="Jupiter" data-say="body_Jupiter">Jupiter</button>
+                    <button type="button" data-body="Saturn" data-say="body_Saturn">Saturn</button>
+                    <button type="button" data-body="Uranus" data-say="body_Uranus">Uranus</button>
+                    <button type="button" data-body="Neptune" data-say="body_Neptune">Neptune</button>
+                    <button type="button" data-body="Pluto" data-say="body_Pluto">Pluto</button>
+                  </div>
+                  <button type="button" class="fam-button" id="orbits" aria-pressed="true" data-say="orbits">Orbits</button>
+                  <button type="button" class="fam-button" id="labels" aria-pressed="true" data-say="names">Names</button>
+                </div>
+                <p class="fam-fine" id="body-info" role="status" hidden></p>
+                <p class="fam-fine" id="scale-note" hidden data-say="scaleNote">Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
+              </div>
+              <div class="box" data-box="satellites">
+                <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are: press a group to switch it on or off. Press a dot, or find one by name, to see how high and fast it goes and its orbit; the Ride row puts the camera on it. A group shows how old its elements are." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。グループを押すと、表示と非表示が切り替わります。点を押すか、名前で探すと、高さと速さ、軌道がわかります。「いっしょに移動」の行で、カメラをその衛星に載せられます。">
+                  <span class="fam-label" data-say="satellites">Satellites</span>
+                  <div class="group fam-seg" id="sat-groups" role="group" aria-label="Satellite groups" data-say-label="satGroups"></div>
+                  <span class="fam-label" data-say="satFind">Find</span>
+                  <div class="group fam-seg" role="group" aria-label="Find" data-say-label="satFind">
+                    <button type="button" data-sat-find="25544" data-say="sat_iss">ISS</button>
+                    <button type="button" data-sat-find="48274" data-say="sat_css">Tiangong</button>
+                  </div>
+                  <input type="search" id="sat-search" class="fam-field" autocomplete="off" spellcheck="false" aria-label="Find a satellite" data-say-label="satSearch" placeholder="Hubble, GPS, 25544" data-say-placeholder="satSearchHint" aria-controls="sat-results" />
+                  <span class="fam-label" data-say="satSource">Your own source</span>
+                  <input type="url" id="sat-source" class="fam-field" autocomplete="off" spellcheck="false" inputmode="url" aria-label="Address of your own elements" data-say-label="satSourceLabel" placeholder="https://example.org/elements.json" data-say-placeholder="satSourceHint" aria-describedby="sat-source-note" />
+                  <button type="button" class="fam-button" id="sat-source-go" data-say="satSourceLoad">Load</button>
+                  <div class="group fam-seg" id="sat-results" role="group" aria-label="Matches" data-say-label="satMatches" hidden></div>
+                </div>
+                <p class="fam-fine" id="sat-info" role="status" hidden></p>
+                <p class="fam-fine" id="sat-source-note" role="status" hidden></p>
+                <p class="fam-fine" id="sat-about" hidden></p>
+                <p class="fam-fine" id="sat-note" hidden></p>
+              </div>
+              <div class="box" data-box="flights">
+                <div class="fam-row" id="mission-controls" role="group" aria-label="Space Shuttle flights" data-say-label="missions" hidden data-help-en="Replay a Space Shuttle flight: pick an orbiter (or the Hubble visits), then a flight, and press Play. The orbiter is placed from the element sets Space-Track kept at the time, over the days of the flight; the Hubble Space Telescope is placed too on the flights that carried it, deployed it or serviced it." data-help-ja="スペースシャトルの飛行を再生します。オービター (またはハッブル望遠鏡の訪問) を選び、次に飛行を選んで「再生」を押します。オービターは、当時 Space-Track が保存していた軌道要素から、飛行の日数にわたって位置を出します。ハッブル宇宙望遠鏡を運んだ、放出した、修理した飛行では、望遠鏡も表示します。">
+                  <span class="fam-label" data-say="missions">Space Shuttle flights</span>
+                  <div class="group fam-seg" id="mission-orbiters" role="group" aria-label="Orbiter" data-say-label="missionOrbiter"></div>
+                  <div class="group fam-seg" id="mission-list" role="group" aria-label="Flight" data-say-label="missionFlight"></div>
+                  <kazoku-replay-bar id="mission-replay" steps="600 3600 21600" speed="3600"></kazoku-replay-bar>
+                </div>
+                <p class="fam-fine" id="mission-info" role="status" hidden></p>
+                <output class="fam-fine" id="mission-clock" hidden></output>
+                <p class="fam-fine" id="mission-note" hidden></p>
+              </div>
+              <div class="box" data-box="ride">
+                <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
+                  <span class="fam-label" data-say="rideAlong">Ride along</span>
+                  <div class="group fam-seg" role="group" aria-label="Ride along" data-say-label="rideAlong">
+                    <button type="button" data-ride="iss" data-say="sat_iss">ISS</button>
+                    <button type="button" data-ride="css" data-say="sat_css">Tiangong</button>
+                    <button type="button" data-ride="starlink" data-say="ride_starlink">A Starlink satellite</button>
+                    <button type="button" data-ride="chosen" data-say="ride_chosen">The chosen satellite</button>
+                    <button type="button" data-ride="group" data-say="ride_group">One from the last group</button>
+                    <button type="button" data-ride="Moon" data-say="body_Moon">Moon</button>
+                    <button type="button" data-ride="Mars" data-say="body_Mars">Mars</button>
+                    <button type="button" data-ride="Jupiter" data-say="body_Jupiter">Jupiter</button>
+                    <button type="button" data-ride="none" data-say="ride_none">Stop</button>
+                  </div>
+                  <span class="fam-label" data-say="rideView">View</span>
+                  <div class="group fam-seg" role="group" aria-label="View" data-say-label="rideView">
+                    <button type="button" data-ride-view="from" class="on" data-say="ride_from">From it</button>
+                    <button type="button" data-ride-view="follow" data-say="ride_follow">Behind it</button>
+                  </div>
+                  <span class="fam-label" data-say="rideLook">Looking</span>
+                  <div class="group fam-seg" role="group" aria-label="Looking" data-say-label="rideLook">
+                    <button type="button" data-ride-look="down" class="on" data-say="look_down">Straight down</button>
+                    <button type="button" data-ride-look="horizon" data-say="look_horizon">At the horizon</button>
+                  </div>
+                </div>
+                <p class="fam-fine" id="ride-info" role="status" hidden></p>
+              </div>
             </div>
           </div>
-          <p class="fam-fine" id="picked" role="status" data-say="picked">Hover or tap a place.</p>
-
-          <div class="fam-row" id="real-controls" hidden data-help-en="The realistic look lights the Earth by the real Sun at this moment. Choose another date and time, or go back to now." data-help-ja="リアルな見た目では、この時刻の本物の太陽で地球を照らします。ほかの日時を選ぶか、「今」に戻せます。">
-            <button type="button" class="fam-button" id="clouds" aria-pressed="true" data-say="clouds">Clouds</button>
-            <button type="button" class="fam-button" id="lights" aria-pressed="true" data-say="lights">City lights</button>
-          </div>
-          <div class="fam-row" id="light-controls" hidden data-help-en="Sun is the true light: the night side is dark. Always lit shows the day picture lit from the camera's side, so a ride on the night side is never a black frame. Night boost keeps the true day and night but raises the night side so land and coasts show." data-help-ja="「太陽」は本物の光で、夜の側は暗くなります。「いつも明るい」は、カメラの側から昼の画像を照らすので、夜の側を回っても真っ暗になりません。「夜を明るく」は、昼と夜はそのままで、夜の側を持ち上げて陸と海岸が見えるようにします。">
-            <span class="fam-label" data-say="light">Light</span>
-            <div class="group fam-seg" role="group" aria-label="Light" data-say-label="light">
-              <button type="button" data-light="sun" class="on" data-say="light_sun">Sun</button>
-              <button type="button" data-light="lit" data-say="light_lit">Always lit</button>
-              <button type="button" data-light="boost" data-say="light_boost">Night boost</button>
-            </div>
-          </div>
-          <div class="fam-row" id="time-controls" hidden>
-            <label class="field">
-              <span data-say="when">Date and time</span>
-              <input type="datetime-local" id="when" class="fam-field" />
-            </label>
-            <button type="button" class="fam-button" id="now" aria-pressed="true" data-say="now">Now</button>
-          </div>
-          <div class="fam-row" id="speed-controls" role="group" aria-label="Time speed" data-say-label="timeSpeed" hidden data-help-en="Run time faster than real time, hold it still, or run it backwards. The buttons are multiples of real time: 0 holds it still, 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="時間を実際より速く進めたり、止めたり、逆に戻したりします。ボタンは実際の時間の何倍かを表します。0は止まり、3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。「1秒で1日」にすると、地球が回り、月が動くのが見えます。">
-            <span class="fam-label" data-say="time">Time</span>
-            <kazoku-speed-buttons id="time-speed" data-testid="time-speed" steps="0 1 3600 86400 -3600" value="1" no-label></kazoku-speed-buttons>
-          </div>
-          <div class="fam-row" id="space-controls" hidden data-help-en="Compressed scale squeezes the distances so everything fits one view; True scale shows how empty space is. Go to zooms to a part of the sky; Look at points the camera at a body." data-help-ja="「縮めた縮尺」は、全体が1つの画面に入るように距離を縮めます。「本当の縮尺」では、宇宙がどれだけ空っぽかがわかります。「移動先」で空の一部にズームし、「見る天体」でカメラを天体に向けます。">
-            <span class="fam-label" data-say="scale">Scale</span>
-            <div class="group fam-seg" role="group" aria-label="Scale" data-say-label="scale">
-              <button type="button" data-scale="compressed" class="on" data-say="scale_compressed">Compressed</button>
-              <button type="button" data-scale="true" data-say="scale_true">True scale</button>
-            </div>
-            <span class="fam-label" data-say="bodiesLook" id="bodies-label">Planets</span>
-            <div class="group fam-seg" id="bodies-look" role="group" aria-label="Planets" data-say-label="bodiesLook">
-              <button type="button" data-bodies="realistic" class="on" data-say="bodies_realistic">Shaded</button>
-              <button type="button" data-bodies="painted" data-say="bodies_painted">Painted</button>
-              <button type="button" data-bodies="plain" data-say="bodies_plain">Plain</button>
-            </div>
-            <span class="fam-label" data-say="goTo">Go to</span>
-            <div class="group fam-seg" role="group" aria-label="Go to" data-say-label="goTo">
-              <button type="button" data-jump="earth" data-say="body_Earth">Earth</button>
-              <button type="button" data-jump="moon" data-say="body_Moon">Moon</button>
-              <button type="button" data-jump="sun" data-say="body_Sun">Sun</button>
-              <button type="button" data-jump="inner" data-say="jump_inner">Inner planets</button>
-              <button type="button" data-jump="solar-system" data-say="jump_solar">Solar system</button>
-              <button type="button" data-jump="Jupiter-moons" data-say="jump_jupiter">Jupiter and its moons</button>
-              <button type="button" data-jump="Saturn-moons" data-say="jump_saturn">Saturn and its moons</button>
-            </div>
-            <span class="fam-label" data-say="lookAt">Look at</span>
-            <div class="group fam-seg" role="group" aria-label="Look at" data-say-label="lookAt">
-              <button type="button" data-body="Earth" class="on" data-say="body_Earth">Earth</button>
-              <button type="button" data-body="Moon" data-say="body_Moon">Moon</button>
-              <button type="button" data-body="Sun" data-say="body_Sun">Sun</button>
-              <button type="button" data-body="Mercury" data-say="body_Mercury">Mercury</button>
-              <button type="button" data-body="Venus" data-say="body_Venus">Venus</button>
-              <button type="button" data-body="Mars" data-say="body_Mars">Mars</button>
-              <button type="button" data-body="Jupiter" data-say="body_Jupiter">Jupiter</button>
-              <button type="button" data-body="Saturn" data-say="body_Saturn">Saturn</button>
-              <button type="button" data-body="Uranus" data-say="body_Uranus">Uranus</button>
-              <button type="button" data-body="Neptune" data-say="body_Neptune">Neptune</button>
-              <button type="button" data-body="Pluto" data-say="body_Pluto">Pluto</button>
-            </div>
-            <button type="button" class="fam-button" id="orbits" aria-pressed="true" data-say="orbits">Orbits</button>
-            <button type="button" class="fam-button" id="labels" aria-pressed="true" data-say="names">Names</button>
-          </div>
-          <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are: press a group to switch it on or off. Press a dot, or find one by name, to see how high and fast it goes and its orbit; the Ride row puts the camera on it. A group shows how old its elements are." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。グループを押すと、表示と非表示が切り替わります。点を押すか、名前で探すと、高さと速さ、軌道がわかります。「いっしょに移動」の行で、カメラをその衛星に載せられます。">
-            <span class="fam-label" data-say="satellites">Satellites</span>
-            <div class="group fam-seg" id="sat-groups" role="group" aria-label="Satellite groups" data-say-label="satGroups"></div>
-            <span class="fam-label" data-say="satFind">Find</span>
-            <div class="group fam-seg" role="group" aria-label="Find" data-say-label="satFind">
-              <button type="button" data-sat-find="25544" data-say="sat_iss">ISS</button>
-              <button type="button" data-sat-find="48274" data-say="sat_css">Tiangong</button>
-            </div>
-            <input type="search" id="sat-search" class="fam-field" autocomplete="off" spellcheck="false" aria-label="Find a satellite" data-say-label="satSearch" placeholder="Hubble, GPS, 25544" data-say-placeholder="satSearchHint" aria-controls="sat-results" />
-            <span class="fam-label" data-say="satSource">Your own source</span>
-            <input type="url" id="sat-source" class="fam-field" autocomplete="off" spellcheck="false" inputmode="url" aria-label="Address of your own elements" data-say-label="satSourceLabel" placeholder="https://example.org/elements.json" data-say-placeholder="satSourceHint" aria-describedby="sat-source-note" />
-            <button type="button" class="fam-button" id="sat-source-go" data-say="satSourceLoad">Load</button>
-            <div class="group fam-seg" id="sat-results" role="group" aria-label="Matches" data-say-label="satMatches" hidden></div>
-          </div>
-          <div class="fam-row" id="mission-controls" role="group" aria-label="Space Shuttle flights" data-say-label="missions" hidden data-help-en="Replay a Space Shuttle flight: pick an orbiter (or the Hubble visits), then a flight, and press Play. The orbiter is placed from the element sets Space-Track kept at the time, over the days of the flight; the Hubble Space Telescope is placed too on the flights that carried it, deployed it or serviced it." data-help-ja="スペースシャトルの飛行を再生します。オービター (またはハッブル望遠鏡の訪問) を選び、次に飛行を選んで「再生」を押します。オービターは、当時 Space-Track が保存していた軌道要素から、飛行の日数にわたって位置を出します。ハッブル宇宙望遠鏡を運んだ、放出した、修理した飛行では、望遠鏡も表示します。">
-            <span class="fam-label" data-say="missions">Space Shuttle flights</span>
-            <div class="group fam-seg" id="mission-orbiters" role="group" aria-label="Orbiter" data-say-label="missionOrbiter"></div>
-            <div class="group fam-seg" id="mission-list" role="group" aria-label="Flight" data-say-label="missionFlight"></div>
-            <kazoku-replay-bar id="mission-replay" steps="600 3600 21600" speed="3600"></kazoku-replay-bar>
-          </div>
-          <p class="fam-fine" id="mission-info" role="status" hidden></p>
-          <output class="fam-fine" id="mission-clock" hidden></output>
-          <p class="fam-fine" id="mission-note" hidden></p>
-          <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
-            <span class="fam-label" data-say="rideAlong">Ride along</span>
-            <div class="group fam-seg" role="group" aria-label="Ride along" data-say-label="rideAlong">
-              <button type="button" data-ride="iss" data-say="sat_iss">ISS</button>
-              <button type="button" data-ride="css" data-say="sat_css">Tiangong</button>
-              <button type="button" data-ride="starlink" data-say="ride_starlink">A Starlink satellite</button>
-              <button type="button" data-ride="chosen" data-say="ride_chosen">The chosen satellite</button>
-              <button type="button" data-ride="group" data-say="ride_group">One from the last group</button>
-              <button type="button" data-ride="Moon" data-say="body_Moon">Moon</button>
-              <button type="button" data-ride="Mars" data-say="body_Mars">Mars</button>
-              <button type="button" data-ride="Jupiter" data-say="body_Jupiter">Jupiter</button>
-              <button type="button" data-ride="none" data-say="ride_none">Stop</button>
-            </div>
-            <span class="fam-label" data-say="rideView">View</span>
-            <div class="group fam-seg" role="group" aria-label="View" data-say-label="rideView">
-              <button type="button" data-ride-view="from" class="on" data-say="ride_from">From it</button>
-              <button type="button" data-ride-view="follow" data-say="ride_follow">Behind it</button>
-            </div>
-            <span class="fam-label" data-say="rideLook">Looking</span>
-            <div class="group fam-seg" role="group" aria-label="Looking" data-say-label="rideLook">
-              <button type="button" data-ride-look="down" class="on" data-say="look_down">Straight down</button>
-              <button type="button" data-ride-look="horizon" data-say="look_horizon">At the horizon</button>
-            </div>
-          </div>
-          <p class="fam-fine" id="ride-info" role="status" hidden></p>
-          <p class="fam-fine" id="sat-info" role="status" hidden></p>
-          <p class="fam-fine" id="sat-source-note" role="status" hidden></p>
-          <p class="fam-fine" id="sat-about" hidden></p>
-          <p class="fam-fine" id="sat-note" hidden></p>
-          <p class="fam-fine" id="body-info" role="status" hidden></p>
-          <p class="fam-fine" id="scale-note" hidden data-say="scaleNote">Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
-          <p class="fam-fine" id="status" role="status" hidden></p>
-        </div>
+        </aside>
       </div>
 
       <section class="more" id="embed" aria-labelledby="embed-h">
