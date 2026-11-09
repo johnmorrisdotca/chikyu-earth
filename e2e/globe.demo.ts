@@ -26,7 +26,8 @@ async function fit(page: Page): Promise<void> {
 }
 
 async function touch(page: Page, type: string, id: number, x: number, y: number): Promise<void> {
-  await page.locator("#globe").evaluate((el, [t, i, cx, cy]) => {
+  // the bar is for the element, so that is where the fingers are
+  await page.locator("#globe chikyu-earth").evaluate((el, [t, i, cx, cy]) => {
     el.dispatchEvent(
       new PointerEvent(t as string, {
         pointerId: i as number,

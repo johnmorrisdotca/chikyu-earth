@@ -119,7 +119,8 @@ test("without a tile set, or with a tile that fails, the Earth stays as it was a
   await setView(page, await zoomFor(page, 2600));
   await settle(page, 1500);
   expect((await statsOf(page)).tiles).toMatchObject({ ready: false, held: 0, requested: 0 });
-  expect(await page.locator("kazoku-view-controls").getAttribute("zoom-max"), "no tiles, no extra zoom").toBe("5");
+  expect(await page.locator(EARTH).getAttribute("zoom-max"), "no tiles, no extra zoom").toBeNull();
+  expect(await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { limits: { zoomMax: number } }).limits.zoomMax), "the bar for it holds to 5").toBe(5);
   await expect(page.locator(EARTH)).toHaveAttribute("data-state", "live");
   expect(errors).toEqual([]);
 });
