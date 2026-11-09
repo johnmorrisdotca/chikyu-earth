@@ -20,7 +20,12 @@ createServer((req, res) => {
     let url = (req.url ?? "/").split("?")[0].replace(/^\/chikyu-earth\/?/, "/");
     if (url === "/") url = "/index.html";
     // the tests bring their own made-up tile set, so they never depend on whether the real one was built here
-    if (process.env.WITHOUT_TILES && url.startsWith("/tiles/")) url = "/no-tiles";
+    if (process.env.WITHOUT_TILES && url.startsWith("/tiles/")) {
+      const empty = url === "/tiles/manifest.json";
+      res.writeHead(empty ? 200 : 404, { "content-type": "application/json" });
+      res.end(empty ? JSON.stringify({ tileSize: 512, layers: {} }) : "not found");
+      return;
+    }
     const path = join(root, normalize(url));
     try {
       const body = await readFile(path);

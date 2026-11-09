@@ -30,7 +30,12 @@ await cp(at("demo/demo.css"), at("site/demo.css"));
 await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
 // the Earth tile pyramid (made by `pnpm tiles`, never committed): served beside the demo when it has been built
+// without it, an empty manifest, so the demo's one request for it is answered (no 404 in the console) and the Earth keeps its own pictures
 if (existsSync(at(".cache/earth-tiles-out/manifest.json"))) await cp(at(".cache/earth-tiles-out"), at("site/tiles"), { recursive: true });
+else {
+  await mkdir(at("site/tiles"), { recursive: true });
+  await writeFile(at("site/tiles/manifest.json"), JSON.stringify({ tileSize: 512, layers: {} }), "utf8");
+}
 // the pictures of the Sun, planets and moons (wakusei-planets, an optional peer the demo draws them with): the two smaller widths ship in its package, the sharpest come from the repository by jsDelivr
 await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("site/planets"), { recursive: true });
 await cp(at("demo/elements"), at("site/elements"), { recursive: true });
