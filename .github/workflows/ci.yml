@@ -7,6 +7,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -21,6 +22,7 @@ jobs:
       - run: pnpm check
   package:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +41,7 @@ jobs:
     # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium, then in WebKit. Every test still runs once.
     name: demo (${{ matrix.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +64,7 @@ jobs:
         run: pnpm test:demo:one ${{ matrix.projects }}
   usage:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -74,3 +78,21 @@ jobs:
         run: pnpm test:usage
       - name: The realistic Earth's soak, one minute (ten minutes by hand with pnpm test:soak)
         run: SOAK_MINUTES=1 pnpm test:soak
+  commits:
+    # A pushed commit message never names an AI as author or co-author.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: No AI attribution in the pushed commit messages
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          range="$BEFORE..HEAD"
+          git cat-file -e "$BEFORE^{commit}" 2>/dev/null || range="HEAD~1..HEAD"
+          if git log --format='%an %ae%n%cn %ce%n%B' "$range" | grep -i -E 'co-authored-by:.*(claude|anthropic|openai|chatgpt|gpt)|noreply@anthropic|noreply@openai'; then
+            echo "A commit names an AI as author (see AGENTS.md: no AI attribution)"; exit 1
+          fi
