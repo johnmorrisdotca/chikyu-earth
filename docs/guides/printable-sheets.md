@@ -5,8 +5,6 @@ order: 10
 description: The globe and a world map to colour, a "my country" sheet, day and night for a date and time, and the seasons, on A4, US Letter, A3 or Tabloid, in English and Japanese, with thick lines and big type for children, and ready-made PDFs.
 ---
 
-[日本語](ja/printable-sheets.md)
-
 `/sheets` draws five printable things from the package's own outlines and its own sun, each as one SVG string measured in millimetres (a millimetre of the picture is a millimetre of the paper), so it needs no browser and no dependency:
 
 - **The globe** (`globeSheetSvg`): one side of the Earth as a big disc, with the continents in thick outlines and the names of the continents and oceans written where they are. Three sides: `americas`, `europe-africa` and `asia-oceania`. The lines are the coasts of the continents only: there is no border between two countries of one continent, so a child colours a whole continent. Russia is cut at the Urals (the meridian 60 degrees east), so Siberia is in Asia.
