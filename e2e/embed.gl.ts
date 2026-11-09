@@ -1,6 +1,6 @@
 // The embed page on the realistic look: one WebGL context, a canvas inside its budget, nothing drawn once it rests.
 import { expect, test } from "@playwright/test";
-import { COUNT_SCRIPT, counts, EARTH, NOON, settle, statsOf } from "./gl.ts";
+import { COUNT_SCRIPT, counts, EARTH, NOON, ownClock, settle, statsOf, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -63,15 +63,13 @@ test("the address chooses the clock, the scale, the body and the part of the sky
 });
 
 test("a day a second in the embed draws at most 30 times a second, and nothing in a hidden tab", async ({ page }) => {
+  await ownClock(page);
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/embed.html?look=space&time=${NOV2}&speed=86400&center=-100,40`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
   await settle(page, 800);
-  const s0 = await spaceStats(page);
-  const t0 = Date.now();
-  await page.waitForTimeout(4000);
-  const s1 = await spaceStats(page);
-  const perSecond = (s1.draws - s0.draws) / ((Date.now() - t0) / 1000);
+  const { before, after, seconds } = await timed(page, 4000, () => spaceStats(page));
+  const perSecond = (after.draws - before.draws) / seconds;
   console.log(`space embed at a day a second: ${perSecond.toFixed(1)} draws a second`);
   expect(perSecond).toBeGreaterThan(5);
   expect(perSecond).toBeLessThanOrEqual(31);
@@ -112,8 +110,9 @@ test("the space embed can ride along with the ISS: one context, the camera at th
   await page.goto(`/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&ride=iss&rlook=horizon`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
-  // the pictures the ISS's view needs arrive, and the ones it lets go are let go
-  await settle(page, 9000);
+  // the glide to the ISS ends; the pictures its view needs arrive, and the ones it lets go are let go four seconds after
+  await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride.gliding), { timeout: 30_000 }).toBe(false);
+  await settle(page, 6000);
   const stats = (await page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats"))) as { contexts: number; canvas: { pixels: number }; camera: { position: number[] } };
   expect(stats.contexts).toBe(1);
   expect(stats.canvas.pixels).toBeLessThanOrEqual(6_000_000);

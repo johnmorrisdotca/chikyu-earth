@@ -34,6 +34,43 @@ export async function settle(page: Page, ms = 700): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
+const owned = new WeakSet<Page>();
+
+/**
+ * Own the page's clock: install it before the page opens. It then runs as usual until `freezeClock` or `timed` stops it, and `page.clock.runFor(ms)` moves it by exactly `ms`, so a rate counted
+ * in that time cannot be changed by how slowly a busy machine draws.
+ */
+export async function ownClock(page: Page): Promise<void> {
+  await page.clock.install();
+  owned.add(page);
+}
+
+/** Stop an owned clock where it is; time then moves only by `page.clock.runFor`, until `page.clock.resume()`. */
+export async function freezeClock(page: Page): Promise<void> {
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(new Date(now + 50));
+}
+
+/**
+ * Read something, let `ms` pass, read it again. On an owned clock the span is exactly `ms` of the page's time (the clock is stopped for both reads, then runs on); otherwise it is `ms` of this
+ * machine's time, as a stopwatch sees it. `seconds` is the span.
+ */
+export async function timed<T>(page: Page, ms: number, read: () => Promise<T>): Promise<{ before: T; after: T; seconds: number }> {
+  if (owned.has(page)) {
+    await freezeClock(page);
+    const before = await read();
+    await page.clock.runFor(ms);
+    const after = await read();
+    await page.clock.resume();
+    return { before, after, seconds: ms / 1000 };
+  }
+  const before = await read();
+  const t0 = Date.now();
+  await page.waitForTimeout(ms);
+  const after = await read();
+  return { before, after, seconds: (Date.now() - t0) / 1000 };
+}
+
 export async function counts(page: Page): Promise<GlCounts> {
   return readCounts(page);
 }
