@@ -160,7 +160,7 @@ if (interactive) {
     speed: 0.004178,
     zoom: space ? startZoom : "fit",
     grabRadius: space ? undefined : real ? discRadius(frame.clientWidth, frame.clientWidth, 1) : "fit",
-    limits: space ? (query.get("ride") && query.get("rview") !== "follow" ? { tiltMax: 90, zoomMin: 0.5, zoomMax: 6 } : { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 }) : { tiltMax: 90 },
+    limits: space ? (query.get("ride") && query.get("rview") !== "follow" ? { tiltMax: 90, zoomMin: 0.5, zoomMax: 6 } : { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 }) : { tiltMax: 90, zoomMin: 1, zoomMax: 5 },
     onChange(state: ViewState, info) {
       const detail: GlobeView = { yaw: state.yaw, tilt: state.tilt, zoom: state.zoom, panX: state.panX, panY: state.panY };
       if (space) {
