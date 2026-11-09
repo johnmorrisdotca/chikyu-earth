@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **kazoku-ui 0.26: a plain drag always turns, and lighter sheets for children** (KAZOKU-UI-87, KAZOKU-UI-86, MODULES-743). On the globe and the views that turn, a plain drag (and one finger) now turns at every zoom; the middle or right button, Ctrl or Command and a drag, Space and a drag, and the wheel move; the Move or Turn choice is gone. The printable sheets for children draw their outline at kazoku-ui's kid line, 1.2 mm (was 3), and the lines inside at 1 mm (was 2.5), so a sheet is lighter and the names have room; the header's Name is a line to write on.
+
 ## 0.20.0 - 2026-11-09
 
 - **Wide is theatre mode** (MODULES-717). Wide gives the globe the page's own column, centred, out to where the side panel was; the page no longer stretches to the window's edges.

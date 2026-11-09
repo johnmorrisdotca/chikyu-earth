@@ -6,7 +6,7 @@ import { geoDistance, geoOrthographic } from "d3-geo";
 import { Body, Equator, MakeTime, Observer, SiderealTime } from "astronomy-engine";
 import { DEFAULT_MARGIN_MM, PAGE_NAMES, TYPE_PRESETS, printableSize } from "@johnmorrisdotca/kazoku-ui/print";
 import { subsolarPoint } from "../src/realistic/sun.ts";
-import { TYPES, textWidth, wrap } from "../src/sheets/common.ts";
+import { TYPES, innerMm, textWidth, wrap } from "../src/sheets/common.ts";
 import { countrySheetSvg } from "../src/sheets/country.ts";
 import { globeSheetSvg, worldMapSvg } from "../src/sheets/earth.ts";
 import { hatchPath } from "../src/sheets/hatch.ts";
@@ -69,15 +69,15 @@ test("every sheet renders on every paper, in both languages and both types, with
   }
 });
 
-test("every line of a child's sheet is at least 2.5 mm thick, the outline 3 mm; the hatching of the night is a shading, not a line to colour", () => {
+test("every line of a child's sheet is drawn at kazoku-ui's kid line (1.2 mm since 0.25) or the inner line just under it; the hatching of the night is a shading, not a line to colour", () => {
   const room = roomOf("a4");
   for (const [name, svg] of everySheet(room, "en", "kid")) {
     const shading = [...svg.matchAll(/<path d="[^"]*" fill="none" stroke="#000" stroke-width="([\d.]+)"[^>]*data-night=""/g)].map((m) => Number(m[1]));
     const widths = numbers(svg.replace(/<text[^>]*>/g, "<text>"), "stroke-width").filter((width) => !shading.includes(width));
     assert.ok(widths.length >= 2, `${name} has lines`);
-    assert.ok(Math.min(...widths) >= 2.5, `${name}: thinnest line ${Math.min(...widths)} mm`);
-    assert.ok(Math.max(...widths) <= 3.2, `${name}: thickest line ${Math.max(...widths)} mm`);
-    assert.ok(svg.includes(`stroke-width="${TYPE_PRESETS.kid.lineMm}"`), `${name} has its 3 mm outline`);
+    assert.ok(Math.min(...widths) >= innerMm("kid") - 1e-9, `${name}: thinnest line ${Math.min(...widths)} mm`);
+    assert.ok(Math.max(...widths) <= TYPE_PRESETS.kid.lineMm * 1.07, `${name}: thickest line ${Math.max(...widths)} mm`);
+    assert.ok(svg.includes(`stroke-width="${TYPE_PRESETS.kid.lineMm}"`), `${name} has its kid outline`);
   }
 });
 

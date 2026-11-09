@@ -15,7 +15,7 @@ export interface SheetType {
 
 /** The two type presets: the same sizes as kazoku-ui's `TYPE_PRESETS` (title, name, body and small in points, and the line in millimetres), checked against it by a test. */
 export const TYPES: Readonly<Record<"kid" | "normal", SheetType>> = {
-  kid: { titleMm: 40 * PT, nameMm: 28 * PT, bodyMm: 18 * PT, smallMm: 10 * PT, lineMm: 3 },
+  kid: { titleMm: 40 * PT, nameMm: 28 * PT, bodyMm: 18 * PT, smallMm: 10 * PT, lineMm: 1.2 },
   normal: { titleMm: 24 * PT, nameMm: 14 * PT, bodyMm: 11 * PT, smallMm: 8 * PT, lineMm: 0.4 },
 };
 
@@ -80,7 +80,7 @@ export function footer(words: string, widthMm: number, heightMm: number, sizeMm:
 
 export type TypeName = "kid" | "normal";
 
-/** The thickness of a sheet's outline in millimetres, and of the lines inside it (2.5 mm when the outline is 3). */
+/** The thickness of a sheet's outline in millimetres, and of the lines inside it (1 mm when the outline is kazoku-ui's kid line, 1.2 mm). */
 export const outlineMm = (type: TypeName): number => TYPES[type].lineMm;
 export const innerMm = (type: TypeName): number => Math.max(TYPES[type].lineMm * (2.5 / 3), 0.3);
 

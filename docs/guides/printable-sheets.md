@@ -44,7 +44,7 @@ console.log(terminator(Date.UTC(2026, 5, 21, 12), 6).map(([lon, lat]) => `${lon.
 | `earthFacts`, `dayNightFacts`, `seasonsFacts`, `countryFacts`, `TITLES`, `SAY`, `PLACES` | the words: each sheet's three facts and title, the brand and credits, and the continents and oceans with their Japanese names |
 | `thickPath`, `hatchPath` | the two helpers behind the lines: a path made simpler for a thick line, and hatching cut to a shape |
 
-`options` is `{ widthMm, heightMm, lang, type }`: the room, `en` or `ja`, and `kid` (3 mm outline, 2.5 mm lines inside, names 24 pt, facts 18 pt) or `normal` (thin lines, small type). A name is not written where it would not fit.
+`options` is `{ widthMm, heightMm, lang, type }`: the room, `en` or `ja`, and `kid` (1.2 mm outline, 1 mm lines inside, names 24 pt, facts 18 pt) or `normal` (thin lines, small type). A name is not written where it would not fit.
 
 ## The page around a picture
 
@@ -86,4 +86,4 @@ The Pages build prints PDFs from the demo: the three sides of the globe, the wor
 
 ## How it is checked
 
-Without a browser: every sheet on all four papers (A4, US Letter, A3, Tabloid), in both languages and both types, with no bad number; every line at least 2.5 mm thick and the outline 3 mm; the land's shares against known values (29% land, Asia 30%, Europe 7%, Africa 20%); no line along a border between two countries of one continent; every line of text inside the room it is drawn for; every country with an outline has a sheet that fits; the day and night line against the package's own sun position, and that against astronomy-engine, for two dates (the hatching is read back from the sheet and every end is on the night side); and the seasons' axis against the Earth's tilt, leaning toward the Sun in June and away in December. In Chromium and WebKit the demo is played, and in Chromium each kind of sheet is printed to a PDF on all four papers and the PDF is read for its paper size and its page count (one page).
+Without a browser: every sheet on all four papers (A4, US Letter, A3, Tabloid), in both languages and both types, with no bad number; every line at least 1 mm thick and the outline 1.2 mm, kazoku-ui's kid line; the land's shares against known values (29% land, Asia 30%, Europe 7%, Africa 20%); no line along a border between two countries of one continent; every line of text inside the room it is drawn for; every country with an outline has a sheet that fits; the day and night line against the package's own sun position, and that against astronomy-engine, for two dates (the hatching is read back from the sheet and every end is on the night side); and the seasons' axis against the Earth's tilt, leaning toward the Sun in June and away in December. In Chromium and WebKit the demo is played, and in Chromium each kind of sheet is printed to a PDF on all four papers and the PDF is read for its paper size and its page count (one page).
