@@ -168,7 +168,7 @@ tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view,
 ## The Sun, the Moon and the planets
 
 `<chikyu-space>` (`@johnmorrisdotca/chikyu-earth/space/element`) places the Earth, the Moon, the Sun, the planets and Pluto (the real ones, with their moons, when [wakusei-planets](https://github.com/johnmorrisdotca/wakusei-planets) is installed: [guide](docs/guides/the-real-planets.md)) where they are at a date and time, with the Moon's phase and the Earth's day side
-from the light, a compressed scale you can read (and a true one that shows how empty it is), time that runs forwards or backwards, and a zoom from the Earth to the solar system. Positions are
+from the light, a compressed scale you can read (and a true one that shows how empty it is), time that runs forwards or backwards (Play, Pause and Back in the demo, and a `chikyu-timechange` event for a date box to follow: [guide](docs/guides/time-and-play.md)), and a zoom from the Earth to the solar system. Positions are
 computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/space.md](docs/space.md). The solar system is wakusei-planets' to own, so this view is moving there; this package keeps the Earth and its satellites ([why two packages](docs/guides/two-packages.md)).
 
 <p align="center"><img alt="The solar system on 2 November 2026 in the compressed scale: orbits round the Sun, the planets named" src="docs/images/space-solar.png" width="420"></p>
@@ -430,6 +430,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
+| [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, Play, Pause and Back |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |

@@ -49,7 +49,7 @@ The demo shows a line saying "Compressed scale: ..." under the controls whenever
 ## Time
 
 `time` is an ISO date (`2026-11-02T14:00Z`) or `now`; `speed` is game seconds a second: `1` real time, `0` held still, `3600` an hour a second, `86400` a day a second, negative runs
-backwards. The demo's Time row is the family's speed buttons (kazoku-ui's `<kazoku-speed-buttons>`) with those steps, `0 1 3600 86400 -3600`, read as multiples of real time. Setting `time` points the camera at the same place on the ground again. The Sun is where `astronomy-engine` says (apparent, with aberration), the Earth is turned
+backwards. The demo's Time row is the family's replay bar (kazoku-ui's `<kazoku-replay-bar>`: Play, Pause and Back to the date) with the speeds `1 3600 86400 -3600`, read as multiples of real time, and the date box follows the clock ([the guide](guides/time-and-play.md)). Setting `time` points the camera at the same place on the ground again. The Sun is where `astronomy-engine` says (apparent, with aberration), the Earth is turned
 by Greenwich sidereal time, the Moon shows its near side to the Earth (its libration, up to 8 degrees, is not drawn), and each planet is lit from the Sun, so Venus has its crescent and
 the Moon its quarter.
 
@@ -85,7 +85,7 @@ the `chikyu-satellite-click` event and `stats.satellites` go with it. Elements c
 ## Properties, events, stats
 
 Attributes and properties: `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`; property `body`. `setView(view)` takes
-the shared controls' yaw, tilt and zoom (pan is not used). Events: `chikyu-ready`, `chikyu-unavailable`, `chikyu-time` (while time runs), `chikyu-body-click`, `chikyu-body-focus`. `stats` has `state`, `draws`, `contexts`, `canvas`,
+the shared controls' yaw, tilt and zoom (pan is not used). Events: `chikyu-ready`, `chikyu-unavailable`, `chikyu-timechange` (`{ time, running }`: four a second at most while time runs, and once when it holds), `chikyu-time` (every step the clock takes, up to thirty a second), `chikyu-body-click`, `chikyu-body-focus`. `stats` has `state`, `draws`, `contexts`, `canvas`,
 `tiers`, `distance`, `time` and `lookups`.
 
 ## The budget, and how each part is tested (`e2e/space.gl.ts`, `e2e/space.soak.ts`)
