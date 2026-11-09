@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { publishThumbnails, thumbnailHead } from "./family-thumbnail.mjs";
-import { renderEmbed, renderIndex } from "./page.ts";
+import { renderEmbed, renderIndex, renderKids } from "./page.ts";
 
 const at = (path: string) => new URL(`../${path}`, import.meta.url).pathname;
 
@@ -12,7 +12,7 @@ const pkg = JSON.parse(readFileSync(at("package.json"), "utf8"));
 await rm(at("site/"), { recursive: true, force: true });
 await mkdir(at("site/"), { recursive: true });
 await build({
-  entryPoints: [at("demo/demo.ts"), at("demo/embed.ts"), at("demo/builder.ts")],
+  entryPoints: [at("demo/demo.ts"), at("demo/embed.ts"), at("demo/builder.ts"), at("demo/kids.ts")],
   bundle: true,
   splitting: true,
   format: "esm",
@@ -45,5 +45,6 @@ const ALT = "Chikyu Earth: the globe as a line drawing over Europe and Africa, a
 await writeFile(at("site/index.html"), renderIndex().replace("  </head>", `    ${thumbnailHead(pkg, { alt: ALT })}\n  </head>`), "utf8");
 publishThumbnails(at(""), at("site/"));
 await writeFile(at("site/embed.html"), renderEmbed(), "utf8");
+await writeFile(at("site/kids.html"), renderKids(), "utf8");
 await cp(at("demo/builder.html"), at("site/builder.html"));
-console.log("site built: index.html, embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/, missions/");
+console.log("site built: index.html, embed.html, kids.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/, missions/");

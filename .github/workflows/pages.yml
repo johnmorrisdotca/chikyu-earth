@@ -60,6 +60,9 @@ jobs:
         run: python3 -m venv .cache/venv && .cache/venv/bin/pip install pillow && .cache/venv/bin/python -I scripts/make-earth-tiles.py build
       - run: pnpm site
       - run: pnpm docs:site
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: The ready-made PDFs of the printable sheets
+        run: node scripts/make-pdfs.mjs
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

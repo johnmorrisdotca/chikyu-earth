@@ -28,3 +28,15 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
 #sat-groups button::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent); flex: none; }
 #embed-panel .fam-seg button[aria-checked="true"] { background: var(--ink); color: var(--surface); }
 #embed-panel .fam-seg button, .embed-places .fam-button { min-height: 48px; }
+
+/* the printable sheets */
+.kids { display: grid; gap: 10px; padding: 8px 0 16px; }
+.kids-title { margin: 0 0 4px; font-size: 1.4rem; }
+.kids-picks { display: grid; gap: 10px; margin-bottom: 8px; }
+.kids-picks .fam-row { flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.kids-picks .fam-seg button, .kids-picks .fam-button, .kids-picks .fam-field { min-height: 48px; min-width: 48px; font-family: inherit; }
+.kids-picks .field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
+.kids-flag { height: 48px; border: 1px solid var(--rule); border-radius: 4px; }
+.kids-paper { position: relative; width: 100%; overflow: hidden; border-radius: 6px; background: #1a2233; }
+#paper-inner { transform-origin: 0 0; width: max-content; }
+#paper-inner .kazoku-sheet { display: flex; flex-direction: column; gap: 6mm; }

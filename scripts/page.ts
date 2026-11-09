@@ -9,19 +9,32 @@ const id = "chikyu-earth";
 const TITLE = "Chikyu Earth 地球: a line-drawn globe for the web";
 const DESCRIPTION = "A line-drawn globe of the world's countries that turns at the Earth's own rate, centred on where you are, with an optional realistic Earth from space and markers for any place. A web component and an SVG string.";
 
+const LINKS = [{ href: "kids.html", say: "pageKids" }, { href: "docs/index.html", say: "pageDocs" }, { href: "embed.html", say: "pageEmbed" }];
+
+/** The family's script and the language chooser, then the page's own module. */
+const scripts = (script: string): string =>
+  `<script>${FAMILY_SCRIPT}</script>\n<script>window.chikyuLanguage = familyLanguage({ id: ${JSON.stringify(id)}, words: ${JSON.stringify(WORDS)} });</script>\n<script type="module" src="kazoku-parts.js"></script>\n<script type="module" src="${script}"></script>`;
+
 /** The page's text with the family's blocks put in where its comments say. */
 export function renderIndex(): string {
   const html = readFileSync(new URL("../demo/index.html", import.meta.url), "utf8");
   return html
     .replace("<!--family:head-->", familyHead({ id, title: TITLE, description: DESCRIPTION }))
-    .replace("<!--family:header-->", familyHeader({ id, links: [{ href: "docs/index.html", say: "pageDocs" }, { href: "embed.html", say: "pageEmbed" }] }))
+    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
     .replace("<!--family:footer-->", familyFooter({ id }))
-    .replace(
-      /<!--family:scripts ([\w.-]+)-->/,
-      (_, script: string) =>
-        `<script>${FAMILY_SCRIPT}</script>\n<script>window.chikyuLanguage = familyLanguage({ id: ${JSON.stringify(id)}, words: ${JSON.stringify(WORDS)} });</script>\n<script type="module" src="kazoku-parts.js"></script>\n<script type="module" src="${script}"></script>`,
-    );
+    .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
+}
+
+/** The page for printable sheets, made like the demo's, with the family's blocks and its own script. */
+export function renderKids(): string {
+  const html = readFileSync(new URL("../demo/kids.html", import.meta.url), "utf8");
+  return html
+    .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.kd_title, description: WORDS.en.kd_description }))
+    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
+    .replace("<!--family:footer-->", familyFooter({ id }))
+    .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 
 /** demo/embed.html, the frame a page puts in an iframe: plain, no family blocks. */
