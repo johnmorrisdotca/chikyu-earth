@@ -73,6 +73,8 @@
   "sideEffects": [
     "./dist/element.js",
     "./src/element.ts",
+    "./dist/passes/element.js",
+    "./src/passes/element.ts",
     "./dist/realistic/element.js",
     "./src/realistic/element.ts",
     "./dist/space/element.js",
@@ -121,6 +123,16 @@
       "types": "./dist/satellites/index.d.ts",
       "import": "./dist/satellites/index.js",
       "default": "./dist/satellites/index.js"
+    },
+    "./passes/element": {
+      "types": "./dist/passes/element.d.ts",
+      "import": "./dist/passes/element.js",
+      "default": "./dist/passes/element.js"
+    },
+    "./passes": {
+      "types": "./dist/passes/index.d.ts",
+      "import": "./dist/passes/index.js",
+      "default": "./dist/passes/index.js"
     },
     "./sheets": {
       "types": "./dist/sheets/index.d.ts",

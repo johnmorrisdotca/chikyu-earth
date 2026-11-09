@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -52,3 +52,11 @@ if (!sheets.countrySheetSvg("JP", room).includes("data-flag-box")) throw new Err
 if (Math.abs(Number(sheets.dayNightSvg(Date.UTC(2026, 5, 21, 12), room).match(/data-sun="[-\d.]+ ([-\d.]+)"/)[1]) - 23.44) > 0.1) throw new Error("dayNightSvg is off");
 if (!sheets.seasonsSvg(room).includes("data-orbit")) throw new Error("seasonsSvg is off");
 console.log("sheets ok");
+
+const passes = await import(new URL("../dist/passes/index.js", import.meta.url).href);
+const iss = { OBJECT_NAME: "ISS (ZARYA)", EPOCH: "2026-11-02T10:25:21", MEAN_MOTION: 15.49150046, ECCENTRICITY: 0.0007139, INCLINATION: 51.6332, RA_OF_ASC_NODE: 335.9757, ARG_OF_PERICENTER: 339.3739, MEAN_ANOMALY: 20.6961, NORAD_CAT_ID: 25544, BSTAR: 0.00012, MEAN_MOTION_DOT: 0.0001, MEAN_MOTION_DDOT: 0 };
+const day = Date.UTC(2026, 10, 3);
+const found = passes.findPasses(iss, { latitude: 51.5, longitude: -0.13 }, { from: day, to: day + 3 * 86_400_000 }, { all: true });
+if (found.length < 8 || found.some((one: { highest: { altitude: number } }) => one.highest.altitude < 10) || passes.compassOf(180) !== "S") throw new Error("findPasses is off");
+if (!passes.skySvg(found[0], passes.passPath(iss, { latitude: 51.5, longitude: -0.13 }, found[0])).includes("data-mark")) throw new Error("skySvg is off");
+console.log("passes ok");
