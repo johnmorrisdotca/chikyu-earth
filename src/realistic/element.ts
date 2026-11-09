@@ -10,6 +10,7 @@ import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
+import type { TileStats } from "./tile-set.ts";
 
 type EarthLayer = Extract<Layer, "day" | "night" | "clouds" | "water">;
 
@@ -68,7 +69,7 @@ export const readTime = (value: string | null): number | "now" => {
 };
 
 /**
- * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds`, `texture-base` (where the pictures are served from) and `max-ratio` (the most device pixels to a CSS pixel the canvas is drawn at, 2 at most, and `0.5` draws at half the size and scales it up: for a background; read when the element connects, and it is the shared renderer's cap for the whole page), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
+ * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds`, `texture-base` (where the pictures are served from), `tiles` (where a set of finer map tiles is served from, see the Earth tiles guide: only the tiles in view are loaded, over the package's own pictures, which stay as the far view and the fallback; without it, or when a tile cannot be fetched, the Earth is drawn as before) and `max-ratio` (the most device pixels to a CSS pixel the canvas is drawn at, 2 at most, and `0.5` draws at half the size and scales it up: for a background; read when the element connects, and it is the shared renderer's cap for the whole page), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
  *
  * @example
  * ```ts no-run
@@ -78,11 +79,12 @@ export const readTime = (value: string | null): number | "now" => {
  * earth.setAttribute("center", "139.7,35.7");
  * earth.setAttribute("time", "2026-06-21T03:00Z");
  * earth.setAttribute("texture-base", "/textures/");
+ * earth.setAttribute("tiles", "/tiles/");
  * document.body.append(earth);
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["center", "time", "clouds", "lights", "light", "live-seconds"];
+  static observedAttributes = ["center", "time", "clouds", "lights", "light", "live-seconds", "tiles"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -139,6 +141,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
       assets: taken.renderer.assets,
       textureBase: () => this.#textureBase(),
       cap: () => this.#textureCap(),
+      tiles: () => this.tiles ?? undefined,
+      onTiles: (layers) => this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } })),
       drift: 1.5,
       invalidate: () => this.#gate?.soon(),
       onPose: (pose) => {
@@ -184,6 +188,18 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "lights") this.lights = value !== "off";
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
+    else if (name === "tiles") this.#gate?.soon();
+  }
+
+  /** Where the finer map tiles are served from (a folder with `manifest.json`), or `null` for none; the attribute `tiles`. The Earth loads only the tiles in view, over its own pictures. */
+  get tiles(): string | null {
+    const given = this.getAttribute("tiles");
+    if (!given) return null;
+    return given.endsWith("/") ? given : `${given}/`;
+  }
+  set tiles(value: string | null) {
+    if (value === null || value === "") this.removeAttribute("tiles");
+    else this.setAttribute("tiles", value);
   }
 
   /** A box laid over the Earth for markers (see `@johnmorrisdotca/chikyu-earth/markers`): where it is, the pose of the last draw, and a way to hear the next. */
@@ -245,12 +261,13 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#gate?.soon();
   }
 
-  /** What the element is doing, for a page or a test: its state, the texture widths held, the draws made. */
-  get stats(): { state: EarthState; tiers: Record<EarthLayer, number>; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
+  /** What the element is doing, for a page or a test: its state, the texture widths held, the map tiles held, the draws made. */
+  get stats(): { state: EarthState; tiers: Record<EarthLayer, number>; tiles: TileStats; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
     const stats = this.#taken?.renderer.stats;
     return {
       state: this.#state,
       tiers: { ...this.#tiers },
+      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0 },
       draws: stats?.draws ?? 0,
       contexts: stats?.contexts ?? 0,
       canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },

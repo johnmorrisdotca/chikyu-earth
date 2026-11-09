@@ -9,6 +9,7 @@ import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, CLOUD_FRAG, SURFACE_FRAG, SURFACE_VER
 import { subsolarPoint, unitVector } from "./sun.ts";
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
+import { createTileSet, type TileSet } from "./tile-set.ts";
 export type { ThreeParts };
 
 type Three = ThreeParts;
@@ -54,6 +55,8 @@ export interface EarthModel {
   light: LightMode;
   /** Where the camera looked at the last draw (the element decides from it whether a new draw is worth it). */
   drawn: { view: GlobeView; time: number; radius: number; centre: GeoPoint } | null;
+  /** The map tiles laid over the pictures while the scene is built: what they are doing, for a page or a test. */
+  tiles: TileSet | null;
   /** The pixel ratio the textures are chosen for. */
   ratio(): number;
 }
@@ -64,6 +67,10 @@ export interface EarthDeps {
   textureBase: () => string;
   /** The widest texture, 4096 at most. */
   cap: () => number;
+  /** Where the finer map tiles are (a URL ending with a slash), or `undefined`: the Earth then keeps the package's own pictures. */
+  tiles?: () => string | undefined;
+  /** Told once when the tile set has been read: the width in pixels of the finest level of each of its layers. */
+  onTiles?: (layers: Record<string, number>) => void;
   /** Clouds' eastward drift against the ground, degrees an hour. */
   drift: number;
   invalidate: () => void;
@@ -81,6 +88,7 @@ export const newModel = (): EarthModel => ({
   lights: true,
   light: "sun",
   drawn: null,
+  tiles: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
@@ -176,6 +184,13 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
 
       const turned = new three.Group();
       const earth = new three.Mesh(grid, surface);
+      const tiles: TileSet = createTileSet(
+        three,
+        turned,
+        { sunDir, lights: surface.uniforms["lights"] as { value: number }, boost: surface.uniforms["boost"] as { value: number }, ortho: surface.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night },
+        { assets: deps.assets, base: () => deps.tiles?.(), cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
+      );
+      model.tiles = tiles;
       const clouds = new three.Mesh(grid, cloudMaterial);
       clouds.scale.setScalar(CLOUD_RADIUS);
       clouds.renderOrder = 2;
@@ -211,6 +226,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           camera.updateProjectionMatrix();
           model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...model.centre } };
           textures.sync(radius * model.ratio());
+          tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
           return false;
         },
@@ -218,6 +234,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           size = { width: next, height: nextHeight };
         },
         dispose() {
+          model.tiles = null;
+          tiles.dispose();
           textures.dispose();
           grid.dispose();
           surface.dispose();

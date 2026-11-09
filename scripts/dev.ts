@@ -19,6 +19,8 @@ createServer((req, res) => {
   void (async () => {
     let url = (req.url ?? "/").split("?")[0].replace(/^\/chikyu-earth\/?/, "/");
     if (url === "/") url = "/index.html";
+    // the tests bring their own made-up tile set, so they never depend on whether the real one was built here
+    if (process.env.WITHOUT_TILES && url.startsWith("/tiles/")) url = "/no-tiles";
     const path = join(root, normalize(url));
     try {
       const body = await readFile(path);

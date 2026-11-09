@@ -31,6 +31,34 @@ A layer stops at the largest level its source can fill without being enlarged, s
 
 That is 852 files and 10.3 MB for the whole pyramid. A view never loads it all: a tile decodes to about 1 MB of graphics memory, so a full screen at the right level is a few dozen tiles.
 
+## Using them
+
+Give the realistic Earth the folder the tiles are served from, with a slash at the end, in the `tiles` attribute (or `earth.tiles = "..."`):
+
+```html
+<chikyu-earth-realistic center="139.7,35.7" texture-base="/textures/" tiles="/tiles/"></chikyu-earth-realistic>
+```
+
+The element reads `manifest.json` once, and nothing more is fetched until the zoom needs it. The package's own pictures stay under the tiles as the far view and as the fallback: day 4096 across, night 2048. The element then:
+
+- **Picks the level from the zoom and the canvas.** It wants about one texel to a device pixel (a texel may be a quarter wider before the next level is chosen), so it counts the disc's radius in device pixels, which grows with the zoom, the size of the box and the pixel ratio. While the package's own 4096 picture is as sharp as that, no tile is fetched. Past that, day level 3 (8192) and then level 4 (16384). Night tiles start at level 2 (4096) and stop at level 3.
+- **Loads only the tiles in view.** A tile is in view when part of it is in the box on the front of the globe, a little before its edge slides in, and the middle of the box first. At most six are fetched at once. The antimeridian and the poles need nothing special: a tile is tested where it is on the sphere, and a longitude of 180 is the last column.
+- **Draws them over the package's picture**, one patch of the sphere for each tile, a finer level on top of a coarser one, with the same Sun, night side and city lights as the rest of the Earth. On the dark side the night tile that goes with the day tile is read too, but only where the Sun is low enough to show it.
+- **Keeps few of them.** A tile that leaves view, or is no longer the level wanted, is kept for four seconds (a drag back costs nothing) and then freed, its texture disposed on the GPU, and at once, the oldest first, when more than **48** are held: about 70 MB of graphics memory at most. If the tiles in view would be more than that, the level drops until they fit. A device that holds no 4096 picture (a `max-texture` below 4096, or a phone with 2 GB or less) uses no tiles.
+- **Draws on demand.** A tile that arrives asks for one draw, batched with the others of that moment and held to 30 frames a second; at most eight new tiles go onto the sphere in a frame, and nothing is drawn at rest, out of sight, or in a hidden tab. A lost WebGL context is recovered with the tiles that were held, with no new fetch.
+- **Falls back silently.** Without the option, with a manifest that cannot be read, or for a tile that cannot be fetched (it is asked for again after half a minute), the Earth is drawn as before from the package's pictures, and nothing is reported to the reader. `earth.stats.tiles` says what it is doing (`ready`, `level`, `held`, `shown`, `loading`, `failed`, `requested`), and the element fires `chikyu-tiles` once when a set has been read.
+
+### How far to zoom
+
+The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. The finest tile level is 16384 across, four times the widest picture, so the realistic Earth goes **four times further: 20 times**. At 20 times a 420 pixel globe has a disc 3,900 pixels in radius, and a texel is up to 1.5 CSS pixels wide on an ordinary screen, so there is still detail in it, but nothing finer than the source has (the Blue Marble is 500 m a pixel). The limit is the view controls' `zoom-max`, which the page sets. The demo raises it from 5 to 20 when the tiles are found, and leaves it at 5 when they are not:
+
+```ts no-run
+const controls = document.querySelector("kazoku-view-controls")!;
+earth.addEventListener("chikyu-tiles", () => controls.setAttribute("zoom-max", "20"));
+```
+
+The clouds stay at the package's 2048 picture: they are soft, and NASA's finer cloud files are no longer served. The city lights go to level 3 (8192 across), half the day map's detail, where there is little more to see.
+
 ## Making them
 
 ```sh

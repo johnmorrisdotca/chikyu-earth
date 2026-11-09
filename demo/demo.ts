@@ -29,6 +29,9 @@ const say = (key: string, values: Record<string, string | number> = {}): string 
   return (chooser?.word(key) ?? WORDS.en[key] ?? key).replace(/\{(\w+)\}/g, (all, name: string) => String(values[name] ?? all));
 };
 
+/** The most zoom on the realistic Earth when its tiles are there: 4 times the package pictures' 5x, as the finest tiles are 4 times wider than the widest picture. */
+const TILES_ZOOM_MAX = 20;
+
 const flat = document.querySelector<ChikyuEarth>("chikyu-earth");
 const controls = document.querySelector("kazoku-view-controls");
 const stage = document.querySelector<HTMLElement>("#globe");
@@ -116,8 +119,8 @@ if (flat && controls && stage) {
     missionRow?.leave();
     real = null;
     space = null;
-    controls!.removeAttribute("zoom-min");
-    controls!.removeAttribute("zoom-max");
+    controls!.setAttribute("zoom-min", "1");
+    controls!.setAttribute("zoom-max", "5");
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
@@ -651,6 +654,11 @@ if (flat && controls && stage) {
       const centre = flat!.centre;
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
       element.setAttribute("texture-base", "textures/");
+      element.setAttribute("tiles", "tiles/");
+      controls!.setAttribute("zoom-min", "1");
+      controls!.setAttribute("zoom-max", "5");
+      // the package's pictures are sharp to about 5x; with the tiles the detail runs 4 times further
+      element.addEventListener("chikyu-tiles", () => controls!.setAttribute("zoom-max", String(TILES_ZOOM_MAX)));
       const clouds = address.get("clouds");
       const lights = address.get("lights");
       const when = address.get("time");

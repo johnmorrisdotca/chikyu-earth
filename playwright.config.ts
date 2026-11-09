@@ -19,7 +19,7 @@ export default defineConfig({
   use: { baseURL: `http://127.0.0.1:${port}`, reducedMotion: "reduce", locale: "en-US" },
   webServer: {
     command: "node scripts/dev.ts",
-    env: { PORT: String(port) },
+    env: { PORT: String(port), WITHOUT_TILES: "1" },
     url: `http://127.0.0.1:${port}/chikyu-earth/`,
     reuseExistingServer: false,
   },

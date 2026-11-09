@@ -62,6 +62,11 @@ when it is ready, and the smaller one let go. When the zoom drops, the larger on
 **Caps.** No texture is wider than 4096 (a day picture at 4096 is about 43 MB on the GPU with its mipmaps; the other layers stay at 2048 or less), `max-texture`
 lowers that, and a device that reports 2 GB of memory or less stops at 2048.
 
+**Finer tiles for a close zoom.** Past a zoom of about 5 the 4096 picture blurs. With `tiles="/tiles/"` (a folder URL, with a `manifest.json`) the element loads only
+the 512 pixel map tiles in view, from level 3 (8192 across) to level 4 (16384), over these pictures, holds at most 48 of them (about 70 MB of graphics memory), frees the
+rest after 4 seconds, and keeps the pictures above as the far view and the fallback when the option is missing or a tile fails. The page's zoom limit can then go from
+5 to 20. How the level is chosen, the memory budget, what is not tiled, and how to make and serve a set: [Sharp Earth maps, cut into tiles](guides/earth-tiles.md).
+
 ## Attributes and properties
 
 | | |
@@ -70,11 +75,12 @@ lowers that, and a device that reports 2 GB of memory or less stops at 2048.
 | `time="2026-06-21T12:00Z"` | the moment shown; `now` (the default) follows the clock |
 | `clouds="off"`, `lights="off"` | switch the cloud layer or the night lights off |
 | `texture-base`, `max-texture` | where the pictures are; the widest one to use |
+| `tiles` | where a tile set is (a folder URL with `manifest.json`); finer tiles load for the part in view. A `max-texture` under 4096 turns them off |
 | `max-ratio` | the most device pixels to a CSS pixel the canvas is drawn at (2 at most; `0.5` draws at half the size and scales it up, for a background). Read when the element connects; the shared renderer keeps it for the whole page |
 | `live-seconds` | how often the Sun and clouds are put right while the time is `now` (60) |
 
-Properties: `time` (a number of milliseconds, a `Date` or `"now"`), `centre`, `clouds`, `lights`, `view`, `stats`. Events: `chikyu-ready`,
-`chikyu-unavailable` (WebGL missing or a picture would not load; `detail.reason`), `chikyu-tier` (`detail.layer`, `detail.width`). `data-state` is
+Properties: `time` (a number of milliseconds, a `Date` or `"now"`), `centre`, `clouds`, `lights`, `tiles`, `view`, `stats` (with `stats.tiles`). Events: `chikyu-ready`,
+`chikyu-unavailable` (WebGL missing or a picture would not load; `detail.reason`), `chikyu-tier` (`detail.layer`, `detail.width`), `chikyu-tiles` (a tile set has been read; `detail.layers`, the finest width of each). `data-state` is
 `loading`, `live`, `lost` or `unavailable`.
 
 **Draws.** Changes made in one task (a `time` and a `setView` together) are one draw.

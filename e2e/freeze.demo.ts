@@ -4,6 +4,7 @@
 import { canvasSize, COUNT_SCRIPT, gpuObjects, readCounts, withinPixelBudget } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
 import { routeElements } from "./recorded.ts";
+import { routeTiles } from "./tiles-fixture.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
 
@@ -159,6 +160,48 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   await expect(page.locator("chikyu-space")).toHaveCount(0);
   // The shared renderer lets the context go a moment after the last view leaves, and takes its canvas with it.
   await expect.poll(async () => page.evaluate(() => document.querySelectorAll("canvas").length + [...document.querySelectorAll("*")].filter((el) => el.shadowRoot?.querySelector("canvas:not(.cm-canvas)")).length), { timeout: 15_000 }).toBe(0);
+});
+
+test("the map tiles: zooming in and out over and over gives back what it took, holds few tiles, and draws nothing at rest", async ({ page }) => {
+  const log = await routeTiles(page);
+  await open(page, "realistic");
+  const earth = page.locator("chikyu-earth-realistic");
+  const tiles = () => earth.evaluate((el) => (Reflect.get(el, "stats") as { tiles: { ready: boolean; level: number | null; held: number; shown: number; loading: number; requested: number } }).tiles);
+  await expect.poll(async () => (await tiles()).ready).toBe(true);
+  const radiusFor = async (radius: number) => {
+    const box = (await earth.boundingBox())!;
+    return radius / (Math.min(box.width, box.height) / 2 / 1.08 - 1);
+  };
+  const view = (zoom: number, yaw = 0) => earth.evaluate((el, v) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView(v, true), { yaw, tilt: 0, zoom, panX: 0, panY: 0 });
+  const settled: number[] = [];
+  const peaks: number[] = [];
+  let heldMost = 0;
+  for (let round = 0; round < 6; round += 1) {
+    await view(await radiusFor(1000), round * 7);
+    await expect.poll(async () => (await tiles()).level, { timeout: 30_000 }).toBe(3);
+    await expect.poll(async () => (await tiles()).shown, { timeout: 30_000 }).toBeGreaterThan(2);
+    await view(await radiusFor(2600), round * 7);
+    await expect.poll(async () => (await tiles()).level, { timeout: 30_000 }).toBe(4);
+    await expect.poll(async () => (await tiles()).loading, { timeout: 30_000 }).toBe(0);
+    await page.waitForTimeout(600);
+    peaks.push(gpuObjects(await readCounts(page)));
+    heldMost = Math.max(heldMost, (await tiles()).held);
+    // at rest with the tiles on the sphere nothing is drawn
+    const rest = await bounded(page, 1500);
+    expect(rest.draws, "no GL draws at rest with the tiles loaded").toBe(0);
+    expect(rest.frames).toBe(0);
+    await view(1);
+    await expect.poll(async () => (await tiles()).held, { timeout: 20_000 }).toBe(0);
+    await page.waitForTimeout(2000);
+    const counted = await readCounts(page);
+    settled.push(gpuObjects(counted));
+    expect(counted.contexts, "one WebGL context").toBe(1);
+  }
+  console.log(`live GPU objects with the tiles on the sphere: ${peaks.join(", ")}; after each zoom out: ${settled.join(", ")}; the most tiles held: ${heldMost}; tiles fetched: ${log.tiles.length}`);
+  expect(heldMost, "tiles held at once").toBeLessThanOrEqual(48);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after six rounds than after the second").toBeLessThanOrEqual(settled[1]! + 8);
+  expect(Math.max(...peaks.slice(1)), "the same number with the tiles on, round after round").toBeLessThanOrEqual(peaks[1]! + 8);
+  expect(settled[5]!, "zoomed out, the tiles' textures and buffers are all gone").toBeLessThanOrEqual(settled[0]! + 2);
 });
 
 test("the planets: the Sun, planets, Pluto and moons painted, the looks switched and the moons shown, nothing grows and nothing is drawn at rest", async ({ page }) => {

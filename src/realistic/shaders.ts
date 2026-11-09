@@ -12,7 +12,8 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
-export const SURFACE_FRAG = /* glsl */ `
+/** The surface program. `tile` is the program of a map tile laid over the whole-Earth pictures: the day picture is read at the tile's own coordinates, the rest at the whole Earth's. */
+const surfaceFrag = (tile: boolean): string => /* glsl */ `
 uniform sampler2D dayMap;
 uniform sampler2D nightMap;
 uniform sampler2D waterMap;
@@ -20,6 +21,7 @@ uniform vec3 sunDir;
 uniform float lights;
 uniform float boost;
 uniform float ortho;
+${tile ? "uniform vec4 nightRect;\nvarying vec2 vUvG;" : ""}
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorld;
@@ -29,7 +31,7 @@ void main() {
   float ndl = dot(n, sunDir);
   float day = smoothstep(-0.10, 0.22, ndl);
   vec3 albedo = texture2D(dayMap, vUv).rgb;
-  float water = texture2D(waterMap, vUv).r;
+  float water = texture2D(waterMap, ${tile ? "vUvG" : "vUv"}).r;
 
   vec3 lit = albedo * (0.07 + 1.0 * pow(max(ndl, 0.0), 0.5));
   float dusk = smoothstep(-0.14, 0.0, ndl) * (1.0 - smoothstep(0.0, 0.30, ndl));
@@ -39,7 +41,7 @@ void main() {
   float glint = pow(max(dot(n, h), 0.0), 220.0) * water * day;
   lit += vec3(1.0, 0.93, 0.80) * glint * 0.7;
 
-  vec3 night = texture2D(nightMap, vUv).rgb;
+  vec3 night = texture2D(nightMap, ${tile ? "(vUvG - nightRect.xy) / nightRect.zw" : "vUv"}).rgb;
   night = night * night * vec3(1.6, 1.5, 1.3) * lights + night * 0.25;
   vec3 col = mix(night, lit, day);
   col += pow(albedo, vec3(0.75)) * boost * 0.65 * (1.0 - day);
@@ -48,6 +50,34 @@ void main() {
   float sunSide = 0.12 + 0.88 * smoothstep(-0.25, 0.5, ndl);
   col += vec3(0.20, 0.45, 1.0) * rim * sunSide * 0.55;
   gl_FragColor = vec4(col, 1.0);
+}`;
+
+export const SURFACE_FRAG = surfaceFrag(false);
+
+/** The same surface for a map tile: the tile's own program. */
+export const TILE_FRAG = surfaceFrag(true);
+
+/**
+ * A map tile's corners: one 0 to 1 grid for every tile, put on the sphere here from the tile's longitude and latitude range (`rect`: west, north, east, south, in radians) at `radius`.
+ * `vUvG` is where the point is on the whole-Earth pictures.
+ */
+export const TILE_VERT = /* glsl */ `
+uniform vec4 rect;
+uniform float radius;
+varying vec2 vUv;
+varying vec2 vUvG;
+varying vec3 vNormal;
+varying vec3 vWorld;
+void main() {
+  vUv = uv;
+  float lon = mix(rect.x, rect.z, uv.x);
+  float lat = mix(rect.y, rect.w, uv.y);
+  vec3 unit = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
+  vUvG = vec2((lon + 3.14159265358979) / 6.28318530717959, 0.5 - lat / 3.14159265358979);
+  vNormal = normalize(mat3(modelMatrix) * unit);
+  vec4 world = modelMatrix * vec4(unit * radius, 1.0);
+  vWorld = world.xyz;
+  gl_Position = projectionMatrix * viewMatrix * world;
 }`;
 
 export const CLOUD_FRAG = /* glsl */ `
