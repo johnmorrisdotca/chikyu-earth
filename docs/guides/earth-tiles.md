@@ -53,6 +53,9 @@ The element reads `manifest.json` once, and nothing more is fetched until the zo
 The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. The finest tile level is 16384 across, four times the widest picture, so the realistic Earth goes **four times further: 20 times**. At 20 times a 420 pixel globe has a disc 3,900 pixels in radius, and a texel is up to 1.5 CSS pixels wide on an ordinary screen, so there is still detail in it, but nothing finer than the source has (the Blue Marble is 500 m a pixel). The limit is the view controls' `zoom-max`, which the page sets. The demo raises it from 5 to 20 when the tiles are found, and leaves it at 5 when they are not:
 
 ```ts no-run
+import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+
+const earth = document.querySelector<ChikyuEarthRealistic>("chikyu-earth-realistic")!;
 const controls = document.querySelector("kazoku-view-controls")!;
 earth.addEventListener("chikyu-tiles", () => controls.setAttribute("zoom-max", "20"));
 ```

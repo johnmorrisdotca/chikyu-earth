@@ -53,6 +53,9 @@ description: 地球に大きく近づいてもくっきり見えるように、�
 パッケージの画像がくっきり見えるのは約 5 倍までで、デモの上限も 5 でした。タイルの一番細かいレベルは横 16384 で、一番大きな画像の 4 倍です。そのため、リアルな地球は **4 倍遠くまで、つまり 20 倍まで**近づけます。20 倍では、420 ピクセルの地球の円盤は半径 3,900 ピクセルになり、ふつうの画面でテクセル 1 つは CSS ピクセルで最大 1.5 ほどです。まだ細部は見えますが、元の画像より細かいものはありません (Blue Marble は 1 ピクセルが 500 m です)。上限は表示操作の `zoom-max` で、ページが決めます。デモは、タイルが見つかると 5 から 20 に上げ、見つからないときは 5 のままにします。
 
 ```ts no-run
+import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+
+const earth = document.querySelector<ChikyuEarthRealistic>("chikyu-earth-realistic")!;
 const controls = document.querySelector("kazoku-view-controls")!;
 earth.addEventListener("chikyu-tiles", () => controls.setAttribute("zoom-max", "20"));
 ```
