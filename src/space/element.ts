@@ -137,6 +137,8 @@ const EARTH_RATE = 360 / 86_164.0905;
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
 const REAL_TIME_TICK_MS = 60_000;
+/** The least time between two `chikyu-timechange` events while time runs: a few a second at most, however fast the picture is drawn. */
+const TIME_EVENT_MS = 250;
 /**
  * Tilt to the poles. The zoom is the camera's distance: a millionth of Fit takes in the whole solar system (the views of the planets and their distances need that much), and 2.5 times is as close as the Earth's 4096 pixel picture and the body textures stay sharp.
  * Riding at a body looking at the Earth, the zoom only narrows the camera's field a little either way: 0.5 to 6.
@@ -163,13 +165,22 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  *
  * It carries kazoku-ui's controls itself: a drag turns the view, two fingers pinch, Ctrl and the wheel zoom (a plain wheel at Fit scrolls the page) and the arrow keys, + and - work once it is focused. The zoom runs from a millionth of Fit (the whole solar system) to 2.5 times, and from 0.5 to 6 times while riding from a body. `controls="none"` turns the hands off; `zoom-min` and `zoom-max` change the range. A `<kazoku-view-controls for="...">` on the element takes the hands over, and the page applies its events with `setView`.
  *
+ * While time runs (`speed` is not 0) it sends `chikyu-timechange` with `detail: { time, running: true }`, `time` being the moment shown in milliseconds since 1970, at most four times a second however fast the picture is
+ * drawn (and, with the clock at real time, as often as it steps: once a minute, or once a second with satellites or a ride on show), only while the tab is shown, and once with `running: false` when the clock holds
+ * (`speed` set to 0): a page writes the date into its date box from it. It is not sent for a `time` the page sets itself. `chikyu-time` is the older event of every step the clock takes (up to thirty a second):
+ * it is kept for pages that use it, but a page that shows the date wants `chikyu-timechange`.
+ *
  * @example
  * ```ts no-run
  * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
  *
  * const space = document.createElement("chikyu-space") as ChikyuSpace;
  * space.setAttribute("time", "2026-11-02T12:00Z");
- * space.setAttribute("speed", "0");
+ * space.setAttribute("speed", "86400");
+ * space.addEventListener("chikyu-timechange", (event) => {
+ *   const { time, running } = (event as CustomEvent<{ time: number; running: boolean }>).detail;
+ *   console.log(new Date(time).toISOString(), running ? "running" : "held");
+ * });
  * document.body.append(space);
  * ```
  */
@@ -187,6 +198,7 @@ export class ChikyuSpace extends HTMLElement {
   #state: SpaceState = "loading";
   #timer: ReturnType<typeof setTimeout> | undefined;
   #last = 0;
+  #announced = -Infinity;
   #pool = new Map<BodyName, HTMLElement>();
   #places: Record<BodyName, BodyPlace | null> | undefined;
   #chosenLabel: HTMLElement | undefined;
@@ -319,12 +331,16 @@ export class ChikyuSpace extends HTMLElement {
     return this.#speed;
   }
   set speed(value: number) {
+    // time up to this moment is worked out at the old speed, so a hold keeps the moment the reader saw last
+    if (this.#speed !== 0 && this.isConnected) this.#advance(performance.now());
+    const was = this.#speed;
     this.#speed = Number.isFinite(value) ? value : 1;
     this.#model.speed = this.#speed;
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
     this.#last = performance.now();
     this.#schedule();
     this.#gate?.request();
+    if (this.#speed === 0 && was !== 0) this.#announce(false);
   }
 
   get scale(): ScaleMode {
@@ -659,14 +675,27 @@ export class ChikyuSpace extends HTMLElement {
     this.#timer = setTimeout(this.#tick, wait);
   }
 
-  #tick = (): void => {
-    const now = performance.now();
+  /** Bring the moment shown up to `now` (the page's own clock, in milliseconds) at the speed it has run at. */
+  #advance(now: number): void {
     if (this.#speed === 1 && this.#mode === "now") this.#model.time = Date.now();
     else this.#model.time += (now - this.#last) * this.#speed;
     this.#last = now;
+  }
+
+  /** Tell the page the moment shown: at most four times a second while time runs (`running`, and not from a hidden tab), and once, at once, when it holds. */
+  #announce(running: boolean): void {
+    const now = performance.now();
+    if (running && (now - this.#announced < TIME_EVENT_MS || document.visibilityState === "hidden")) return;
+    this.#announced = running ? now : -Infinity;
+    this.dispatchEvent(new CustomEvent("chikyu-timechange", { detail: { time: this.#model.time, running } }));
+  }
+
+  #tick = (): void => {
+    this.#advance(performance.now());
     this.#gate?.request();
     this.#schedule();
     this.dispatchEvent(new CustomEvent("chikyu-time", { detail: { time: this.#model.time } }));
+    this.#announce(this.#speed !== 0);
   };
 
   // --- labels --------------------------------------------------------------------------------------------------------------------------------------

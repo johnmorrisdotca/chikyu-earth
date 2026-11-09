@@ -76,6 +76,9 @@ export const readTime = (value: string | null): number | "now" => {
 /**
  * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds`, `texture-base` (where the pictures are served from), `tiles` (where a set of finer map tiles is served from, see the Earth tiles guide: only the tiles in view are loaded, over the package's own pictures, which stay as the far view and the fallback; without it, or when a tile cannot be fetched, the Earth is drawn as before) and `max-ratio` (the most device pixels to a CSS pixel the canvas is drawn at, 2 at most, and `0.5` draws at half the size and scales it up: for a background; read when the element connects, and it is the shared renderer's cap for the whole page), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
  *
+ * Its only running clock is `time="now"`: the Sun and the clouds are put right every `live-seconds` (a minute by default, a second at the least), and each time it sends `chikyu-timechange` with `detail: { time, running: true }` (the moment shown in
+ * milliseconds since 1970; not from a hidden tab). When the time is set to a date it sends one with `running: false`, and a date does not move, so a page's date box has nothing more to follow.
+ *
  * @example
  * ```ts no-run
  * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
@@ -324,8 +327,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /** While the time is "now", the Sun and the clouds are put right once a minute (`live-seconds` changes that): no frames between. */
   #startTick(): void {
+    const ran = this.#tick !== undefined;
     clearInterval(this.#tick);
     this.#tick = undefined;
+    // the clock was following the real one and now holds a date: told once, so a page's date box stops following it
+    if (ran && this.#mode !== "now") this.dispatchEvent(new CustomEvent("chikyu-timechange", { detail: { time: this.#model.time, running: false } }));
     if (!this.isConnected || this.#mode !== "now") return;
     const seconds = Number(this.getAttribute("live-seconds"));
     const ms = Number.isFinite(seconds) && seconds > 0 ? Math.max(MIN_TICK_MS, seconds * 1000) : LIVE_TICK_MS;
@@ -335,6 +341,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #onTick = (): void => {
     this.#model.time = Date.now();
     this.#gate?.soon();
+    // at most once a second (`live-seconds` is at least 1), and not from a hidden tab: nobody sees the date box
+    if (document.visibilityState !== "hidden") this.dispatchEvent(new CustomEvent("chikyu-timechange", { detail: { time: this.#model.time, running: true } }));
   };
 
   #take = (): void => {
