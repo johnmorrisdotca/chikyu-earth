@@ -211,7 +211,7 @@ export function earthFacts(kind: "globe" | "map", lang: Lang): string[] {
   }
   const small = continents.oceania;
   return lang === "ja"
-    ? [`いちばん おおきい たいりくは アジア。りくの ${percent(continents.asia)}% です。`, `いちばん ちいさい たいりくは オセアニア。りくの ${percent(small)}% です。`, "いちばん おおきい うみは たいへいよう。りくを ぜんぶ あわせたより おおきい。"]
+    ? [`いちばん おおきい たいりくは アジア。りくの ${percent(continents.asia)}%。`, `いちばん ちいさい たいりくは オセアニア。りくの ${percent(small)}%。`, "いちばん おおきい うみは たいへいよう。りくを ぜんぶ あわせたより おおきい。"]
     : [`Asia is the biggest continent: ${percent(continents.asia)}% of the land.`, `Oceania is the smallest: ${percent(small)}% of the land.`, "The Pacific is bigger than all the land put together."];
 }
 

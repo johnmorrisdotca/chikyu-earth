@@ -24,10 +24,10 @@ export type Lang = "en" | "ja";
 export const n = (v: number): string => (Math.round(v * 100) / 100).toString();
 export const esc = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** The width of a text in millimetres, estimated on the wide side so a fallback font still fits: a full-width character is as wide as the type is tall, a Latin capital or a digit 0.82 of it, a small letter 0.7 (DejaVu Sans Bold, the usual fallback on a server, is that wide), a space or a stop 0.38. */
+/** The width of a text in millimetres, estimated on the wide side so a fallback font still fits: a full-width character is as wide as the type is tall, a Latin capital or a digit 0.82 of it, a small letter 0.7 (DejaVu Sans Bold, the usual fallback on a server, is that wide), a percent sign or a wide capital (M, W) 1.0, a space or a stop 0.38. */
 export function textWidth(text: string, sizeMm: number): number {
   let total = 0;
-  for (const ch of text) total += /[\u3000-ヿ一-鿿＀-￯]/.test(ch) ? sizeMm : /[ .,:;!'|]/.test(ch) ? 0.38 * sizeMm : /[A-Z0-9]/.test(ch) ? 0.82 * sizeMm : 0.7 * sizeMm;
+  for (const ch of text) total += /[\u3000-ヿ一-鿿＀-￯]/.test(ch) ? sizeMm : /[ .,:;!'|]/.test(ch) ? 0.38 * sizeMm : /[%@#&MW]/.test(ch) ? 1.0 * sizeMm : /[A-Z0-9]/.test(ch) ? 0.82 * sizeMm : 0.7 * sizeMm;
   return total;
 }
 

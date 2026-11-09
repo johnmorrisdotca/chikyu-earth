@@ -9,7 +9,7 @@ const id = "chikyu-earth";
 const TITLE = "Chikyu Earth 地球: a line-drawn globe for the web";
 const DESCRIPTION = "A line-drawn globe of the world's countries that turns at the Earth's own rate, centred on where you are, with an optional realistic Earth from space and markers for any place. A web component and an SVG string.";
 
-const LINKS = [{ href: "kids.html", say: "pageKids" }, { href: "docs/index.html", say: "pageDocs" }, { href: "embed.html", say: "pageEmbed" }];
+const LINKS = [{ href: "docs/index.html", say: "pageDocs" }, { href: "embed.html", say: "pageEmbed" }];
 
 /** The family's script and the language chooser, then the page's own module. */
 const scripts = (script: string): string =>
