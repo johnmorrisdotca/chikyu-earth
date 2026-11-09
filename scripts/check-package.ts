@@ -43,3 +43,12 @@ if (station.count !== 1 || height < 380 || height > 470) throw new Error(`create
 const flights = satellites.missions();
 if (flights.length !== 135 || satellites.missionOf("STS-31")?.hubble !== "deployment" || satellites.missionOf(51)?.name !== "STS-51") throw new Error("the missions are off");
 console.log("satellites ok");
+
+const sheets = await import(new URL("../dist/sheets/index.js", import.meta.url).href);
+const room = { widthMm: 184.6, heightMm: 170 };
+if (!sheets.globeSheetSvg("americas", room).includes("North")) throw new Error("globeSheetSvg is off");
+if (!sheets.worldMapSvg(room).includes("data-coast")) throw new Error("worldMapSvg is off");
+if (!sheets.countrySheetSvg("JP", room).includes("data-flag-box")) throw new Error("countrySheetSvg is off");
+if (Math.abs(Number(sheets.dayNightSvg(Date.UTC(2026, 5, 21, 12), room).match(/data-sun="[-\d.]+ ([-\d.]+)"/)[1]) - 23.44) > 0.1) throw new Error("dayNightSvg is off");
+if (!sheets.seasonsSvg(room).includes("data-orbit")) throw new Error("seasonsSvg is off");
+console.log("sheets ok");

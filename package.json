@@ -122,6 +122,11 @@
       "import": "./dist/satellites/index.js",
       "default": "./dist/satellites/index.js"
     },
+    "./sheets": {
+      "types": "./dist/sheets/index.d.ts",
+      "import": "./dist/sheets/index.js",
+      "default": "./dist/sheets/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -163,14 +168,14 @@
   },
   "dependencies": {
     "@johnmorrisdotca/chizu": "^1.6.0",
-    "@johnmorrisdotca/kazoku-ui": "^0.21.1",
+    "@johnmorrisdotca/kazoku-ui": "^0.22.0",
     "d3-geo": "^3.1.1"
   },
   "peerDependencies": {
-    "three": ">=0.160.0",
+    "@johnmorrisdotca/wakusei-planets": ">=0.5.0",
     "astronomy-engine": ">=2.1.0",
     "satellite.js": ">=6.0.0",
-    "@johnmorrisdotca/wakusei-planets": ">=0.5.0"
+    "three": ">=0.160.0"
   },
   "peerDependenciesMeta": {
     "three": {
@@ -192,6 +197,8 @@
     "@angular/core": "^22.2.4",
     "@angular/platform-browser": "^22.2.4",
     "@eslint/js": "^9.0.0",
+    "@johnmorrisdotca/hata": "^1.8.0",
+    "@johnmorrisdotca/kuni": "^1.5.0",
     "@johnmorrisdotca/wakusei-planets": "^0.5.0",
     "@playwright/test": "1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
