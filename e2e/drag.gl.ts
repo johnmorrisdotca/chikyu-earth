@@ -1,6 +1,6 @@
 // The ground follows the pointer, in every look and when riding: drag right and the ground moves right, drag up and it moves up, the arrow keys agree, Auto-turn turns the real way
 // (the ground moves left to right, as the Earth turns west to east), and a ride can be dragged too. Real pointer events, real key presses, and the pictures compared: the ground's move
-// is found by sliding the middle of the first picture over the second (e2e/ground.ts).
+// is found by sliding the middle of the first picture over the second (e2e/ground.ts). The flat globes, the realistic Earth and the space view are in follows.gl.ts, with the family's shared helper.
 import { expect, test, type Page } from "@playwright/test";
 import { COUNT_SCRIPT, settle } from "./gl.ts";
 import { changedShare, dragBy, groundShift } from "./ground.ts";
@@ -15,6 +15,13 @@ interface RideStats {
   ride: { riding: boolean; gliding: boolean };
 }
 
+/** A ride has begun and its glide to the ride's camera is over: the picture holds still after this. */
+async function rideSettled(page: Page): Promise<void> {
+  const stats = (): Promise<RideStats> => page.locator("chikyu-space").evaluate((el) => Reflect.get(el, "stats") as RideStats);
+  await expect.poll(async () => (await stats()).ride.riding, { timeout: 30_000 }).toBe(true);
+  await expect.poll(async () => (await stats()).ride.gliding, { timeout: 10_000 }).toBe(false);
+}
+
 async function open(page: Page, query: string, wait: "flat" | "realistic" | "space" | "ride"): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/?${query}`);
@@ -22,11 +29,7 @@ async function open(page: Page, query: string, wait: "flat" | "realistic" | "spa
   else if (wait === "realistic") await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
   else {
     await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
-    if (wait === "ride") {
-      const stats = (): Promise<RideStats> => page.locator("chikyu-space").evaluate((el) => Reflect.get(el, "stats") as RideStats);
-      await expect.poll(async () => (await stats()).ride.riding, { timeout: 30_000 }).toBe(true);
-      await expect.poll(async () => (await stats()).ride.gliding, { timeout: 10_000 }).toBe(false);
-    }
+    if (wait === "ride") await rideSettled(page);
   }
   // the controls' own Auto-turn is on for a reader with no motion preference: stop it, the tests turn it on when they mean to
   await page.locator(CONTROLS).evaluate((el) => (el as unknown as { pause(): void }).pause());
@@ -70,40 +73,28 @@ async function followsTheHand(page: Page): Promise<void> {
   await page.keyboard.press("ArrowDown");
   await settle(page, 500);
 
-  // Auto-turn at a quick pace so a second or two shows: the angle grows, and the ground goes left to right, as the Earth turns west to east
+  // Auto-turn at a quick pace: turned by a fixed angle (read from the controller, never from a stopwatch), the ground has gone left to right, as the Earth turns west to east
   const turn = await moved(page, async () => {
-    await page.locator(CONTROLS).evaluate((el) => {
-      const controller = Reflect.get(el, "controller") as { speed: number; play(): void };
-      controller.speed = 6;
-      controller.play();
-    });
-    await page.waitForTimeout(1500);
-    await page.locator(CONTROLS).evaluate((el) => (el as unknown as { pause(): void }).pause());
+    await page.locator(CONTROLS).evaluate(
+      (el) =>
+        new Promise<void>((resolve) => {
+          const controls = el as unknown as { controller: { speed: number; state: { yaw: number }; play(): void }; pause(): void };
+          const start = controls.controller.state.yaw;
+          controls.controller.speed = 6;
+          controls.controller.play();
+          const wait = (): void => {
+            if (Math.abs(controls.controller.state.yaw - start) < 9) return void requestAnimationFrame(wait);
+            controls.pause();
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          };
+          wait();
+        }),
+    );
   });
   expect(turn.x, `Auto-turn moves the ground right (moved ${turn.x},${turn.y})`).toBeGreaterThan(MIN);
 }
 
 test.beforeEach(({ page }) => routeElements(page));
-
-test("the line globe: the ground follows a drag, the arrows and Auto-turn", async ({ page }) => {
-  await open(page, `look=line&${FIXED}`, "flat");
-  await followsTheHand(page);
-});
-
-test("the thick globe: the ground follows a drag, the arrows and Auto-turn", async ({ page }) => {
-  await open(page, `look=thick&${FIXED}`, "flat");
-  await followsTheHand(page);
-});
-
-test("the realistic Earth: the ground follows a drag, the arrows and Auto-turn", async ({ page }) => {
-  await open(page, `look=realistic&${FIXED}`, "realistic");
-  await followsTheHand(page);
-});
-
-test("the Earth in space: the ground follows a drag, the arrows and Auto-turn", async ({ page }) => {
-  await open(page, `look=space&${FIXED}`, "space");
-  await followsTheHand(page);
-});
 
 test("riding the ISS, looking down: the ground follows a drag, the arrows and Auto-turn", async ({ page }) => {
   await open(page, `look=space&${FIXED}&sats=stations&ride=iss`, "ride");
@@ -151,7 +142,8 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
     await other.addInitScript(COUNT_SCRIPT);
     await other.goto(`/chikyu-earth/?look=space&${FIXED}&sats=stations&ride=iss`);
     await other.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
-    await other.waitForTimeout(6000);
+    await rideSettled(other);
+    await settle(other, 500);
     const shot = await other.locator(GLOBE).screenshot();
     await other.close();
     return shot;
@@ -172,7 +164,8 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
   await again.addInitScript(COUNT_SCRIPT);
   await again.goto(url.href);
   await again.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
-  await again.waitForTimeout(6000);
+  await rideSettled(again);
+  await settle(again, 500);
   const after = await again.locator(GLOBE).screenshot();
   expect(await changedShare(again, before, after), "the address brings the same picture back").toBeLessThan(0.03);
   await again.close();
