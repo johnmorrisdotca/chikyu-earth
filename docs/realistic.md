@@ -22,10 +22,8 @@ Types for three come from `@types/three`.
   import "@johnmorrisdotca/chikyu-earth/realistic/element";
 </script>
 
-<div id="globe" tabindex="0">
-  <chikyu-earth-realistic texture-base="/textures/"></chikyu-earth-realistic>
-</div>
-<kazoku-view-controls for="globe" address controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+<chikyu-earth-realistic id="earth" texture-base="/textures/" tabindex="0"></chikyu-earth-realistic>
+<kazoku-view-controls for="earth" address controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
 
 <script type="module">
   const earth = document.querySelector("chikyu-earth-realistic");
@@ -35,7 +33,7 @@ Types for three come from `@types/three`.
 </script>
 ```
 
-The view is the flat globe's: `setView(view, final)` takes the shared controls' `{ yaw, tilt, zoom, panX, panY }`, `center` is where it starts, and a
+The element carries the drag, pinch, wheel and keys itself (0.1 to 5 times, 20 with `tiles`; `controls="none"` takes them off), so the bar above is only for buttons and the address, and the page applies its events. The view is the flat globe's: `setView(view, final)` takes the shared controls' `{ yaw, tilt, zoom, panX, panY }`, `center` is where it starts, and a
 page that wants the flat look keeps `<chikyu-earth>` and shows one or the other (the demo's Line, Thick and Realistic buttons do exactly
 that, and keep the camera when the choice changes).
 

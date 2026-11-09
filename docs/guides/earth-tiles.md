@@ -50,14 +50,10 @@ The element reads `manifest.json` once, and nothing more is fetched until the zo
 
 ### How far to zoom
 
-The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. The finest tile level is 16384 across, four times the widest picture, so the realistic Earth goes **four times further: 20 times**. At 20 times a 420 pixel globe has a disc 3,900 pixels in radius, and a texel is up to 1.5 CSS pixels wide on an ordinary screen, so there is still detail in it, but nothing finer than the source has (the Blue Marble is 500 m a pixel). The limit is the view controls' `zoom-max`, which the page sets. The demo raises it from 5 to 20 when the tiles are found, and leaves it at 5 when they are not:
+The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. The finest tile level is 16384 across, four times the widest picture, so the realistic Earth goes **four times further: 20 times**. At 20 times a 420 pixel globe has a disc 3,900 pixels in radius, and a texel is up to 1.5 CSS pixels wide on an ordinary screen, so there is still detail in it, but nothing finer than the source has (the Blue Marble is 500 m a pixel). The element raises its own zoom limit from 5 to 20 when the tiles are found, and leaves it at 5 when they are not (it sets its `zoom-max` attribute, which a bar for the element reads; a `zoom-max` you set yourself is left alone). Nothing else is needed:
 
-```ts no-run
-import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
-
-const earth = document.querySelector<ChikyuEarthRealistic>("chikyu-earth-realistic")!;
-const controls = document.querySelector("kazoku-view-controls")!;
-earth.addEventListener("chikyu-tiles", () => controls.setAttribute("zoom-max", "20"));
+```html
+<chikyu-earth-realistic texture-base="/textures/" tiles="/tiles/"></chikyu-earth-realistic>
 ```
 
 The clouds stay at the package's 2048 picture: they are soft, and NASA's finer cloud files are no longer served. The city lights go to level 3 (8192 across), half the day map's detail, where there is little more to see.

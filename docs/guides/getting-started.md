@@ -32,7 +32,9 @@ The globe is an SVG drawn from Natural Earth country outlines. It is centred whe
 
 ## 2. Let the reader turn it
 
-The package draws; the shared [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls supply every hand and button: drag to turn, tilt to either pole, zoom, pinch, pan, a speed choice and Fit. Add them, and pass what they say to the globe with one listener:
+The globe already turns by itself: the element carries kazoku-ui's controls, so a drag turns it, two fingers pinch, Ctrl and the wheel zoom (the plain wheel at Fit scrolls the page) and the arrow keys, `+`, `-` and `0` work once it is focused, from a tenth of Fit to 20 times ([zoom, pan and turn](zoom-and-pan.md) has every range and why). `controls="none"` takes the hands off.
+
+For buttons, a slider, a speed choice, Fit and the view kept in the address, add the shared [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls bar for the element, and pass what it says to the globe with one listener:
 
 ```html
 <!doctype html>
@@ -52,10 +54,8 @@ The package draws; the shared [kazoku-ui](https://github.com/johnmorrisdotca/kaz
     </script>
   </head>
   <body>
-    <div id="globe" tabindex="0">
-      <chikyu-earth size="420" look="thick" center="139.7,35.7"></chikyu-earth>
-    </div>
-    <kazoku-view-controls for="globe" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
+    <chikyu-earth id="earth" size="420" look="thick" center="139.7,35.7" tabindex="0"></chikyu-earth>
+    <kazoku-view-controls for="earth" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
   </body>
 </html>
 ```

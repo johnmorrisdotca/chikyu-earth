@@ -32,7 +32,9 @@ description: ページに地球儀を置き、中心を決め、見る人が回�
 
 ## 2. 見る人が回せるようにする
 
-パッケージは描くだけです。回す、傾ける、拡大する、ピンチ、移動、速さの選択、全体表示といった操作は、共有の [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) のビューコントロールが受け持ちます。コントロールを追加し、その結果をリスナー1つで地球儀に渡します。
+地球儀は、何もしなくても自分で動かせます。要素が kazoku-ui の操作を持っているので、ドラッグで回り、2 本の指でつまんで拡大縮小でき、Ctrl を押してホイールを回すとズームします (「全体」でのふつうのホイールはページをスクロールします)。フォーカスすると、矢印キー、`+`、`-`、`0` も使えます。範囲は「全体」の 10 分の 1 から 20 倍です (各範囲とその理由は[ズーム、移動、回転](zoom-and-pan.md)にあります)。`controls="none"` で操作を外せます。
+
+ボタン、スライダー、速さの選択、全体表示、アドレスへの保存が欲しいときは、共有の [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) のビューコントロール (バー) を要素に付け、その結果をリスナー1つで地球儀に渡します。
 
 ```html
 <!doctype html>
@@ -52,10 +54,8 @@ description: ページに地球儀を置き、中心を決め、見る人が回�
     </script>
   </head>
   <body>
-    <div id="globe" tabindex="0">
-      <chikyu-earth size="420" look="thick" center="139.7,35.7"></chikyu-earth>
-    </div>
-    <kazoku-view-controls for="globe" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
+    <chikyu-earth id="earth" size="420" look="thick" center="139.7,35.7" tabindex="0"></chikyu-earth>
+    <kazoku-view-controls for="earth" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
   </body>
 </html>
 ```

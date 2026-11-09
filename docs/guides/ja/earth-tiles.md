@@ -50,14 +50,10 @@ description: 地球に大きく近づいてもくっきり見えるように、�
 
 ### どこまで近づけるか
 
-パッケージの画像がくっきり見えるのは約 5 倍までで、デモの上限も 5 でした。タイルの一番細かいレベルは横 16384 で、一番大きな画像の 4 倍です。そのため、リアルな地球は **4 倍遠くまで、つまり 20 倍まで**近づけます。20 倍では、420 ピクセルの地球の円盤は半径 3,900 ピクセルになり、ふつうの画面でテクセル 1 つは CSS ピクセルで最大 1.5 ほどです。まだ細部は見えますが、元の画像より細かいものはありません (Blue Marble は 1 ピクセルが 500 m です)。上限は表示操作の `zoom-max` で、ページが決めます。デモは、タイルが見つかると 5 から 20 に上げ、見つからないときは 5 のままにします。
+パッケージの画像がくっきり見えるのは約 5 倍までで、デモの上限も 5 でした。タイルの一番細かいレベルは横 16384 で、一番大きな画像の 4 倍です。そのため、リアルな地球は **4 倍遠くまで、つまり 20 倍まで**近づけます。20 倍では、420 ピクセルの地球の円盤は半径 3,900 ピクセルになり、ふつうの画面でテクセル 1 つは CSS ピクセルで最大 1.5 ほどです。まだ細部は見えますが、元の画像より細かいものはありません (Blue Marble は 1 ピクセルが 500 m です)。要素は、タイルが見つかると自分でズームの上限を 5 から 20 に上げ、見つからないときは 5 のままにします (要素自身の `zoom-max` 属性に書き込みます。要素に付けたバーはそれを読みます。自分で付けた `zoom-max` はそのままです)。ほかに何も要りません。
 
-```ts no-run
-import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
-
-const earth = document.querySelector<ChikyuEarthRealistic>("chikyu-earth-realistic")!;
-const controls = document.querySelector("kazoku-view-controls")!;
-earth.addEventListener("chikyu-tiles", () => controls.setAttribute("zoom-max", "20"));
+```html
+<chikyu-earth-realistic texture-base="/textures/" tiles="/tiles/"></chikyu-earth-realistic>
 ```
 
 雲はパッケージの 2048 の画像のままです。雲はやわらかい絵で、NASA の細かい雲の画像は今は配信されていません。都市の明かりはレベル 3 (横 8192) までです。昼の地図の半分の細かさですが、それ以上は見るものがあまりありません。

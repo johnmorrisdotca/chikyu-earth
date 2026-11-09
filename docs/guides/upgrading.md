@@ -7,6 +7,17 @@ description: What changed between versions and what to do about it. The package 
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.18: every view zooms and turns by itself
+
+`<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` now carry kazoku-ui's controls: drag, pinch, Ctrl and the wheel, the keys. A page that did not wire them gets them, and a plain wheel at Fit still scrolls the page. Act on it if:
+
+- You put `<kazoku-view-controls for="...">` on a wrapper around the element. Point `for` at the element itself (give it an `id` and a `tabindex`), or add `controls="none"` to the element, or a drag is handled by both.
+- You do not want the hands (a thumbnail, a background): add `controls="none"`.
+- You set `zoom-min` and `zoom-max` on the bar to keep a range: the element's own range is now 0.1 to 20 (line), 0.1 to 5 or 20 with tiles (realistic) and a millionth to 2.5 (space); the bar's attributes still win. See [zoom, pan and turn](zoom-and-pan.md).
+- You install without kazoku-ui: it is now a dependency (it was an optional peer), because the elements import its `view-controls`.
+
+The embed page is still by default; `turn=1` or `turn=auto` gives it the hands.
+
 ## To 0.9: riding along, and a quieter Auto-turn
 
 New: `element.ride(...)` and `ridePose` (in `/space`). One change you may notice: `<chikyu-space>`'s `setView(view, final = true)` takes a second argument. Passing the shared controls' `detail.final` (as the demo does) lets the Auto-turn at the Earth's own rate stop drawing thirty times a second; passing nothing draws on every change, as before.

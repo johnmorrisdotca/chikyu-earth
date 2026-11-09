@@ -32,7 +32,7 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
 - The Sun, the Moon and the planets where they are on a date and time (`/space`), and satellites at the places SGP4 puts them (`/satellites`), with a camera that rides along.
 - Markers with labels, groups, clusters and events (`/markers`), on either globe.
 - Pure parts that run on a server: `globe()`, the rotation and view maths, `COUNTRIES` and `countryList()`.
-- The shared kazoku-ui view controls: drag, tilt, zoom, pan, pinch, Front and Fit, with the view kept in the address.
+- Every live view zooms, pans and turns by itself, with no bar: drag, two-finger pinch, Ctrl and the wheel (a plain wheel at Fit scrolls the page) and the keys, through kazoku-ui's controls, from a tenth of Fit to 20 times on the line globe ([each range and why](docs/guides/zoom-and-pan.md)). Add `<kazoku-view-controls>` for buttons and the address.
 - Names in English and Japanese, and a strict content security policy is enough.
 
 ## Install and use
@@ -62,11 +62,11 @@ One script tag from [jsDelivr](https://www.jsdelivr.com/package/npm/@johnmorrisd
 </html>
 ```
 
-The globe appears centred where you say; with no `center` it centres on the reader (the browser asks for their location; until they answer, and if they decline, it starts on the Greenwich meridian). `look` is `line` or `thick`.
+The globe appears centred where you say; with no `center` it centres on the reader (the browser asks for their location; until they answer, and if they decline, it starts on the Greenwich meridian). `look` is `line` or `thick`. It also zooms and turns: drag, pinch, Ctrl and the wheel, the arrow keys (`controls="none"` takes that off).
 
 ### With the shared controls
 
-The [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls turn, tip, zoom and pan it, and keep the view in the address. One listener passes their camera on:
+The [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls bar adds buttons and a slider and keeps the view in the address. One listener passes its camera on:
 
 ```html
 <!doctype html>
@@ -86,10 +86,8 @@ The [kazoku-ui](https://github.com/johnmorrisdotca/kazoku-ui) view controls turn
     </script>
   </head>
   <body>
-    <div id="globe" tabindex="0">
-      <chikyu-earth size="420" look="thick" center="139.7,35.7"></chikyu-earth>
-    </div>
-    <kazoku-view-controls for="globe" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
+    <chikyu-earth id="earth" size="420" look="thick" center="139.7,35.7" tabindex="0"></chikyu-earth>
+    <kazoku-view-controls for="earth" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178"></kazoku-view-controls>
   </body>
 </html>
 ```
@@ -211,13 +209,24 @@ markers.add({ id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo", group: "Citi
 
 ## Controls
 
-The shared [kazoku-ui view controls](https://github.com/johnmorrisdotca/kazoku-ui) supply every hand and button:
-drag to turn, tilt up to either pole, zoom, pan, touch pinch, Front and Fit. Chikyu does not draw its own zoom,
+The elements carry the shared [kazoku-ui view controls](https://github.com/johnmorrisdotca/kazoku-ui) themselves, so
+every live view zooms, pans and turns with no bar: drag to turn (and move, once zoomed), touch pinch, Ctrl and the
+wheel to zoom (a plain wheel at Fit scrolls the page), the arrow keys, `+`, `-` and `0` once the element is focused.
+`controls="none"` takes the hands off; `zoom-min` and `zoom-max` change the range. Chikyu does not draw its own zoom,
 rotate or drag controls.
 
+| Element | Zoom range | Why it stops there |
+| --- | --- | --- |
+| `<chikyu-earth>` | 0.1 to 20 times | Natural Earth 1:110m outlines, redrawn at each zoom; at 20 times the view is about 640 km across and a coast is a few straight segments |
+| `<chikyu-earth-realistic>` | 0.1 to 5 times; 20 with `tiles` found | the package's pictures are 4096 pixels across at most; the finest tile level is 4 times that |
+| `<chikyu-space>` | a millionth to 2.5 times; 0.5 to 6 riding from a body | the zoom is the camera's distance (the whole solar system needs a millionth); close in, the Earth's picture and the textures stay sharp to 2.5 |
+
+[Zoom, pan and turn](docs/guides/zoom-and-pan.md) says more. For buttons, a slider, Auto-turn and the address, add the
+bar for the element (give it an `id` and a `tabindex`); it takes the hands over and the page applies its events:
+
 ```html
-<div id="globe" tabindex="0"><chikyu-earth size="420"></chikyu-earth></div>
-<kazoku-view-controls id="controls" for="globe" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
+<chikyu-earth id="earth" size="420" tabindex="0"></chikyu-earth>
+<kazoku-view-controls id="controls" for="earth" address grab-radius="fit" controls="advanced" tilt-max="90" speed="0.004178" autoplay></kazoku-view-controls>
 ```
 
 ```ts no-run
@@ -259,6 +268,8 @@ The rotation is the pair d3-geo's `rotate` takes: `[-longitude, -latitude]` cent
 | `center` | `"longitude,latitude"` to centre on. Wins over geolocation. | the reader's location, else `0,0` |
 | `look` | `line` or `thick`. (`style` is the older name for it: a framework reads `style` as CSS, so use `look` there.) | `line` |
 | `graticule` | Draw a light graticule under the countries. | off |
+| `controls` | `none` takes off the drag, pinch, wheel and keys the element carries. | on |
+| `zoom-min`, `zoom-max` | The zoom range, over the element's own (0.1 to 20). | 0.1, 20 |
 
 `setView(view, final = true)` applies a shared controller's `{ yaw, tilt, zoom, panX, panY }`. Every call updates
 the state; pass `final: false` for the cheap relative transform during a gesture and `final: true` for the full
@@ -375,6 +386,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [The realistic Earth and markers](docs/guides/realistic-and-markers.md) | The Earth from space, markers |
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
+| [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |
 | [How it stays light](docs/guides/how-it-works.md) | The budget |
 | [Architecture](docs/guides/architecture.md) | How the layers fit |

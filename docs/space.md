@@ -22,16 +22,16 @@ The pictures are the Earth's and the Moon's (`dist/textures/`, 1.85 MB in all); 
   import "@johnmorrisdotca/kazoku-ui/view-controls/define";
   import "@johnmorrisdotca/chikyu-earth/space/element";
 </script>
-<div id="sky" tabindex="0"><chikyu-space time="2026-11-02T14:00Z" speed="0" texture-base="/textures/"></chikyu-space></div>
-<kazoku-view-controls for="sky" address zoom-min="0.000001" zoom-max="2.5" tilt-max="90"></kazoku-view-controls>
+<chikyu-space id="sky" tabindex="0" time="2026-11-02T14:00Z" speed="0" texture-base="/textures/"></chikyu-space>
+<kazoku-view-controls for="sky" address tilt-max="90"></kazoku-view-controls>
 <script type="module">
   const sky = document.querySelector("chikyu-space");
   document.querySelector("kazoku-view-controls").addEventListener("kazoku-viewchange", (e) => sky.setView(e.detail));
 </script>
 ```
 
-`zoom-min` and `zoom-max` let the shared controls zoom out far enough (the camera sits `3.4 / zoom` Earth radii from the Earth's centre: zoom 1 shows the Earth, 0.1 shows
-the Moon's neighbourhood, 0.005 the planets). `sky.zoomFor("moon" | "sun" | "inner" | "solar-system" | "earth")` gives the zoom that shows each part of the sky at the
+The element carries the drag, pinch, wheel and keys itself, with a zoom range of one millionth to 2.5 (0.5 to 6 while riding from a body), so the bar is only for buttons and the address; `zoom-min` and `zoom-max` change the range. The zoom goes out far enough because the camera sits `3.4 / zoom` Earth radii from the Earth's centre: zoom 1 shows the Earth, 0.1 shows
+the Moon's neighbourhood, 0.005 the planets. `sky.zoomFor("moon" | "sun" | "inner" | "solar-system" | "earth")` gives the zoom that shows each part of the sky at the
 current scale and moment (`controller.set({ zoom }, true, "jump")` goes there). Yaw and tilt turn the camera round the Earth (a drag right or up moves the Earth's surface right or up); it is fixed to the stars, so the Earth
 turns under it as time runs.
 
