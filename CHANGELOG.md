@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.22.1 - 2026-11-09
+
 - kazoku-ui 0.27: the globe and the space looks draw at most 30 frames a second while they move (KAZOKU-UI-91), as the family's freeze rule asks; nothing else changes.
 
 ## 0.22.0 - 2026-11-09
