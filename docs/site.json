@@ -50,6 +50,16 @@
       "ja": "人工衛星: 軌道要素から位置を計算",
       "platform": "node"
     },
+    "./passes": {
+      "en": "Passes: when a satellite crosses the sky over a place",
+      "ja": "通過: 衛星が場所の空を通る時刻",
+      "platform": "node"
+    },
+    "./passes/element": {
+      "en": "The <chikyu-passes> element",
+      "ja": "<chikyu-passes> 要素",
+      "platform": "browser"
+    },
     "./sheets": {
       "en": "Printable sheets: the globe and a world map to colour, my country, day and night, the seasons",
       "ja": "印刷できるシート: 色をぬる地球と世界地図、わたしの国、昼と夜、季節",

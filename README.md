@@ -30,6 +30,7 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
 - It opens centred on where the reader is, or where you say. Auto-turn runs at the Earth's own rate: one sidereal day a turn, and the family's speed buttons (0.5×, 1×, 2×) are multiples of it.
 - The Earth from space (`/realistic`): day and night by the real Sun, city lights, sun glint, clouds and the atmosphere, drawn with three.js through one shared WebGL context.
 - The Sun, the Moon and the planets where they are on a date and time (`/space`), and satellites at the places SGP4 puts them (`/satellites`), with a camera that rides along.
+- When you can see the ISS (`/passes`): the next passes of the ISS, Tiangong and Hubble over any place, with direction, height, brightness and whether the satellite is lit while the sky is dark, a sky dome that draws each, and `<chikyu-passes>`.
 - Markers with labels, groups, clusters and events (`/markers`), on either globe.
 - Pure parts that run on a server: `globe()`, the rotation and view maths, `COUNTRIES` and `countryList()`.
 - Every live view zooms, pans and turns by itself, with no bar: drag, two-finger pinch, Ctrl and the wheel (a plain wheel at Fit scrolls the page) and the keys, through kazoku-ui's controls, from a tenth of Fit to 20 times on the line globe ([each range and why](docs/guides/zoom-and-pan.md)). Add `<kazoku-view-controls>` for buttons and the address.
@@ -185,6 +186,35 @@ import { createSatellites, type ElementSet } from "@johnmorrisdotca/chikyu-earth
 const elements: ElementSet[] = await (await fetch("/my-celestrak-copy.json")).json();
 document.querySelector("chikyu-space")!.setSatellites("stations", createSatellites(elements), { orbits: true });
 ```
+
+## Passes: when can I see the ISS?
+
+`findPasses(elements, place, { from, to })` gives the next passes of a satellite over a place: when it comes up, is highest and goes down (UTC, with the compass word and degrees at each, and the height), how bright it looks, and whether it can be seen, which needs the satellite in sunlight while the watcher's sky is in civil twilight or darker (each pass says which). It is a pure function over the same SGP4 as the rest, with no DOM and no clock. `skySvg` draws a pass across the sky as an SVG string, `groundTrack` gives the path under the satellite for a globe, and `<chikyu-passes>` lists the passes and draws the dome, in English and Japanese. The ISS, Tianhe and Hubble have estimated standard magnitudes (from their size and an assumed albedo); give better ones with `magnitudes`.
+
+```ts
+import { findPasses } from "@johnmorrisdotca/chikyu-earth/passes";
+
+const iss = {
+  OBJECT_NAME: "ISS (ZARYA)",
+  EPOCH: "2026-11-09T04:58:46.240896",
+  MEAN_MOTION: 15.49270212,
+  ECCENTRICITY: 0.00072974,
+  INCLINATION: 51.6321,
+  RA_OF_ASC_NODE: 302.4538,
+  ARG_OF_PERICENTER: 5.2479,
+  MEAN_ANOMALY: 354.8585,
+  NORAD_CAT_ID: 25544,
+  BSTAR: 0.0001553356,
+  MEAN_MOTION_DOT: 8.201e-5,
+  MEAN_MOTION_DDOT: 0,
+};
+const from = Date.UTC(2026, 10, 10);
+const tokyo = { latitude: 35.69, longitude: 139.69 };
+const [next] = findPasses(iss, tokyo, { from, to: from + 5 * 86_400_000 });
+console.log(next ? `${new Date(next.highest.ms).toISOString()}: ${next.highest.compass}, ${Math.round(next.highest.altitude)} degrees, ${next.sky}` : "none");
+```
+
+Passes are only as good as the orbit data are new: each pass says how old its elements are, and the ISS's change with every reboost. Checked against Skyfield (249 passes: every time within a second, directions within 0.06 degree), and by hand against a sky-watching site's published predictions (all found, times within two seconds). Brightness is a model from the satellite's size, good to a magnitude or two. The guide has the numbers and the rules: [passes guide](docs/guides/passes.md). The demo's page [Passes over me](https://johnmorrisdotca.github.io/chikyu-earth/passes.html) has a map, a search, "My location" (asked for only when pressed) and the code for every way a page is made.
 
 ## Riding along
 
@@ -382,6 +412,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../markers` | `attachMarkers` and the pure projection, clusters and labels. |
 | `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
 | `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
+| `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
 
 ## Guides
 
@@ -397,6 +428,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [TypeScript and Node](docs/guides/typescript-and-node.md) | Types and the pure side |
 | [The realistic Earth and markers](docs/guides/realistic-and-markers.md) | The Earth from space, markers |
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
+| [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
