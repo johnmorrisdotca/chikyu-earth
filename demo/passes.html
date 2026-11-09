@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!--family:head-->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230b1424'/%3E%3Ccircle cx='50' cy='50' r='34' fill='%2313203a' stroke='%238fa1b8' stroke-width='4'/%3E%3Cpath d='M30 38Q44 30 56 40T70 52M34 60Q46 54 58 66' fill='none' stroke='%238fa1b8' stroke-width='3'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="family.css" />
+    <link rel="stylesheet" href="wide.css" />
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <main>
+      <!--family:header-->
+      <!--family:unreviewed-->
+      <section class="passes" aria-labelledby="passes-heading">
+        <h1 id="passes-heading" class="kids-title" data-say="ps_heading">Passes over me</h1>
+        <p class="fam-fine" data-say="ps_lede"></p>
+        <div class="passes-top">
+          <div class="passes-picks">
+            <div class="fam-row">
+              <span class="fam-label" data-say="ps_where">Place</span>
+              <button type="button" class="fam-button" id="locate" data-testid="locate" data-say="ps_locate">My location</button>
+              <span class="fam-seg" id="tries" role="group" data-say-label="ps_tries" data-testid="tries"></span>
+            </div>
+            <div class="fam-row">
+              <label class="field"><span data-say="ps_search">Search a city or country</span><input type="search" id="search" class="fam-field" autocomplete="off" spellcheck="false" placeholder="Tokyo, Brazil, 東京" data-say-placeholder="ps_searchHint" aria-controls="results" data-testid="search" /></label>
+              <span class="fam-seg" id="results" role="group" aria-live="polite" data-testid="results" hidden></span>
+            </div>
+            <div class="fam-row" id="numbers">
+              <label class="field"><span data-say="ps_lat">Latitude</span><input type="number" id="lat" class="fam-field" step="0.01" min="-90" max="90" data-testid="lat" /></label>
+              <label class="field"><span data-say="ps_lon">Longitude</span><input type="number" id="lon" class="fam-field" step="0.01" min="-180" max="180" data-testid="lon" /></label>
+            </div>
+            <div class="passes-choices">
+            <div class="fam-row"><span class="fam-label" data-say="ps_sat">Satellite</span><span class="fam-seg" id="sats" role="group" data-say-label="ps_sat" data-testid="sats"></span></div>
+            <div class="fam-row"><span class="fam-label" data-say="ps_days">Days</span><span class="fam-seg" id="days" role="group" data-say-label="ps_days" data-testid="days"></span></div>
+            <div class="fam-row"><span class="fam-label" data-say="ps_show">Show</span><span class="fam-seg" id="shows" role="group" data-say-label="ps_show" data-testid="shows"></span></div>
+            <div class="fam-row"><span class="fam-label" data-say="ps_sky">Sky</span><span class="fam-seg" id="skies" role="group" data-say-label="ps_sky" data-testid="skies"></span></div>
+            </div>
+          </div>
+          <div class="passes-map"><div id="map" class="passes-mapbox" role="group" data-say-label="ps_map" data-testid="map"></div></div>
+        </div>
+        <p class="fam-fine" id="place-note" role="status" data-testid="place-note"></p>
+        <div class="stage-tools"><kazoku-wide-toggle id="wide" address storage="chikyu-wide" data-testid="wide"></kazoku-wide-toggle></div>
+        <chikyu-passes id="passes" data-testid="passes" days="5" show="visible" sky="civil">
+          <div slot="ground" class="passes-ground" id="ground" data-testid="ground">
+            <div class="globe-view" role="group" data-say-label="ps_ground"><chikyu-earth id="ground-earth" size="300" look="line" center="139.69,35.69" tabindex="0"></chikyu-earth></div>
+            <kazoku-view-controls id="ground-controls" for="ground-earth" layout="horizontal" controls="basic" data-testid="ground-controls"></kazoku-view-controls>
+          </div>
+        </chikyu-passes>
+        <p class="fam-fine" id="ground-note" data-say="ps_groundNote"></p>
+        <p class="fam-fine" id="data-note" role="status" data-testid="data-note"></p>
+      </section>
+
+      <section class="more" id="embed" aria-labelledby="embed-h">
+        <h2 id="embed-h" data-say="ps_embedTitle">Put the passes in your page</h2>
+        <p data-say="ps_embedText">Choose a place and a satellite, pick how your page is made and copy the code.</p>
+        <div class="fam-panels">
+          <div class="fam-panel">
+            <kazoku-embed-panel id="embed-panel" data-testid="embed-panel"></kazoku-embed-panel>
+          </div>
+        </div>
+      </section>
+
+      <p class="fam-fine"><a href="index.html" data-say="ps_back">The globe</a></p>
+      <p class="fam-fine credits"><span data-say="credits">Outlines and names: chizu (Natural Earth, public domain; names from kuni). Projection: d3-geo. Satellites: orbital elements from CelesTrak (celestrak.org) and, when it does not answer, Space-Track.org (USSPACECOM), positions by SGP4 (satellite.js, MIT). Details in</span> <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">NOTICE.md</a></p>
+      <!--family:footer-->
+    </main>
+    <!--family:scripts passes.js-->
+  </body>
+</html>

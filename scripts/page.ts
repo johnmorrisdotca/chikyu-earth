@@ -37,6 +37,22 @@ export function renderKids(): string {
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 
+/** The page for the passes over a place, made like the demo's, with the family's blocks and its own script. */
+export function renderPasses(): string {
+  const html = readFileSync(new URL("../demo/passes.html", import.meta.url), "utf8");
+  return html
+    .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.ps_title, description: WORDS.en.ps_description }))
+    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
+    .replace("<!--family:footer-->", familyFooter({ id }))
+    .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
+}
+
+/** demo/passes-embed.html, the frame for the passes: plain, no family blocks. */
+export function renderPassesEmbed(): string {
+  return readFileSync(new URL("../demo/passes-embed.html", import.meta.url), "utf8");
+}
+
 /** demo/embed.html, the frame a page puts in an iframe: plain, no family blocks. */
 export function renderEmbed(): string {
   return readFileSync(new URL("../demo/embed.html", import.meta.url), "utf8");

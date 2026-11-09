@@ -71,3 +71,35 @@ kazoku-view-controls, kazoku-speed-buttons { --kazoku-ink: var(--ink); --kazoku-
   [data-wide="on"] .controls .box { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); padding: 14px; }
 }
 @media (max-width: 640px) { .stage-tools { display: none; } }
+
+/* the passes page: the places and choices on the left, the map beside them, then the passes (the element's own list, sky dome and facts, with the ground track on a globe) */
+.passes { display: grid; gap: 10px; padding: 8px 0 16px; }
+.passes-top { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 880px) { .passes-top { grid-template-columns: minmax(0, 1fr) minmax(0, 24rem); } }
+.passes-picks { display: grid; gap: 10px; }
+.passes-picks .fam-row { flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.passes-picks .fam-seg { flex-wrap: wrap; }
+.passes-picks .fam-seg button, .passes-picks .fam-button, .passes-picks .fam-field { min-height: 48px; min-width: 48px; font-family: inherit; }
+.passes-picks .fam-field[type="number"] { width: 8.5rem; border-radius: 999px; padding: 0 14px; }
+.passes-picks input[type="search"] { border-radius: 999px; padding: 0 14px; min-width: 13rem; }
+.passes-picks .field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
+.passes-mapbox { border-radius: 12px; overflow: hidden; border: 1px solid var(--rule); cursor: crosshair; background: var(--felt); }
+.passes-map-svg { display: block; width: 100%; height: auto; touch-action: manipulation; }
+.map-ocean { fill: var(--felt-deep); }
+.map-land { fill: color-mix(in srgb, var(--felt-ink) 22%, var(--felt)); stroke: color-mix(in srgb, var(--felt-ink) 70%, transparent); stroke-width: .4; }
+.map-pin { fill: #ff4d6d; }
+.map-pin-ring { fill: none; stroke: #fff; stroke-width: 2.5; }
+chikyu-passes { display: block; --chikyu-pass-lit: #d97706; }
+:root[data-theme="dark"] chikyu-passes { --chikyu-pass-lit: #ffb454; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) chikyu-passes { --chikyu-pass-lit: #ffb454; } }
+.passes-ground { width: 100%; display: grid; gap: 8px; justify-items: center; }
+.passes-ground .globe-view, .passes-ground kazoku-view-controls { width: 100%; }
+.ground-track { position: absolute; inset: 0; overflow: visible; }
+chikyu-passes { --chikyu-picture: 270px; }
+[data-wide="on"] chikyu-passes { --chikyu-picture: 420px; }
+.passes #data-note, .passes #place-note, .passes #ground-note { min-height: 1.3em; }
+.passes-choices { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+.passes-choices .fam-row { flex: 0 0 auto; }
+.passes-picks .fam-row, .passes-choices .fam-row { max-width: 100%; min-width: 0; }
+.passes-picks .fam-seg { max-width: 100%; border-radius: 22px; }
+.passes-picks .fam-seg button { white-space: normal; }

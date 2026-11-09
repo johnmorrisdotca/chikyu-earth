@@ -13,6 +13,8 @@ import { CITATION, FIELDS, IDS_PER_ASK, gpPath, loginFrom, realSend, toRaw, with
 export { FIELDS, type Raw };
 
 /** Groups too big to ship whole: the demo keeps every Nth satellite (by catalogue number). */
+/** The satellites the passes' embed example reads, as OMM JSON in one small file (`bright.json`): the ISS, Tianhe (China's Tiangong) and the Hubble Space Telescope. */
+export const BRIGHT = [25544, 48274, 20580] as const;
 export const THIN: Readonly<Record<string, number>> = { starlink: 5 };
 export const SOURCE = "CelesTrak (https://celestrak.org): GP element sets from the U.S. Space Force's 18th Space Defense Squadron and, for Starlink, SpaceX's own supplemental elements";
 export const SPACETRACK_SOURCE = `Space-Track.org (https://www.space-track.org): GP element sets from U.S. Space Command. ${CITATION}`;
@@ -75,6 +77,16 @@ export function buildAll(read: (group: SatelliteGroupInfo) => { raw: readonly Ra
     }
   }
   files["index.json"] = { fields: ["NORAD_CAT_ID", "OBJECT_NAME", "group"], rows: names };
+  // the three bright satellites as OMM JSON (what `<chikyu-passes elements-src>` and `parseElements` read), from the files above
+  const bright = BRIGHT.flatMap((id) => {
+    for (const made of Object.values(files)) {
+      const { rows, fields } = made as Partial<GroupFile>;
+      const row = rows?.find((one) => one[0] === id);
+      if (row && fields) return [Object.fromEntries(fields.map((field, i) => [field, row[i]]))];
+    }
+    return [];
+  });
+  if (bright.length > 0) files["bright.json"] = bright;
   const fromSpaceTrack = Object.values(groups).some((one) => one.source === "spacetrack");
   return { files, manifest: { source: fromSpaceTrack ? `${SOURCE}. ${SPACETRACK_SOURCE}` : SOURCE, retrieved: oldest, groups, index: "index.json" } };
 }
