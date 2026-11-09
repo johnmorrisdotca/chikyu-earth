@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **The demo has a Wide layout and shows its zoom readout** (MODULES-717). kazoku-ui's `<kazoku-wide-toggle>` (and the T key, and `?wide=on` in the address) gives the globe the page's whole width, 16:9 and no taller than 80% of the screen, with the bar under it and the controls below as a row of boxes; the line globe, the realistic Earth and the space view all grow to the room, stay round, and the 3D looks draw again at the new size inside the renderer's caps. On a phone it is one column and there is no button. The toggle speaks the page's language. The shared bar's zoom readout (`2.4×`, between zoom out and zoom in; tap it for Fit) is checked on the buttons, Ctrl and the wheel, and a pinch. Demo and tests only: the package's code is unchanged. kazoku-ui is `^0.23.0`.
+- **The demo has a Wide layout and shows its zoom readout** (MODULES-717). kazoku-ui's `<kazoku-wide-toggle>` (and the T key, and `?wide=on` in the address) gives the globe the page's whole width, 16:9 and no taller than 80% of the screen, with the bar under it and the controls below as a row of boxes; the line globe, the realistic Earth and the space view all grow to the room, stay round, and the 3D looks draw again at the new size inside the renderer's caps. On a phone it is one column and there is no button. The toggle speaks the page's language. The shared bar's zoom readout (`2.4×`, between zoom out and zoom in; tap it for Fit) is checked on the buttons, Ctrl and the wheel, and a pinch. Demo and tests only: the package's code is unchanged. kazoku-ui is `^0.24.0`.
 
 ## 0.19.0 - 2026-11-09
 

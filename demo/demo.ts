@@ -145,11 +145,12 @@ if (flat && controls && stage) {
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(speakSpace));
   const bodyButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-body]")];
   /** Look at one body: it fills the view, and a line says how big it is and how far. */
-  function lookAtBody(name: BodyName, info?: BodyInfo): void {
+  function lookAtBody(name: BodyName, info?: BodyInfo, keepView = false): void {
     if (!space) return;
+    const same = keepView && !space.riding && space.body === name;
     if (space.riding) stopRide(true);
     space.body = name;
-    Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "body");
+    if (!same) Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "body");
     for (const b of bodyButtons) b.classList.toggle("on", b.dataset["body"] === name);
     const facts = info ?? space.bodyInfo(name);
     if (bodyInfo) {
@@ -599,7 +600,8 @@ if (flat && controls && stage) {
         if (spaceButton) spaceButton.disabled = true;
         void setLook("line");
       });
-      element.addEventListener("chikyu-body-click", (e) => lookAtBody((e as CustomEvent<BodyInfo>).detail.name, (e as CustomEvent<BodyInfo>).detail));
+      // A press on the body already looked at keeps the view: a double-click there is the gesture that fits it (kazoku-ui's controller), and the first click must not put the zoom back under it.
+      element.addEventListener("chikyu-body-click", (e) => lookAtBody((e as CustomEvent<BodyInfo>).detail.name, (e as CustomEvent<BodyInfo>).detail, true));
       element.addEventListener("chikyu-satellite-click", (e) => showSatellite((e as CustomEvent<SatelliteRef>).detail));
       element.addEventListener("chikyu-satellites-unavailable", () => notice(say("satLoadFail")));
       element.addEventListener("chikyu-ride-lost", () => {

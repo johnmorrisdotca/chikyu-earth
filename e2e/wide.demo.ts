@@ -15,11 +15,12 @@ async function open(page: Page, query = ""): Promise<void> {
   await page.locator(CONTROLS).evaluate((el) => (el as unknown as { pause(): void }).pause());
 }
 
-const phoneOnly = (info: { project: { name: string } }): boolean => info.project.name.endsWith("phone");
+/** A phone: 640 px and under, where the layout is one column and the toggle is hidden. */
+const isPhone = (viewport: { width: number } | null): boolean => (viewport?.width ?? 1280) <= 640;
 
 test.describe("the layout", () => {
-  test.beforeEach((_fixtures, info) => {
-    test.skip(phoneOnly(info), "the phone is one column and has its own test");
+  test.beforeEach(({ viewport }) => {
+    test.skip(isPhone(viewport), "the phone is one column and has its own test");
   });
 
   test("Normal puts the panel beside the view, the bar under the view, and the globe at 420", async ({ page }) => {
@@ -81,8 +82,8 @@ test.describe("the layout", () => {
 });
 
 test.describe("the toggle, the T key and the address", () => {
-  test.beforeEach((_fixtures, info) => {
-    test.skip(phoneOnly(info), "the toggle is hidden on a phone");
+  test.beforeEach(({ viewport }) => {
+    test.skip(isPhone(viewport), "the toggle is hidden on a phone");
   });
 
   test("?wide=on opens Wide, T switches, and the address follows the page and the look", async ({ page }) => {
@@ -139,8 +140,8 @@ test.describe("the toggle, the T key and the address", () => {
 });
 
 test.describe("the phone", () => {
-  test.beforeEach((_fixtures, info) => {
-    test.skip(!phoneOnly(info), "the desk has its own layout tests");
+  test.beforeEach(({ viewport }) => {
+    test.skip(!isPhone(viewport), "the desk has its own layout tests");
   });
 
   for (const query of ["", "?wide=on"]) {
