@@ -38,10 +38,10 @@ jobs:
       - name: The package as npm packs it installs and imports
         run: pnpm test:package
   demo:
-    # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium, then in WebKit. Every test still runs once.
+    # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium in two parts (one job reached its 15 minutes on 2026-11-09), then in WebKit. Each part may take 25 minutes. Every test still runs once.
     name: demo (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +49,8 @@ jobs:
           - { name: "realistic Earth 1 of 3", browser: chromium, projects: "--project=chromium-gl --shard=1/3" }
           - { name: "realistic Earth 2 of 3", browser: chromium, projects: "--project=chromium-gl --shard=2/3" }
           - { name: "realistic Earth 3 of 3", browser: chromium, projects: "--project=chromium-gl --shard=3/3" }
-          - { name: "desk and phone, Chromium", browser: chromium, projects: "--project=chromium-desk --project=chromium-phone" }
+          - { name: "desk and phone, Chromium 1 of 2", browser: chromium, projects: "--project=chromium-desk --project=chromium-phone --shard=1/2" }
+          - { name: "desk and phone, Chromium 2 of 2", browser: chromium, projects: "--project=chromium-desk --project=chromium-phone --shard=2/2" }
           - { name: "desk and phone, WebKit", browser: webkit, projects: "--project=webkit-desk --project=webkit-phone" }
     steps:
       - uses: actions/checkout@v7
