@@ -11,8 +11,8 @@ import { fetchGroup, GROUP_STYLE, setsOfGroup } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);
 const WORDS = {
-  en: { title: "Chikyu Earth, full screen", back: "The demo", play: "Play", pause: "Pause", clock: "Clock", camera: "Camera", sats: "Satellites", cam_space: "Space", cam_sun: "Sun side", cam_ground: "Ground", sats_all: "All satellites", sats_off: "Hide satellites", label: "The Earth from space, with its sunlit and dark sides", help: "Drag to turn. Wheel or pinch to zoom.", loading: "Loading satellites", shown: "{n} satellites shown" },
-  ja: { title: "地球 (全画面)", back: "デモ", play: "再生", pause: "一時停止", clock: "時計", camera: "カメラ", sats: "人工衛星", cam_space: "宇宙", cam_sun: "太陽側", cam_ground: "地上", sats_all: "すべての人工衛星", sats_off: "人工衛星を隠す", label: "宇宙から見た地球。昼の側と夜の側", help: "ドラッグで回転します。ホイールかピンチで拡大・縮小します。", loading: "人工衛星を読み込み中", shown: "{n} 機の人工衛星を表示中" },
+  en: { title: "Chikyu Earth, full screen", back: "The demo", play: "Play", pause: "Pause", clock: "Clock", camera: "Camera", sats: "Satellites", cam_space: "In the stars", cam_sun: "Sun side", cam_ground: "Ground", sats_all: "All satellites", sats_off: "Hide satellites", label: "The Earth from space, with its sunlit and dark sides", help: "Drag to turn. Wheel or pinch to zoom.", loading: "Loading satellites", shown: "{n} satellites shown" },
+  ja: { title: "地球 (全画面)", back: "デモ", play: "再生", pause: "一時停止", clock: "時計", camera: "カメラ", sats: "人工衛星", cam_space: "星に固定", cam_sun: "太陽側", cam_ground: "地上", sats_all: "すべての人工衛星", sats_off: "人工衛星を隠す", label: "宇宙から見た地球。昼の側と夜の側", help: "ドラッグで回転します。ホイールかピンチで拡大・縮小します。", loading: "人工衛星を読み込み中", shown: "{n} 機の人工衛星を表示中" },
 };
 type Key = keyof (typeof WORDS)["en"];
 const lang = (query.get("lang") ?? navigator.language).toLowerCase().startsWith("ja") ? "ja" : "en";
