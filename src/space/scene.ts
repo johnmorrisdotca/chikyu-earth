@@ -15,9 +15,32 @@ import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type Sate
 
 type Three = ThreeParts;
 const RAD = Math.PI / 180;
-/** The camera's distance, in Earth radii, at which the Earth fills the view at zoom 1. */
-export const FIT_DISTANCE = 3.4;
 const FOV = 35;
+/** How much of the view's shorter side the Earth's disc fills at zoom 1 when the page does not say: 0.9, so the atmosphere's glow (8% beyond the disc) is inside the view and never cut. */
+export const DEFAULT_EARTH_SIZE = 0.9;
+
+/**
+ * The camera's distance, in radii of the body it looks at, at which the body's disc fills `size` of the view's shorter side (`aspect` is the view's width over its height; the field of view is vertical).
+ * Pure; `size` may be above 1 for a body drawn larger than the view.
+ *
+ * @param size - Share of the shorter side the disc's diameter fills.
+ * @param aspect - Width over height of the view.
+ * @returns The distance, in the body's radii.
+ *
+ * @example
+ * ```ts
+ * import { fitDistance } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(fitDistance(0.9, 16 / 9).toFixed(2));
+ * ```
+ */
+export function fitDistance(size: number, aspect: number): number {
+  const across = Math.max(0.02, Math.min(50, size)) * Math.min(1, Math.max(0.05, aspect));
+  return Math.sqrt(1 + 1 / (across * Math.tan((FOV / 2) * RAD)) ** 2);
+}
+
+/** The camera at the centre of the Earth's view: `ground` is held over a place on the ground (the Earth keeps still, the clock moves the light), `space` is held in the stars at the direction the place was in when it was set (the Earth turns beneath it), `sun` is held on the Sun's side (the day and night line keeps its place while the Earth turns). */
+export type CameraMode = "ground" | "space" | "sun";
 const LAYERS: Layer[] = ["day", "night", "clouds", "water", "moon"];
 /** The moons of a planet are shown once the planet is this many CSS pixels across its radius, and each is drawn at least this many pixels across its radius. */
 const MOON_MIN_PLANET_PX = 4;
@@ -92,8 +115,16 @@ export interface SpaceModel {
   view: { yaw: number; tilt: number; zoom: number };
   /** The home place: the camera starts above it. */
   centre: { lon: number; lat: number };
-  /** Earth's turn against the stars (degrees) at the moment the camera was last moved: the camera is fixed to the stars, not to the ground. */
+  /** Which way the camera is held (see `CameraMode`). */
+  camera: CameraMode;
+  /** Degrees an hour the cloud picture is made to move eastward against the ground: 0, the default (it is one snapshot, not a forecast). */
+  cloudDrift: number;
+  /** For the `space` camera: the Earth's turn against the stars (degrees) at the moment the camera was set, so it stays in the stars while the Earth turns beneath; null until the next draw sets it. */
   cameraSpin: number | null;
+  /** The share of the view's shorter side the Earth's disc fills at zoom 1, and where its centre is in the view (0 to 1 across and down; 0.5, 0.5 is the middle). */
+  earth: { size: number; x: number; y: number };
+  /** The camera's distance at zoom 1 in radii of the body it looks at, as the last draw worked it out from the view's shape and `earth.size`. */
+  fit: number;
   orbits: boolean;
   labels: boolean;
   /** Milliseconds of game time one second of wall time covers (the ephemeris is looked up once per such span). */
@@ -136,7 +167,11 @@ export const newSpaceModel = (): SpaceModel => ({
   mode: "compressed",
   view: { yaw: 0, tilt: 0, zoom: 1 },
   centre: { lon: 0, lat: 0 },
+  camera: "space",
+  cloudDrift: 0,
   cameraSpin: null,
+  earth: { size: DEFAULT_EARTH_SIZE, x: 0.5, y: 0.5 },
+  fit: fitDistance(DEFAULT_EARTH_SIZE, 1),
   orbits: true,
   labels: true,
   stepMs: 1000,
@@ -488,6 +523,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         scene,
         camera,
         update() {
+          const fit = fitDistance(model.earth.size, size.width / Math.max(1, size.height));
+          model.fit = fit;
           const frame = track.at(model.time);
           model.lookups = track.lookups;
           if (model.stepMs !== trackStep) {
@@ -509,7 +546,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const back = -(frame.spin + 90) * RAD;
             sunLocal.value.set(toSun[0] * Math.cos(back) + toSun[2] * Math.sin(back), toSun[1], -toSun[0] * Math.sin(back) + toSun[2] * Math.cos(back));
           }
-          cloudShift.value = -(((model.time / 3_600_000) * 1.5) % 360) / 360;
+          cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
           earthMaterial.uniforms["lights"]!.value = model.light === "lit" ? 0 : 1;
           earthMaterial.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
 
@@ -596,7 +633,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               const place: Vec3 = [rideState[0]!, rideState[1]!, rideState[2]!];
               if (ride.view === "follow") {
                 focusPos = place;
-                focusRadius = Math.max(1e-4, ride.distanceKm / 6371 / FIT_DISTANCE);
+                focusRadius = Math.max(1e-4, ride.distanceKm / 6371 / fit);
               } else rideFrom = { position: place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], hidden: null, gameSeconds: 0 };
             } else model.rideLost = true;
           }
@@ -621,13 +658,22 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const speed = Math.hypot(...rideFrom.velocity);
             model.rideMotion = typeof ride!.target === "string" ? ((speed / Math.max(1e-9, away)) / rideFrom.gameSeconds) * focal : (speed / Math.max(50, (away - 1) * 6371)) * focal;
           } else {
-            const spin = model.cameraSpin ?? frame.spin;
+            // where the camera is held: over a place on the ground (the Earth's own turn is added to it), in the stars (the turn at the moment it was set), or on the Sun's side (the Sun's right ascension and, for the latitude, its declination)
+            let spin = frame.spin;
+            let baseLat = model.centre.lat;
+            if (model.camera === "space") {
+              if (model.cameraSpin === null) model.cameraSpin = frame.spin;
+              spin = model.cameraSpin;
+            } else if (model.camera === "sun") {
+              spin = Math.atan2(-frame.sun[2], frame.sun[0]) / RAD;
+              baseLat += Math.asin(Math.max(-1, Math.min(1, frame.sun[1] / (Math.hypot(...frame.sun) || 1)))) / RAD;
+            }
             // behind a satellite the Earth is the far side of what the camera looks at, so it moves with the camera's side-step; the view is mirrored for the ground to follow the pointer
             const way = ride && ride.view === "follow" && typeof ride.target !== "string" ? -1 : 1;
             const lon = model.centre.lon - way * model.view.yaw;
-            const lat = Math.max(-90, Math.min(90, model.centre.lat - way * model.view.tilt));
+            const lat = Math.max(-90, Math.min(90, baseLat - way * model.view.tilt));
             const aim = direction(spin + lon, lat);
-            distance = Math.max(1.05 * focusRadius, (FIT_DISTANCE * focusRadius) / Math.max(1e-9, model.view.zoom));
+            distance = Math.max(1.05 * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
             target.set(focusPos[0], focusPos[1], focusPos[2]);
             camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
             camera.up.set(0, 1, 0);
@@ -654,6 +700,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           camera.fov = fovNow;
           camera.aspect = size.width / Math.max(1, size.height);
+          // the Earth's place in the view: the picture is moved, not the camera (a camera riding from a body keeps the middle)
+          const shiftX = rideFrom ? 0 : (model.earth.x - 0.5) * size.width;
+          const shiftY = rideFrom ? 0 : (model.earth.y - 0.5) * size.height;
+          if (shiftX !== 0 || shiftY !== 0) camera.setViewOffset(size.width, size.height, -shiftX, -shiftY, size.width, size.height);
+          else if (camera.view) camera.clearViewOffset();
           camera.updateProjectionMatrix();
           camera.updateMatrixWorld();
           // always lit: the light comes from the camera's side of the Earth (the Sun, Moon and planets stay where they are)

@@ -15,9 +15,9 @@ import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
 import type { RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
-import { BODY_NAMES, createSpaceItem, FIT_DISTANCE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SpaceModel } from "./scene.ts";
+import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SpaceModel } from "./scene.ts";
 
-export { BODY_NAMES, type BodyName, type RideTarget };
+export { BODY_NAMES, type BodyName, type CameraMode, type RideTarget };
 
 let painter: BodyPainter | undefined;
 
@@ -131,6 +131,14 @@ type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propag
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
 const RAD = Math.PI / 180;
+/** A `camera` attribute: `ground` or `sun`, else the camera held in the stars (the default: the Earth turns beneath it). */
+const readCamera = (value: string | null): CameraMode => (value === "ground" || value === "sun" ? value : "space");
+/** A number attribute within a range, or the fallback. */
+const readNumber = (value: string | null, fallback: number, min: number, max: number): number => {
+  if (value === null || value.trim() === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
 /** The Earth's own turn, degrees a second. */
 const EARTH_RATE = 360 / 86_164.0905;
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
@@ -185,7 +193,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits", "bodies", "light"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -225,6 +233,9 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.orbits = this.getAttribute("orbits") !== "off";
     this.#model.bodies = this.getAttribute("bodies") ?? "";
     this.#model.light = readLight(this.getAttribute("light"));
+    this.#model.camera = readCamera(this.getAttribute("camera"));
+    this.#model.cloudDrift = Number.isFinite(Number(this.getAttribute("cloud-drift") ?? "0")) ? Number(this.getAttribute("cloud-drift") ?? "0") : 0;
+    this.#model.earth = { size: readNumber(this.getAttribute("earth-size"), DEFAULT_EARTH_SIZE, 0.02, 50), x: readNumber(this.getAttribute("earth-x"), 0.5, -2, 3), y: readNumber(this.getAttribute("earth-y"), 0.5, -2, 3) };
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
     this.#model.speed = this.#speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
@@ -303,6 +314,14 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "orbits") this.orbits = value !== "off";
     else if (name === "bodies") this.bodies = value ?? "";
     else if (name === "light") this.light = readLight(value);
+    else if (name === "camera") this.camera = readCamera(value);
+    else if (name === "cloud-drift") {
+      this.#model.cloudDrift = Number.isFinite(Number(value ?? "0")) ? Number(value ?? "0") : 0;
+      this.#gate?.request();
+    }
+    else if (name === "earth-size") this.earthSize = readNumber(value, DEFAULT_EARTH_SIZE, 0.02, 50);
+    else if (name === "earth-x") this.earthX = readNumber(value, 0.5, -2, 3);
+    else if (name === "earth-y") this.earthY = readNumber(value, 0.5, -2, 3);
   }
 
   get centre(): GeoPoint {
@@ -310,6 +329,48 @@ export class ChikyuSpace extends HTMLElement {
   }
   set centre(value: GeoPoint) {
     this.#model.centre = { ...value };
+    this.#model.cameraSpin = null;
+    this.#gate?.request();
+  }
+
+  /**
+   * How the camera is held (the `camera` attribute). `space` (the default): held in the stars, looking at the place `center` names as it is at the moment the camera is set (when the element opens, and again when `time` or `center` is set), so the Earth
+   * turns beneath it as the clock runs, with the day and night line where the Sun really is. `ground`: held over `center` on the ground, so the Earth keeps still and the clock moves the light across it. `sun`: held on the Sun's side, `center` being the
+   * longitude and latitude from the sub-solar point (`0,0` looks straight at the noon place), so the day and night line keeps its place on the screen while the Earth turns beneath.
+   */
+  get camera(): CameraMode {
+    return this.#model.camera;
+  }
+  set camera(value: CameraMode) {
+    this.#model.camera = value;
+    this.#model.cameraSpin = null;
+    this.#gate?.request();
+  }
+
+  /** The share of the view's shorter side the Earth's disc fills at zoom 1 (the `earth-size` attribute): 0.9 by default, so the atmosphere's glow is never cut at any shape of box. Above 1 the Earth is larger than the view. */
+  get earthSize(): number {
+    return this.#model.earth.size;
+  }
+  set earthSize(value: number) {
+    this.#model.earth.size = Number.isFinite(value) ? Math.min(50, Math.max(0.02, value)) : DEFAULT_EARTH_SIZE;
+    this.#gate?.request();
+  }
+
+  /** Where the Earth's centre is across the view (the `earth-x` attribute): 0 at the left edge, 0.5 in the middle (the default), 1 at the right edge. */
+  get earthX(): number {
+    return this.#model.earth.x;
+  }
+  set earthX(value: number) {
+    this.#model.earth.x = Number.isFinite(value) ? value : 0.5;
+    this.#gate?.request();
+  }
+
+  /** Where the Earth's centre is down the view (the `earth-y` attribute): 0 at the top, 0.5 in the middle (the default), 1 at the bottom. */
+  get earthY(): number {
+    return this.#model.earth.y;
+  }
+  set earthY(value: number) {
+    this.#model.earth.y = Number.isFinite(value) ? value : 0.5;
     this.#gate?.request();
   }
 
@@ -581,7 +642,7 @@ export class ChikyuSpace extends HTMLElement {
       const sites = painter?.moons?.(name, this.#model.time) ?? [];
       const reach = Math.max(1, ...sites.map((site) => Math.hypot(...site.offset)).filter((r) => r <= 22));
       const radius = RADIUS[name]![this.#model.mode];
-      return Math.min(1, (FIT_DISTANCE * radius) / ((reach * radius * 1.15) / Math.tan(17.5 * RAD)));
+      return Math.min(1, (this.#model.fit * radius) / ((reach * radius * 1.15) / Math.tan(17.5 * RAD)));
     }
     const frame = this.#model.drawn?.frame ?? frameAt(this.#model.time);
     const mode = this.#model.mode;
@@ -594,7 +655,7 @@ export class ChikyuSpace extends HTMLElement {
       inner: Math.max(around("Mercury"), around("Venus"), around("Mars"), Math.hypot(...sun)),
       "solar-system": Math.max(...(Object.keys(frame.planets) as (keyof typeof frame.planets)[]).map(around), Math.hypot(...sun)),
     }[preset as Exclude<SpacePreset, `${string}-moons`>];
-    return preset === "earth" ? 1 : FIT_DISTANCE / Math.max(FIT_DISTANCE, reach * 3.4);
+    return preset === "earth" ? 1 : this.#model.fit / Math.max(this.#model.fit, reach * 3.4);
   }
 
   /** What the element is doing, for a page or a test. */

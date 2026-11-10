@@ -54,8 +54,10 @@ const readCentre = (value: string | null): GeoPoint | null => {
   return { lon: lon!, lat: lat! };
 };
 
-/** A `camera` attribute: `space` or `sun`, else the camera held over a place on the ground. */
-const readCamera = (value: string | null): CameraMode => (value === "space" || value === "sun" ? value : "ground");
+/** A `camera` attribute: `ground` or `sun`, else the camera held in the stars (the default: the Earth turns beneath it). */
+const readCamera = (value: string | null): CameraMode => (value === "ground" || value === "sun" ? value : "space");
+/** A `cloud-drift` attribute: degrees an hour the clouds are made to move eastward against the ground (0, the default: where the picture has them). */
+const readDrift = (value: string | null): number => (value !== null && Number.isFinite(Number(value)) ? Number(value) : 0);
 /** The plain wheel in an immersive view is a pinch of this share: a notch (100) zooms about 1.2 times, as the family's mouse wheel does with Alt. */
 const WHEEL_AS_PINCH = 0.2;
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
@@ -138,7 +140,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -178,6 +180,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.lights = this.getAttribute("lights") !== "off";
     this.#model.light = readLight(this.getAttribute("light"));
     this.#model.camera = readCamera(this.getAttribute("camera"));
+    this.#model.cloudDrift = readDrift(this.getAttribute("cloud-drift"));
     this.#model.speed = this.speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
@@ -216,7 +219,6 @@ export class ChikyuEarthRealistic extends HTMLElement {
         }
         this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } }));
       },
-      drift: 1.5,
       invalidate: () => this.#gate?.soon(),
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
@@ -280,6 +282,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "live-seconds") this.#startTick();
     else if (name === "tiles") this.#gate?.soon();
     else if (name === "camera") this.camera = readCamera(value);
+    else if (name === "cloud-drift") {
+      this.#model.cloudDrift = readDrift(value);
+      this.#gate?.soon();
+    }
   }
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -322,8 +328,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
-   * How the camera is held (the `camera` attribute). `ground` (the default): over the place `center` names on the ground, so the Earth keeps still and the clock moves the light across it. `space`: held in the stars, looking at the place `center` names as it is at the
-   * moment the camera is set (when the element opens, and again when `time` or `center` is set), so the Earth turns beneath it as the clock runs, with the day and night line where the Sun really is. `sun`: held on the Sun's side, `center` being the longitude and
+   * How the camera is held (the `camera` attribute). `space` (the default): held in the stars, looking at the place `center` names as it is at the
+   * moment the camera is set (when the element opens, and again when `time` or `center` is set), so the Earth turns beneath it as the clock runs, with the day and night line where the Sun really is. `ground`: over the place `center` names on the ground, so the Earth keeps still and the clock moves the light across it. `sun`: held on the Sun's side, `center` being the longitude and
    * latitude from the sub-solar point (`0,0` looks straight at the noon place and shows no night), so the day and night line keeps its place on the screen while the Earth turns beneath. A drag turns the view about the same body in any of them.
    */
   get camera(): CameraMode {

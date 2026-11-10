@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AU_IN_EARTH_RADII, blend, createTrack, frameAt, orbitPath, PLANETS, type Vec3 } from "../src/space/ephemeris.ts";
+import { fitDistance } from "../src/space/scene.ts";
 import { compress, placeAround, placeMoon, placeSun, RADIUS, SUN_COMPRESSED, truePosition } from "../src/space/scale.ts";
 
 const len = (v: Vec3): number => Math.hypot(v[0], v[1], v[2]);
@@ -141,4 +142,18 @@ test("Pluto is a planet of the view: nearly 40 astronomical units from the Sun i
   const orbit = orbitPath("Pluto", f.ms, 12);
   assert.equal(orbit.length, 13);
   assert.ok(len(orbit[0]!) > 25);
+});
+
+test("the camera's distance at Fit puts the Earth's disc, and so its glow, inside the shorter side of a box of any shape", () => {
+  const tan = Math.tan((35 / 2) * (Math.PI / 180));
+  /** The disc's radius as a share of half the shorter side: the Earth's tangent ray from the camera, over the field of view. */
+  const share = (distance: number, aspect: number): number => 1 / Math.sqrt(distance * distance - 1) / tan / Math.min(1, aspect);
+  for (const aspect of [16 / 9, 1, 9 / 16, 3]) {
+    const distance = fitDistance(0.9, aspect);
+    assert.ok(Math.abs(share(distance, aspect) - 0.9) < 1e-9, `aspect ${aspect}: ${share(distance, aspect)}`);
+    // the glow reaches 8% beyond the disc: still inside
+    assert.ok(share(distance, aspect) * 1.08 <= 1, "the glow is not cut");
+  }
+  assert.ok(fitDistance(0.9, 9 / 16) > fitDistance(0.9, 1), "a tall box needs the camera further back");
+  assert.equal(fitDistance(0.9, 16 / 9), fitDistance(0.9, 1), "a wide box is fitted by its height, as a square is");
 });

@@ -71,6 +71,8 @@ export interface EarthModel {
   light: LightMode;
   /** How the camera is held (see `CameraMode`). */
   camera: CameraMode;
+  /** How fast the cloud picture is made to move eastward against the ground, degrees an hour: 0 (the default) keeps the clouds where the picture has them. The picture is one snapshot, not a forecast; a drift is only for life. */
+  cloudDrift: number;
   /** For the `space` camera: the Earth's turn against the stars (degrees) when the camera was set; null until the next draw sets it. */
   cameraSpin: number | null;
   /** Game seconds a second (the clock's speed): the satellites are placed from it. */
@@ -97,8 +99,6 @@ export interface EarthDeps {
   tiles?: () => string | undefined;
   /** Told once when the tile set has been read: the width in pixels of the finest level of each of its layers. */
   onTiles?: (layers: Record<string, number>) => void;
-  /** Clouds' eastward drift against the ground, degrees an hour. */
-  drift: number;
   invalidate: () => void;
   onError?: (error: unknown) => void;
   onTier?: (layer: Layer, width: number) => void;
@@ -115,7 +115,8 @@ export const newModel = (): EarthModel => ({
   clouds: true,
   lights: true,
   light: "sun",
-  camera: "ground",
+  camera: "space",
+  cloudDrift: 0,
   cameraSpin: null,
   speed: 1,
   satellites: newSatelliteState(),
@@ -292,7 +293,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           sunLocal.value.set(sx, sy, sz);
           sunDir.value.set(sx, sy, sz).applyEuler(turned.rotation);
           if (model.light === "lit") sunDir.value.set(0, 0, 1);
-          cloudShift.value = -(((model.time / 3_600_000) * deps.drift) % 360) / 360;
+          cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
           clouds.visible = model.clouds;
           surface.uniforms["lights"]!.value = model.lights && model.light !== "lit" ? 1 : 0;
           surface.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;

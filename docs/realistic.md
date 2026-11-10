@@ -72,7 +72,8 @@ rest after 4 seconds, and keeps the pictures above as the far view and the fallb
 | `center="lon,lat"` | where the view starts (the reader's own place if left out and they allow it, as in the flat element) |
 | `time="2026-06-21T12:00Z"` | the moment shown; `now` (the default) follows the clock |
 | `speed="86400"` | seconds that pass for each real second, from the moment shown: `1` real time, `0` holds, `3600` an hour a second, `86400` a day a second, negative runs backwards. Left out, the clock follows `time`: real time for `now`, held for a date. Same name as `<chikyu-space>`'s; [the guide](guides/time-and-play.md) |
-| `camera="space"` | how the camera is held: `ground` (the default, over a place on the ground), `space` (in the stars: the Earth turns beneath it) or `sun` (on the Sun's side: the day and night line keeps its place on the screen); [the guide](guides/full-screen-and-camera.md) |
+| `camera="ground"` | how the camera is held: `space` (the default: in the stars, so the Earth turns beneath it), `ground` (over a place on the ground) or `sun` (on the Sun's side: the day and night line keeps its place on the screen); [the guide](guides/full-screen-and-camera.md) |
+| `cloud-drift="1.5"` | degrees an hour the clouds slide east against the ground (0, the default: the picture is one snapshot, not a forecast) |
 | `immersive` | full screen: the element fills its box in any shape, a plain wheel zooms and a touch drag turns; [the guide](guides/full-screen-and-camera.md) |
 | `clouds="off"`, `lights="off"` | switch the cloud layer or the night lights off |
 | `texture-base`, `max-texture` | where the pictures are; the widest one to use |
