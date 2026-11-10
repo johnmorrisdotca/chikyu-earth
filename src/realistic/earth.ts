@@ -76,6 +76,8 @@ export interface EarthDeps {
   invalidate: () => void;
   onError?: (error: unknown) => void;
   onTier?: (layer: Layer, width: number) => void;
+  /** Told at the start of every draw, before anything is read for it. */
+  onDraw?: () => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
 }
@@ -208,6 +210,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         scene,
         camera,
         update() {
+          deps.onDraw?.();
           const view = model.view;
           const look = lookAt(model.centre, view);
           turned.rotation.set(look.lat * RAD, -look.lon * RAD, 0, "XYZ");

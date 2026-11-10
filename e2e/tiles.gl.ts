@@ -172,7 +172,8 @@ test("a lost WebGL context is recovered with the tiles still on the sphere", asy
 const watchDraws = (page: Page): Promise<void> =>
   page.locator(EARTH).evaluate((el) => {
     const read = () => Reflect.get(el, "stats") as { draws: number; tiers: Record<string, number>; tiles: { requested: number; loading: number } };
-    const seen = { newFrames: 0, tileFrames: 0, mostInAFrame: 0 };
+    const seen = { newFrames: 0, tileFrames: 0, mostInAFrame: 0, log: [] as string[] };
+    let n = 0;
     Reflect.set(window, "__watch", seen);
     const first = read();
     let draws = first.draws;
@@ -185,6 +186,8 @@ const watchDraws = (page: Page): Promise<void> =>
       const picture = JSON.stringify(now.tiers) !== tiers;
       if (tile) seen.tileFrames += 1;
       if (tile || picture) seen.newFrames += 1;
+      n += 1;
+      if (now.draws !== draws || tile || picture) seen.log.push(`f${n}@${Math.round(performance.now())} draws+${now.draws - draws}${tile ? " tile" : ""}${picture ? " picture" : ""}`);
       draws = now.draws;
       arrived = now.tiles.requested - now.tiles.loading;
       tiers = JSON.stringify(now.tiers);
@@ -193,7 +196,7 @@ const watchDraws = (page: Page): Promise<void> =>
     requestAnimationFrame(frame);
   });
 
-const watched = (page: Page): Promise<{ newFrames: number; tileFrames: number; mostInAFrame: number }> => page.evaluate(() => Reflect.get(window, "__watch"));
+const watched = (page: Page): Promise<{ newFrames: number; tileFrames: number; mostInAFrame: number; log: string[] }> => page.evaluate(() => Reflect.get(window, "__watch"));
 
 /** Answer each tile after its own wait, so the tiles arrive in different frames, in clumps and one by one, as on a slow connection. */
 const slowTiles = async (page: Page, waits: number[]): Promise<void> => {
@@ -229,7 +232,7 @@ for (const [how, waits] of [
     const draws = end.draws - start.draws;
     expect(seen.tileFrames, "tiles arrived").toBeGreaterThan(0);
     expect(seen.mostInAFrame, "draws in any one frame").toBeLessThanOrEqual(1);
-    expect(draws, `draws while the tiles arrived (${seen.tileFrames} frames with a tile, ${seen.newFrames} with something new)`).toBeLessThanOrEqual(seen.newFrames + 1);
+    expect(draws, `draws while the tiles arrived (${seen.tileFrames} frames with a tile, ${seen.newFrames} with something new: ${seen.log.join(", ")})`).toBeLessThanOrEqual(seen.newFrames + 1);
     expect(draws, "draws a second").toBeLessThanOrEqual(Math.ceil(30 * seconds) + 1);
   });
 }
