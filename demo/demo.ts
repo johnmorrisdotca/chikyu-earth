@@ -680,9 +680,15 @@ if (flat && controls && stage) {
       if (lights === "off") element.setAttribute("lights", "off");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
-      // with the date "now" the Sun is put right once a minute, and the date box follows
+      // the clock runs only while Play is on; with the date "now" and no Play the Sun is put right once a minute, and the date box follows
+      if (clock.play) element.setAttribute("speed", String(clock.speed));
+      // the date box follows the clock while it runs, and once when it holds the date it stopped on is the date shown, in the address
       element.addEventListener("chikyu-timechange", (e) => {
-        if (when && document.activeElement !== when) when.value = localValue((e as CustomEvent<{ time: number }>).detail.time);
+        const { time, running } = (e as CustomEvent<{ time: number; running: boolean }>).detail;
+        if (when && document.activeElement !== when) when.value = localValue(time);
+        if (running) return;
+        address.set("time", isoSecond(time));
+        now?.setAttribute("aria-pressed", "false");
       });
       element.addEventListener("chikyu-unavailable", () => {
         notice(say("noWebgl"));
@@ -699,7 +705,7 @@ if (flat && controls && stage) {
     if (realControls) realControls.hidden = false;
     if (lightControls) lightControls.hidden = false;
     if (timeControls) timeControls.hidden = false;
-    replay.hidden = true;
+    markClock();
     for (const box of [spaceControls, scaleNote]) if (box) box.hidden = true;
     return true;
   }
@@ -787,9 +793,16 @@ if (flat && controls && stage) {
   const missionBar = document.querySelector<ReplayBarElement>("#mission-replay");
   /** The date the reader chose (the address, the box or Now): Back returns to it. */
   let origin = Number.isFinite(Date.parse(address.get("time") ?? "")) ? Date.parse(address.get("time")!) : Date.now();
-  /** The clock's speed on the space view: nothing runs while Play is off, and a held view draws nothing. */
+  /** The view whose clock the bar runs: the space view or the realistic Earth. */
+  const clocked = (): ChikyuSpace | ChikyuEarthRealistic | null => space ?? real;
+  /** The moment the view shows, in milliseconds (the realistic Earth reads "now" while it follows the real clock). */
+  const momentOf = (view: ChikyuSpace | ChikyuEarthRealistic): number => (typeof view.time === "number" ? view.time : Date.now());
+  /** Does the date the reader chose follow the real clock (no date in the address, or Now)? The realistic Earth is live then, and Back returns it to that. */
+  let originLive = !Number.isFinite(Date.parse(address.get("time") ?? ""));
+  /** The clock's speed: nothing runs while Play is off, and a held view draws nothing. The realistic Earth that was never played is live at "now" and is left alone until Play. */
   const runClock = (): void => {
     if (space) space.speed = clock.play ? clock.speed : 0;
+    else if (real && (clock.play || real.hasAttribute("speed"))) real.speed = clock.play ? clock.speed : 0;
   };
   /** Show the clock's state: the bar (Play comes out off for a reader who prefers reduced motion), its words, and the address, while the space view is on. */
   function markClock(): void {
@@ -798,26 +811,28 @@ if (flat && controls && stage) {
     if (replay.getAttribute("speed") !== String(clock.speed)) replay.setAttribute("speed", String(clock.speed));
     replay.setAttribute("lang", say("locale").startsWith("ja") ? "ja" : "en");
     replay.words = { group: say("time"), start: say("back") };
-    replay.hidden = !space;
-    if (!space) return;
+    replay.hidden = !clocked();
+    if (!clocked()) return;
     address.set("play", clock.play ? "on" : null);
     address.set("speed", clock.speed === DEFAULT_SPEED ? null : String(clock.speed));
   }
   /** Leaving the space view while it runs: the date it had reached is the date the next view shows, and Play is off. */
   function settleClock(): void {
-    if (!space) return;
-    if (clock.play) address.set("time", isoSecond(space.time));
+    const view = clocked();
+    if (!view) return;
+    if (clock.play) address.set("time", isoSecond(momentOf(view)));
     clock.play = false;
     replay.playing = false;
     address.set("play", null);
   }
   /** Play or Pause. Play starts from the date shown: a date that follows "now" becomes that moment, so the clock does not jump to a later now. */
   function setPlaying(on: boolean): void {
-    if (!space) return;
+    const view = clocked();
+    if (!view) return;
     if (on && missionBar?.playing) missionBar.playing = false;
     if (on && address.get("time") === null) {
-      const at = space.time;
-      space.time = at;
+      const at = momentOf(view);
+      view.time = at;
       address.set("time", isoSecond(at));
     }
     clock.play = on;
@@ -827,13 +842,22 @@ if (flat && controls && stage) {
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(markClock));
   replay.addEventListener("kazoku-replay", (event) => {
     const { action, playing, reason } = (event as CustomEvent<ReplayDetail>).detail;
-    if (reason !== "user" || action === "repeat" || !space) return;
+    const view = clocked();
+    if (reason !== "user" || action === "repeat" || !view) return;
     if (action === "start") {
-      // Back: the date the reader chose, held
+      // Back: the date the reader chose, held (the realistic Earth that was following the real clock goes back to following it)
       clock.play = false;
       markClock();
+      if (real && originLive) {
+        real.removeAttribute("speed");
+        real.time = "now";
+        address.set("time", null);
+        now?.setAttribute("aria-pressed", "true");
+        if (when) when.value = localValue(Date.now());
+        return;
+      }
       runClock();
-      space.time = origin;
+      view.time = origin;
       address.set("time", isoSecond(origin));
       now?.setAttribute("aria-pressed", "false");
       if (when) when.value = localValue(origin);
@@ -850,8 +874,9 @@ if (flat && controls && stage) {
   });
   // leaving while the clock runs: the date it had reached goes into the address, so a returning reader is where they were
   addEventListener("pagehide", () => {
-    if (!space || !clock.play) return;
-    address.set("time", isoSecond(space.time));
+    const view = clocked();
+    if (!view || !clock.play) return;
+    address.set("time", isoSecond(momentOf(view)));
     address.flush();
   });
   missionRow = mountMissions({
@@ -912,6 +937,7 @@ if (flat && controls && stage) {
     if (!Number.isFinite(ms)) return;
     now?.setAttribute("aria-pressed", "false");
     origin = ms;
+    originLive = false;
     if (real) real.time = ms;
     if (space) space.time = ms;
     address.set("time", isoSecond(ms));
@@ -919,8 +945,13 @@ if (flat && controls && stage) {
   now?.addEventListener("click", () => {
     now.setAttribute("aria-pressed", "true");
     origin = Date.now();
+    originLive = true;
     if (when) when.value = localValue(origin);
-    if (real) real.time = "now";
+    if (real) {
+      // not playing: back to following the real clock, as it always did; playing: it goes on from now at the speed chosen
+      if (!clock.play) real.removeAttribute("speed");
+      real.time = "now";
+    }
     if (space) space.time = "now";
     address.set("time", null);
   });
