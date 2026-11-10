@@ -2,7 +2,7 @@
 title: The date follows the clock, and Play
 section: how-to
 order: 11
-description: Show the date the clock of the space view or the realistic Earth has reached, and run it from a date with Play, Pause and Back: the speed, the event, how often it is sent, and what the demo keeps in its address.
+description: "Show the date the clock of the space view or the realistic Earth has reached, and run it from a date with Play, Pause and Back: the speed, the event, how often it is sent, and what the demo keeps in its address."
 ---
 
 `<chikyu-space>` has a clock: `time` is the moment shown and `speed` is how many seconds pass for each real second (`0` holds it still, `3600` is an hour a second, `86400` a day a second, a negative number runs backwards). A page with a date box wants to show the date the clock has reached, and a reader wants to start it from the date in the box and stop it again. This guide is the event that carries the date and the controls the demo puts round it.

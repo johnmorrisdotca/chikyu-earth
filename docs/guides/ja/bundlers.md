@@ -1,5 +1,5 @@
 ---
-title: バンドラーで使う: Vite、webpack、ES モジュール
+title: "バンドラーで使う: Vite、webpack、ES モジュール"
 section: how-to
 order: 3
 description: パッケージをインストールして、Vite や webpack のプロジェクト、または ES モジュールの環境で要素を import します。

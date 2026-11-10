@@ -2,7 +2,7 @@
 title: Zoom, pan and turn
 section: how-to
 order: 13
-description: Every live view in the package zooms, pans and turns by itself, with no bar and no wiring: the gestures, the zoom range of each element and why it stops where it does, and how to turn the hands off or add buttons.
+description: "Every live view in the package zooms, pans and turns by itself, with no bar and no wiring: the gestures, the zoom range of each element and why it stops where it does, and how to turn the hands off or add buttons."
 ---
 
 A reader who drops `<chikyu-earth>`, `<chikyu-earth-realistic>` or `<chikyu-space>` on a page expects to be able to move the picture. They do, with nothing else on the page. Each element carries [kazoku-ui's view controls](https://github.com/johnmorrisdotca/kazoku-ui) itself (the shared `carryControls`), so the same hands work in a script tag, a framework, the code builder and an iframe.

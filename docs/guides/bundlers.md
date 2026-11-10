@@ -1,5 +1,5 @@
 ---
-title: With a bundler: Vite, webpack and ES modules
+title: "With a bundler: Vite, webpack and ES modules"
 section: how-to
 order: 3
 description: Install the package and import the element in a Vite or webpack project, or in any ES module setup.
