@@ -5,11 +5,13 @@ import { expect, test, type Page } from "@playwright/test";
 const CONTROLS = "kazoku-view-controls";
 const speedButton = (page: Page, value: number) => page.locator(`${CONTROLS} kazoku-speed-buttons button[data-v="${value}"]`);
 
-test("Auto-turn has the family's 0.5×, 1× and 2×, kept in the attribute and the address, and the Earth's own rate is the 1×", async ({ page }) => {
+test("Auto-turn has the family's 0.5×, 1× and 2× and a 1440× that it opens on, kept in the attribute and the address, and the Earth's own rate is the 1×", async ({ page }) => {
   await page.goto("/chikyu-earth/");
   await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
   if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
-  await expect(page.locator(`${CONTROLS} kazoku-speed-buttons button`)).toHaveText(["0.5×", "1×", "2×"]);
+  await expect(page.locator(`${CONTROLS} kazoku-speed-buttons button`)).toHaveText(["0.5×", "1×", "2×", "1440×"]);
+  await expect(speedButton(page, 1440)).toHaveAttribute("aria-pressed", "true");
+  await speedButton(page, 1).click();
   await expect(speedButton(page, 1)).toHaveAttribute("aria-pressed", "true");
   expect(await page.locator(CONTROLS).evaluate((el) => Reflect.get(el, "controller").speed as number)).toBeCloseTo(0.004178, 6);
   await speedButton(page, 2).click();

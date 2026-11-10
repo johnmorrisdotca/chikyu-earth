@@ -113,11 +113,25 @@ if (flat && controls && stage) {
 
   const state = (): ViewChangeDetail => Reflect.get(controls, "state") as ViewChangeDetail;
 
-  /** Auto-turn's speed on the 3D looks: a turn in a minute, where the Earth's real rate (0.004 degrees a second, the line globe's own) cannot be seen. */
+  /**
+   * Auto-turn's speed, for the look that is showing (MODULES-898). The `speed` attribute is the real rate (0.004 degrees a second, the line globe's own) and 1× on the buttons is real time, but a turn at that rate cannot be seen,
+   * so the line and thick globes open on the 1440× button, a day a minute (a turn in a minute). The 3D looks have no real-time button: their 1× is six degrees a second, a turn in a minute too.
+   */
   const REAL_TURN = "0.004178";
   const VISIBLE_TURN = "6";
   const turnFor = (visible: boolean): void => {
-    if (controls!.getAttribute("speed") !== (visible ? VISIBLE_TURN : REAL_TURN)) controls!.setAttribute("speed", visible ? VISIBLE_TURN : REAL_TURN);
+    const set = (name: string, value: string): void => {
+      if (controls!.getAttribute(name) !== value) controls!.setAttribute(name, value);
+    };
+    if (visible) {
+      set("speed", VISIBLE_TURN);
+      set("paces", "0.5 1 2");
+      set("pace", "1");
+    } else {
+      set("speed", REAL_TURN);
+      set("paces", "0.5 1 2 1440");
+      set("pace", "1440");
+    }
   };
 
   function leave3d(): void {
