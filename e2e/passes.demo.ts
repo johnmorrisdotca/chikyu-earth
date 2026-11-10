@@ -5,6 +5,13 @@ import { expect, test, type Page } from "@playwright/test";
 const AT = "2026-11-10T00:00Z";
 const PAGE = `/chikyu-earth/passes.html?at=${AT}`;
 const rows = (page: Page) => page.locator("chikyu-passes .row");
+/**
+ * How many passes the list shows, as the page itself says it after each time the list is made (`#data-note[data-passes]`, set on the element's `chikyu-passes` event): the state to wait for after a choice. The `days` attribute
+ * changes the moment a button is pressed, long before the list for it is drawn, so it says nothing about the list.
+ */
+const listed = async (page: Page): Promise<number> => Number(await page.locator("#data-note").getAttribute("data-passes"));
+/** How long to wait for a list to be made. It is the longest a wait may take, not a time spent: each wait ends the moment the page says the list is there (MODULES-804). */
+const MADE = 20_000;
 
 test("it lists the passes over Tokyo, draws the sky dome and the ground track of the first, and keeps the choices in the address", async ({ page }) => {
   await page.goto(PAGE);
@@ -69,20 +76,23 @@ test("the satellite, the days, all passes and the darker sky change the list", a
   await page.goto(PAGE);
   await expect(rows(page).first()).toBeVisible();
   const visible = await rows(page).count();
+  expect(await listed(page), "the page counts the list it drew").toBe(visible);
   await page.getByTestId("shows").getByRole("button", { name: "All passes" }).click();
-  await expect.poll(() => rows(page).count()).toBeGreaterThan(visible);
-  await expect(page.locator("chikyu-passes .badge:not([data-reason='visible'])").first()).toBeVisible();
+  await expect.poll(() => listed(page), { timeout: MADE }).toBeGreaterThan(visible);
+  await expect(page.locator("chikyu-passes .badge:not([data-reason='visible'])").first()).toBeVisible({ timeout: MADE });
   await page.getByTestId("shows").getByRole("button", { name: "Visible passes" }).click();
+  await expect.poll(() => listed(page), { timeout: MADE }).toBe(visible);
   await page.getByTestId("days").getByRole("button", { name: "10", exact: true }).click();
   await expect(page.locator("chikyu-passes")).toHaveAttribute("days", "10");
-  await expect.poll(() => rows(page).count()).toBeGreaterThan(visible);
+  await expect.poll(() => listed(page), { timeout: MADE, message: "the list for 10 days is made, and longer than the one for 5" }).toBeGreaterThan(visible);
   await page.getByTestId("sats").getByRole("button", { name: "All three" }).click();
-  await expect(rows(page).first().locator(".when")).toContainText("·");
+  await expect(rows(page).first().locator(".when")).toContainText("·", { timeout: MADE });
   await page.getByTestId("sats").getByRole("button", { name: "Hubble" }).click();
   await page.getByTestId("shows").getByRole("button", { name: "All passes" }).click();
-  await expect(rows(page).first().locator(".when")).not.toContainText("·");
+  await expect(rows(page).first().locator(".when")).not.toContainText("·", { timeout: MADE });
   await page.getByTestId("shows").getByRole("button", { name: "Visible passes" }).click();
-  const sky = await rows(page).count();
+  await expect.poll(async () => (await listed(page)) === (await rows(page).count()), { timeout: MADE }).toBe(true);
+  const sky = await listed(page);
   await page.getByTestId("skies").getByRole("button", { name: "Darker only" }).click();
   expect(await rows(page).count()).toBeLessThanOrEqual(sky);
   await expect.poll(() => { const q = new URL(page.url()).searchParams; return [q.get("days"), q.get("sat"), q.get("sky")]; }).toEqual(["10", "hst", "nautical"]);

@@ -5,6 +5,9 @@ import { defineConfig, devices } from "@playwright/test";
 const port = Number(process.env.TEST_PORT ?? 8201);
 // WebGL is drawn in software, never on the machine's graphics card (the family's rule). kazoku-ui 0.9.1 exports these as `SOFTWARE_GL_ARGS` from `/testing`; this is that list.
 const SOFTWARE_GL = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"];
+// The page's own pictures (the line globe, a map, text) are drawn by the CPU, not by the software GPU. With only SOFTWARE_GL, Chromium rasterizes them on the emulated GPU as well, and on the passes page the world map
+// alone took 5 to 10 seconds of that GPU's time, in which the page drew no frame and answered no click (MODULES-804: a click took 6 s, and the 5 s waits ran out). WebGL is still drawn in software, by the flags above.
+const CPU_RASTER = "--disable-gpu-rasterization";
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 
 export default defineConfig({
@@ -36,8 +39,8 @@ export default defineConfig({
       timeout: (Number(process.env.SOAK_MINUTES ?? 10) + 4) * 60_000,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
     },
-    { name: "chromium-desk", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: SOFTWARE_GL } } },
-    { name: "chromium-phone", use: { ...devices["Desktop Chrome"], ...phone, launchOptions: { args: SOFTWARE_GL } } },
+    { name: "chromium-desk", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, CPU_RASTER] } } },
+    { name: "chromium-phone", use: { ...devices["Desktop Chrome"], ...phone, launchOptions: { args: [...SOFTWARE_GL, CPU_RASTER] } } },
     // WebKit on a desktop viewport with touch: `isMobile` is Chromium's to honour.
     { name: "webkit-desk", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 900 } } },
     { name: "webkit-phone", use: { ...devices["Desktop Safari"], viewport: phone.viewport, hasTouch: true } },
