@@ -17,7 +17,7 @@ void main() {
  *
  * What it shades, in the textures' own (sRGB) space (a look, not a radiometric model):
  * - the Sun's light reddens towards the terminator and the twilight has a warm band on the lit side and a blue hour beyond it;
- * - the ocean is deeper, with a hard glint under the Sun, a broad sheen round it, and the sky reflected at grazing angles; clouds hide the glint;
+ * - the ocean is a clearer blue, with a hard glint under the Sun, a broad sheen round it, and the sky reflected at grazing angles; clouds hide the glint;
  * - the clouds throw a shadow on the ground, displaced away from the Sun and longer as it gets low;
  * - the night side has the city lights warm and softly spread, dimmed where cloud covers them;
  * - the air shows as a rim on the limb, blue by day and orange along the terminator.
@@ -47,7 +47,8 @@ void main() {
   vec2 g = ${tile ? "vUvG" : "vUv"};
   vec3 albedo = texture2D(dayMap, vUv).rgb;
   float water = texture2D(waterMap, g).r;
-  albedo *= mix(vec3(1.0), vec3(0.80, 0.91, 1.07), water);
+  albedo = pow(albedo, vec3(0.86)) * 1.08;
+  albedo *= mix(vec3(1.0), vec3(1.05, 1.22, 1.55), water);
 
   // the cloud over this point, and the cloud whose shadow falls on it (found by going back along the Sun's ground track)
   float lat = (0.5 - g.y) * PI;
@@ -61,7 +62,7 @@ void main() {
   float shadow = smoothstep(0.28, 0.88, texture2D(cloudMap, shadowAt).r);
 
   vec3 sunColour = mix(vec3(1.0, 0.62, 0.38), vec3(1.0, 0.97, 0.91), smoothstep(0.0, 0.22, ndl));
-  vec3 lit = albedo * sunColour * (0.07 + 1.0 * pow(max(ndl, 0.0), 0.5));
+  vec3 lit = albedo * sunColour * (0.07 + 1.2 * pow(max(ndl, 0.0), 0.5));
   lit *= 1.0 - 0.5 * shadow * smoothstep(0.02, 0.3, ndl);
   float dusk = smoothstep(-0.14, 0.0, ndl) * (1.0 - smoothstep(0.0, 0.30, ndl));
   lit += vec3(0.55, 0.28, 0.14) * dusk * 0.30 * (0.35 + 0.65 * albedo.g);
@@ -70,7 +71,7 @@ void main() {
   vec3 h = normalize(sunDir + toEye);
   float nh = max(dot(n, h), 0.0);
   float open = water * (1.0 - 0.9 * cover) * day;
-  float spec = pow(nh, 500.0) * 1.5 + pow(nh, 60.0) * 0.2;
+  float spec = pow(nh, 400.0) * 0.45 + pow(nh, 50.0) * 0.12;
   lit += vec3(1.0, 0.93, 0.80) * spec * open;
   lit += vec3(0.28, 0.50, 0.95) * pow(1.0 - ndv, 4.0) * 0.5 * open;
 
@@ -80,7 +81,7 @@ void main() {
   vec3 lamps = (lamp * lamp * vec3(1.6, 1.4, 1.1) + spread * vec3(0.55, 0.40, 0.22)) * lights * (1.0 - 0.7 * cover);
   vec3 night = lamps + lamp * 0.25;
   // the blue hour just beyond the terminator
-  night += vec3(0.04, 0.08, 0.20) * smoothstep(-0.22, -0.04, ndl) * (1.0 - smoothstep(-0.04, 0.08, ndl)) * 0.45;
+  night += vec3(0.04, 0.08, 0.20) * smoothstep(-0.20, -0.06, ndl) * (1.0 - smoothstep(-0.06, 0.06, ndl)) * 0.28;
   vec3 col = mix(night, lit, day);
   col += pow(albedo, vec3(0.75)) * boost * 0.65 * (1.0 - day);
 

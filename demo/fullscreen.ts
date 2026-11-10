@@ -117,7 +117,7 @@ async function showGroups(names: readonly string[], on: boolean): Promise<void> 
         const file = await fetchGroup(name).catch(() => null);
         if (!file) return;
         // the elements are a snapshot: with no date in the address and the snapshot old, show the day it was taken so the satellites are where they were
-        earth.setSatellites(name, createSatellites(setsOfGroup(file)), GROUP_STYLE[name]);
+        earth.setSatellites(name, createSatellites(setsOfGroup(file)), { ...GROUP_STYLE[name]!, orbits: false });
         loaded.add(name);
       } else earth.showSatellites(name, true);
     }),

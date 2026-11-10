@@ -57,7 +57,7 @@ The realistic Earth is shaded from the NASA pictures the package already carries
 
 - **The air.** A thin bright layer on the limb and a wide faint halo, blue by day and orange along the terminator, fading out on the night side.
 - **The terminator.** The Sun reddens as it gets low, with a warm band on the lit side and a blue hour beyond the line.
-- **The ocean.** Deeper, with a hard glint under the Sun, a broad sheen round it, and the sky reflected at grazing angles; cloud hides the glint.
+- **The ocean.** A clearer blue, with a hard glint under the Sun, a broad sheen round it, and the sky reflected at grazing angles; cloud hides the glint.
 - **The clouds** throw a shadow on the ground, longer as the Sun gets low.
 - **The night.** City lights are warm and softly spread, and cloud dims them.
 

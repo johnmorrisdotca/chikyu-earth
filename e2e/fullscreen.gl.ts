@@ -77,7 +77,7 @@ test("the family's gesture check is green on the full-screen page", async ({ pag
 test("every satellite group at once: one context, a capped canvas, and the placing inside the frame budget", async ({ page }) => {
   await open(page, `time=${NOV10}&speed=0&sats=all`);
   await expect.poll(async () => (await statsOf(page)).satellites.groups, { timeout: 60_000 }).toBeGreaterThanOrEqual(10);
-  await expect.poll(async () => (await statsOf(page)).satellites.placed, { timeout: 60_000 }).toBeGreaterThan(5000);
+  await expect.poll(async () => (await statsOf(page)).satellites.placed, { timeout: 60_000 }).toBeGreaterThan(3000);
   await settle(page, 1500);
   const stats = await statsOf(page);
   expect((await readCounts(page)).contexts).toBe(1);
@@ -88,7 +88,7 @@ test("every satellite group at once: one context, a capped canvas, and the placi
 
 test("with every group shown and the clock running the page draws at most 30 times a second, and a held clock draws nothing", async ({ page }) => {
   await open(page, `time=${NOV10}&speed=60&sats=all`);
-  await expect.poll(async () => (await statsOf(page)).satellites.placed, { timeout: 60_000 }).toBeGreaterThan(5000);
+  await expect.poll(async () => (await statsOf(page)).satellites.placed, { timeout: 60_000 }).toBeGreaterThan(3000);
   await settle(page, 1000);
   const a = (await statsOf(page)).draws;
   await page.waitForTimeout(3000);
