@@ -45,10 +45,16 @@ export async function ownClock(page: Page): Promise<void> {
   owned.add(page);
 }
 
-/** Stop an owned clock where it is; time then moves only by `page.clock.runFor`, until `page.clock.resume()`. */
+/**
+ * How far past the page's own time `freezeClock` pauses. Reading the page's time and asking for the pause are two calls, and the page's clock keeps running between them: on a loaded machine (software GL,
+ * several browsers) that takes well over the 50 ms this once allowed, which put the pause point in the past and `pauseAt` threw "Cannot fast-forward to the past". This is far longer than any call takes.
+ */
+const FREEZE_AHEAD_MS = 3000;
+
+/** Stop an owned clock where it is (a moment ahead of the page's time, `FREEZE_AHEAD_MS`, chosen from the page's own clock); time then moves only by `page.clock.runFor`, until `page.clock.resume()`. */
 export async function freezeClock(page: Page): Promise<void> {
   const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(new Date(now + 50));
+  await page.clock.pauseAt(new Date(now + FREEZE_AHEAD_MS));
 }
 
 /**

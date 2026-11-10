@@ -176,7 +176,7 @@ test.describe("moving", () => {
     // The glide is a function of the page's clock and ends on the first frame drawn after it, so the test owns the clock: how long a busy machine takes to draw a frame cannot change what is measured.
     await page.clock.install();
     await open(page);
-    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await freezeClock(page);
     const glideFor = (ms: number): Promise<void> => page.clock.runFor(ms);
     await rideButton(page, "ISS").click();
     await glideFor(1500);
