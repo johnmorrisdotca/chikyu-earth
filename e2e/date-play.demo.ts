@@ -188,7 +188,9 @@ test("the realistic Earth tells the page when its 'now' clock steps, and once wh
   const log = (await page.evaluate(() => Reflect.get(window, "__timechange"))) as { at: number; running: boolean; time: number }[];
   expect(log.length, "told while it follows the clock").toBeGreaterThanOrEqual(2);
   expect(log.every((e) => e.running && Math.abs(e.time - Date.now()) < 60_000)).toBe(true);
-  for (let i = 1; i < log.length; i += 1) expect(log[i]!.at - log[i - 1]!.at, "no more than once a second").toBeGreaterThanOrEqual(950);
+  // a one-second interval: one late tick makes the next gap short on a busy machine (CI saw 1,206 ms then 794 ms), so the rate is checked over the whole run, where a second timer or a double send would show
+  const span = log.at(-1)!.at - log[0]!.at;
+  expect(log.length - 1, `no more than once a second (${log.length} in ${Math.round(span)} ms)`).toBeLessThanOrEqual(Math.round(span / 1000));
   await page.locator("#when").fill("2026-06-21T12:00");
   await page.locator("#when").dispatchEvent("change");
   await page.waitForTimeout(2500);
