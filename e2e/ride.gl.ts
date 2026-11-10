@@ -123,10 +123,12 @@ test("riding the Moon puts the camera at the Moon: 10 Earth radii away in the co
 test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
 
-  /** Long enough for 60 frames at the cap, and every frame is a lot of work for the software GPU: the longer a window, the longer the GPU is behind afterwards. */
-  const WINDOW = 2500;
+  /** Long enough for 60 frames at the cap. Every frame is a lot of work for the software GPU (about a tenth of a second in CI), so the longer a window, the longer the GPU is behind afterwards. */
+  const WINDOW = 2000;
 
   test("it animates continuously but at most 30 frames a second: real time, a minute a second and 60x on the ISS, Mars at a day a second", async ({ page }) => {
+    // about 10 s of its own and, at the end, the 20 to 30 s the software GPU needs to finish the frames it asked for (`drainGpu`)
+    test.setTimeout(90_000);
     await ownClock(page);
     await open(page);
     await rideButton(page, "ISS").click();
@@ -134,7 +136,7 @@ test.describe("moving", () => {
     const results: string[] = [];
     for (const [speed, least, most] of [[1, 5, 30.5], [60, 5, 30.5]] as const) {
       await setSpeed(page, speed);
-      await settle(page, 700);
+      await settle(page, 400);
       const m = await measure(page, WINDOW);
       results.push(`${speed}x: ${m.frames.toFixed(1)} frames a second`);
       expect(m.gameSeconds).toBeGreaterThan(speed * 0.8);
@@ -145,7 +147,7 @@ test.describe("moving", () => {
     await rideButton(page, "Mars").click();
     await glided(page);
     await setSpeed(page, 86_400);
-    await settle(page, 700);
+    await settle(page, 400);
     const mars = await measure(page, WINDOW);
     results.push(`Mars at a day a second: ${mars.frames.toFixed(1)} frames a second`);
     expect(mars.frames).toBeLessThanOrEqual(30.5);
