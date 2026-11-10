@@ -3,6 +3,7 @@
 // reader is typing in it, a reader who prefers reduced motion gets Play left off, links from before the bar still work, and the realistic Earth tells the page when its "now" clock steps.
 import { COUNT_SCRIPT, readCounts } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
+import { untilStill } from "./gl.ts";
 
 test.beforeEach(({ browserName }, info) => {
   test.skip(browserName !== "chromium" || info.project.name !== "chromium-desk", "WebGL is drawn in the desk Chromium here, in software");
@@ -167,7 +168,8 @@ test("nothing is drawn while paused, and the clock stops asking for frames", asy
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
   // the view controls' own Auto-turn is on for a reader with no motion preference and asks for frames of its own: it is stopped, so what is left is the clock's
   await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
-  await page.waitForTimeout(800);
+  // a frame is already queued when Pause lands (the hold's own last draw, and one the controls' turn had asked for) and a loaded machine draws it late: rest is measured once it has landed
+  await untilStill(page);
   const before = await readCounts(page);
   await page.waitForTimeout(3000);
   const after = await readCounts(page);

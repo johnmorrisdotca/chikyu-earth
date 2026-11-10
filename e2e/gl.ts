@@ -77,6 +77,23 @@ export async function timed<T>(page: Page, ms: number, read: () => Promise<T>): 
   return { before, after, seconds: (Date.now() - t0) / 1000 };
 }
 
+/**
+ * Wait until nothing is drawn or asked for any more: the draw and frame-request counts are the same one second apart. Holding a clock (or stopping the controls' turn) leaves one last frame
+ * already queued, and that frame is drawn, rightly; on a loaded machine (software GL) it can land more than a second later. A test of "nothing is drawn while held" takes its first reading
+ * after this, so it measures rest, not that last frame. If frames keep coming, this fails after `timeout` ms: that is the bug it is there to find.
+ */
+export async function untilStill(page: Page, timeout = 20_000): Promise<void> {
+  const end = Date.now() + timeout;
+  let before = await readCounts(page);
+  for (;;) {
+    await page.waitForTimeout(1000);
+    const now = await readCounts(page);
+    if (now.draws === before.draws && now.rafRequests === before.rafRequests) return;
+    if (Date.now() > end) throw new Error(`still drawing ${timeout} ms after it was held: ${now.draws - before.draws} draws and ${now.rafRequests - before.rafRequests} frames asked for in the last second`);
+    before = now;
+  }
+}
+
 export async function counts(page: Page): Promise<GlCounts> {
   return readCounts(page);
 }

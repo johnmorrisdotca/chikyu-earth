@@ -3,6 +3,7 @@
 // canvas past 6 million pixels or 4096 a side on a 5K screen at a pixel ratio of 2. `pnpm test:freeze` runs it; CI and the release run it.
 import { canvasSize, COUNT_SCRIPT, gpuObjects, readCounts, withinPixelBudget } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
+import { untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 import { routeTiles } from "./tiles-fixture.ts";
 
@@ -255,7 +256,8 @@ test.describe("the space view's clock", () => {
     expect((s1.lookups - s0.lookups) / 4).toBeLessThanOrEqual(2.6);
     expect(running.requests - running.callbacks, "one frame at a time").toBeLessThanOrEqual(1);
     await page.locator('#replay [data-act="play"]').dispatchEvent("click");
-    await page.waitForTimeout(1000);
+    // the hold leaves one last frame already queued, and a loaded machine draws it late: rest is measured once it has landed
+    await untilStill(page);
     const paused = await bounded(page, 3000, "space");
     expect(paused.draws, "nothing drawn while paused").toBe(0);
     expect(paused.frames).toBe(0);
