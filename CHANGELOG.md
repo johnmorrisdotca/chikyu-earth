@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.27.0 - 2026-11-10
+
 - **The demo's line and thick globes open turning where it can be seen** (MODULES-898). Auto-turn opens on a new 1440× button (a day a minute, a turn in about a minute) beside 0.5×, 1× and 2×; 1× is still the Earth's own rate, `0.004178` degrees a second, and the package's elements and the embed page are unchanged. The 3D looks keep their own 6 degrees a second, and going back to a line look puts the 1440× back. A reader who prefers reduced motion still gets a still globe with Auto-turn ready. Tests: `e2e/globe-turn.demo.ts`, `e2e/speed.demo.ts`.
 
 ## 0.26.0 - 2026-11-10
