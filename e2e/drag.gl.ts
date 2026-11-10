@@ -159,6 +159,9 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
   const url = new URL(page.url());
   expect(Number(url.searchParams.get("yaw")), "the address follows the drag").toBeCloseTo(dragged.yaw, 0);
   expect(Number(url.searchParams.get("tilt"))).toBeCloseTo(dragged.tilt, 0);
+  // the address keeps the turn to the degree, so the picture it brings back is the one at the address's own numbers: put the first page there too, or the share of the picture that differs is the rounding (a fraction of a degree, a few pixels), not the address
+  await page.locator(CONTROLS).evaluate((el, [yaw, tilt]) => Reflect.get(el, "controller").set({ yaw, tilt }, true), [Number(url.searchParams.get("yaw")), Number(url.searchParams.get("tilt"))] as const);
+  await settle(page, 1500);
   const before = await picture(page);
 
   const again = await page.context().newPage();
