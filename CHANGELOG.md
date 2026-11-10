@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.0 - 2026-11-10
+
 - **The date follows the clock, and the demo has Play, Pause and Back** (MODULES-784, MODULES-755). `<chikyu-space>` sends `chikyu-timechange` with `detail: { time, running }`: while the clock runs (`speed` not 0) four times a second at most however fast the picture is drawn (as often as the clock steps at real time), only while the tab is shown, and once with `running: false` when the clock holds, so a page can write the date it stopped on. `<chikyu-earth-realistic>` sends it too while its `time="now"` clock steps (every `live-seconds`) and once when it is given a date. `chikyu-time` stays as the every-step event and is documented so. Setting `speed` to 0 now keeps the moment the reader last saw, and the clock goes on from there.
 - **The demo's Time row is kazoku-ui's `<kazoku-replay-bar>`** next to the date field, in place of the Time speed buttons: Play runs from the date shown and the box follows it (never while the reader is typing in it), Pause holds it and writes the date reached into `time`, Back to the date returns to the date chosen, and riding along starts the clock. `play=on` and `speed` stay in the address, and the date when the clock stops or the reader leaves. The space view opens held; `speed=0` links stay held, links that name a speed and no `play` keep running, and a reader who prefers reduced motion gets Play left off. Guide in English and Japanese: `docs/guides/time-and-play.md`. Test: `e2e/date-play.demo.ts`.
 
