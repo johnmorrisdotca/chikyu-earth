@@ -3,7 +3,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createSatellites, type ElementSet } from "../src/satellites/index.ts";
-import { COUNT_SCRIPT, alive, counts, freezeClock, ownClock, settle, timed } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, drainGpu, freezeClock, ownClock, settle, timed, untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -59,11 +59,16 @@ const issAt = (ms: number): [number, number, number] => {
 };
 const angle = (a: number[], b: number[]): number => (Math.acos((a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!) / (Math.hypot(...(a as [number, number, number])) * Math.hypot(...(b as [number, number, number])))) * 180) / Math.PI;
 
+/** On an owned clock: let `ms` of the page's time pass at once, as far as its timers and frames go (loads are the machine's, and are waited for with `untilStill`). */
+async function passTime(page: Page, ms: number): Promise<void> {
+  await freezeClock(page);
+  await page.clock.runFor(ms);
+  await page.clock.resume();
+}
+
 /** On an owned clock: let the glide to a ride's camera run its course (it takes about a second of the page's time, a little more for a far body), and check it ended. */
 async function glided(page: Page): Promise<void> {
-  await freezeClock(page);
-  await page.clock.runFor(2500);
-  await page.clock.resume();
+  await passTime(page, 2500);
   expect((await statsOf(page)).ride.gliding, "the glide has ended").toBe(false);
 }
 
@@ -118,6 +123,9 @@ test("riding the Moon puts the camera at the Moon: 10 Earth radii away in the co
 test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
 
+  /** Long enough for 60 frames at the cap, and every frame is a lot of work for the software GPU: the longer a window, the longer the GPU is behind afterwards. */
+  const WINDOW = 2500;
+
   test("it animates continuously but at most 30 frames a second: real time, a minute a second and 60x on the ISS, Mars at a day a second", async ({ page }) => {
     await ownClock(page);
     await open(page);
@@ -127,7 +135,7 @@ test.describe("moving", () => {
     for (const [speed, least, most] of [[1, 5, 30.5], [60, 5, 30.5]] as const) {
       await setSpeed(page, speed);
       await settle(page, 700);
-      const m = await measure(page, 4000);
+      const m = await measure(page, WINDOW);
       results.push(`${speed}x: ${m.frames.toFixed(1)} frames a second`);
       expect(m.gameSeconds).toBeGreaterThan(speed * 0.8);
       expect(m.frames, `${speed}x`).toBeGreaterThanOrEqual(least);
@@ -138,37 +146,62 @@ test.describe("moving", () => {
     await glided(page);
     await setSpeed(page, 86_400);
     await settle(page, 700);
-    const mars = await measure(page, 4000);
+    const mars = await measure(page, WINDOW);
     results.push(`Mars at a day a second: ${mars.frames.toFixed(1)} frames a second`);
     expect(mars.frames).toBeLessThanOrEqual(30.5);
     console.log(`ride along: ${results.join("; ")}`);
+    // the software GPU is far behind the frames this test asked for (33 s in CI): wait for it here, so the next test does not wait for it with its own clock running
+    console.log(`ride along: the GPU took ${Math.round(await drainGpu(page))} ms to catch up`);
   });
 
-  test("paused it rests, and out of sight or in a hidden tab it draws nothing while the clock runs", async ({ page }) => {
+  /**
+   * The ride on the ISS, paused and at rest. The clock is the test's own, so the glide to the camera is run through at once instead of waited for, and each window below is a span of the page's
+   * time that a busy machine cannot stretch. `untilStill` is the wait for the last frame already queued: what is read after it is rest, not that frame.
+   */
+  async function ridingAtRest(page: Page): Promise<void> {
+    await ownClock(page);
     await open(page);
     await rideButton(page, "ISS").click();
-    await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
-    await settle(page, 600);
+    await glided(page);
+    await untilStill(page);
+  }
+
+  /** At 60x the ride is drawing in sight: the proof that the nothing drawn in the two tests below is the page's doing, not a ride that never draws. */
+  async function drawingAt60(page: Page): Promise<void> {
+    await setSpeed(page, 60);
+    const before = (await statsOf(page)).draws;
+    await expect.poll(async () => (await statsOf(page)).draws, { message: "at 60x in sight the ride draws" }).toBeGreaterThan(before + 2);
+  }
+
+  test("paused it rests: nothing is drawn and no frame is asked for", async ({ page }) => {
+    await ridingAtRest(page);
     const rest = await measure(page, 3000);
     expect(rest.glDraws, "paused: nothing drawn").toBe(0);
-    expect(rest.requests).toBe(0);
-    await setSpeed(page, 60);
-    await settle(page, 800);
+    expect(rest.requests, "paused: no frame asked for").toBe(0);
+  });
+
+  test("out of sight it draws nothing while the clock runs", async ({ page }) => {
+    await ridingAtRest(page);
+    await drawingAt60(page);
     await page.evaluate(() => {
       const spacer = document.createElement("div");
       spacer.style.height = "6000px";
       document.body.prepend(spacer);
       window.scrollTo(0, 0);
     });
-    await page.waitForTimeout(1200);
+    await untilStill(page);
     expect((await measure(page, 2500)).glDraws, "out of sight").toBe(0);
-    await page.evaluate(() => window.scrollTo(0, 0));
+  });
+
+  test("in a hidden tab it draws nothing while the clock runs", async ({ page }) => {
+    await ridingAtRest(page);
+    await drawingAt60(page);
     await page.evaluate(() => {
       Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
       Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    await page.waitForTimeout(600);
+    await untilStill(page);
     expect((await measure(page, 2500)).glDraws, "hidden tab").toBe(0);
   });
 
@@ -235,14 +268,18 @@ test("a satellite whose elements are too old for the date cannot be ridden: the 
 test("riding, stopping and riding again frees what it took, and a lost context comes back with the ride", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // The test's own clock: the glide of each switch and the four seconds after which a picture is let go are the page's time, run through at once (this test once spent 45 of its 60 seconds waiting for them), and
+  // `untilStill` waits for what is not the clock's: the pictures arriving, and the last frame queued.
+  await ownClock(page);
   await open(page);
   // a first round of every way to ride makes what is made once (the first time a planet is in the picture its sphere is put on the GPU); the second must give back what it took
   const ride = async (): Promise<void> => {
     for (const name of ["ISS", "Moon", "Mars", "ISS", "Stop", "ISS"]) {
       await rideButton(page, name).click();
-      await settle(page, 1500);
+      await glided(page);
     }
-    await settle(page, 6000);
+    await passTime(page, 6000);
+    await untilStill(page);
   };
   const held = async (): Promise<number> => alive(await counts(page), "Buffer") + alive(await counts(page), "Texture") + alive(await counts(page), "VertexArray");
   await ride();
@@ -250,7 +287,8 @@ test("riding, stopping and riding again frees what it took, and a lost context c
   await ride();
   await ride();
   expect(await held(), "no more buffers, textures and vertex arrays after two more rounds of six switches").toBeLessThanOrEqual(riding);
-  await settle(page, 4500);
+  await passTime(page, 4500);
+  await untilStill(page);
   const before = (await statsOf(page)).draws;
   await page.locator(SPACE).evaluate((el) => {
     const ext = (el.shadowRoot!.querySelector("canvas")!.getContext("webgl2") as WebGL2RenderingContext).getExtension("WEBGL_lose_context")!;

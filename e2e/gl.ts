@@ -94,6 +94,28 @@ export async function untilStill(page: Page, timeout = 20_000): Promise<void> {
   }
 }
 
+/**
+ * Wait until the graphics processor has finished everything the page asked it to draw, and say how long that took (ms). Software drawing (SwiftShader) is slower than the 30 frames a second the element asks for, so a test that draws
+ * for a while ends with the GPU behind the page, and the browser then makes the next test wait for it while that test's clock is running: after the ride's frame-rate test the GPU was 33 s behind in CI, which came out of the
+ * next test's 60 s (MODULES-805). A test that draws continuously ends with this, so it pays for its own drawing. The read of one pixel is the synchronous call that waits for all the commands before it.
+ */
+export async function drainGpu(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const canvases: HTMLCanvasElement[] = [];
+    const walk = (root: Document | ShadowRoot): void => {
+      canvases.push(...root.querySelectorAll("canvas"));
+      for (const el of root.querySelectorAll("*")) if (el.shadowRoot) walk(el.shadowRoot);
+    };
+    walk(document);
+    const t = performance.now();
+    for (const canvas of canvases) {
+      const gl = (canvas.getContext("webgl2") ?? canvas.getContext("webgl")) as WebGL2RenderingContext | null;
+      gl?.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    }
+    return performance.now() - t;
+  });
+}
+
 export async function counts(page: Page): Promise<GlCounts> {
   return readCounts(page);
 }
