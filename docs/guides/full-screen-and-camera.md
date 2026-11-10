@@ -24,14 +24,14 @@ description: Fill the window with the realistic Earth, hold the camera in the st
 
 The page keeps the family's other rules: the clock opens running from now (`speed="3600"`, an hour a second), a reader who prefers reduced motion gets a still view with Play ready, and the time the page shows is the device's own.
 
-## The camera: `ground`, `space` or `sun`
+## The camera: `space` (the default), `ground` or `sun`
 
 The `camera` attribute (and property) says how the camera is held. `center` is where it looks.
 
 | `camera` | The camera is held | What you see |
 |---|---|---|
-| `ground` (the default) | over the place `center` names on the ground | the Earth keeps still; the clock moves the light, the night side and the clouds across it |
-| `space` | in the stars, looking at `center` as it is when the camera is set | the Earth turns beneath the camera as the clock runs, 360 degrees in 23 hours 56 minutes; the day and night line is where the Sun really is, and moves a degree a day |
+| `space` (the default) | in the stars, looking at `center` as it is when the camera is set | the Earth turns beneath the camera as the clock runs, 360 degrees in 23 hours 56 minutes; the day and night line is where the Sun really is, and moves a degree a day |
+| `ground` | over the place `center` names on the ground | the Earth keeps still; the clock moves the light and the night side across it |
 | `sun` | on the Sun's side: `center` is the longitude and latitude from the place the Sun is overhead (`0,0` is straight at noon) | the day and night line stays where it is on the screen while the Earth turns beneath it |
 
 The camera in the stars is set when the element opens, and again when `time` or `center` is set: a page that jumps to another date looks at `center` as it is at that date. A drag turns the view from where the camera is held; Centre puts it back.
@@ -49,7 +49,9 @@ console.log(earth.camera);
 
 `cameraCentre` and `greenwichSidereal` (from `@johnmorrisdotca/chikyu-earth/realistic`) are the pure sums behind it: the angle the Earth has turned against the stars at a moment, and the place the camera looks at.
 
-The light and the clouds read the real Sun and the real moment in every mode: only the camera moves.
+The light reads the real Sun and the real moment in every mode: only the camera moves. The clouds are one snapshot, not a forecast, so they stay where the picture has them and turn with the Earth; `cloud-drift="1.5"` makes them slide east by that many degrees an hour, for life, and says nothing about the weather.
+
+`<chikyu-space>` takes the same `camera` (it was always the ground before 0.24), and `earth-size` (the share of the shorter side the Earth's disc fills at Fit, 0.9 by default so the glow is never cut), `earth-x` and `earth-y` (where the Earth's centre is in the view, 0.5 and 0.5 in the middle). Both elements fill their box in any shape, so the demo's panel, Wide and the embed frame draw edge to edge, with no square inside.
 
 ## How the Earth looks
 

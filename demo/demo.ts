@@ -39,6 +39,8 @@ if (flat && controls && stage) {
   const address = createAddressState({ defaults: { look: "line" } });
   const status = document.querySelector<HTMLElement>("#status");
   const realControls = document.querySelector<HTMLElement>("#real-controls");
+  const cameraControls = document.querySelector<HTMLElement>("#camera-controls");
+  const earthStage = document.querySelector<HTMLElement>(".earth-stage");
   const lightControls = document.querySelector<HTMLElement>("#light-controls");
   const timeControls = document.querySelector<HTMLElement>("#time-controls");
   const replay = document.querySelector<ReplayBarElement>("#replay")!;
@@ -111,8 +113,16 @@ if (flat && controls && stage) {
 
   const state = (): ViewChangeDetail => Reflect.get(controls, "state") as ViewChangeDetail;
 
+  /** Auto-turn's speed on the 3D looks: a turn in a minute, where the Earth's real rate (0.004 degrees a second, the line globe's own) cannot be seen. */
+  const REAL_TURN = "0.004178";
+  const VISIBLE_TURN = "6";
+  const turnFor = (visible: boolean): void => {
+    if (controls!.getAttribute("speed") !== (visible ? VISIBLE_TURN : REAL_TURN)) controls!.setAttribute("speed", visible ? VISIBLE_TURN : REAL_TURN);
+  };
+
   function leave3d(): void {
     if (!real && !space) return;
+    turnFor(false);
     settleClock();
     real?.remove();
     space?.remove();
@@ -123,7 +133,7 @@ if (flat && controls && stage) {
     Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");
     mountMarkers(flat!);
     flat!.hidden = false;
-    for (const box of [realControls, lightControls, timeControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
+    for (const box of [realControls, cameraControls, lightControls, timeControls, spaceControls, scaleNote, bodyInfo, satControls, satInfo, satNote, rideControls, rideInfo]) if (box) box.hidden = true;
     if (placesBox) placesBox.hidden = false;
     if (pickedNote) pickedNote.hidden = false;
   }
@@ -588,19 +598,19 @@ if (flat && controls && stage) {
   }
   markLight();
   // how the camera is held on the realistic Earth: over the ground (the Earth keeps still), in the stars (it turns beneath) or on the Sun's side
-  let cameraMode = ["space", "sun"].includes(address.get("camera") ?? "") ? (address.get("camera") as string) : "ground";
+  let cameraMode = ["ground", "sun"].includes(address.get("camera") ?? "") ? (address.get("camera") as string) : "space";
   const cameraButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-camera]")];
   const markCamera = (): void => {
     for (const b of cameraButtons) {
       b.classList.toggle("on", b.dataset["camera"] === cameraMode);
       b.setAttribute("aria-pressed", String(b.dataset["camera"] === cameraMode));
     }
-    address.set("camera", cameraMode === "ground" ? null : cameraMode);
+    address.set("camera", cameraMode === "space" ? null : cameraMode);
   };
   for (const button of cameraButtons) {
     button.addEventListener("click", () => {
-      cameraMode = button.dataset["camera"] ?? "ground";
-      real?.setAttribute("camera", cameraMode);
+      cameraMode = button.dataset["camera"] ?? "space";
+      for (const element of [real, space]) element?.setAttribute("camera", cameraMode);
       markCamera();
     });
   }
@@ -648,6 +658,8 @@ if (flat && controls && stage) {
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
       element.setAttribute("texture-base", "textures/");
       element.setAttribute("bodies", bodiesLook);
+      element.setAttribute("camera", cameraMode);
+      turnFor(true);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       const scale = address.get("scale");
       const startTime = address.get("time");
@@ -693,6 +705,7 @@ if (flat && controls && stage) {
     }
     if (realControls) realControls.hidden = true;
     if (lightControls) lightControls.hidden = false;
+    if (cameraControls) cameraControls.hidden = false;
     for (const box of [timeControls, spaceControls, satControls, rideControls]) if (box) box.hidden = false;
     markClock();
     missionRow?.enter();
@@ -725,7 +738,8 @@ if (flat && controls && stage) {
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
-      if (cameraMode !== "ground") element.setAttribute("camera", cameraMode);
+      element.setAttribute("camera", cameraMode);
+      turnFor(true);
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
       element.addEventListener("chikyu-satellite-click", (e) => showSatellite((e as CustomEvent<SatelliteRef>).detail));
       // the clock runs while Play is on (a link that says nothing opens playing, from now); held at "now" the Sun is put right once a minute, and the date box follows
@@ -753,6 +767,7 @@ if (flat && controls && stage) {
     }
     if (realControls) realControls.hidden = false;
     if (lightControls) lightControls.hidden = false;
+    if (cameraControls) cameraControls.hidden = false;
     if (timeControls) timeControls.hidden = false;
     if (satControls) satControls.hidden = false;
     markClock();
@@ -770,7 +785,7 @@ if (flat && controls && stage) {
   function markGrab(look: Look): void {
     shownLook = look;
     if (look === "space") controls!.removeAttribute("grab-radius");
-    else if (look === "realistic") controls!.setAttribute("grab-radius", String(discRadius(stage!.clientWidth, stage!.clientWidth, 1)));
+    else if (look === "realistic") controls!.setAttribute("grab-radius", String(discRadius(stage!.clientWidth, stage!.clientHeight, 1)));
     else controls!.setAttribute("grab-radius", "fit");
   }
 
@@ -787,6 +802,7 @@ if (flat && controls && stage) {
       flat!.setView(state(), true);
     }
     markGrab(next);
+    if (earthStage) earthStage.dataset["look"] = next;
     address.set("look", next);
     for (const b of lookButtons) {
       b.classList.toggle("on", b.dataset["style"] === next);

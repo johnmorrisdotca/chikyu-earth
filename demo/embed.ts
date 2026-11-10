@@ -73,6 +73,7 @@ if (look === "realistic") {
   if (query.get("light") === "lit" || query.get("light") === "boost") element.setAttribute("light", query.get("light")!);
   element.addEventListener("chikyu-unavailable", () => {
     element.remove();
+    delete document.body.dataset["look"];
     flat.hidden = false;
     earth = flat;
     autoTurn();
@@ -80,6 +81,7 @@ if (look === "realistic") {
   flat.hidden = true;
   still(element);
   frame.append(element);
+  document.body.dataset["look"] = "realistic";
   earth = element;
 }
 
@@ -109,6 +111,7 @@ if (look === "space") {
   if (query.get("labels") !== "1") element.setAttribute("labels", "off");
   element.addEventListener("chikyu-unavailable", () => {
     element.remove();
+    delete document.body.dataset["look"];
     flat.hidden = false;
     earth = flat;
     space = undefined;
@@ -117,6 +120,7 @@ if (look === "space") {
   flat.hidden = true;
   still(element);
   frame.append(element);
+  document.body.dataset["look"] = "space";
   earth = element;
   space = element;
   const body = query.get("body");
