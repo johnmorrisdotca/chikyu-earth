@@ -264,3 +264,60 @@ test.describe("the space view's clock", () => {
     expect(paused.requests, "no frame asked for while paused").toBeLessThanOrEqual(1);
   });
 });
+
+test.describe("the realistic Earth's clock", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  const clock = (page: Page) => page.locator("chikyu-earth-realistic").evaluate((el) => ({ time: Reflect.get(el, "time") as number | "now", speed: Reflect.get(el, "speed") as number }));
+
+  test("Play at a day a second draws at most thirty frames a second, one frame at a time, and Pause leaves nothing drawn", async ({ page }) => {
+    await open(page, "realistic");
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await page.locator('#replay button[data-v="86400"]').dispatchEvent("click");
+    await page.locator('#replay [data-act="play"]').dispatchEvent("click");
+    await page.waitForTimeout(1500);
+    const running = await bounded(page, 4000, "realistic");
+    expect(running.frames, "frames drawn while it runs").toBeGreaterThan(5);
+    expect(running.frames).toBeLessThanOrEqual(4 * 31);
+    expect(running.requests - running.callbacks, "one frame at a time").toBeLessThanOrEqual(1);
+    expect((await clock(page)).speed).toBe(86_400);
+    await page.locator('#replay [data-act="play"]').dispatchEvent("click");
+    await untilStill(page);
+    const held = await clock(page);
+    const paused = await bounded(page, 3000, "realistic");
+    expect(paused.draws, "nothing drawn while paused").toBe(0);
+    expect(paused.frames).toBe(0);
+    expect(paused.requests, "no frame asked for while paused").toBeLessThanOrEqual(1);
+    expect((await clock(page)).time, "and the moment does not move").toBe(held.time);
+  });
+
+  test("playing, it draws nothing out of sight or in a hidden tab", async ({ page }) => {
+    await open(page, "realistic");
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await page.locator('#replay button[data-v="86400"]').dispatchEvent("click");
+    await page.locator('#replay [data-act="play"]').dispatchEvent("click");
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      const spacer = document.createElement("div");
+      spacer.style.height = "6000px";
+      document.body.prepend(spacer);
+      window.scrollTo(0, 0);
+      document.querySelector("#globe")!.scrollIntoView = () => undefined;
+    });
+    await expect.poll(async () => page.locator("chikyu-earth-realistic").evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(1000);
+    await page.waitForTimeout(800);
+    const away = await bounded(page, 2500, "realistic");
+    expect(away.draws, "no GL draws out of sight while the clock runs").toBe(0);
+    expect(away.frames).toBe(0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(500);
+    const hidden = await bounded(page, 2500, "realistic");
+    expect(hidden.draws, "no GL draws in a hidden tab while the clock runs").toBe(0);
+    expect(hidden.frames).toBe(0);
+  });
+});
