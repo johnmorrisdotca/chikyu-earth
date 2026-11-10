@@ -187,6 +187,17 @@ computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/spa
 
 <p align="center"><img alt="The solar system on 2 November 2026 in the compressed scale: orbits round the Sun, the planets named" src="docs/images/space-solar.png" width="420"></p>
 
+## Meteors
+
+`<chikyu-earth-realistic meteors>` and `<chikyu-space meteors>` draw meteors as they look from space: short streaks 80 to 120 km up, only on the dark side and in twilight, more of them under an active shower's radiant, and only while the clock runs. Each streak's place and moment are drawn at random, and the element says so under the picture; how many there are, where they fall, their height and the showers' dates are real. The showers are the International Meteor Organization's working list for 2026 (37 of them), in an entry point of its own with the rate functions, which needs no browser: [guide](docs/guides/meteors.md).
+
+```js
+import { activeShowers } from "@johnmorrisdotca/chikyu-earth/meteors";
+
+// The showers active on the night of the Geminids' maximum, strongest first.
+for (const { shower, zhr } of activeShowers(Date.UTC(2026, 11, 14, 8))) console.log(`${shower.name}: ${zhr.toFixed(1)} an hour`);
+```
+
 ## Satellites
 
 The ISS, a space station or thousands of Starlink satellites at the places SGP4 puts them for the date and time shown, on `<chikyu-space>`: a group is one draw call however many it holds, press one to get its name, height and speed, and its orbit is drawn. Chikyu fetches nothing: your page passes in orbital elements (CelesTrak's JSON, within its usage policy), and satellite.js (MIT, an optional peer) does the maths about once a second, with every frame between interpolated. `fetchElements(url)` reads OMM JSON, CSV or TLE from an address you choose, politely (https, not again within two hours, stop on any answer that is not 200). A satellite whose elements are more than 14 days from the time shown is drawn dimmer, and one more than 30 days away is left out. A group is hidden while the clock runs faster than 60 times real time. A small catalogue (`SATELLITE_GROUPS`, `CATALOGUE`, `findInCatalogue`) names fourteen groups (stations, weather, GPS, Galileo, OneWeb and more) and about forty satellites worth following, with no elements in it. The guide has the rules for getting elements and the budget, each line tested: [satellites guide](docs/guides/satellites.md), [docs/satellites.md](docs/satellites.md).
@@ -428,6 +439,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../markers` | `attachMarkers` and the pure projection, clusters and labels. |
 | `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
 | `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
+| `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
 
 ## Guides
@@ -447,6 +459,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
+| [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |

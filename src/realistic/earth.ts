@@ -10,6 +10,7 @@ import { subsolarPoint, unitVector } from "./sun.ts";
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet } from "./tile-set.ts";
+import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 export type { ThreeParts };
 
 type Three = ThreeParts;
@@ -59,6 +60,8 @@ export interface EarthModel {
   tiles: TileSet | null;
   /** The pixel ratio the textures are chosen for. */
   ratio(): number;
+  /** Meteors seen from space (src/meteors/layer.ts): off unless the element switches them on. */
+  meteors: MeteorState;
 }
 
 export interface EarthDeps {
@@ -92,6 +95,7 @@ export const newModel = (): EarthModel => ({
   drawn: null,
   tiles: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
+  meteors: newMeteorState(),
 });
 
 /**
@@ -205,6 +209,9 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       scene.add(turned, glow);
       const camera = new three.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
       camera.position.set(0, 0, 5);
+      // the meteors: made the first time they are switched on, and asking for their own next draw while a streak is alive or one is due
+      let meteors: MeteorLayer | null = null;
+      let meteorTimer: ReturnType<typeof setTimeout> | undefined;
 
       return {
         scene,
@@ -231,12 +238,20 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           textures.sync(radius * model.ratio());
           tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
+          if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
+          if (meteors) {
+            const wait = meteors.step({ now: performance.now(), time: model.time, facing: unitVector({ lon: look.lon, lat: look.lat }), sun: [sx, sy, sz], radius, width: size.width, height: size.height });
+            clearTimeout(meteorTimer);
+            meteorTimer = Number.isFinite(wait) ? setTimeout(deps.invalidate, wait) : undefined;
+          }
           return false;
         },
         resize(next, nextHeight) {
           size = { width: next, height: nextHeight };
         },
         dispose() {
+          clearTimeout(meteorTimer);
+          meteors?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

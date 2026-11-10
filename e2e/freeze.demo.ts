@@ -321,3 +321,94 @@ test.describe("the realistic Earth's clock", () => {
     expect(hidden.frames).toBe(0);
   });
 });
+
+test.describe("meteors on the realistic Earth", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  const meteors = (page: Page) => page.locator("chikyu-earth-realistic").evaluate((el) => (Reflect.get(el, "stats") as { meteors: { alive: number; spawned: number } }).meteors);
+  /** The Geminids' maximum over North America at night, the clock running a minute a second: about nine streaks a second, the most there are. */
+  const openMeteors = async (page: Page): Promise<void> => {
+    await page.addInitScript(COUNT_SCRIPT);
+    await page.goto("/chikyu-earth/?look=realistic&time=2026-12-14T08:00Z&center=-100,30&speed=60&meteors=on");
+    await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await expect.poll(async () => (await meteors(page)).spawned, { timeout: 20_000 }).toBeGreaterThan(3);
+  };
+
+  test("with streaks falling it draws at most thirty frames a second, one frame at a time, and holding the clock leaves nothing drawn and no streak alive", async ({ page }) => {
+    await openMeteors(page);
+    const running = await bounded(page, 4000, "realistic");
+    expect(running.frames, "frames drawn while streaks fall").toBeGreaterThan(5);
+    expect(running.frames).toBeLessThanOrEqual(4 * 31);
+    expect(running.requests - running.callbacks, "one frame at a time").toBeLessThanOrEqual(1);
+    await page.locator("chikyu-earth-realistic").evaluate((el) => el.setAttribute("speed", "0"));
+    await untilStill(page);
+    expect((await meteors(page)).alive, "no streak is left hanging").toBe(0);
+    const held = await meteors(page);
+    const paused = await bounded(page, 3000, "realistic");
+    expect(paused.draws, "nothing drawn while the clock is held").toBe(0);
+    expect(paused.frames).toBe(0);
+    expect(paused.requests, "no frame asked for while held").toBeLessThanOrEqual(1);
+    expect((await meteors(page)).spawned, "and no streak starts").toBe(held.spawned);
+  });
+
+  test("streaks falling, it draws nothing out of sight or in a hidden tab, and starts none there", async ({ page }) => {
+    await openMeteors(page);
+    await page.evaluate(() => {
+      const spacer = document.createElement("div");
+      spacer.style.height = "6000px";
+      document.body.prepend(spacer);
+      window.scrollTo(0, 0);
+      document.querySelector("#globe")!.scrollIntoView = () => undefined;
+    });
+    await expect.poll(async () => page.locator("chikyu-earth-realistic").evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(1000);
+    await page.waitForTimeout(2000);
+    const before = await meteors(page);
+    const away = await bounded(page, 2500, "realistic");
+    expect(away.draws, "no GL draws out of sight").toBe(0);
+    expect(away.frames).toBe(0);
+    expect((await meteors(page)).spawned, "no streak starts out of sight").toBe(before.spawned);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(2000);
+    const hidden = await bounded(page, 2500, "realistic");
+    expect(hidden.draws, "no GL draws in a hidden tab").toBe(0);
+    expect(hidden.frames).toBe(0);
+  });
+
+  test("in the space view too: streaks falling, at most thirty frames a second, one frame at a time, and holding the clock leaves nothing drawn", async ({ page }) => {
+    const spaceMeteors = () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { meteors: { alive: number; spawned: number } }).meteors);
+    await page.addInitScript(COUNT_SCRIPT);
+    await page.goto("/chikyu-earth/?look=space&time=2026-12-14T08:00Z&center=-100,30&speed=60&meteors=on");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await expect.poll(async () => (await spaceMeteors()).spawned, { timeout: 20_000 }).toBeGreaterThan(3);
+    const running = await bounded(page, 4000, "space");
+    expect(running.frames, "frames drawn while streaks fall").toBeGreaterThan(5);
+    expect(running.frames).toBeLessThanOrEqual(4 * 31);
+    expect(running.requests - running.callbacks, "one frame at a time").toBeLessThanOrEqual(1);
+    await page.locator("chikyu-space").evaluate((el) => el.setAttribute("speed", "0"));
+    await untilStill(page);
+    expect((await spaceMeteors()).alive, "no streak is left hanging").toBe(0);
+    const paused = await bounded(page, 3000, "space");
+    expect(paused.draws, "nothing drawn while the clock is held").toBe(0);
+    expect(paused.frames).toBe(0);
+  });
+
+  test("switching meteors on and off over and over gives back what it took: GPU objects stay flat", async ({ page }) => {
+    await openMeteors(page);
+    // the layer is made by the first switch-on, so the count is taken with it there
+    const first = gpuObjects(await readCounts(page));
+    for (let i = 0; i < 6; i += 1) {
+      await page.locator("#meteors").click();
+      await page.waitForTimeout(400);
+    }
+    await expect.poll(async () => (await meteors(page)).spawned, { timeout: 20_000 }).toBeGreaterThan(3);
+    await page.waitForTimeout(1500);
+    expect(gpuObjects(await readCounts(page)), "live GPU objects after six switches").toBeLessThanOrEqual(first);
+  });
+});

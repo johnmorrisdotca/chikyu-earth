@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -43,6 +43,12 @@ if (station.count !== 1 || height < 380 || height > 470) throw new Error(`create
 const flights = satellites.missions();
 if (flights.length !== 135 || satellites.missionOf("STS-31")?.hubble !== "deployment" || satellites.missionOf(51)?.name !== "STS-51") throw new Error("the missions are off");
 console.log("satellites ok");
+
+// the meteors: the table and the sums import with no browser and no dependency
+const meteors = await import(new URL("../dist/meteors/index.js", import.meta.url).href);
+const geminids = meteors.activeShowers(Date.UTC(2026, 11, 14, 8))[0];
+if (meteors.METEOR_SHOWERS.length !== 37 || geminids?.shower.code !== "GEM" || !(geminids.zhr > 100) || meteors.streaksPerSecond(8) !== 2.5) throw new Error("the meteors are off");
+console.log("meteors ok");
 
 const sheets = await import(new URL("../dist/sheets/index.js", import.meta.url).href);
 const room = { widthMm: 184.6, heightMm: 170 };

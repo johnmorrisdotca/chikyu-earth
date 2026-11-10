@@ -8,6 +8,7 @@ import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import type { LightMode } from "../realistic/earth.ts";
+import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
@@ -158,7 +159,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${METEOR_NOTE_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -185,12 +186,15 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits", "bodies", "light"];
+  static observedAttributes = ["center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "lang"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
   #speed = 1;
   #view: View | undefined;
+  /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
+  #played = false;
+  #note: HTMLElement | undefined;
   #gate: Gate | undefined;
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
   #stage: HTMLElement | undefined;
@@ -231,10 +235,16 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="labels" aria-hidden="true"></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="labels" aria-hidden="true"></div><p id="meteor-note" hidden></p>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
+    this.#note = root.getElementById("meteor-note")!;
+    this.#played = false;
+    this.#model.meteors.on = this.#meteorsAsked();
+    this.#model.meteors.running = () => this.#speed !== 0 && document.visibilityState !== "hidden" && (this.#played || !prefersLessMotion());
+    this.#model.meteors.onShower = (shower, zhr) => this.dispatchEvent(new CustomEvent("chikyu-meteors", { detail: { shower, zhr } }));
+    setMeteorNote(this.#note, this, this.#model.meteors.on);
     this.#pool.clear();
 
     const nav = navigator as Navigator & { deviceMemory?: number };
@@ -303,6 +313,32 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "orbits") this.orbits = value !== "off";
     else if (name === "bodies") this.bodies = value ?? "";
     else if (name === "light") this.light = readLight(value);
+    else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "meteors-label" || name === "lang") setMeteorNote(this.#note, this, this.#model.meteors.on);
+  }
+
+  #meteorsAsked(): boolean {
+    return this.hasAttribute("meteors") && this.getAttribute("meteors") !== "off";
+  }
+
+  /**
+   * Meteors seen from space, on or off (the attribute `meteors`): short streaks where meteors burn, on the dark side of the Earth and in its twilight, more of them under an active shower, only while the
+   * clock runs, and for a reader who prefers reduced motion only once the page has set a `speed` (a Play). Each streak's place and moment are drawn at random, and a line under the picture says so
+   * (`meteors-label="off"` takes it away); how often they appear, where, how high and when follow real data (`@johnmorrisdotca/chikyu-earth/meteors`). None are drawn while the Earth is under 40 pixels in radius.
+   * `chikyu-meteors` is sent when the strongest active shower changes, with `detail: { shower, zhr }`. Off by default, and nothing of theirs is made until they are first switched on.
+   */
+  get meteors(): boolean {
+    return this.#model.meteors.on;
+  }
+  set meteors(value: boolean) {
+    if (value !== this.#meteorsAsked()) {
+      if (value) this.setAttribute("meteors", "");
+      else this.removeAttribute("meteors");
+      return;
+    }
+    this.#model.meteors.on = value;
+    setMeteorNote(this.#note, this, value);
+    this.#gate?.request();
   }
 
   get centre(): GeoPoint {
@@ -334,6 +370,7 @@ export class ChikyuSpace extends HTMLElement {
     // time up to this moment is worked out at the old speed, so a hold keeps the moment the reader saw last
     if (this.#speed !== 0 && this.isConnected) this.#advance(performance.now());
     const was = this.#speed;
+    if (this.isConnected && this.#view) this.#played = true;
     this.#speed = Number.isFinite(value) ? value : 1;
     this.#model.speed = this.#speed;
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
@@ -614,6 +651,8 @@ export class ChikyuSpace extends HTMLElement {
     camera: { position: [number, number, number]; fov: number };
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, and the moons shown round a planet that is near. */
     bodies: { look: string; painted: number; moons: number };
+    /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
+    meteors: { on: boolean; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -630,6 +669,7 @@ export class ChikyuSpace extends HTMLElement {
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
+      meteors: { on: this.#model.meteors.on, ...this.#model.meteors.drawn },
     };
   }
 

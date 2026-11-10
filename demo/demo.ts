@@ -629,6 +629,7 @@ if (flat && controls && stage) {
       if (scale === "true") element.setAttribute("scale", "true");
       // the clock runs only while Play is on; a held space view draws nothing
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
+      if (address.get("meteors") === "on") element.setAttribute("meteors", "");
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
@@ -699,6 +700,7 @@ if (flat && controls && stage) {
       const startTime = address.get("time");
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
+      if (address.get("meteors") === "on") element.setAttribute("meteors", "");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
       // the clock runs while Play is on (a link that says nothing opens playing, from now); held at "now" the Sun is put right once a minute, and the date box follows
@@ -808,6 +810,15 @@ if (flat && controls && stage) {
   };
   toggle(clouds, "clouds");
   toggle(lights, "lights");
+  // Meteors are off unless asked for (`meteors=on` in the address); the realistic Earth and the space view draw them and say under the picture that each streak is an illustration.
+  const meteors = document.querySelector<HTMLButtonElement>("#meteors");
+  meteors?.addEventListener("click", () => {
+    const on = meteors.getAttribute("aria-pressed") !== "true";
+    meteors.setAttribute("aria-pressed", String(on));
+    if (real) real.meteors = on;
+    if (space) space.meteors = on;
+    address.set("meteors", on ? "on" : null);
+  });
 
   // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
   // Play runs the clock from the date shown; Pause holds it there and writes the date reached to the address (`time`); Back goes to the date the reader chose. `play=on` and `speed` stay in the address.
@@ -993,6 +1004,7 @@ if (flat && controls && stage) {
   }
   if (opened["clouds"] === "off") clouds?.setAttribute("aria-pressed", "false");
   if (opened["lights"] === "off") lights?.setAttribute("aria-pressed", "false");
+  if (opened["meteors"] === "on") meteors?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");

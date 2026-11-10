@@ -5,6 +5,7 @@ import { carryControls, type ElementControls, type ViewController } from "@johnm
 import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
+import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
@@ -29,7 +30,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}";
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + METEOR_NOTE_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -107,6 +108,13 @@ export const readTime = (value: string | null): number | "now" => {
  * While time runs it sends `chikyu-timechange` with `detail: { time, running: true }` (the moment shown in milliseconds since 1970), at most four times a second however fast the picture is drawn and not from a hidden tab, and once with `running: false` when the clock holds
  * (a date is set, or `speed` is set to 0): a page writes the date into its date box from it. It is not sent for a `time` the page sets itself.
  *
+ * `meteors` (the attribute, with or without a value other than `off`; the property is a boolean) draws meteors as they look from space: short streaks 80 to 120 km up,
+ * only where it is dark or twilight, more of them where an active shower's radiant stands high and on the side that faces the Earth's way. Each streak's place and
+ * moment are drawn at random (and said so in a line under the picture, which `meteors-label="off"` takes away for a page that says it itself); how many there are,
+ * where they fall, their height and the showers' dates are real (`@johnmorrisdotca/chikyu-earth/meteors`). They run while the clock runs, at any speed, and not
+ * at all while it is held, out of sight, in a hidden tab, or for a reader who prefers reduced motion until the page sets a `speed` (a Play). `chikyu-meteors`
+ * is sent when the strongest active shower changes, with `detail: { shower, zhr }` (`shower` is `null` when none is active).
+ *
  * @example
  * ```ts no-run
  * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
@@ -125,7 +133,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles"];
+  static observedAttributes = ["center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "meteors", "meteors-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -148,6 +156,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #listeners = new Set<(pose: OverlayPose) => void>();
   #hands: ElementControls | undefined;
   #reach: string | null = null;
+  /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
+  #played = false;
+  #note: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
   };
@@ -168,10 +179,16 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="overlay"></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="overlay"></div><p id="meteor-note" hidden></p>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#overlay = root.getElementById("overlay")!;
+    this.#note = root.getElementById("meteor-note")!;
+    this.#played = false;
+    this.#model.meteors.on = this.#meteorsAsked();
+    this.#model.meteors.running = () => this.speed !== 0 && document.visibilityState !== "hidden" && (this.#played || !prefersLessMotion());
+    this.#model.meteors.onShower = (shower, zhr) => this.dispatchEvent(new CustomEvent("chikyu-meteors", { detail: { shower, zhr } }));
+    this.#meteorNote();
     this.#stage.addEventListener("webglcontextlost", this.#lost, true);
     this.#stage.addEventListener("webglcontextrestored", this.#restored, true);
 
@@ -258,6 +275,34 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
     else if (name === "tiles") this.#gate?.soon();
+    else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "meteors-label" || name === "lang") this.#meteorNote();
+  }
+
+  #meteorsAsked(): boolean {
+    return this.hasAttribute("meteors") && this.getAttribute("meteors") !== "off";
+  }
+
+  /** The line under the picture that says the streaks are an illustration, in the language of the element or the page. */
+  #meteorNote(): void {
+    setMeteorNote(this.#note, this, this.#model.meteors.on);
+  }
+
+  /**
+   * Meteors seen from space, on or off (the attribute `meteors`): see the class's description. Off by default, and nothing of theirs is made until they are first switched on.
+   */
+  get meteors(): boolean {
+    return this.#model.meteors.on;
+  }
+  set meteors(value: boolean) {
+    if (value !== this.#meteorsAsked()) {
+      if (value) this.setAttribute("meteors", "");
+      else this.removeAttribute("meteors");
+      return;
+    }
+    this.#model.meteors.on = value;
+    this.#meteorNote();
+    this.#gate?.soon();
   }
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -325,6 +370,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   #setSpeed(next: number | null): void {
     if (this.isConnected && this.speed !== 0) this.#advance(performance.now());
+    if (this.isConnected && this.#view) this.#played = true;
     this.#speed = next;
     this.#last = performance.now();
     this.#startTick();
@@ -357,7 +403,17 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /** What the element is doing, for a page or a test: its state, the texture widths held, the map tiles held, the draws made. */
-  get stats(): { state: EarthState; tiers: Record<EarthLayer, number>; tiles: TileStats; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
+  get stats(): {
+    state: EarthState;
+    tiers: Record<EarthLayer, number>;
+    tiles: TileStats;
+    draws: number;
+    contexts: number;
+    canvas: { width: number; height: number; pixels: number };
+    assets: { entries: number; refs: number };
+    /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
+    meteors: { on: boolean; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
+  } {
     const stats = this.#taken?.renderer.stats;
     return {
       state: this.#state,
@@ -367,6 +423,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       contexts: stats?.contexts ?? 0,
       canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
+      meteors: { on: this.#model.meteors.on, ...this.#model.meteors.drawn },
     };
   }
 

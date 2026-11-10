@@ -119,6 +119,11 @@
       "import": "./dist/space/element.js",
       "default": "./dist/space/element.js"
     },
+    "./meteors": {
+      "types": "./dist/meteors/index.d.ts",
+      "import": "./dist/meteors/index.js",
+      "default": "./dist/meteors/index.js"
+    },
     "./satellites": {
       "types": "./dist/satellites/index.d.ts",
       "import": "./dist/satellites/index.js",
