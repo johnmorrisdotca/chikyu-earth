@@ -55,7 +55,7 @@ item to: NASA's Scientific Visualization Studio" (Visualizer Ernie Wright, USRA;
 ## The planets' places
 
 `<chikyu-space>` computes positions with **astronomy-engine** (https://github.com/cosinekitty/astronomy, MIT, copyright Don Cross), the page's own optional peer dependency: this package does not
-bundle or ship it. The planets are drawn as plain colours, from no picture.
+bundle or ship it. In this package the planets are drawn as plain colours, from no picture. The demo site's space view paints the Sun, the planets and the moons with the pictures of **wakusei-planets** (https://github.com/johnmorrisdotca/wakusei-planets, MIT, by John Morris), a separate optional package, whose own NOTICE.md credits each picture (public-domain NASA, USGS and JPL imagery from Wikimedia Commons); they are served beside the demo and are not in this package.
 
 ## Satellites
 
