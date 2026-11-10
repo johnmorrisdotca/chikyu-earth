@@ -351,6 +351,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let trackStep = model.stepMs;
 
       const sunEarth = { value: new three.Vector3(1, 0, 0) };
+      /** The Sun in the Earth's own axes (the surface program finds where a cloud's shadow falls from it). */
+      const sunLocal = { value: new three.Vector3(1, 0, 0) };
+      const cloudShift = { value: 0 };
       const sunView = { value: new three.Vector3(1, 0, 0) };
       const grid = sphere(three, 96, 48);
       const solid = sphere(three, 48, 24);
@@ -358,9 +361,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const earthMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: SURFACE_FRAG,
-        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir: sunEarth, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 0 } },
+        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, cloudMap: uniform.clouds, sunDir: sunEarth, sunLocal, cloudShift, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 0 } },
       });
-      const cloudShift = { value: 0 };
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: CLOUD_FRAG,
@@ -502,6 +504,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           clouds.rotation.copy(earth.rotation);
           const toSun = unit(frame.sun);
           sunEarth.value.set(toSun[0], toSun[1], toSun[2]);
+          {
+            // the Earth is turned about the y axis by spin + 90 degrees: the Sun in its own axes is turned back by as much
+            const back = -(frame.spin + 90) * RAD;
+            sunLocal.value.set(toSun[0] * Math.cos(back) + toSun[2] * Math.sin(back), toSun[1], -toSun[0] * Math.sin(back) + toSun[2] * Math.cos(back));
+          }
           cloudShift.value = -(((model.time / 3_600_000) * 1.5) % 360) / 360;
           earthMaterial.uniforms["lights"]!.value = model.light === "lit" ? 0 : 1;
           earthMaterial.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;

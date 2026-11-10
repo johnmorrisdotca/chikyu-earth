@@ -60,7 +60,7 @@ void main() {
   float cover = smoothstep(0.28, 0.88, texture2D(cloudMap, cu).r);
   float shadow = smoothstep(0.28, 0.88, texture2D(cloudMap, shadowAt).r);
 
-  vec3 sunColour = mix(vec3(1.0, 0.52, 0.26), vec3(1.0, 0.97, 0.91), smoothstep(0.0, 0.32, ndl));
+  vec3 sunColour = mix(vec3(1.0, 0.62, 0.38), vec3(1.0, 0.97, 0.91), smoothstep(0.0, 0.22, ndl));
   vec3 lit = albedo * sunColour * (0.07 + 1.0 * pow(max(ndl, 0.0), 0.5));
   lit *= 1.0 - 0.5 * shadow * smoothstep(0.02, 0.3, ndl);
   float dusk = smoothstep(-0.14, 0.0, ndl) * (1.0 - smoothstep(0.0, 0.30, ndl));
@@ -80,7 +80,7 @@ void main() {
   vec3 lamps = (lamp * lamp * vec3(1.6, 1.4, 1.1) + spread * vec3(0.55, 0.40, 0.22)) * lights * (1.0 - 0.7 * cover);
   vec3 night = lamps + lamp * 0.25;
   // the blue hour just beyond the terminator
-  night += vec3(0.05, 0.11, 0.26) * smoothstep(-0.30, -0.05, ndl) * (1.0 - smoothstep(-0.05, 0.10, ndl)) * 0.7;
+  night += vec3(0.04, 0.08, 0.20) * smoothstep(-0.22, -0.04, ndl) * (1.0 - smoothstep(-0.04, 0.08, ndl)) * 0.45;
   vec3 col = mix(night, lit, day);
   col += pow(albedo, vec3(0.75)) * boost * 0.65 * (1.0 - day);
 
