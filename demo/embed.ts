@@ -13,11 +13,13 @@
 //   &satellites=stations,starlink,gps,weather ... &sat=25544   the space look's satellites (any group of the catalogue, from this site's own files, refreshed from CelesTrak's lists every few hours) and the one marked
 //   &ride=iss|css|starlink|Moon|Mars &rview=follow &rlook=horizon   the space look's camera riding along with a body, from it (default) or behind it, looking down (default) or at the horizon
 //   &body=Mars &zoom=moon        the space look's camera (a number is the zoom itself): the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system, or Jupiter-moons, Saturn-moons ...)
+//   &lang=ja                     the credit line in the corner, in Japanese
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
 import "../src/element.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
+import { globeCredit } from "./frame-credit.ts";
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);
@@ -27,6 +29,8 @@ const interactive = query.get("hands") !== "0";
 
 const centre = query.get("center") ?? "0,20";
 const look = query.get("look");
+// the credit comes first, so it is there whatever else the frame does
+globeCredit({ look, satellites: Boolean(query.get("satellites")) || ["iss", "css", "starlink"].includes(query.get("ride") ?? "") }, query.get("lang") === "ja");
 
 /** The elements carry the hands; `hands=0` takes them off with `controls="none"`. */
 const still = (element: HTMLElement): void => {

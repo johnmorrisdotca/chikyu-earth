@@ -9,6 +9,12 @@ const id = "chikyu-earth";
 const TITLE = "Chikyu Earth 地球: a line-drawn globe for the web";
 const DESCRIPTION = "A line-drawn globe of the world's countries that turns at the Earth's own rate, centred on where you are, with an optional realistic Earth from space and markers for any place. A web component and an SVG string.";
 
+/** Where every credit is written in full. */
+const NOTICE = "https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md";
+
+/** The family's footer, with a link to every credit beside the one-line credit, so a reader need not open anything to find the sources. */
+const footer = (): string => familyFooter({ id }).replace('<span data-say="foot"></span>', `<span><span data-say="foot"></span> <a href="${NOTICE}" data-say="creditsAll"></a></span>`);
+
 const LINKS = [{ href: "docs/index.html", say: "pageDocs" }, { href: "embed.html", say: "pageEmbed" }];
 
 /** The family's script and the language chooser, then the page's own module. */
@@ -22,7 +28,7 @@ export function renderIndex(): string {
     .replace("<!--family:head-->", familyHead({ id, title: TITLE, description: DESCRIPTION }))
     .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
-    .replace("<!--family:footer-->", familyFooter({ id }))
+    .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 
@@ -33,7 +39,7 @@ export function renderKids(): string {
     .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.kd_title, description: WORDS.en.kd_description }))
     .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
-    .replace("<!--family:footer-->", familyFooter({ id }))
+    .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 
@@ -44,7 +50,7 @@ export function renderPasses(): string {
     .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.ps_title, description: WORDS.en.ps_description }))
     .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
-    .replace("<!--family:footer-->", familyFooter({ id }))
+    .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 

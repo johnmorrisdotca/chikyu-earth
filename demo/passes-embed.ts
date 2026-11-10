@@ -10,6 +10,7 @@
 //   &from=2026-11-09T12:00Z    the first moment (now by default)
 import "../src/passes/element.ts";
 import type { ChikyuPasses } from "../src/passes/element.ts";
+import { passesCredit } from "./frame-credit.ts";
 import { CREDIT, PASS_SATELLITES, type PassSat } from "./passes-code.ts";
 
 const query = new URLSearchParams(location.search);
@@ -39,6 +40,7 @@ if (from && Number.isFinite(Date.parse(from))) element.setAttribute("from", from
 element.setAttribute("credit", CREDIT);
 element.setAttribute("elements-src", new URL("elements/bright.json", location.href).href);
 document.getElementById("frame")!.append(element);
+passesCredit(lang === "ja");
 element.addEventListener("chikyu-passes", () => {
   document.body.dataset["ready"] = "true";
 });

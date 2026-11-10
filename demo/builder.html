@@ -10,6 +10,7 @@
       main.builder { max-width: 1040px; margin: 0 auto; padding: 16px 12px 40px; }
       .builder h1 { margin: 8px 0 4px; font-size: 1.6rem; }
       .builder .lede { margin: 0 0 14px; color: var(--muted); }
+      .builder .credits { margin: 24px 0 0; }
       .builder .fam-seg button, .builder .embed-places .fam-button { min-height: 48px; min-width: 48px; font: inherit; }
       .builder .fam-seg button[aria-checked="true"] { background: var(--ink); color: var(--surface); }
     </style>
@@ -23,6 +24,7 @@
           <kazoku-embed-panel id="embed-panel" data-testid="embed-panel"></kazoku-embed-panel>
         </div>
       </div>
+      <footer class="fam-fine credits">MIT code. Sources: country outlines from Natural Earth, Earth pictures from NASA, satellite orbits from CelesTrak and Space-Track.org. <a href="https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md">Every credit (NOTICE.md)</a></footer>
     </main>
     <script type="module" src="builder.js"></script>
   </body>
