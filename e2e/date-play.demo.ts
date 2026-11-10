@@ -19,11 +19,12 @@ const boxMs = async (page: Page): Promise<number> => Date.parse(await page.locat
 const play = (page: Page) => page.locator('#replay [data-act="play"]');
 const back = (page: Page) => page.locator('#replay [data-act="start"]');
 const speed = (page: Page, value: number) => page.locator(`#replay button[data-v="${value}"]`);
-/** What the address holds, as the page writes it (a few moments after a choice). */
-const addressOf = async (page: Page): Promise<URLSearchParams> => {
-  await page.waitForTimeout(400);
-  return new URL(page.url()).searchParams;
-};
+/** One value in the address, as it reads now. */
+const param = (page: Page, key: string): string | null => new URL(page.url()).searchParams.get(key);
+/** The page writes the address a moment after a choice (kazoku-ui's address state waits 250 ms), so a check waits for the value rather than for a fixed time. */
+const inAddress = (page: Page, key: string, message?: string) => expect.poll(() => param(page, key), { timeout: 5000, ...(message ? { message } : {}) });
+/** The address's `time` as milliseconds (NaN when there is none), waited for like `inAddress`. */
+const timeInAddress = (page: Page, message?: string) => expect.poll(() => Date.parse(param(page, "time") ?? ""), { timeout: 5000, ...(message ? { message } : {}) });
 
 async function open(page: Page, query: string): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
@@ -70,12 +71,13 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
   await open(page, `time=${START}`);
   const start = await boxMs(page);
   expect(Date.parse(START) - start, "the box shows the address's date").toBeLessThan(60_000);
-  expect((await addressOf(page)).get("play")).toBeNull();
+  await page.waitForTimeout(400);
+  expect(param(page, "play")).toBeNull();
   await page.waitForTimeout(1000);
   expect(await boxMs(page), "held until Play").toBe(start);
 
   await play(page).click();
-  expect((await addressOf(page)).get("play")).toBe("on");
+  await inAddress(page, "play").toBe("on");
   await page.waitForTimeout(2000);
   const running = await boxMs(page);
   expect(running, "Play moves the date on from the date shown").toBeGreaterThan(start + 3600_000);
@@ -87,10 +89,9 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
   expect(held).toBeGreaterThanOrEqual(running);
   await page.waitForTimeout(1500);
   expect(await boxMs(page), "Pause holds the date").toBe(held);
-  const paused = await addressOf(page);
-  expect(paused.get("play"), "play leaves the address").toBeNull();
-  expect(Date.parse(paused.get("time")!), "the date it stopped on is in the address").toBeGreaterThan(Date.parse(START));
-  expect(Math.abs(Date.parse(paused.get("time")!) - held), "and is the date shown").toBeLessThan(120_000);
+  await inAddress(page, "play", "play leaves the address").toBeNull();
+  await timeInAddress(page, "the date it stopped on is in the address").toBeGreaterThan(Date.parse(START));
+  expect(Math.abs(Date.parse(param(page, "time")!) - held), "and is the date shown").toBeLessThan(120_000);
 
   // Play again goes on from there, and Back goes to the date the reader chose, not where Pause was
   await play(page).click();
@@ -101,9 +102,8 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
   expect(await boxMs(page), "Back returns to the chosen date").toBe(start);
   await page.waitForTimeout(1000);
   expect(await boxMs(page), "and holds there").toBe(start);
-  const returned = await addressOf(page);
-  expect(Date.parse(returned.get("time")!), "the address has the chosen date").toBe(Date.parse(START));
-  expect(returned.get("play")).toBeNull();
+  await timeInAddress(page, "the address has the chosen date").toBe(Date.parse(START));
+  await inAddress(page, "play").toBeNull();
 });
 
 test("a date at 'now' is not jumped past: Play starts from the date shown", async ({ page }) => {
@@ -114,16 +114,15 @@ test("a date at 'now' is not jumped past: Play starts from the date shown", asyn
   await play(page).click();
   await page.waitForTimeout(1500);
   expect(Math.abs((await boxMs(page)) - shown), "real time from the date shown, not from a later now").toBeLessThan(5 * 60_000);
-  expect(Date.parse((await addressOf(page)).get("time")!), "the moment it started from is in the address").toBeGreaterThan(0);
+  await timeInAddress(page, "the moment it started from is in the address").toBeGreaterThan(0);
 });
 
 test("a speed is kept in the address and a reader who returns finds Play and the speed as they were", async ({ page }) => {
   await open(page, `time=${START}`);
   await speed(page, 86400).click();
   await play(page).click();
-  const ask = await addressOf(page);
-  expect(ask.get("speed")).toBe("86400");
-  expect(ask.get("play")).toBe("on");
+  await inAddress(page, "speed").toBe("86400");
+  await inAddress(page, "play").toBe("on");
   await page.reload();
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 90_000 });
   await expect(play(page)).toHaveAttribute("aria-pressed", "true");
@@ -207,6 +206,7 @@ test.describe("a reader who prefers reduced motion", () => {
     const before = await boxMs(page);
     await page.waitForTimeout(1200);
     expect(await boxMs(page)).toBe(before);
-    expect((await addressOf(page)).get("play")).toBeNull();
+    await page.waitForTimeout(400);
+    expect(param(page, "play")).toBeNull();
   });
 });
