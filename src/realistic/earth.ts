@@ -4,9 +4,11 @@
 import type * as THREE from "three";
 import type { AssetCache, BuildContext, Item3D, Scene3D } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
+import type { SatelliteRef } from "../satellites/types.ts";
 import { HOME_VIEW, lookAt } from "../view.ts";
 import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
-import { subsolarPoint, unitVector } from "./sun.ts";
+import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
+import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "../space/satellite-layer.ts";
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet } from "./tile-set.ts";
@@ -43,6 +45,20 @@ const LAYERS: Layer[] = ["day", "night", "clouds", "water"];
  */
 export type LightMode = "sun" | "lit" | "boost";
 
+/**
+ * How the camera is held: `ground` (the default) over a place on the ground, so the Earth keeps still and the clock moves the light across it; `space` held in the stars, so the Earth turns beneath it as the clock runs and the day and night line stays
+ * where the Sun really puts it; `sun` held on the Sun's side, so the day and night line keeps its place on the screen while the Earth turns beneath.
+ *
+ * @example
+ * ```ts
+ * import type { CameraMode } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const modes: CameraMode[] = ["ground", "space", "sun"];
+ * console.log(modes.join(", "));
+ * ```
+ */
+export type CameraMode = "ground" | "space" | "sun";
+
 export interface EarthModel {
   /** The home centre; the shared controls' yaw and tilt are added to it as in the flat globe. */
   centre: GeoPoint;
@@ -53,10 +69,20 @@ export interface EarthModel {
   lights: boolean;
   /** How the Earth is lit (see `LightMode`). */
   light: LightMode;
+  /** How the camera is held (see `CameraMode`). */
+  camera: CameraMode;
+  /** For the `space` camera: the Earth's turn against the stars (degrees) when the camera was set; null until the next draw sets it. */
+  cameraSpin: number | null;
+  /** Game seconds a second (the clock's speed): the satellites are placed from it. */
+  speed: number;
+  /** The satellites shown, the one chosen, and what the last draw did with them. */
+  satellites: SatelliteState;
   /** Where the camera looked at the last draw (the element decides from it whether a new draw is worth it). */
   drawn: { view: GlobeView; time: number; radius: number; centre: GeoPoint } | null;
   /** The map tiles laid over the pictures while the scene is built: what they are doing, for a page or a test. */
   tiles: TileSet | null;
+  /** The satellite at a point of the view (CSS pixels), within a radius, once a draw has been made and one is there. */
+  pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The pixel ratio the textures are chosen for. */
   ratio(): number;
 }
@@ -76,6 +102,8 @@ export interface EarthDeps {
   invalidate: () => void;
   onError?: (error: unknown) => void;
   onTier?: (layer: Layer, width: number) => void;
+  /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
+  onSatellitesError?: (error: unknown) => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
 }
@@ -87,8 +115,13 @@ export const newModel = (): EarthModel => ({
   clouds: true,
   lights: true,
   light: "sun",
+  camera: "ground",
+  cameraSpin: null,
+  speed: 1,
+  satellites: newSatelliteState(),
   drawn: null,
   tiles: null,
+  pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
@@ -110,6 +143,37 @@ export const newModel = (): EarthModel => ({
 export const discRadius = (width: number, height: number, zoom: number): number => Math.max(1, (Math.min(width, height) / 2 / ATMOSPHERE_OUTER - 1) * zoom);
 
 export { lookAt };
+
+/**
+ * The place the camera looks at for a moment: the home centre as it is (`ground`), the home centre as it was when the camera was set, carried west by the Earth's turn since (`space`), or the home centre read from the Sun's own place (`sun`: `0,0` is straight at noon).
+ * It sets `cameraSpin` when the `space` camera has none yet. Pure apart from that.
+ *
+ * @param model - The model: its centre, camera, camera spin and the moment shown.
+ * @returns The longitude and latitude the view is turned from (yaw and tilt are added to it by `lookAt`).
+ *
+ * @example
+ * ```ts
+ * import { cameraCentre } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const start = Date.UTC(2026, 10, 2, 12);
+ * const model = { centre: { lon: 10, lat: 30 }, camera: "space" as const, cameraSpin: null, time: start };
+ * cameraCentre(model);
+ * model.time = start + 6 * 3_600_000;
+ * console.log(cameraCentre(model).lon.toFixed(1));
+ * ```
+ */
+export function cameraCentre(model: Pick<EarthModel, "centre" | "camera" | "cameraSpin" | "time">): GeoPoint {
+  if (model.camera === "space") {
+    const spin = greenwichSidereal(model.time);
+    model.cameraSpin ??= spin;
+    return { lon: model.centre.lon - (spin - model.cameraSpin), lat: model.centre.lat };
+  }
+  if (model.camera === "sun") {
+    const sun = subsolarPoint(model.time);
+    return { lon: sun.lon + model.centre.lon, lat: Math.max(-90, Math.min(90, sun.lat + model.centre.lat)) };
+  }
+  return model.centre;
+}
 
 /** An equirectangular sphere: +z is longitude 0 on the equator, +x east, +y north; v is 0 at the north pole (the top row of the picture). */
 export function sphere(three: Three, columns: number, rows: number): THREE.BufferGeometry {
@@ -159,13 +223,15 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       const uniform = textures.uniforms as Record<Layer, { value: THREE.Texture | null }>;
 
       const sunDir = { value: new three.Vector3(1, 0, 0) };
+      /** The Sun in the Earth's own axes (before the view turns it), which the surface needs to find where a cloud's shadow falls. */
+      const sunLocal = { value: new three.Vector3(1, 0, 0) };
+      const cloudShift = { value: 0 };
       const grid = sphere(three, 128, 64);
       const surface = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: SURFACE_FRAG,
-        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, sunDir, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 1 } },
+        uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, cloudMap: uniform.clouds, sunDir, sunLocal, cloudShift, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 1 } },
       });
-      const cloudShift = { value: 0 };
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: CLOUD_FRAG,
@@ -187,7 +253,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       const tiles: TileSet = createTileSet(
         three,
         turned,
-        { sunDir, lights: surface.uniforms["lights"] as { value: number }, boost: surface.uniforms["boost"] as { value: number }, ortho: surface.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night },
+        { sunDir, lights: surface.uniforms["lights"] as { value: number }, boost: surface.uniforms["boost"] as { value: number }, ortho: surface.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night, extra: { cloudMap: uniform.clouds, sunLocal, cloudShift } },
         { assets: deps.assets, base: () => deps.tiles?.(), cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
       );
       model.tiles = tiles;
@@ -201,17 +267,29 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       glow.frustumCulled = false;
       const scene = new three.Scene();
       scene.add(turned, glow);
-      const camera = new three.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
-      camera.position.set(0, 0, 5);
+      // the satellites are placed in space's own axes (x to the vernal equinox, y north); this group turns them into the Earth's axes (by the Earth's turn against the stars) and then as the Earth is turned in the view
+      const inertial = new three.Group();
+      const spun = new three.Group();
+      inertial.add(spun);
+      scene.add(inertial);
+      let layer: SatelliteLayer | undefined;
+      // far enough in front that a geostationary satellite (6.6 radii out) is never behind the camera: an orthographic picture is the same from anywhere on the line
+      const camera = new three.OrthographicCamera(-1, 1, 1, -1, 1, 120);
+      camera.position.set(0, 0, 50);
 
       return {
         scene,
         camera,
         update() {
           const view = model.view;
-          const look = lookAt(model.centre, view);
+          const centre = cameraCentre(model);
+          const look = lookAt(centre, view);
           turned.rotation.set(look.lat * RAD, -look.lon * RAD, 0, "XYZ");
+          inertial.rotation.copy(turned.rotation);
+          const spin = greenwichSidereal(model.time);
+          spun.rotation.set(0, -(spin + 90) * RAD, 0);
           const [sx, sy, sz] = unitVector(subsolarPoint(model.time));
+          sunLocal.value.set(sx, sy, sz);
           sunDir.value.set(sx, sy, sz).applyEuler(turned.rotation);
           if (model.light === "lit") sunDir.value.set(0, 0, 1);
           cloudShift.value = -(((model.time / 3_600_000) * deps.drift) % 360) / 360;
@@ -224,7 +302,17 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           camera.top = (size.height / 2 + view.panY) / radius;
           camera.bottom = (-size.height / 2 + view.panY) / radius;
           camera.updateProjectionMatrix();
-          model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...model.centre } };
+          if (!layer && model.satellites.groups.size > 0) {
+            try {
+              layer = createSatelliteLayer(three, spun, model.satellites, model.ratio);
+            } catch (error) {
+              model.satellites.groups.clear();
+              deps.onSatellitesError?.(error);
+            }
+          }
+          layer?.update(model.time, model.speed);
+          model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
+          model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...centre } };
           textures.sync(radius * model.ratio());
           tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
@@ -234,6 +322,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           size = { width: next, height: nextHeight };
         },
         dispose() {
+          layer?.dispose();
+          model.pick = null;
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

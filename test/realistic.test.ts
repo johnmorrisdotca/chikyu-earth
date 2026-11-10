@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { subsolarPoint, unitVector } from "../src/realistic/sun.ts";
+import { greenwichSidereal, subsolarPoint, unitVector } from "../src/realistic/sun.ts";
+import { cameraCentre } from "../src/realistic/earth.ts";
 import { chooseTier, textureBytes, textureCap, TIERS } from "../src/realistic/tiers.ts";
 import { createGate, frameCap, type Timers } from "../src/realistic/gate.ts";
 
@@ -127,4 +128,30 @@ test("asks made in one task are one draw, made when the task ends", async () => 
   gate.soon();
   await Promise.resolve();
   assert.equal(timers.length, 1, "inside the gap the one ask waits");
+});
+
+test("the Earth has turned 280.46 degrees against the stars at noon on 1 January 2000, and about 361 degrees a day after", () => {
+  near(greenwichSidereal(Date.UTC(2000, 0, 1, 12)), 280.46, 0.01, "GMST at J2000");
+  const day = Date.UTC(2026, 10, 2, 12);
+  const turn = (greenwichSidereal(day + 86_400_000) - greenwichSidereal(day) + 360) % 360;
+  near(turn, 0.9856, 0.001, "a day's turn past a whole one");
+});
+
+test("the camera held in the stars looks at a longitude that goes west with the Earth's turn, and the one held on the Sun's side at the sub-solar longitude", () => {
+  const start = Date.UTC(2026, 10, 2, 12);
+  const model = { centre: { lon: 10, lat: 30 }, camera: "space" as const, cameraSpin: null as number | null, time: start };
+  assert.deepEqual(cameraCentre(model), { lon: 10, lat: 30 }, "where it is set, it looks at the centre");
+  model.time = start + 6 * 3_600_000;
+  const later = cameraCentre(model);
+  near(later.lon, 10 - 6 * 15.0411, 0.01, "six hours later the longitude under it is 90 degrees west");
+  assert.equal(later.lat, 30);
+  const ground = cameraCentre({ ...model, camera: "ground" });
+  assert.deepEqual(ground, { lon: 10, lat: 30 }, "held on the ground it does not move");
+  const sun = cameraCentre({ ...model, camera: "sun", centre: { lon: 0, lat: 0 } });
+  const overhead = subsolarPoint(model.time);
+  near(sun.lon, overhead.lon, 1e-9, "noon is straight ahead");
+  near(sun.lat, overhead.lat, 1e-9, "the sub-solar latitude");
+  // the Sun's side keeps the day and night line in one place: the sub-solar point is the same offset from the view's centre at any moment
+  const offset = (time: number): number => subsolarPoint(time).lon - cameraCentre({ centre: { lon: -40, lat: 0 }, camera: "sun", cameraSpin: null, time }).lon;
+  near(offset(start), offset(start + 7 * 3_600_000), 1e-9, "the offset of the Sun from the view's centre");
 });

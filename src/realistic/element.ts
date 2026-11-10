@@ -5,10 +5,14 @@ import { carryControls, type ElementControls, type ViewController } from "@johnm
 import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
-import { createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
+import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
+import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
+import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
+import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
+export type { CameraMode };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
 import type { TileStats } from "./tile-set.ts";
@@ -29,7 +33,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}";
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}";
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -49,6 +53,15 @@ const readCentre = (value: string | null): GeoPoint | null => {
   if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon!) > 180 || Math.abs(lat!) > 90) return null;
   return { lon: lon!, lat: lat! };
 };
+
+/** A `camera` attribute: `space` or `sun`, else the camera held over a place on the ground. */
+const readCamera = (value: string | null): CameraMode => (value === "space" || value === "sun" ? value : "ground");
+/** The plain wheel in an immersive view is a pinch of this share: a notch (100) zooms about 1.2 times, as the family's mouse wheel does with Alt. */
+const WHEEL_AS_PINCH = 0.2;
+/** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
+const SATELLITE_RATE = 360 / (88 * 60);
+const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
+type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -125,7 +138,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles"];
+  static observedAttributes = ["center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -164,6 +177,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.clouds = this.getAttribute("clouds") !== "off";
     this.#model.lights = this.getAttribute("lights") !== "off";
     this.#model.light = readLight(this.getAttribute("light"));
+    this.#model.camera = readCamera(this.getAttribute("camera"));
+    this.#model.speed = this.speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
@@ -208,6 +223,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
       },
+      onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
       onTier: (layer, width) => {
         if (layer in this.#tiers) this.#tiers[layer as EarthLayer] = width;
@@ -223,7 +239,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       } else if (this.#state === "loading") this.#set(this.#view?.live === false && taken.renderer.focused !== undefined ? "idle" : "unavailable");
     });
     this.addEventListener("pointerdown", this.#take);
+    this.addEventListener("pointerdown", this.#down);
     this.addEventListener("focusin", this.#take);
+    // before the shared hands (which hear it after this): a plain wheel in an immersive view zooms
+    this.addEventListener("wheel", this.#wheel, { capture: true, passive: false });
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#startTick();
     document.addEventListener("visibilitychange", this.#onVisible);
@@ -232,6 +251,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   disconnectedCallback(): void {
     this.removeEventListener("pointerdown", this.#take);
+    this.removeEventListener("pointerdown", this.#down);
+    this.removeEventListener("wheel", this.#wheel, { capture: true });
+    window.removeEventListener("pointerup", this.#up, true);
     this.removeEventListener("focusin", this.#take);
     this.#hands?.unbind();
     this.#hands = undefined;
@@ -257,6 +279,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
     else if (name === "tiles") this.#gate?.soon();
+    else if (name === "camera") this.camera = readCamera(value);
   }
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -294,7 +317,30 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
   set centre(value: GeoPoint) {
     this.#model.centre = { ...value };
+    this.#model.cameraSpin = null;
     this.#gate?.soon();
+  }
+
+  /**
+   * How the camera is held (the `camera` attribute). `ground` (the default): over the place `center` names on the ground, so the Earth keeps still and the clock moves the light across it. `space`: held in the stars, looking at the place `center` names as it is at the
+   * moment the camera is set (when the element opens, and again when `time` or `center` is set), so the Earth turns beneath it as the clock runs, with the day and night line where the Sun really is. `sun`: held on the Sun's side, `center` being the longitude and
+   * latitude from the sub-solar point (`0,0` looks straight at the noon place and shows no night), so the day and night line keeps its place on the screen while the Earth turns beneath. A drag turns the view about the same body in any of them.
+   */
+  get camera(): CameraMode {
+    return this.#model.camera;
+  }
+  set camera(value: CameraMode) {
+    this.#model.camera = value;
+    this.#model.cameraSpin = null;
+    this.#gate?.soon();
+  }
+
+  /** True for the full-screen mode (the `immersive` attribute): the element fills its box in any shape, a plain wheel zooms instead of scrolling the page, and a touch drag turns the view instead of scrolling. */
+  get immersive(): boolean {
+    return this.hasAttribute("immersive");
+  }
+  set immersive(value: boolean) {
+    this.toggleAttribute("immersive", value);
   }
 
   /** The moment shown: milliseconds since the epoch, or "now" while it follows the real clock. The clock runs from it at `speed`, so a number read while time runs is the moment it has reached. */
@@ -305,6 +351,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#mode = value instanceof Date ? value.getTime() : value;
     if (this.#mode === "now") this.#model.time = Date.now();
     else this.#model.time = this.#mode;
+    this.#model.cameraSpin = null;
+    this.#model.speed = this.speed;
     this.#last = performance.now();
     this.#startTick();
     this.#gate?.soon();
@@ -325,6 +373,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #setSpeed(next: number | null): void {
     if (this.isConnected && this.speed !== 0) this.#advance(performance.now());
     this.#speed = next;
+    this.#model.speed = this.speed;
     this.#last = performance.now();
     this.#startTick();
     this.#gate?.soon();
@@ -356,11 +405,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /** What the element is doing, for a page or a test: its state, the texture widths held, the map tiles held, the draws made. */
-  get stats(): { state: EarthState; tiers: Record<EarthLayer, number>; tiles: TileStats; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
+  get stats(): { state: EarthState; tiers: Record<EarthLayer, number>; tiles: TileStats; satellites: SatelliteStats; draws: number; contexts: number; canvas: { width: number; height: number; pixels: number }; assets: { entries: number; refs: number } } {
     const stats = this.#taken?.renderer.stats;
     return {
       state: this.#state,
       tiers: { ...this.#tiers },
+      satellites: this.#satelliteStats(),
       tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0 },
       draws: stats?.draws ?? 0,
       contexts: stats?.contexts ?? 0,
@@ -382,10 +432,111 @@ export class ChikyuEarthRealistic extends HTMLElement {
     }
     const shifted = view.zoom !== drawn.view.zoom || view.panX !== drawn.view.panX || view.panY !== drawn.view.panY;
     const a = lookAt(drawn.centre, drawn.view);
-    const b = lookAt(this.#model.centre, view);
+    const b = lookAt(cameraCentre(this.#model), view);
     const px = (Math.abs(b.lon - a.lon) * Math.cos(((a.lat + b.lat) / 2) * RAD) + Math.abs(b.lat - a.lat)) * RAD * drawn.radius;
     if (shifted || px >= 0.5 || (final && px > 0.01)) this.#gate?.soon();
   }
+
+  // --- satellites ---------------------------------------------------------------------------------------------------------------------------------
+  /**
+   * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds, so every group of the catalogue can be shown at once. Giving the name of a group
+   * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations). The groups are placed by SGP4 about once a second and interpolated
+   * between, are hidden while the clock runs faster than `MAX_SATELLITE_SPEED`, are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
+   *
+   * @param group - The group's name, for `showSatellites`, `selectSatellite` and the events.
+   * @param satellites - The group, or `null` to remove it.
+   * @param style - How to draw it.
+   */
+  setSatellites(group: string, satellites: Satellites | null, style: Partial<SatelliteStyle> = {}): void {
+    const groups = this.#model.satellites.groups;
+    if (satellites === null) {
+      groups.delete(group);
+      if (this.#model.satellites.selected?.group === group) this.#model.satellites.selected = null;
+    } else {
+      const was = groups.get(group);
+      groups.set(group, {
+        satellites,
+        color: style.color ?? was?.color ?? SATELLITE_COLORS[groups.size % SATELLITE_COLORS.length]!,
+        size: style.size ?? was?.size ?? 3,
+        orbits: (style.orbits ?? was?.orbits ?? false) && satellites.count <= MAX_ORBIT_GROUP,
+        visible: was?.visible ?? true,
+      });
+    }
+    this.#last = performance.now();
+    this.#startTick();
+    this.#gate?.soon();
+  }
+
+  /** Show or hide a group without losing it. */
+  showSatellites(group: string, on: boolean): void {
+    const found = this.#model.satellites.groups.get(group);
+    if (!found || found.visible === on) return;
+    found.visible = on;
+    this.#startTick();
+    this.#gate?.soon();
+  }
+
+  /** The groups now set, with how many satellites each holds and whether it is shown. */
+  get satelliteGroups(): { name: string; count: number; visible: boolean }[] {
+    return [...this.#model.satellites.groups].map(([name, group]) => ({ name, count: group.satellites.count, visible: group.visible }));
+  }
+
+  /** Mark one satellite: a larger ring round it and its orbit drawn. `null` lets it go. */
+  selectSatellite(ref: SatelliteRef | null): void {
+    const found = ref ? this.#model.satellites.groups.get(ref.group) : undefined;
+    this.#model.satellites.selected = ref && found && ref.index >= 0 && ref.index < found.satellites.count ? { group: ref.group, index: ref.index } : null;
+    this.#gate?.soon();
+  }
+
+  /** The satellite marked by `selectSatellite` or by a press on it, if any. */
+  get selectedSatellite(): SatelliteRef | null {
+    const chosen = this.#model.satellites.selected;
+    return chosen ? { ...chosen } : null;
+  }
+
+  /** Facts about one satellite at the moment shown (name, number, element age, height, speed, period); undefined if it cannot be placed then. */
+  satelliteInfo(ref: SatelliteRef): SatelliteInfo | undefined {
+    return this.#model.satellites.groups.get(ref.group)?.satellites.info(ref.index, this.#model.time);
+  }
+
+  #satelliteStats(): SatelliteStats {
+    const drawn = this.#model.satellites.drawn;
+    let propagations = 0;
+    let lastBatchMs = 0;
+    let maxBatchMs = 0;
+    for (const group of this.#model.satellites.groups.values()) {
+      propagations += group.satellites.propagations;
+      lastBatchMs = Math.max(lastBatchMs, group.satellites.timing.lastBatchMs);
+      maxBatchMs = Math.max(maxBatchMs, group.satellites.timing.maxBatchMs);
+    }
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, tooFast: drawn.tooFast, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+  }
+
+  // A press that does not turn the view (under 6 pixels) on a satellite tells the page, which chooses it with `selectSatellite` if it likes.
+  #downX = 0;
+  #downY = 0;
+  #down = (event: PointerEvent): void => {
+    if (event.button !== 0 || this.#model.satellites.groups.size === 0) return;
+    this.#downX = event.clientX;
+    this.#downY = event.clientY;
+    window.addEventListener("pointerup", this.#up, { capture: true, once: true });
+  };
+  #up = (event: PointerEvent): void => {
+    if (Math.hypot(event.clientX - this.#downX, event.clientY - this.#downY) > 6) return;
+    const rect = this.getBoundingClientRect();
+    const satellite = this.#model.pick?.(event.clientX - rect.left, event.clientY - rect.top, 12);
+    if (satellite) this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite) }, bubbles: true, composed: true }));
+  };
+
+  // In an immersive view a plain wheel zooms. It is passed on to the shared hands as the wheel's own pinch (Ctrl and a small step), so whichever hands hold the view (the element's, or a bar bound to it) apply it with their limits;
+  // Ctrl, Command, Alt and Shift with the wheel are the family's own and are left alone.
+  #wheel = (event: WheelEvent): void => {
+    if (!this.hasAttribute("immersive") || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const pixels = event.deltaMode === 1 ? event.deltaY * 33 : event.deltaMode === 2 ? event.deltaY * 800 : event.deltaY;
+    this.dispatchEvent(new WheelEvent("wheel", { deltaY: Math.max(-250, Math.min(250, pixels)) * WHEEL_AS_PINCH, deltaMode: 0, clientX: event.clientX, clientY: event.clientY, ctrlKey: true, bubbles: true, cancelable: true, composed: true }));
+  };
 
   /** The view as it is (for a page that wants to read it back). */
   get view(): GlobeView {
@@ -404,10 +555,19 @@ export class ChikyuEarthRealistic extends HTMLElement {
     const seconds = Number(this.getAttribute("live-seconds"));
     const live = Number.isFinite(seconds) && seconds > 0 ? Math.max(MIN_TICK_MS, seconds * 1000) : LIVE_TICK_MS;
     const speed = Math.abs(this.speed);
-    if (speed <= 1) return live;
+    const satellites = this.#satellitesMoving();
+    // satellites go round in 90 minutes, so with any on show even real time is drawn about once a second
+    if (speed <= 1 && !satellites) return live;
     if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return Math.min(live, 1000);
     const radius = this.#model.drawn?.radius ?? 200;
-    return Math.min(live, 1000 / Math.min(30, Math.max(1, SUN_RATE * RAD * speed * radius)));
+    return Math.min(live, 1000 / Math.min(30, Math.max(1, (satellites ? SATELLITE_RATE : SUN_RATE) * RAD * speed * radius)));
+  }
+
+  /** Is anything on show that moves faster than the Earth turns: a group of satellites the clock is slow enough to place? */
+  #satellitesMoving(): boolean {
+    if (Math.abs(this.speed) > MAX_SATELLITE_SPEED) return false;
+    for (const group of this.#model.satellites.groups.values()) if (group.visible && group.satellites.count > 0) return true;
+    return false;
   }
 
   /** Tell the page the moment shown: at most four times a second while time runs (`running`, and not from a hidden tab), and once, at once, when it holds. */

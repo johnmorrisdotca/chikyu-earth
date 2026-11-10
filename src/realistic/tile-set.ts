@@ -71,6 +71,8 @@ export interface TileShared {
   /** The whole-Earth water and night pictures' uniforms: their value is the picture now held. */
   water: Uniform<THREE.Texture | null>;
   night: Uniform<THREE.Texture | null>;
+  /** More uniforms the surface program reads (the cloud picture and where the Sun is in the Earth's axes), shared with the sphere's own. */
+  extra?: Record<string, Uniform<unknown>>;
 }
 
 export interface TileSetDeps {
@@ -330,6 +332,7 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         lights: shared.lights,
         boost: shared.boost,
         ortho: shared.ortho,
+        ...shared.extra,
         nightRect,
         rect: { value: tileRect(entry.id) },
         // a finer level sits a little higher, so two levels at once never fight for the same depth; all sit above the whole-Earth sphere's flat faces

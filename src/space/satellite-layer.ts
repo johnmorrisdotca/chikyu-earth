@@ -74,20 +74,22 @@ export interface SatelliteLayer {
   /** Place every shown group for `model.time` and the chosen satellite exactly. */
   update(time: number, speed: number): void;
   /** The satellite nearest to a point of the view (CSS pixels) within `radius`, if one is in front of the Earth. */
-  pick(x: number, y: number, camera: THREE.PerspectiveCamera, size: { width: number; height: number }, radius: number): SatelliteRef | null;
+  pick(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): SatelliteRef | null;
   /** Where the chosen satellite is in the view, if it is. */
-  place(camera: THREE.PerspectiveCamera, size: { width: number; height: number }): { x: number; y: number } | null;
+  place(camera: THREE.Camera, size: { width: number; height: number }): { x: number; y: number } | null;
   /** The chosen satellite's position and velocity now (Earth radii, km/s), or false. */
   exact(ref: SatelliteRef, time: number, out: Float64Array): boolean;
   dispose(): void;
 }
 
-export function createSatelliteLayer(three: Three, scene: THREE.Scene, state: SatelliteState, ratio: () => number): SatelliteLayer {
+export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state: SatelliteState, ratio: () => number): SatelliteLayer {
   if (!three.Points) throw new Error("Satellites need `Points` from three.js: add it to the parts the three loader hands over (see setThreeLoader)");
   const Points = three.Points;
   const drawn = new Map<string, Drawn>();
   const tmp = new Float64Array(6);
   const projected = new three.Vector3();
+  const world = new three.Vector3();
+  const view = new three.Vector3();
 
   const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
@@ -241,28 +243,37 @@ export function createSatelliteLayer(three: Three, scene: THREE.Scene, state: Sa
       let best: SatelliteRef | null = null;
       let bestD = radius * radius;
       const c = camera.position;
+      const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
+      // an orthographic view looks along one direction: what is behind the Earth is further than its centre and inside its disc
+      const centreDepth = ortho ? view.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z : 0;
       for (const [name, entry] of drawn) {
         const group = state.groups.get(name);
         if (!group || !entry.points.visible) continue;
         const p = entry.positions;
         for (let i = 0; i < group.satellites.count; i += 1) {
           if (!group.satellites.visible(i)) continue;
-          projected.set(p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!).project(camera);
+          world.set(p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!).applyMatrix4(scene.matrixWorld);
+          projected.copy(world).project(camera);
           if (projected.z > 1 || projected.z < -1) continue;
           const dx = ((projected.x + 1) / 2) * size.width - x;
           const dy = ((1 - projected.y) / 2) * size.height - y;
           const d = dx * dx + dy * dy;
           if (d > bestD) continue;
-          // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
-          const px = p[i * 3]! - c.x;
-          const py = p[i * 3 + 1]! - c.y;
-          const pz = p[i * 3 + 2]! - c.z;
-          const len2 = px * px + py * py + pz * pz;
-          const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
-          const nx = c.x + px * t;
-          const ny = c.y + py * t;
-          const nz = c.z + pz * t;
-          if (nx * nx + ny * ny + nz * nz < 0.998) continue;
+          if (ortho) {
+            view.copy(world).applyMatrix4(camera.matrixWorldInverse);
+            if (view.z < centreDepth && view.x * view.x + view.y * view.y < 0.996) continue;
+          } else {
+            // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
+            const px = world.x - c.x;
+            const py = world.y - c.y;
+            const pz = world.z - c.z;
+            const len2 = px * px + py * py + pz * pz;
+            const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
+            const nx = c.x + px * t;
+            const ny = c.y + py * t;
+            const nz = c.z + pz * t;
+            if (nx * nx + ny * ny + nz * nz < 0.998) continue;
+          }
           best = { group: name, index: i };
           bestD = d;
         }
@@ -272,7 +283,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Scene, state: Sa
 
     place(camera, size) {
       if (!selectedPoints.visible) return null;
-      projected.set(selectedPosition[0]!, selectedPosition[1]!, selectedPosition[2]!).project(camera);
+      projected.set(selectedPosition[0]!, selectedPosition[1]!, selectedPosition[2]!).applyMatrix4(scene.matrixWorld).project(camera);
       if (projected.z > 1 || projected.z < -1) return null;
       return { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height };
     },
