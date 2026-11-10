@@ -128,12 +128,33 @@ if (flat && controls && stage) {
     if (pickedNote) pickedNote.hidden = false;
   }
 
+  /**
+   * The speed a view opens at: the first step of the Time row where motion can be seen (1 is real time, which looks frozen; 3600 is an hour a second, the Earth's turn and the night line move at once).
+   * MODULES-815: John's rule is that every view opens moving, from now, at the first speed where movement shows.
+   */
   const DEFAULT_SPEED = 3600;
-  const askedSpeed = Number(address.get("speed"));
+  /**
+   * Does a link that says nothing about the clock open moving for a reader who prefers reduced motion? John has not decided (MODULES-815), so today it opens still, as it did.
+   * Changing this to `true` is half the change: kazoku-ui's replay bar also switches Play off under reduced motion (its own rule), and that needs a kazoku-ui option first.
+   */
+  const OPEN_MOVING_WITH_REDUCED_MOTION = false;
+  const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  const askedPlay = address.get("play");
+  const askedSpeedText = address.get("speed");
+  const askedSpeed = askedSpeedText !== null && askedSpeedText !== "" ? Number(askedSpeedText) : NaN;
+  /** A link names a date when it has a `time` or a `mission` (a flight replay sets its own dates): the date it names is shown as it says, held unless the link also asks for Play or a speed. */
+  const namesDate = Number.isFinite(Date.parse(address.get("time") ?? "")) || address.get("mission") !== null;
+  /** Does the page open with the clock running? `play=on` and `play=off` say so; a link from before the bar that names a speed runs at it (`speed=0` holds); a link that says nothing about the clock, no date either, opens moving. */
+  const opensMoving = (): boolean => {
+    if (askedPlay === "on") return true;
+    if (askedPlay === "off") return false;
+    if (Number.isFinite(askedSpeed)) return askedSpeed !== 0;
+    return !namesDate && (!reducedMotion || OPEN_MOVING_WITH_REDUCED_MOTION);
+  };
   const clock = {
-    /** Playing: the space view's clock runs from the date shown at `speed` times real time. A link from before the bar that names a speed other than 0 and has no `play` keeps running. */
-    play: address.get("play") === "on" || (address.get("play") === null && Number.isFinite(askedSpeed) && askedSpeed !== 0),
-    /** Times real time while playing; no speed, or `speed=0`, gets an hour a second. */
+    /** Playing: the view's clock runs from the date shown at `speed` times real time. */
+    play: opensMoving(),
+    /** Times real time while playing; no speed, or `speed=0`, gets the first speed where motion shows. */
     speed: Number.isFinite(askedSpeed) && askedSpeed !== 0 ? askedSpeed : DEFAULT_SPEED,
   };
   let missionRow: ReturnType<typeof mountMissions> = null;
@@ -680,8 +701,9 @@ if (flat && controls && stage) {
       if (lights === "off") element.setAttribute("lights", "off");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
-      // the clock runs only while Play is on; with the date "now" and no Play the Sun is put right once a minute, and the date box follows
+      // the clock runs while Play is on (a link that says nothing opens playing, from now); held at "now" the Sun is put right once a minute, and the date box follows
       if (clock.play) element.setAttribute("speed", String(clock.speed));
+      else if (askedSpeed === 0 && askedPlay !== "off") element.setAttribute("speed", "0"); // a link that says `speed=0` holds the Earth where it opens, not on the real clock
       // the date box follows the clock while it runs, and once when it holds the date it stopped on is the date shown, in the address
       element.addEventListener("chikyu-timechange", (e) => {
         const { time, running } = (e as CustomEvent<{ time: number; running: boolean }>).detail;
@@ -789,7 +811,7 @@ if (flat && controls && stage) {
 
   // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
   // Play runs the clock from the date shown; Pause holds it there and writes the date reached to the address (`time`); Back goes to the date the reader chose. `play=on` and `speed` stay in the address.
-  // The space view opens held: a link with no `play` and `speed=0` (or no speed) stays held, and one from before the bar that names a speed other than 0 keeps running, as it did.
+  // A link that says nothing about the clock opens moving, from now, at DEFAULT_SPEED (MODULES-815). A link with `speed=0`, `play=off` or a date (`time`) holds; one that names a speed other than 0 runs at it.
   const missionBar = document.querySelector<ReplayBarElement>("#mission-replay");
   /** The date the reader chose (the address, the box or Now): Back returns to it. */
   let origin = Number.isFinite(Date.parse(address.get("time") ?? "")) ? Date.parse(address.get("time")!) : Date.now();
@@ -799,6 +821,8 @@ if (flat && controls && stage) {
   const momentOf = (view: ChikyuSpace | ChikyuEarthRealistic): number => (typeof view.time === "number" ? view.time : Date.now());
   /** Does the date the reader chose follow the real clock (no date in the address, or Now)? The realistic Earth is live then, and Back returns it to that. */
   let originLive = !Number.isFinite(Date.parse(address.get("time") ?? ""));
+  /** The reader held the clock with no date to write into the address (Back to "now", or Now while held): the address says `play=off`, so a link made then opens held, not moving. */
+  let heldNoDate = askedPlay === "off";
   /** The clock's speed: nothing runs while Play is off, and a held view draws nothing. The realistic Earth that was never played is live at "now" and is left alone until Play. */
   const runClock = (): void => {
     if (space) space.speed = clock.play ? clock.speed : 0;
@@ -813,16 +837,14 @@ if (flat && controls && stage) {
     replay.words = { group: say("time"), start: say("back") };
     replay.hidden = !clocked();
     if (!clocked()) return;
-    address.set("play", clock.play ? "on" : null);
+    address.set("play", clock.play ? "on" : heldNoDate ? "off" : null);
     address.set("speed", clock.speed === DEFAULT_SPEED ? null : String(clock.speed));
   }
-  /** Leaving the space view while it runs: the date it had reached is the date the next view shows, and Play is off. */
+  /** Leaving a 3D view while it runs: the date it had reached is the date the next view shows, and the next view goes on running from it (a reader who had paused it finds it held). */
   function settleClock(): void {
     const view = clocked();
     if (!view) return;
     if (clock.play) address.set("time", isoSecond(momentOf(view)));
-    clock.play = false;
-    replay.playing = false;
     address.set("play", null);
   }
   /** Play or Pause. Play starts from the date shown: a date that follows "now" becomes that moment, so the clock does not jump to a later now. */
@@ -836,6 +858,7 @@ if (flat && controls && stage) {
       address.set("time", isoSecond(at));
     }
     clock.play = on;
+    heldNoDate = false;
     markClock();
     runClock();
   }
@@ -847,6 +870,7 @@ if (flat && controls && stage) {
     if (action === "start") {
       // Back: the date the reader chose, held (the realistic Earth that was following the real clock goes back to following it)
       clock.play = false;
+      heldNoDate = originLive && real !== null;
       markClock();
       if (real && originLive) {
         real.removeAttribute("speed");
@@ -954,6 +978,9 @@ if (flat && controls && stage) {
     }
     if (space) space.time = "now";
     address.set("time", null);
+    // held at now with no date to keep: the address says so, or a link made now would open moving
+    heldNoDate = !clock.play && clocked() !== null;
+    markClock();
   });
 
   // The choices in the address: ?look=realistic&graticule=1&clouds=off&lights=off&time=2026-06-21T12:00Z
