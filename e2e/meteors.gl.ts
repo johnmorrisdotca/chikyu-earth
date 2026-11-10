@@ -67,6 +67,8 @@ test.describe("with motion allowed", () => {
     // the June solstice at 12:00 UTC: the Sun is over 0 E, 23.4 N
     // the camera is held over the ground so that the Sun stays over the middle while the clock runs (the default camera, in the stars, lets the Earth turn away from it)
     await openEarth(page, "time=2026-06-21T12:00Z&center=0,23.44&speed=60&meteors=on&camera=ground");
+    // the demo opens the 3D looks turning (Auto-turn, 6 degrees a second), which would carry the night side into view: hold the turn so only the clock moves
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
     await page.waitForTimeout(4000);
     const day = await meteors(page);
     expect(day.on).toBe(true);
