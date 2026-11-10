@@ -65,7 +65,8 @@ test.describe("with motion allowed", () => {
 
   test("next to none on the day side: with the Sun over the middle of the view almost nothing in sight is dark", async ({ page }) => {
     // the June solstice at 12:00 UTC: the Sun is over 0 E, 23.4 N
-    await openEarth(page, "time=2026-06-21T12:00Z&center=0,23.44&speed=60&meteors=on");
+    // the camera is held over the ground so that the Sun stays over the middle while the clock runs (the default camera, in the stars, lets the Earth turn away from it)
+    await openEarth(page, "time=2026-06-21T12:00Z&center=0,23.44&speed=60&meteors=on&camera=ground");
     await page.waitForTimeout(4000);
     const day = await meteors(page);
     expect(day.on).toBe(true);
