@@ -1,6 +1,6 @@
 // Play for the realistic Earth (MODULES-799), in a real browser, like e2e/date-play.demo.ts does for the space view: at 86400x for two seconds the date box reads a later day and the Sun
 // has moved with it; Play starts from the date shown, Pause holds it and writes it to the address, Back returns to the date chosen, and the address keeps play, the speed and the date.
-// Nothing is drawn while paused. Links from before the clock still work (a date holds, "now" follows the real clock), and a reader who prefers reduced motion gets Play left off.
+// Nothing is drawn while paused. A link that says nothing opens moving, from now, at an hour a second (MODULES-815); links from before the clock still work (a date holds, `speed=0` holds), and a reader who prefers reduced motion gets Play left off and a still view.
 import { COUNT_SCRIPT, readCounts } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
 import { untilStill } from "./gl.ts";
@@ -129,7 +129,7 @@ test("a speed is kept in the address and a reader who returns finds Play and the
   expect((await clockOf(page)).speed).toBe(86_400);
 });
 
-test("links from before the clock: a date holds, 'now' follows the real clock, and Play from 'now' starts at the moment shown", async ({ page }) => {
+test("links from before the clock: a date holds, and a link that says nothing opens moving, from now, at an hour a second (MODULES-815)", async ({ page }) => {
   await open(page, `time=${START}`);
   expect((await clockOf(page)).attribute, "no speed given").toBeNull();
   const start = await boxMs(page);
@@ -138,26 +138,39 @@ test("links from before the clock: a date holds, 'now' follows the real clock, a
 
   await page.goto(`${PAGE}?look=realistic&center=-100,40`);
   await page.locator(`${EARTH}[data-state=live]`).waitFor({ timeout: 90_000 });
-  const live = await clockOf(page);
-  expect(live.time, "no date: it follows the real clock").toBe("now");
-  expect(live.speed, "at real time").toBe(1);
-  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("live-seconds", "1"));
-  await page.waitForTimeout(2300);
-  expect(Math.abs((await boxMs(page)) - Date.now()), "and the box follows it").toBeLessThan(5 * 60_000);
-
+  await expect(play(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(speed(page, 3600)).toHaveAttribute("aria-pressed", "true");
+  const moving = await clockOf(page);
+  expect(moving.speed, "the element's clock runs at an hour a second").toBe(3600);
+  expect(moving.attribute).toBe("3600");
   const shown = await boxMs(page);
-  await speed(page, 1).click();
-  await play(page).click();
-  await page.waitForTimeout(1500);
-  expect(Math.abs((await boxMs(page)) - shown), "real time from the moment shown, not from a later now").toBeLessThan(5 * 60_000);
-  await timeInAddress(page, "the moment it started from is in the address").toBeGreaterThan(0);
+  expect(Math.abs(shown - Date.now()), "from now").toBeLessThan(5 * 60_000);
+  await boxMovesOn(page, shown, 3600_000, "and the date box runs with it");
   await inAddress(page, "play").toBe("on");
-  // Back to a date that was "now": it follows the real clock again
+  expect(param(page, "time"), "no date in the address while it runs from now").toBeNull();
+
+  // Back to a date that was "now": it follows the real clock again, and the address says it is held with no date
   await back(page).click();
   await page.waitForTimeout(500);
   expect((await clockOf(page)).time, "Back returns to following the real clock").toBe("now");
   await inAddress(page, "time", "and the address has no date").toBeNull();
+  await inAddress(page, "play", "and says it is held").toBe("off");
+  await page.reload();
+  await page.locator(`${EARTH}[data-state=live]`).waitFor({ timeout: 90_000 });
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  expect((await clockOf(page)).speed, "a link made then opens following the real clock, not moving").toBe(1);
+  await page.locator(EARTH).evaluate((el) => el.setAttribute("live-seconds", "1"));
+  await page.waitForTimeout(2300);
+  expect(Math.abs((await boxMs(page)) - Date.now()), "and the box follows it").toBeLessThan(5 * 60_000);
+});
+
+test("speed=0 on a plain link holds the realistic Earth where it opened", async ({ page }) => {
+  await open(page, "speed=0");
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  expect((await clockOf(page)).speed).toBe(0);
+  const start = await boxMs(page);
+  await page.waitForTimeout(1500);
+  expect(await boxMs(page)).toBe(start);
 });
 
 test("Now puts a paused Earth back on the real clock", async ({ page }) => {
@@ -230,5 +243,14 @@ test.describe("a reader who prefers reduced motion", () => {
     expect(await boxMs(page)).toBe(before);
     await page.waitForTimeout(400);
     expect(param(page, "play")).toBeNull();
+  });
+
+  test("a link that says nothing opens still, following the real clock, with Play off (John has not decided yet: OPEN_MOVING_WITH_REDUCED_MOTION in demo/demo.ts)", async ({ page }) => {
+    await open(page, "");
+    await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(play(page)).toBeDisabled();
+    const state = await clockOf(page);
+    expect(state.attribute, "no speed given").toBeNull();
+    expect(state.speed, "real time").toBe(1);
   });
 });

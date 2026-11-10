@@ -61,6 +61,12 @@ The demo's Time row is the family's replay bar (kazoku-ui's `<kazoku-replay-bar>
 - **Back to the date** returns to the date the reader chose (the address, the box or Now) and holds it.
 - Riding along a body or a satellite starts the clock, so the date moves with the ride.
 
-The address keeps `play=on` and `speed` (an hour a second is the default and is left out), and `time` when the clock stops and when the reader leaves the page. A reader who prefers reduced motion gets Play left off, even from an address that asks for it.
+The address keeps `play=on` (or `play=off`, see below) and `speed` (an hour a second is the default and is left out), and `time` when the clock stops and when the reader leaves the page. A reader who prefers reduced motion gets Play left off, even from an address that asks for it.
 
-The Time row runs on both the space view and the realistic Earth. The space view opens held. The realistic Earth opens as it always did, following the real clock at `now` and holding a date: Play from `now` starts from the moment shown and writes it into `time`, and Back returns to following the real clock when the date was `now`. A link from before the bar still works: `speed=0` is held, a link that names another speed and no `play` keeps running at it, as it did, and a link with neither opens held.
+The Time row runs on both the space view and the realistic Earth.
+
+- **A link that says nothing about the clock opens moving**, in the space view and the realistic Earth alike: the clock runs from now at an hour a second (`speed` 3600), and the date box runs with it. Real time would look frozen, so the demo starts at the first step of the Time row where motion shows. A reader who prefers reduced motion still gets a still view with Play off, until that is decided otherwise (`OPEN_MOVING_WITH_REDUCED_MOTION` in `demo/demo.ts`). Nothing is drawn while it is held, out of sight or in a hidden tab, and never more than 30 frames a second.
+- **A link that says something works as it says.** `speed=0` and `play=off` open held. A date (`time=...`) is shown as it says and held, until Play. A speed other than 0 with no `play` runs at that speed, as links from before the bar did, and `play=on` runs at the speed in the address (an hour a second without one).
+- **A Pause stays held.** It writes the date reached into `time`, so a link made then opens held on that date. Back to a date that was "now" on the realistic Earth, and Now pressed while held, have no date to write, so the address says `play=off`.
+- **The line and thick globes turn on their own** when the page opens (the view controls' Auto-turn, at the Earth's own rate, a sidereal day a turn), except for a reader who prefers reduced motion.
+- Play from `now` starts from the moment shown and writes it into `time`, and Back returns to following the real clock when the date was `now`.

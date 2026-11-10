@@ -130,7 +130,7 @@ test("a speed is kept in the address and a reader who returns finds Play and the
   await expect(speed(page, 86400)).toHaveAttribute("aria-pressed", "true");
 });
 
-test("links from before the bar: speed=0 stays held, a speed alone keeps running, and nothing at all opens held", async ({ page }) => {
+test("links from before the bar: speed=0 stays held, a speed alone keeps running, and a date alone is shown as it says, held", async ({ page }) => {
   await open(page, `time=${START}&speed=0`);
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
   expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number)).toBe(0);
@@ -149,6 +149,52 @@ test("links from before the bar: speed=0 stays held, a speed alone keeps running
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 90_000 });
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
   expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number)).toBe(0);
+});
+
+test("a link that says nothing about the clock opens moving, from now, at the first speed where motion shows, and the date box runs with it (MODULES-815)", async ({ page }) => {
+  await open(page, "");
+  await expect(play(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(speed(page, 3600)).toHaveAttribute("aria-pressed", "true");
+  expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number), "the element's clock runs at an hour a second").toBe(3600);
+  const before = await boxMs(page);
+  expect(Math.abs(before - Date.now()), "from now").toBeLessThan(5 * 60_000);
+  await expect.poll(async () => (await boxMs(page)) - before, { message: "the date box ran on", timeout: 8000 }).toBeGreaterThanOrEqual(3600_000);
+  await inAddress(page, "play").toBe("on");
+  // the reader's Pause is written to the address and a link made then stays held
+  await play(page).click();
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  await timeInAddress(page, "the date it stopped on is in the address").toBeGreaterThan(before);
+  await inAddress(page, "play").toBeNull();
+  await page.reload();
+  await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 90_000 });
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number), "held after a Pause").toBe(0);
+});
+
+test("a Pause with no date to keep (Now while held) is written as play=off, and a link made then opens held", async ({ page }) => {
+  await open(page, "");
+  await play(page).click();
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  await page.locator("#now").click();
+  await inAddress(page, "play").toBe("off");
+  await inAddress(page, "time").toBeNull();
+  await page.reload();
+  await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 90_000 });
+  await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number)).toBe(0);
+  await play(page).click();
+  await inAddress(page, "play").toBe("on");
+});
+
+test("the line and the thick globe turn on their own when the page opens", async ({ page }) => {
+  for (const look of ["line", "thick"]) {
+    await page.goto(`${PAGE}?look=${look}`);
+    await page.locator("chikyu-earth").waitFor();
+    const lon = (): Promise<number> => page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "state") as { yaw: number }).yaw);
+    expect(await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "state") as { turning: boolean }).turning), `the ${look} globe is turning on its own`).toBe(true);
+    const start = await lon();
+    await expect.poll(async () => Math.abs((await lon()) - start), { message: `the ${look} globe turned`, timeout: 8000 }).toBeGreaterThan(0.001);
+  }
 });
 
 test("the box is left alone while the reader is typing in it", async ({ page }) => {
@@ -177,13 +223,13 @@ test("nothing is drawn while paused, and the clock stops asking for frames", asy
   expect(after.rafRequests, "no frames asked for while paused").toBe(before.rafRequests);
 });
 
-test("the realistic Earth tells the page when its 'now' clock steps, and once when it is given a date", async ({ page }) => {
+test("the realistic Earth held at 'now' (play=off) tells the page when its clock steps, and once when it is given a date", async ({ page }) => {
   await page.addInitScript(() => {
     const log: { at: number; running: boolean; time: number }[] = [];
     Reflect.set(window, "__timechange", log);
     addEventListener("DOMContentLoaded", () => document.addEventListener("chikyu-timechange", (e) => log.push({ at: performance.now(), ...(e as CustomEvent<{ running: boolean; time: number }>).detail }), true));
   });
-  await page.goto(`${PAGE}?look=realistic&center=-100,40`);
+  await page.goto(`${PAGE}?look=realistic&center=-100,40&play=off`);
   await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 90_000 });
   await page.locator("chikyu-earth-realistic").evaluate((el) => el.setAttribute("live-seconds", "1"));
   await page.waitForTimeout(3300);
@@ -212,5 +258,14 @@ test.describe("a reader who prefers reduced motion", () => {
     expect(await boxMs(page)).toBe(before);
     await page.waitForTimeout(400);
     expect(param(page, "play")).toBeNull();
+  });
+
+  test("a link that says nothing opens still, with Play off (John has not decided yet whether it moves: OPEN_MOVING_WITH_REDUCED_MOTION in demo/demo.ts)", async ({ page }) => {
+    await open(page, "");
+    await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number)).toBe(0);
+    const before = await boxMs(page);
+    await page.waitForTimeout(1200);
+    expect(await boxMs(page)).toBe(before);
   });
 });
