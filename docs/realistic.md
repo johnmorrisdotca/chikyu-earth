@@ -71,14 +71,15 @@ rest after 4 seconds, and keeps the pictures above as the far view and the fallb
 |---|---|
 | `center="lon,lat"` | where the view starts (the reader's own place if left out and they allow it, as in the flat element) |
 | `time="2026-06-21T12:00Z"` | the moment shown; `now` (the default) follows the clock |
+| `speed="86400"` | seconds that pass for each real second, from the moment shown: `1` real time, `0` holds, `3600` an hour a second, `86400` a day a second, negative runs backwards. Left out, the clock follows `time`: real time for `now`, held for a date. Same name as `<chikyu-space>`'s; [the guide](guides/time-and-play.md) |
 | `clouds="off"`, `lights="off"` | switch the cloud layer or the night lights off |
 | `texture-base`, `max-texture` | where the pictures are; the widest one to use |
 | `tiles` | where a tile set is (a folder URL with `manifest.json`); finer tiles load for the part in view. A `max-texture` under 4096 turns them off |
 | `max-ratio` | the most device pixels to a CSS pixel the canvas is drawn at (2 at most; `0.5` draws at half the size and scales it up, for a background). Read when the element connects; the shared renderer keeps it for the whole page |
-| `live-seconds` | how often the Sun and clouds are put right while the time is `now` (60) |
+| `live-seconds` | how often the Sun and clouds are put right at real time, the time `now` (60); faster time is drawn as often as the Sun's turn moves a pixel, 1 to 30 times a second |
 
-Properties: `time` (a number of milliseconds, a `Date` or `"now"`), `centre`, `clouds`, `lights`, `tiles`, `view`, `stats` (with `stats.tiles`). Events: `chikyu-ready`,
-`chikyu-unavailable` (WebGL missing or a picture would not load; `detail.reason`), `chikyu-tier` (`detail.layer`, `detail.width`), `chikyu-tiles` (a tile set has been read; `detail.layers`, the finest width of each). `data-state` is
+Properties: `time` (a number of milliseconds, a `Date` or `"now"`; reads `"now"` while it follows the real clock, else the moment reached), `speed`, `centre`, `clouds`, `lights`, `tiles`, `view`, `stats` (with `stats.tiles`). Events: `chikyu-ready`,
+`chikyu-timechange` (`{ time, running }`: four a second at most while the clock runs, not from a hidden tab, and once with `running: false` when it holds), `chikyu-unavailable` (WebGL missing or a picture would not load; `detail.reason`), `chikyu-tier` (`detail.layer`, `detail.width`), `chikyu-tiles` (a tile set has been read; `detail.layers`, the finest width of each). `data-state` is
 `loading`, `live`, `lost` or `unavailable`.
 
 **Draws.** Changes made in one task (a `time` and a `setView` together) are one draw.
