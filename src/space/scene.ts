@@ -2,8 +2,9 @@
 // the Earth's centre, lit by the Sun so that the Moon's phase and the Earth's day side come out of the light, not out of a table. Draws only when asked.
 import type * as THREE from "three";
 import type { AssetCache, BuildContext, Item3D, Scene3D } from "@johnmorrisdotca/kazoku-ui/renderer";
-import { ATMOSPHERE_OUTER, sphere } from "../realistic/earth.ts";
-import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, BODY_FRAG, CLOUD_FRAG, GLOW_FRAG, GLOW_VERT, SURFACE_FRAG, SURFACE_VERT } from "../realistic/shaders.ts";
+import { AIR_QUALITY, AIR_TOP, AIR_VERT, airFrag } from "../realistic/air.ts";
+import { sphere } from "../realistic/earth.ts";
+import { BODY_FRAG, CLOUD_FRAG, GLOW_FRAG, GLOW_VERT, SURFACE_FRAG, SURFACE_VERT } from "../realistic/shaders.ts";
 import { createTextureSet, type ThreeParts } from "../realistic/textures.ts";
 import type { Layer } from "../realistic/tiers.ts";
 import type { LightMode } from "../realistic/earth.ts";
@@ -307,6 +308,8 @@ export interface SpaceDeps {
   invalidate: () => void;
   onError?: (error: unknown) => void;
   onTier?: (layer: Layer, width: number) => void;
+  /** How much the air costs: `full` (12 samples along the ray and 4 toward the Sun) or `light` (6 and 2, for a small or slow device). Read once, when the scene is built. */
+  air?: () => "full" | "light";
   /** Where each body is on the screen, in CSS pixels in the box, or null when it is behind the camera. Called at each draw. */
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
@@ -406,7 +409,6 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       /** The Sun in the Earth's own axes (the surface program finds where a cloud's shadow falls from it). */
       const sunLocal = { value: new three.Vector3(1, 0, 0) };
       const cloudShift = { value: 0 };
-      const sunView = { value: new three.Vector3(1, 0, 0) };
       const grid = sphere(three, 96, 48);
       const solid = sphere(three, 48, 24);
 
@@ -422,13 +424,14 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         transparent: true,
         depthWrite: false,
       });
+      // the air: light scattered once on its way through a shell 100 km thick, worked out for each pixel (the same program as the realistic Earth's), in the world's own axes
       const atmosphereMaterial = new three.ShaderMaterial({
-        vertexShader: ATMOSPHERE_VERT,
-        fragmentShader: ATMOSPHERE_FRAG,
-        uniforms: { sunView, outer: { value: ATMOSPHERE_OUTER }, ortho: { value: 0 } },
+        vertexShader: AIR_VERT,
+        fragmentShader: airFrag(AIR_QUALITY[deps.air?.() ?? "full"]),
+        uniforms: { sunDir: sunEarth, ortho: { value: 0 } },
         transparent: true,
+        premultipliedAlpha: true,
         depthWrite: false,
-        side: three.BackSide,
       });
 
       const earth = new three.Mesh(grid, earthMaterial);
@@ -436,8 +439,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       clouds.scale.setScalar(1.006);
       clouds.renderOrder = 3;
       const glow = new three.Mesh(grid, atmosphereMaterial);
-      glow.scale.setScalar(ATMOSPHERE_OUTER);
-      glow.renderOrder = 2;
+      glow.scale.setScalar(AIR_TOP);
+      glow.renderOrder = 4;
       glow.frustumCulled = false;
 
       const moonSun = { value: new three.Vector3(1, 0, 0) };
@@ -728,7 +731,6 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           camera.updateMatrixWorld();
           // always lit: the light comes from the camera's side of the Earth (the Sun, Moon and planets stay where they are)
           if (model.light === "lit") sunEarth.value.set(camera.position.x, camera.position.y, camera.position.z).normalize();
-          sunView.value.copy(sunEarth.value).transformDirection(camera.matrixWorldInverse);
           const pose = model.pose;
           pose.p[0] = camera.position.x;
           pose.p[1] = camera.position.y;

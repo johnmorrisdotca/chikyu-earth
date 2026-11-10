@@ -6,7 +6,8 @@ import type { AssetCache, BuildContext, Item3D, Scene3D } from "@johnmorrisdotca
 import type { GeoPoint, GlobeView } from "../types.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { HOME_VIEW, lookAt } from "../view.ts";
-import { ATMOSPHERE_FRAG, ATMOSPHERE_VERT, CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
+import { AIR_QUALITY, AIR_TOP, AIR_VERT, airFrag } from "./air.ts";
+import { CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
 import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "../space/satellite-layer.ts";
 import type { Layer } from "./tiers.ts";
@@ -105,6 +106,8 @@ export interface EarthDeps {
   invalidate: () => void;
   onError?: (error: unknown) => void;
   onTier?: (layer: Layer, width: number) => void;
+  /** How much the air costs: `full` (12 samples along the ray and 4 toward the Sun) or `light` (6 and 2, for a small or slow device). Read once, when the scene is built. */
+  air?: () => "full" | "light";
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
   /** Told at the start of every draw, before anything is read for it. */
@@ -246,13 +249,14 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         transparent: true,
         depthWrite: false,
       });
+      // the air: light scattered once on its way through a shell 100 km thick, worked out for each pixel and laid over the surface. A device that is small or slow takes fewer samples (the `light` quality).
       const atmosphere = new three.ShaderMaterial({
-        vertexShader: ATMOSPHERE_VERT,
-        fragmentShader: ATMOSPHERE_FRAG,
-        uniforms: { sunView: sunDir, outer: { value: ATMOSPHERE_OUTER }, ortho: { value: 1 } },
+        vertexShader: AIR_VERT,
+        fragmentShader: airFrag(AIR_QUALITY[deps.air?.() ?? "full"]),
+        uniforms: { sunDir, ortho: { value: 1 } },
         transparent: true,
+        premultipliedAlpha: true,
         depthWrite: false,
-        side: three.BackSide,
       });
 
       const turned = new three.Group();
@@ -269,8 +273,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       clouds.renderOrder = 2;
       turned.add(earth, clouds);
       const glow = new three.Mesh(grid, atmosphere);
-      glow.scale.setScalar(ATMOSPHERE_OUTER);
-      glow.renderOrder = 1;
+      glow.scale.setScalar(AIR_TOP);
+      glow.renderOrder = 3;
       glow.frustumCulled = false;
       const scene = new three.Scene();
       scene.add(turned, glow);

@@ -1,5 +1,5 @@
-// The three programs of the realistic Earth, as GLSL strings: the surface (day, night, sun glint, rim), the cloud layer and the
-// atmosphere's glow. Colours are shaded in the textures' own (sRGB) space: a look, not a radiometric model.
+// The programs of the realistic Earth, as GLSL strings: the surface (day, night, sun glint), the cloud layer and the Moon and the Sun's glow. The air is `air.ts`.
+// Colours are shaded in the textures' own (sRGB) space: a look, not a radiometric model.
 
 export const SURFACE_VERT = /* glsl */ `
 varying vec2 vUv;
@@ -19,8 +19,8 @@ void main() {
  * - the Sun's light reddens towards the terminator and the twilight has a warm band on the lit side and a blue hour beyond it;
  * - the ocean is a clearer blue, with a hard glint under the Sun, a broad sheen round it, and the sky reflected at grazing angles; clouds hide the glint;
  * - the clouds throw a shadow on the ground, displaced away from the Sun and longer as it gets low;
- * - the night side has the city lights warm and softly spread, dimmed where cloud covers them;
- * - the air shows as a rim on the limb, blue by day and orange along the terminator.
+ * - the night side has the city lights warm and softly spread, dimmed where cloud covers them.
+ * The air over it is the air program's (`air.ts`), drawn over the surface, so the surface has no rim of its own.
  */
 const surfaceFrag = (tile: boolean): string => /* glsl */ `
 uniform sampler2D dayMap;
@@ -85,10 +85,6 @@ void main() {
   vec3 col = mix(night, lit, day);
   col += pow(albedo, vec3(0.75)) * boost * 0.65 * (1.0 - day);
 
-  float rim = pow(1.0 - ndv, 3.0);
-  float sunSide = 0.12 + 0.88 * smoothstep(-0.25, 0.5, ndl);
-  vec3 rimColour = mix(vec3(0.20, 0.45, 1.0), vec3(1.0, 0.45, 0.18), 0.8 * (1.0 - smoothstep(0.0, 0.30, abs(ndl))));
-  col += rimColour * rim * sunSide * 0.6;
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -136,43 +132,6 @@ void main() {
   vec3 col = mix(vec3(0.015, 0.02, 0.04), vec3(1.0), day * (0.18 + 0.82 * pow(max(ndl, 0.0), 0.45)));
   col += vec3(0.55, 0.28, 0.14) * smoothstep(-0.14, 0.0, ndl) * (1.0 - smoothstep(0.0, 0.25, ndl)) * 0.35;
   gl_FragColor = vec4(col, a);
-}`;
-
-export const ATMOSPHERE_VERT = /* glsl */ `
-varying vec3 vPosView;
-varying vec3 vNormalView;
-void main() {
-  vec4 view = modelViewMatrix * vec4(position, 1.0);
-  vPosView = view.xyz;
-  vNormalView = normalize(normalMatrix * position);
-  gl_Position = projectionMatrix * view;
-}`;
-
-export const ATMOSPHERE_FRAG = /* glsl */ `
-uniform vec3 sunView;
-uniform float outer;
-uniform float ortho;
-varying vec3 vPosView;
-varying vec3 vNormalView;
-void main() {
-  vec3 n = normalize(vNormalView);
-  vec3 v = ortho > 0.5 ? vec3(0.0, 0.0, 1.0) : normalize(-vPosView);
-  float nz = clamp(dot(n, v), -1.0, 1.0);
-  float rho = outer * sqrt(max(0.0, 1.0 - nz * nz));
-  float t = clamp((rho - 1.0) / (outer - 1.0), 0.0, 1.0);
-  vec2 dir = normalize(n.xy + vec2(1e-5, 0.0));
-  // the Sun's light at this point of the limb: 1 where the Sun stands behind it, 0 at the terminator, -1 on the night side
-  float toward = dot(vec3(dir, 0.0), sunView);
-  float side = smoothstep(-0.45, 0.45, toward);
-  // a thin bright layer on the limb and a wide faint halo, both fading to nothing at the outer edge
-  float limb = pow(1.0 - t, 5.0);
-  float halo = pow(1.0 - t, 2.2);
-  float glow = (limb * 0.85 + halo * 0.35) * (0.06 + 0.94 * side);
-  vec3 day = mix(vec3(0.30, 0.52, 0.95), vec3(0.50, 0.74, 1.0), limb);
-  vec3 dusk = mix(vec3(1.0, 0.42, 0.16), vec3(1.0, 0.62, 0.30), limb);
-  float band = exp(-pow(toward / 0.32, 2.0));
-  vec3 col = mix(mix(vec3(0.06, 0.12, 0.35), day, side), dusk, band * 0.85);
-  gl_FragColor = vec4(col, clamp(glow, 0.0, 1.0) * (1.0 - t));
 }`;
 
 /** The Moon and other plain bodies: a picture (or a flat colour) lit by the Sun, with a trace of light on the dark side. */

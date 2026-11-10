@@ -4,6 +4,7 @@ import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "../adopt.ts";
 import type { GeoPoint } from "../types.ts";
+import { airFor } from "../realistic/air.ts";
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
@@ -271,6 +272,7 @@ export class ChikyuSpace extends HTMLElement {
       assets: taken.renderer.assets,
       textureBase: () => this.#textureBase(),
       cap: () => this.#textureCap(),
+      air: () => airFor(this.getAttribute("air")),
       invalidate: () => this.#gate?.request(),
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
       onTier: (layer: Layer, width: number) => {

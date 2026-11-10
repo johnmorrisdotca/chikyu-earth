@@ -7,3 +7,4 @@ export { lookAt, discRadius, ATMOSPHERE_OUTER, cameraCentre, type CameraMode, ty
 export type { ThreeParts } from "./earth.ts";
 export { TEXEL_SLACK, coveringTile, parseManifest, pointOnEarth, tileColumns, tileLevel, tileRect, tileRows, tilesInView, type TileCamera, type TileId, type TileLayer, type VisibleTile } from "./tiles.ts";
 export { TILE_KEEP_MS, TILE_LIMIT } from "./tile-set.ts";
+export { AIR_QUALITY, AIR_TOP, AIR_VERT, airFor, airFrag, type AirSamples } from "./air.ts";

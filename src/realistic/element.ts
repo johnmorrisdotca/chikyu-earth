@@ -5,6 +5,7 @@ import { carryControls, type ElementControls, type ViewController } from "@johnm
 import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
+import { airFor } from "./air.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
@@ -236,6 +237,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         }
         this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } }));
       },
+      air: () => airFor(this.getAttribute("air")),
       invalidate: () => this.#gate?.soon(),
       onDraw: () => this.#gate?.drawn(),
       onPose: (pose) => {
