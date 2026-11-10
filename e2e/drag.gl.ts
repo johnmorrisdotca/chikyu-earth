@@ -154,7 +154,8 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
   await dragBy(page, page.locator(GLOBE), 40, -20);
   await settle(page, 1500);
   const dragged = await stateOf();
-  expect(dragged.yaw).toBeGreaterThan(-21 + 10);
+  // a drag turns by the share of the view it crosses, and the view now fills the whole felt (wider than the old square), so the same 40 pixels turn a little less
+  expect(dragged.yaw).toBeGreaterThan(-21 + 5);
   const url = new URL(page.url());
   expect(Number(url.searchParams.get("yaw")), "the address follows the drag").toBeCloseTo(dragged.yaw, 0);
   expect(Number(url.searchParams.get("tilt"))).toBeCloseTo(dragged.tilt, 0);

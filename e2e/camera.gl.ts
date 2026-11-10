@@ -65,9 +65,9 @@ test("held on the Sun's side, the camera follows the Sun's own place and the day
   expect(asked).toBe("sun");
 });
 
-test("the camera is one of three words, and anything else is the ground", async ({ page }) => {
+test("the camera is one of three words, and anything else is the camera in the stars", async ({ page }) => {
   await open(page, "nonsense");
-  expect(await page.locator(EARTH).evaluate((el) => Reflect.get(el, "camera"))).toBe("ground");
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("camera", "space"));
   expect(await page.locator(EARTH).evaluate((el) => Reflect.get(el, "camera"))).toBe("space");
+  await page.locator(EARTH).evaluate((el) => el.setAttribute("camera", "ground"));
+  expect(await page.locator(EARTH).evaluate((el) => Reflect.get(el, "camera"))).toBe("ground");
 });

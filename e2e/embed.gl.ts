@@ -1,4 +1,5 @@
 // The embed page on the realistic look: one WebGL context, a canvas inside its budget, nothing drawn once it rests.
+import { fitDistance } from "../src/space/scene.ts";
 import { expect, test } from "@playwright/test";
 import { COUNT_SCRIPT, counts, EARTH, NOON, ownClock, settle, statsOf, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
@@ -55,7 +56,7 @@ test("the address chooses the clock, the scale, the body and the part of the sky
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
   await expect(page.locator(SPACE)).toHaveAttribute("scale", "true");
   await expect(page.locator(SPACE)).toHaveAttribute("speed", "0");
-  await expect.poll(async () => (await spaceStats(page)).distance).toBeCloseTo(3.4 * (3389.5 / 6371), 1);
+  await expect.poll(async () => (await spaceStats(page)).distance).toBeCloseTo(fitDistance(0.9, 1) * (3389.5 / 6371), 1);
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => [...el.shadowRoot!.querySelectorAll(".sp-label:not([hidden])")].map((n) => n.textContent))).toContain("Mars");
   await page.goto(`/chikyu-earth/embed.html?look=space&time=${NOV2}&zoom=solar-system&labels=1`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor();

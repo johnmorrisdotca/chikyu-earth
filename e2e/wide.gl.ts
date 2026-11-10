@@ -27,18 +27,19 @@ for (const { look, tag } of LOOKS) {
     await settle(page);
     const before = await page.locator(tag).boundingBox();
     const small = await statsOf(page, tag);
-    expect(before!.width).toBeLessThanOrEqual(420);
+    expect(before!.width, "the felt's whole width, not a 420 square in it").toBeGreaterThan(430);
 
     await page.locator("kazoku-wide-toggle").getByRole("button").click();
     await expect(page.locator("html")).toHaveAttribute("data-wide", "on");
-    await expect.poll(async () => (await page.locator(tag).boundingBox())!.width).toBeGreaterThan(before!.width * 1.3);
+    await expect.poll(async () => (await page.locator(tag).boundingBox())!.width).toBeGreaterThan(before!.width * 1.1);
     // it draws again for the new size: the canvas is as big as the element, in device pixels, and still one context
     await expect.poll(async () => (await statsOf(page, tag)).canvas.width, { timeout: 15_000 }).toBeGreaterThan(small.canvas.width * 1.2);
     await settle(page);
     const box = (await page.locator(tag).boundingBox())!;
     const ratio = await page.evaluate(() => window.devicePixelRatio);
     const big = await statsOf(page, tag);
-    expect(Math.abs(box.width - box.height), "round").toBeLessThan(1);
+    const felt = (await page.locator(".earth-stage").boundingBox())!;
+    expect(Math.abs(box.width - felt.width) + Math.abs(box.height - felt.height), "the whole felt, edge to edge").toBeLessThan(2);
     expect(big.draws, "drawn again").toBeGreaterThan(small.draws);
     expect(big.canvas.width, "sharp: a device pixel for every pixel of the picture").toBeGreaterThanOrEqual(Math.floor(box.width * ratio) - 1);
     expect(withinPixelBudget({ pixels: big.canvas.pixels, side: Math.max(big.canvas.width, big.canvas.height), count: 1 })).toBe(true);
@@ -47,7 +48,7 @@ for (const { look, tag } of LOOKS) {
     // and back to Normal: the canvas goes back down with the element
     await page.keyboard.press("t");
     await expect(page.locator("html")).not.toHaveAttribute("data-wide", "on");
-    await expect.poll(async () => (await page.locator(tag).boundingBox())!.width).toBeLessThanOrEqual(420);
+    await expect.poll(async () => (await page.locator(tag).boundingBox())!.width).toBeLessThanOrEqual(before!.width + 1);
     await expect.poll(async () => (await statsOf(page, tag)).canvas.width, { timeout: 15_000 }).toBeLessThanOrEqual(small.canvas.width + 1);
   });
 }

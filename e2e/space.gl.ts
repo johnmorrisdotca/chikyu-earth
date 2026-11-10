@@ -203,6 +203,8 @@ test.describe("the controls' Auto-turn", () => {
 
   test("at the Earth's own rate it moves nothing a person can see in seconds, so it draws about once in half a minute, not thirty times a second", async ({ page }) => {
     await open(page);
+    // the demo opens the 3D looks turning at a speed that can be seen (6 degrees a second); this test is about the Earth's own rate
+    await page.locator("kazoku-view-controls").evaluate((el) => el.setAttribute("speed", "0.004178"));
     await page.locator("kazoku-view-controls").evaluate((el) => {
       const controls = el as HTMLElement & { state: { turning: boolean }; play(): void };
       if (!controls.state.turning) controls.play();
