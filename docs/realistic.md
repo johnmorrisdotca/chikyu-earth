@@ -72,6 +72,8 @@ rest after 4 seconds, and keeps the pictures above as the far view and the fallb
 | `center="lon,lat"` | where the view starts (the reader's own place if left out and they allow it, as in the flat element) |
 | `time="2026-06-21T12:00Z"` | the moment shown; `now` (the default) follows the clock |
 | `speed="86400"` | seconds that pass for each real second, from the moment shown: `1` real time, `0` holds, `3600` an hour a second, `86400` a day a second, negative runs backwards. Left out, the clock follows `time`: real time for `now`, held for a date. Same name as `<chikyu-space>`'s; [the guide](guides/time-and-play.md) |
+| `camera="space"` | how the camera is held: `ground` (the default, over a place on the ground), `space` (in the stars: the Earth turns beneath it) or `sun` (on the Sun's side: the day and night line keeps its place on the screen); [the guide](guides/full-screen-and-camera.md) |
+| `immersive` | full screen: the element fills its box in any shape, a plain wheel zooms and a touch drag turns; [the guide](guides/full-screen-and-camera.md) |
 | `clouds="off"`, `lights="off"` | switch the cloud layer or the night lights off |
 | `texture-base`, `max-texture` | where the pictures are; the widest one to use |
 | `tiles` | where a tile set is (a folder URL with `manifest.json`); finer tiles load for the part in view. A `max-texture` under 4096 turns them off |
@@ -123,3 +125,7 @@ hands over only the parts it uses (`setThreeLoader(() => import("./three-subset"
 
 There is one WebGL context per page. With several `<chikyu-earth-realistic>` elements on a page the one you last touched is live and the others are empty until
 you touch them; for a wall of globes use kazoku-ui's renderer directly.
+
+## Satellites on the realistic Earth
+
+The realistic Earth draws satellite groups with the same calls as `<chikyu-space>`: `setSatellites(group, satellites, style)`, `showSatellites`, `satelliteGroups`, `selectSatellite`, `selectedSatellite`, `satelliteInfo`, the event `chikyu-satellite-click` and `stats.satellites`. A group is one draw call, so every group can be on at once; a satellite behind the Earth is hidden by it; the clock above `MAX_SATELLITE_SPEED` hides the groups. [Full screen, the camera in the stars and every satellite](guides/full-screen-and-camera.md).

@@ -13,7 +13,7 @@ const pkg = JSON.parse(readFileSync(at("package.json"), "utf8"));
 await rm(at("site/"), { recursive: true, force: true });
 await mkdir(at("site/"), { recursive: true });
 await build({
-  entryPoints: [at("demo/demo.ts"), at("demo/embed.ts"), at("demo/builder.ts"), at("demo/kids.ts"), at("demo/passes.ts"), at("demo/passes-embed.ts")],
+  entryPoints: [at("demo/demo.ts"), at("demo/fullscreen.ts"), at("demo/embed.ts"), at("demo/builder.ts"), at("demo/kids.ts"), at("demo/passes.ts"), at("demo/passes-embed.ts")],
   bundle: true,
   splitting: true,
   format: "esm",
@@ -52,4 +52,5 @@ await writeFile(at("site/kids.html"), renderKids(), "utf8");
 await writeFile(at("site/passes.html"), renderPasses(), "utf8");
 await writeFile(at("site/passes-embed.html"), renderPassesEmbed(), "utf8");
 await cp(at("demo/builder.html"), at("site/builder.html"));
+await cp(at("demo/fullscreen.html"), at("site/fullscreen.html"));
 console.log("site built: index.html, embed.html, kids.html, passes.html, passes-embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/, missions/");

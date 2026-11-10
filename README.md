@@ -162,7 +162,7 @@ atmosphere at the rim, drawn with three.js through kazoku-ui's shared renderer. 
 
 Needs `three` and `@johnmorrisdotca/kazoku-ui` (both optional peers) and the pictures (1.6 MB, from NASA, in `dist/textures/`). It draws nothing while nothing changes,
 at most 30 times a second while it does, in one WebGL context, with textures that grow as you zoom and are freed after. With `tiles="/tiles/"` (a folder of NASA map
-tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view, so you can zoom in to 20 times and stay sharp. With `speed="86400"` (a day a second; the name `<chikyu-space>` uses) its clock runs on from the date shown and the Sun, the night side and the clouds follow it ([guide](docs/guides/time-and-play.md)). All of it, the budget and the tests:
+tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view, so you can zoom in to 20 times and stay sharp. With `speed="86400"` (a day a second; the name `<chikyu-space>` uses) its clock runs on from the date shown and the Sun, the night side and the clouds follow it ([guide](docs/guides/time-and-play.md)). `immersive` fills the window, `camera="space"` holds the camera in the stars so the Earth turns beneath it, and it draws every satellite group at once ([guide](docs/guides/full-screen-and-camera.md)). All of it, the budget and the tests:
 [docs/realistic.md](docs/realistic.md).
 
 ## The Sun, the Moon and the planets
@@ -428,6 +428,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [TypeScript and Node](docs/guides/typescript-and-node.md) | Types and the pure side |
 | [The realistic Earth and markers](docs/guides/realistic-and-markers.md) | The Earth from space, markers |
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
+| [Full screen, the camera in the stars and every satellite](docs/guides/full-screen-and-camera.md) | `immersive`, `camera="space"`, the Earth's look, and every satellite group on the realistic Earth |
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |

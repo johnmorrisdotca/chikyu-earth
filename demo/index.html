@@ -58,6 +58,12 @@
                 <div class="fam-row" id="real-controls" hidden data-help-en="The realistic look lights the Earth by the real Sun at this moment. Choose another date and time, or go back to now." data-help-ja="リアルな見た目では、この時刻の本物の太陽で地球を照らします。ほかの日時を選ぶか、「今」に戻せます。">
                   <button type="button" class="fam-button" id="clouds" aria-pressed="true" data-say="clouds">Clouds</button>
                   <button type="button" class="fam-button" id="lights" aria-pressed="true" data-say="lights">City lights</button>
+                  <span class="fam-label" data-say="camera">Camera</span>
+                  <div class="group fam-seg" role="group" aria-label="Camera" data-say-label="camera" data-help-en="Ground keeps the camera over one place on the ground, so the Earth keeps still while the light moves across it. Space holds the camera in the stars: the Earth turns beneath it, and the day and night line is where the Sun really puts it. Sun side holds the camera on the Sun's side: the day and night line stays on the screen while the Earth turns beneath." data-help-ja="「地上」はカメラを地上の一点の上に置くので、地球は動かず、光だけが動きます。「宇宙」はカメラを星に対して止めます。地球がその下で回り、昼夜の境目は太陽が実際にある場所に出ます。「太陽側」はカメラを太陽の側に置くので、地球が回っても昼夜の境目は画面の同じ場所にあります。">
+                    <button type="button" data-camera="ground" class="on" data-say="camera_ground">Ground</button>
+                    <button type="button" data-camera="space" data-say="camera_space">Space</button>
+                    <button type="button" data-camera="sun" data-say="camera_sun">Sun side</button>
+                  </div>
                 </div>
                 <div class="fam-row" id="light-controls" hidden data-help-en="Sun is the true light: the night side is dark. Always lit shows the day picture lit from the camera's side, so a ride on the night side is never a black frame. Night boost keeps the true day and night but raises the night side so land and coasts show." data-help-ja="「太陽」は本物の光で、夜の側は暗くなります。「いつも明るい」は、カメラの側から昼の画像を照らすので、夜の側を回っても真っ暗になりません。「夜を明るく」は、昼と夜はそのままで、夜の側を持ち上げて陸と海岸が見えるようにします。">
                   <span class="fam-label" data-say="light">Light</span>

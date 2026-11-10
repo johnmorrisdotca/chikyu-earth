@@ -236,6 +236,9 @@ if (flat && controls && stage) {
   };
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(relabelSatellites));
   relabelSatellites();
+  /** The view the satellites are on: the space view, or the realistic Earth (which shows them too). */
+  const satHost = (): ChikyuSpace | ChikyuEarthRealistic | null => space ?? real;
+  const msOf = (view: ChikyuSpace | ChikyuEarthRealistic): number => (view.time === "now" ? Date.now() : view.time);
   let lastGroup: string | null = null;
   let chosen: SatelliteRef | null = null;
 
@@ -260,9 +263,10 @@ if (flat && controls && stage) {
     return [say("satFact", { name: info.name, altitude: Math.round(info.altitudeKm), speed: info.speedKmS.toFixed(2), period: Math.round(info.periodMinutes), age: ageText(info.ageDays) }), stale, aboutText(info.noradId)].filter(Boolean).join(" ");
   };
   const showSatellite = (ref: SatelliteRef | null): void => {
-    space?.selectSatellite(ref);
+    satHost()?.selectSatellite(ref);
     chosen = ref;
-    const info = ref && space ? space.satelliteInfo(ref) : undefined;
+    const host = satHost();
+    const info = ref && host ? host.satelliteInfo(ref) : undefined;
     if (satInfo) {
       satInfo.hidden = !info;
       satInfo.textContent = info ? describeSatellite(info) : "";
@@ -278,9 +282,10 @@ if (flat && controls && stage) {
     if (!satNote) return;
     const shown = [...shownGroups].filter((id) => made.has(id) && filesOf.has(id));
     satNote.hidden = shown.length === 0;
-    if (!shown.length || !space) return;
+    const host = satHost();
+    if (!shown.length || !host) return;
     const oldest = Math.min(...shown.map((id) => Date.parse(filesOf.get(id)!.retrieved)));
-    const dim = shown.reduce((sum, id) => sum + made.get(id)!.sets.filter((set) => Math.abs(space!.time - Date.parse(`${set.EPOCH}Z`)) > DEFAULT_DIM_AFTER_DAYS * 86_400_000).length, 0);
+    const dim = shown.reduce((sum, id) => sum + made.get(id)!.sets.filter((set) => Math.abs(msOf(host) - Date.parse(`${set.EPOCH}Z`)) > DEFAULT_DIM_AFTER_DAYS * 86_400_000).length, 0);
     const locale = say("locale");
     satNote.textContent = [say("satNote", { ago: ago(oldest), shown: shown.reduce((sum, id) => sum + made.get(id)!.count, 0).toLocaleString(locale), all: shown.reduce((sum, id) => sum + filesOf.get(id)!.all, 0).toLocaleString(locale), limit: 60 }), dim ? say("satDim", { n: dim, days: DEFAULT_DIM_AFTER_DAYS }) : "", shown.some((id) => filesOf.get(id)!.source === "spacetrack") ? say("satSpaceTrack") : ""].filter(Boolean).join(" ");
   };
@@ -300,14 +305,15 @@ if (flat && controls && stage) {
   };
   /** Show or hide one group on the space view; the first time, make it. The elements are a snapshot: if it is too old for the date shown, show the day it was downloaded instead. */
   async function toggleGroup(name: string, on: boolean, fit = false): Promise<void> {
-    if (!space) return;
+    const host = satHost();
+    if (!host) return;
     const button = satButtons.find((b) => b.dataset["satGroup"] === name);
     button?.setAttribute("aria-pressed", String(on));
     if (on) shownGroups.add(name);
     else shownGroups.delete(name);
     address.set("sats", shownGroups.size ? [...shownGroups].join(",") : null);
     if (!on) {
-      space.showSatellites(name, false);
+      host.showSatellites(name, false);
       noteSatellites();
       noteGroup();
       return;
@@ -316,17 +322,17 @@ if (flat && controls && stage) {
     try {
       const group = await groupOf(name);
       const retrieved = Date.parse(filesOf.get(name)!.retrieved);
-      if (Math.abs(space.time - retrieved) > DEFAULT_DIM_AFTER_DAYS * 86_400_000 && address.get("time") === null) {
-        space.time = retrieved;
+      if (Math.abs(msOf(host) - retrieved) > DEFAULT_DIM_AFTER_DAYS * 86_400_000 && address.get("time") === null) {
+        host.time = retrieved;
         if (when) when.value = localValue(retrieved);
         now?.setAttribute("aria-pressed", "false");
         notice(say("satOld", { days: Math.round(Math.abs(Date.now() - retrieved) / 86_400_000), date: filesOf.get(name)!.retrieved.slice(0, 10) }));
       }
-      if (!space.satelliteGroups.some((one) => one.name === name)) space.setSatellites(name, group, GROUP_STYLE[name]!);
-      else space.showSatellites(name, true);
+      if (!host.satelliteGroups.some((one) => one.name === name)) host.setSatellites(name, group, GROUP_STYLE[name]!);
+      else host.showSatellites(name, true);
       noteSatellites();
       noteGroup();
-      if (fit && !space.riding) {
+      if (fit && !(host as ChikyuSpace).riding) {
         const reach = reachOf(group.sets);
         if (reach > 1.6) Reflect.get(controls!, "controller").set({ zoom: Math.min(1, 1.8 / reach) }, true, "satellites");
       }
@@ -343,7 +349,7 @@ if (flat && controls && stage) {
   const squash = (text: string): string => text.toUpperCase().replace(/[^A-Z0-9]+/g, "");
   /** Switch the satellite's group on and mark it as the chosen one. */
   async function chooseSatellite(noradId: number, group?: string): Promise<boolean> {
-    if (!space) return false;
+    if (!satHost()) return false;
     let name = made.get("yours")?.sets.some((set) => set.NORAD_CAT_ID === noradId) ? "yours" : group;
     if (name !== "yours") {
       try {
@@ -411,7 +417,8 @@ if (flat && controls && stage) {
     sourceNote.textContent = text ?? "";
   };
   async function loadSource(): Promise<void> {
-    if (!space || !sourceBox) return;
+    const view = satHost();
+    if (!view || !sourceBox) return;
     const url = sourceBox.value.trim();
     if (!url) {
       noteSource(null);
@@ -428,7 +435,7 @@ if (flat && controls && stage) {
       const group = createSatellites(source.sets);
       made.set("yours", group);
       filesOf.set("yours", { id: "yours", retrieved: new Date(source.retrievedAt).toISOString(), all: source.sets.length + source.skipped.length, fields: [], rows: [] });
-      if (space.satelliteGroups.some((one) => one.name === "yours")) space.setSatellites("yours", null);
+      if (view.satelliteGroups.some((one) => one.name === "yours")) view.setSatellites("yours", null);
       address.set("src", url);
       if (!satButtons.some((b) => b.dataset["satGroup"] === "yours")) {
         const button = document.createElement("button");
@@ -580,6 +587,24 @@ if (flat && controls && stage) {
     });
   }
   markLight();
+  // how the camera is held on the realistic Earth: over the ground (the Earth keeps still), in the stars (it turns beneath) or on the Sun's side
+  let cameraMode = ["space", "sun"].includes(address.get("camera") ?? "") ? (address.get("camera") as string) : "ground";
+  const cameraButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-camera]")];
+  const markCamera = (): void => {
+    for (const b of cameraButtons) {
+      b.classList.toggle("on", b.dataset["camera"] === cameraMode);
+      b.setAttribute("aria-pressed", String(b.dataset["camera"] === cameraMode));
+    }
+    address.set("camera", cameraMode === "ground" ? null : cameraMode);
+  };
+  for (const button of cameraButtons) {
+    button.addEventListener("click", () => {
+      cameraMode = button.dataset["camera"] ?? "ground";
+      real?.setAttribute("camera", cameraMode);
+      markCamera();
+    });
+  }
+  markCamera();
   let planetsTried = false;
   let planetsHere = false;
   let bodiesLook = ["realistic", "painted", "plain"].includes(address.get("bodies") ?? "") ? (address.get("bodies") as string) : "realistic";
@@ -700,7 +725,9 @@ if (flat && controls && stage) {
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
+      if (cameraMode !== "ground") element.setAttribute("camera", cameraMode);
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
+      element.addEventListener("chikyu-satellite-click", (e) => showSatellite((e as CustomEvent<SatelliteRef>).detail));
       // the clock runs while Play is on (a link that says nothing opens playing, from now); held at "now" the Sun is put right once a minute, and the date box follows
       if (clock.play) element.setAttribute("speed", String(clock.speed));
       else if (askedSpeed === 0 && askedPlay !== "off") element.setAttribute("speed", "0"); // a link that says `speed=0` holds the Earth where it opens, not on the real clock
@@ -727,8 +754,14 @@ if (flat && controls && stage) {
     if (realControls) realControls.hidden = false;
     if (lightControls) lightControls.hidden = false;
     if (timeControls) timeControls.hidden = false;
+    if (satControls) satControls.hidden = false;
     markClock();
-    for (const box of [spaceControls, scaleNote]) if (box) box.hidden = true;
+    for (const box of [spaceControls, scaleNote, rideControls]) if (box) box.hidden = true;
+    // the satellites are on the realistic Earth too: the groups shown stay shown
+    for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
+    for (const name of shownGroups) void toggleGroup(name, true);
+    const wanted = Number(address.get("sat"));
+    if (wanted) void chooseSatellite(wanted);
     return true;
   }
 
