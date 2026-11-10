@@ -39,7 +39,19 @@ export function fitDistance(size: number, aspect: number): number {
   return Math.sqrt(1 + 1 / (across * Math.tan((FOV / 2) * RAD)) ** 2);
 }
 
-/** The camera at the centre of the Earth's view: `ground` is held over a place on the ground (the Earth keeps still, the clock moves the light), `space` is held in the stars at the direction the place was in when it was set (the Earth turns beneath it), `sun` is held on the Sun's side (the day and night line keeps its place while the Earth turns). */
+/**
+ * The camera at the centre of the Earth's view: `ground` is held over a place on the ground (the Earth keeps still, the clock moves the light), `space` is held in the stars at the direction the place was in when it was set (the Earth turns beneath it), `sun` is held on the Sun's side (the day and night line keeps its place while the Earth turns).
+ *
+ * @example
+ * ```ts no-run
+ * import type { CameraMode, ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const hold = (space: ChikyuSpace, mode: CameraMode): void => {
+ *   space.camera = mode;
+ * };
+ * console.log(typeof hold);
+ * ```
+ */
 export type CameraMode = "ground" | "space" | "sun";
 const LAYERS: Layer[] = ["day", "night", "clouds", "water", "moon"];
 /** The moons of a planet are shown once the planet is this many CSS pixels across its radius, and each is drawn at least this many pixels across its radius. */
