@@ -152,12 +152,17 @@ test("links from before the bar: speed=0 stays held, a speed alone keeps running
 });
 
 test("a link that says nothing about the clock opens moving, from now, at the first speed where motion shows, and the date box runs with it (MODULES-815)", async ({ page }) => {
+  const opened = Date.now();
   await open(page, "");
   await expect(play(page)).toHaveAttribute("aria-pressed", "true");
   await expect(speed(page, 3600)).toHaveAttribute("aria-pressed", "true");
   expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number), "the element's clock runs at an hour a second").toBe(3600);
   const before = await boxMs(page);
-  expect(Math.abs(before - Date.now()), "from now").toBeLessThan(5 * 60_000);
+  // The clock has run at an hour a second since the page opened, so "from now" is from the moment it opened: no earlier
+  // than then, and no later than an hour for every second since, with a minute of slack for the box's rounding.
+  const ranFor = Date.now() - opened;
+  expect(before, "from now, not a date before the page opened").toBeGreaterThan(opened - 60_000);
+  expect(before, "from now, not further on than the clock could have run").toBeLessThan(opened + 3600 * ranFor + 60_000);
   await expect.poll(async () => (await boxMs(page)) - before, { message: "the date box ran on", timeout: 8000 }).toBeGreaterThanOrEqual(3600_000);
   await inAddress(page, "play").toBe("on");
   // the reader's Pause is written to the address and a link made then stays held

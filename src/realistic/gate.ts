@@ -21,6 +21,7 @@ export const browserTimers: Timers = {
  *
  * const gate: Gate = createGate(33, () => console.log("draw"));
  * gate.request();
+ * gate.drawn();
  * gate.cancel();
  * ```
  */
@@ -33,6 +34,12 @@ export interface Gate {
   cancel(): void;
   /** Change the least time between runs (a lower frame rate on a battery). */
   setMinMs(minMs: number): void;
+  /**
+   * Tell the gate a draw has begun (call it first thing in the draw). From the first call, an ask made after a run and before the draw it asked for is dropped, since that draw reads the state as it is
+   * when it runs and so shows the change too: two tiles that arrive a few milliseconds apart are one draw, not a draw and a second, empty one 33 ms later. A draw that does not come within `minMs`
+   * (a hidden tab, a busy machine) no longer holds asks back.
+   */
+  drawn(): void;
 }
 
 /**
@@ -59,14 +66,19 @@ export function createGate(minMs: number, fire: () => void, timers: Timers = bro
   let last = -Infinity;
   let waiting: unknown;
   let soon = false;
+  let tracking = false;
+  let undrawn = false;
   const run = (): void => {
     waiting = undefined;
     last = timers.now();
+    undrawn = true;
     fire();
   };
   const request = (): void => {
     if (waiting !== undefined) return;
-    const wait = last + least - timers.now();
+    const now = timers.now();
+    if (tracking && undrawn && now - last < least) return;
+    const wait = last + least - now;
     if (wait <= 0) run();
     else waiting = timers.set(run, wait);
   };
@@ -86,6 +98,10 @@ export function createGate(minMs: number, fire: () => void, timers: Timers = bro
     },
     setMinMs(value) {
       least = value;
+    },
+    drawn() {
+      tracking = true;
+      undrawn = false;
     },
   };
 }

@@ -203,6 +203,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       },
       drift: 1.5,
       invalidate: () => this.#gate?.soon(),
+      onDraw: () => this.#gate?.drawn(),
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };

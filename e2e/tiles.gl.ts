@@ -165,18 +165,74 @@ test("a lost WebGL context is recovered with the tiles still on the sphere", asy
   expect(log.tiles.length - asked, "the held tiles are drawn again, not fetched again").toBeLessThanOrEqual(4);
 });
 
-test("tiles that arrive one after another are a few draws, not a draw each, and never more than 30 a second", async ({ page }) => {
-  await routeTiles(page);
-  await openEarth(page, `time=${NOON}&center=0,23`);
-  await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
-  const start = await statsOf(page);
-  const t0 = Date.now();
-  await setView(page, await zoomFor(page, 1000));
-  await expect.poll(async () => (await statsOf(page)).tiles.loading, { timeout: 30_000 }).toBe(0);
-  await expect.poll(async () => (await statsOf(page)).tiles.shown).toBeGreaterThan(3);
-  await settle(page, 600);
-  const end = await statsOf(page);
-  const seconds = (Date.now() - t0) / 1000;
-  expect(end.draws - start.draws, "draws while the tiles arrived").toBeLessThanOrEqual(Math.ceil(30 * seconds) + 1);
-  expect(end.draws - start.draws, "fewer draws than tiles").toBeLessThan(end.tiles.requested + 3);
-});
+/**
+ * Watch the element frame by frame (from the page's own animation frames): how many draws each frame holds, and how many frames had something new to show: a tile arrived (the tiles fetched minus
+ * those still loading went up), or one of the package's own pictures was swapped for a sharper one (the zoom needs those too, and they are not tiles).
+ */
+const watchDraws = (page: Page): Promise<void> =>
+  page.locator(EARTH).evaluate((el) => {
+    const read = () => Reflect.get(el, "stats") as { draws: number; tiers: Record<string, number>; tiles: { requested: number; loading: number } };
+    const seen = { newFrames: 0, tileFrames: 0, mostInAFrame: 0, log: [] as string[] };
+    let n = 0;
+    Reflect.set(window, "__watch", seen);
+    const first = read();
+    let draws = first.draws;
+    let arrived = first.tiles.requested - first.tiles.loading;
+    let tiers = JSON.stringify(first.tiers);
+    const frame = (): void => {
+      const now = read();
+      seen.mostInAFrame = Math.max(seen.mostInAFrame, now.draws - draws);
+      const tile = now.tiles.requested - now.tiles.loading > arrived;
+      const picture = JSON.stringify(now.tiers) !== tiers;
+      if (tile) seen.tileFrames += 1;
+      if (tile || picture) seen.newFrames += 1;
+      n += 1;
+      if (now.draws !== draws || tile || picture) seen.log.push(`f${n}@${Math.round(performance.now())} draws+${now.draws - draws}${tile ? " tile" : ""}${picture ? " picture" : ""}`);
+      draws = now.draws;
+      arrived = now.tiles.requested - now.tiles.loading;
+      tiers = JSON.stringify(now.tiers);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+
+const watched = (page: Page): Promise<{ newFrames: number; tileFrames: number; mostInAFrame: number; log: string[] }> => page.evaluate(() => Reflect.get(window, "__watch"));
+
+/** Answer each tile after its own wait, so the tiles arrive in different frames, in clumps and one by one, as on a slow connection. */
+const slowTiles = async (page: Page, waits: number[]): Promise<void> => {
+  let n = 0;
+  await page.route("**/tiles/**/*.webp", async (route) => {
+    await new Promise((done) => setTimeout(done, waits[n++ % waits.length]));
+    await route.fallback();
+  });
+};
+
+for (const [how, waits] of [
+  ["at once", [0]],
+  ["one after another, a frame or three apart", [20, 45, 80, 130, 190, 260, 340]],
+  ["in clumps", [30, 33, 36, 200, 203, 400]],
+] as const) {
+  // The rule the element promises: at most one draw in a frame, at most 30 a second, and what arrives in one frame is one draw. So the draws while the tiles arrive are no more than the frames that had
+  // something new to show (a tile, or a sharper picture of the package's own), plus the one the zoom itself asks for.
+  test(`tiles that arrive ${how} are a draw for each frame they arrive in, not a draw each, and never more than 30 a second`, async ({ page }) => {
+    await routeTiles(page);
+    await slowTiles(page, [...waits]);
+    await openEarth(page, `time=${NOON}&center=0,23`);
+    await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
+    await watchDraws(page);
+    const start = await statsOf(page);
+    const t0 = Date.now();
+    await setView(page, await zoomFor(page, 1000));
+    await expect.poll(async () => (await statsOf(page)).tiles.loading, { timeout: 30_000 }).toBe(0);
+    await expect.poll(async () => (await statsOf(page)).tiles.shown).toBeGreaterThan(3);
+    await settle(page, 600);
+    const end = await statsOf(page);
+    const seconds = (Date.now() - t0) / 1000;
+    const seen = await watched(page);
+    const draws = end.draws - start.draws;
+    expect(seen.tileFrames, "tiles arrived").toBeGreaterThan(0);
+    expect(seen.mostInAFrame, "draws in any one frame").toBeLessThanOrEqual(1);
+    expect(draws, `draws while the tiles arrived (${seen.tileFrames} frames with a tile, ${seen.newFrames} with something new: ${seen.log.join(", ")})`).toBeLessThanOrEqual(seen.newFrames + 1);
+    expect(draws, "draws a second").toBeLessThanOrEqual(Math.ceil(30 * seconds) + 1);
+  });
+}
