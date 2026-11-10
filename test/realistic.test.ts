@@ -94,6 +94,46 @@ test("the gate runs at once, then at most once every minMs, and never loses the 
   assert.equal(timers.length, 1);
 });
 
+test("a gate told when the draw begins drops an ask that the draw it already asked for will show, and never one made after the draw began", () => {
+  let now = 0;
+  const timers: { at: number; run: () => void }[] = [];
+  const clock: Timers = {
+    set: (run, ms) => {
+      const timer = { at: now + ms, run };
+      timers.push(timer);
+      return timer;
+    },
+    clear: (handle) => timers.splice(timers.indexOf(handle as (typeof timers)[number]), 1),
+    now: () => now,
+  };
+  const ran: number[] = [];
+  const gate = createGate(33, () => ran.push(now), clock);
+  gate.request();
+  now = 5;
+  gate.request();
+  assert.equal(timers.length, 1, "before the gate has been told of a draw, a second ask in the gap waits as it always did");
+  gate.cancel();
+  gate.drawn();
+  now = 40;
+  gate.request();
+  assert.deepEqual(ran, [0, 40], "a draw has begun, so the gate runs again");
+  now = 46;
+  gate.request();
+  assert.equal(timers.length, 0, "the draw asked for at 40 has not begun: it will show whatever this ask changed, so there is no second run");
+  gate.drawn();
+  now = 50;
+  gate.request();
+  assert.equal(timers.length, 1, "an ask made after the draw began is kept, for when the gap is over");
+  assert.equal(timers[0]!.at, 73);
+  gate.cancel();
+  now = 200;
+  gate.request();
+  assert.deepEqual(ran, [0, 40, 200]);
+  now = 300;
+  gate.request();
+  assert.deepEqual(ran, [0, 40, 200, 300], "a draw that never began does not hold asks back for longer than the gap");
+});
+
 test("the frame cap is 30, lower on a small device", () => {
   assert.equal(frameCap(), 30);
   assert.equal(frameCap(60), 60);

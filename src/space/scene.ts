@@ -12,6 +12,8 @@ import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scal
 import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
+import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
+import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
 type Three = ThreeParts;
 const RAD = Math.PI / 180;
@@ -157,6 +159,8 @@ export interface SpaceModel {
   speed: number;
   /** The satellites shown, the one chosen, and what the last draw did with them. */
   satellites: SatelliteState;
+  /** Meteors seen from space, on the Earth (src/meteors/layer.ts): off unless the element switches them on. */
+  meteors: MeteorState;
   /** The body or satellite the camera rides along with, or null. */
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
@@ -202,6 +206,7 @@ export const newSpaceModel = (): SpaceModel => ({
   pose: { p: [0, 0, 0], q: [0, 0, 0, 1], fov: FOV, valid: false },
   rideMotion: 0,
   satellites: newSatelliteState(),
+  meteors: newMeteorState(),
   pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
@@ -509,6 +514,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       }
       const moonSlots = new Map<string, { slot: Slot; seen: number }>();
       let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+      let meteors: MeteorLayer | null = null;
+      let meteorTimer: ReturnType<typeof setTimeout> | undefined;
 
       let layer: SatelliteLayer | undefined;
       const rideState = new Float64Array(6);
@@ -814,6 +821,18 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             if (at || selectedShown) deps.onSelected(at);
             selectedShown = at !== null;
           }
+          // the meteors, on the Earth: made the first time they are switched on, and asking for their own next draw while a streak is alive or one is due
+          if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, earth, model.meteors);
+          if (meteors) {
+            // the camera's place, turned into the Earth's own axes (the Earth is at the middle of the scene and turns about its pole)
+            const turn = earth.rotation.y;
+            const fx = camera.position.x * Math.cos(turn) - camera.position.z * Math.sin(turn);
+            const fz = camera.position.x * Math.sin(turn) + camera.position.z * Math.cos(turn);
+            const far = Math.hypot(fx, camera.position.y, fz) || 1;
+            const wait = meteors.step({ now: performance.now(), time: model.time, facing: [fx / far, camera.position.y / far, fz / far], sun: unitVector(subsolarPoint(model.time)), radius: Math.min(px.Earth, 1e5), width: size.width, height: size.height });
+            if (meteorTimer !== undefined) clearTimeout(meteorTimer);
+            meteorTimer = Number.isFinite(wait) ? setTimeout(() => deps.invalidate(), wait) : undefined;
+          }
           if (model.rideLost) deps.onRideLost?.();
           if (model.transition) deps.onMoving?.();
           return false;
@@ -823,6 +842,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         },
         dispose() {
           if (releaseTimer !== undefined) clearTimeout(releaseTimer);
+          if (meteorTimer !== undefined) clearTimeout(meteorTimer);
+          meteors?.dispose();
           layer?.dispose();
           model.pick = null;
           textures.dispose();

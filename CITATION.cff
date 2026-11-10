@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use Chikyu Earth in your work, please cite it as below, and credit the sources it draws on (NOTICE.md)."
+title: "Chikyu Earth"
+type: software
+version: 0.25.0
+date-released: "2026-11-10"
+authors:
+  - family-names: Morris
+    given-names: John
+repository-code: "https://github.com/johnmorrisdotca/chikyu-earth"
+repository-artifact: "https://www.npmjs.com/package/@johnmorrisdotca/chikyu-earth"
+url: "https://johnmorrisdotca.github.io/chikyu-earth/"
+license: MIT
+abstract: "A line-drawn globe of the world's countries as an SVG and a web component, with an optional realistic Earth from space lit by the real Sun, the Sun, Moon and planets, satellites on their orbits, and the next passes of the International Space Station over any place. Every source is credited in NOTICE.md."
+keywords:
+  - globe
+  - Earth
+  - satellites
+  - ISS passes
+  - day and night
+  - astronomy education

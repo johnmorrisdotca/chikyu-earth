@@ -12,6 +12,7 @@ import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type Sate
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet } from "./tile-set.ts";
+import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 export type { ThreeParts };
 
 type Three = ThreeParts;
@@ -87,6 +88,8 @@ export interface EarthModel {
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The pixel ratio the textures are chosen for. */
   ratio(): number;
+  /** Meteors seen from space (src/meteors/layer.ts): off unless the element switches them on. */
+  meteors: MeteorState;
 }
 
 export interface EarthDeps {
@@ -104,6 +107,8 @@ export interface EarthDeps {
   onTier?: (layer: Layer, width: number) => void;
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
+  /** Told at the start of every draw, before anything is read for it. */
+  onDraw?: () => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
 }
@@ -124,6 +129,7 @@ export const newModel = (): EarthModel => ({
   tiles: null,
   pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
+  meteors: newMeteorState(),
 });
 
 /**
@@ -277,11 +283,15 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       // far enough in front that a geostationary satellite (6.6 radii out) is never behind the camera: an orthographic picture is the same from anywhere on the line
       const camera = new three.OrthographicCamera(-1, 1, 1, -1, 1, 120);
       camera.position.set(0, 0, 50);
+      // the meteors: made the first time they are switched on, and asking for their own next draw while a streak is alive or one is due
+      let meteors: MeteorLayer | null = null;
+      let meteorTimer: ReturnType<typeof setTimeout> | undefined;
 
       return {
         scene,
         camera,
         update() {
+          deps.onDraw?.();
           const view = model.view;
           const centre = cameraCentre(model);
           const look = lookAt(centre, view);
@@ -317,6 +327,12 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           textures.sync(radius * model.ratio());
           tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
+          if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
+          if (meteors) {
+            const wait = meteors.step({ now: performance.now(), time: model.time, facing: unitVector({ lon: look.lon, lat: look.lat }), sun: [sx, sy, sz], radius, width: size.width, height: size.height });
+            clearTimeout(meteorTimer);
+            meteorTimer = Number.isFinite(wait) ? setTimeout(deps.invalidate, wait) : undefined;
+          }
           return false;
         },
         resize(next, nextHeight) {
@@ -325,6 +341,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         dispose() {
           layer?.dispose();
           model.pick = null;
+          clearTimeout(meteorTimer);
+          meteors?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

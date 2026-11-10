@@ -15,14 +15,28 @@ Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets
 
 <p align="center"><a href="https://johnmorrisdotca.github.io/chikyu-earth/"><strong>Open the demo →</strong></a> · <a href="https://johnmorrisdotca.github.io/chikyu-earth/embed.html">Embed page</a> · <a href="https://johnmorrisdotca.github.io/chikyu-earth/docs/">Docs</a></p>
 
-<p align="center"><img alt="The line-drawn globe, Europe and Africa in view, with the shared control bar" src="docs/images/line-desk.png" width="640"></p>
+It runs in the browser of a phone, a tablet or a computer: nothing to install, no account, and it is free. Turn the Earth, see where the Sun is shining on it, and find out when the International Space Station (ISS) crosses the sky over your place.
+
+<p align="center"><img alt="The demo on a desk: the realistic Earth centred on Asia with the dusk line down the middle, city lights on the night side, and the look, places and light buttons beside it" src="docs/images/day-night-desk.webp" width="620"> <img alt="The passes page on a phone: the next sightings of the ISS over Tokyo as a list, and the sky dome with the path of the first one, from the south-south-west past the south-east to the east-south-east" src="docs/images/passes-phone.webp" width="200"></p>
 
 ## Who it is for
 
-- **A developer who wants a globe on a page** with one tag, no build step, no canvas, and an SVG that prints sharply.
-- **A site with a place on it**: a team, a venue, a flight, a satellite pass. Markers move with the globe and gather into clusters.
-- **A teacher or writer** who wants the Earth turning at its own rate, and the Sun, Moon and planets where they are on a date.
-- **A maker of tools** who wants countries as data: outlines, English and Japanese names and two-letter codes, with no network.
+- **Teachers and students:** the Earth lit by the real Sun, so [day and night](https://johnmorrisdotca.github.io/chikyu-earth/?look=realistic) can be seen for any date and time, and [sheets to print](https://johnmorrisdotca.github.io/chikyu-earth/kids.html) in English and Japanese: the globe to colour, a world map, my country, [day and night](https://johnmorrisdotca.github.io/chikyu-earth/kids.html?kind=daynight) and the seasons.
+- **Satellite spotters and space enthusiasts:** [when the ISS passes over your place](https://johnmorrisdotca.github.io/chikyu-earth/passes.html), with the direction, the height and how bright, and [all 135 Space Shuttle flights](https://johnmorrisdotca.github.io/chikyu-earth/?look=space&mission=sts-31&time=1990-04-25T00:00Z) put on the globe.
+- **Researchers and outreach staff:** the orbit model (SGP4) and how far it can be trusted, every source with its terms in [NOTICE.md](NOTICE.md), the [passes checked against Skyfield](docs/guides/passes.md#how-well-it-matches). Read [Limits](#limits) first, and see [How to cite](#how-to-cite).
+- **Developers and sites with a place on them:** one tag, no build step, no canvas, an SVG that prints sharply, markers that move with the globe, and countries as data (outlines, English and Japanese names and two-letter codes, no network). The install and the API are below.
+
+## Try it now, nothing to install
+
+**Learn:** **[Day and night now](https://johnmorrisdotca.github.io/chikyu-earth/?look=realistic)** · **[Sheets to print](https://johnmorrisdotca.github.io/chikyu-earth/kids.html)** · **[The day and night sheet](https://johnmorrisdotca.github.io/chikyu-earth/kids.html?kind=daynight)**
+
+**Look up:** **[When can I see the ISS?](https://johnmorrisdotca.github.io/chikyu-earth/passes.html)** (pick a place, search, or press My location) · **[The Earth, the Moon and the planets](https://johnmorrisdotca.github.io/chikyu-earth/?look=space)** · **[Space Shuttle STS-31, which put the Hubble telescope up](https://johnmorrisdotca.github.io/chikyu-earth/?look=space&mission=sts-31&time=1990-04-25T00:00Z)**
+
+**Make:** **[The code builder](https://johnmorrisdotca.github.io/chikyu-earth/builder.html)** · **[The embed page](https://johnmorrisdotca.github.io/chikyu-earth/embed.html)** · **[The demo in Japanese](https://johnmorrisdotca.github.io/chikyu-earth/?lang=ja)** · **[in English](https://johnmorrisdotca.github.io/chikyu-earth/?lang=en)**
+
+## For teachers and families
+
+Chikyu Earth works on a phone or a tablet as well as on a computer, in the browser, and it is free: the code is MIT-licensed, and nothing is installed or signed up for. [The sheets guide](https://johnmorrisdotca.github.io/chikyu-earth/docs/guides/printable-sheets.html) says what each printable sheet is, and [the ISS guide](https://johnmorrisdotca.github.io/chikyu-earth/docs/guides/passes.html) says how a pass is worked out and how to read one. Every source is credited in [NOTICE.md](NOTICE.md) and at the foot of each demo page.
 
 ## Features
 
@@ -173,6 +187,17 @@ computed in the browser by astronomy-engine (MIT), nothing is fetched. [docs/spa
 
 <p align="center"><img alt="The solar system on 2 November 2026 in the compressed scale: orbits round the Sun, the planets named" src="docs/images/space-solar.png" width="420"></p>
 
+## Meteors
+
+`<chikyu-earth-realistic meteors>` and `<chikyu-space meteors>` draw meteors as they look from space: short streaks 80 to 120 km up, only on the dark side and in twilight, more of them under an active shower's radiant, and only while the clock runs. Each streak's place and moment are drawn at random, and the element says so under the picture; how many there are, where they fall, their height and the showers' dates are real. The showers are the International Meteor Organization's working list for 2026 (37 of them), in an entry point of its own with the rate functions, which needs no browser: [guide](docs/guides/meteors.md).
+
+```js
+import { activeShowers } from "@johnmorrisdotca/chikyu-earth/meteors";
+
+// The showers active on the night of the Geminids' maximum, strongest first.
+for (const { shower, zhr } of activeShowers(Date.UTC(2026, 11, 14, 8))) console.log(`${shower.name}: ${zhr.toFixed(1)} an hour`);
+```
+
 ## Satellites
 
 The ISS, a space station or thousands of Starlink satellites at the places SGP4 puts them for the date and time shown, on `<chikyu-space>`: a group is one draw call however many it holds, press one to get its name, height and speed, and its orbit is drawn. Chikyu fetches nothing: your page passes in orbital elements (CelesTrak's JSON, within its usage policy), and satellite.js (MIT, an optional peer) does the maths about once a second, with every frame between interpolated. `fetchElements(url)` reads OMM JSON, CSV or TLE from an address you choose, politely (https, not again within two hours, stop on any answer that is not 200). A satellite whose elements are more than 14 days from the time shown is drawn dimmer, and one more than 30 days away is left out. A group is hidden while the clock runs faster than 60 times real time. A small catalogue (`SATELLITE_GROUPS`, `CATALOGUE`, `findInCatalogue`) names fourteen groups (stations, weather, GPS, Galileo, OneWeb and more) and about forty satellites worth following, with no elements in it. The guide has the rules for getting elements and the budget, each line tested: [satellites guide](docs/guides/satellites.md), [docs/satellites.md](docs/satellites.md).
@@ -188,6 +213,8 @@ document.querySelector("chikyu-space")!.setSatellites("stations", createSatellit
 ```
 
 ## Passes: when can I see the ISS?
+
+<p align="center"><img alt="The passes page on a desk: a place, the satellite, the days and the sky to choose; the list of passes; the sky dome with the pressed pass drawn across it; and the same path on a small globe" src="docs/images/passes-desk.webp" width="760"></p>
 
 `findPasses(elements, place, { from, to })` gives the next passes of a satellite over a place: when it comes up, is highest and goes down (UTC, with the compass word and degrees at each, and the height), how bright it looks, and whether it can be seen, which needs the satellite in sunlight while the watcher's sky is in civil twilight or darker (each pass says which). It is a pure function over the same SGP4 as the rest, with no DOM and no clock. `skySvg` draws a pass across the sky as an SVG string, `groundTrack` gives the path under the satellite for a globe, and `<chikyu-passes>` lists the passes and draws the dome, in English and Japanese. The ISS, Tianhe and Hubble have estimated standard magnitudes (from their size and an assumed albedo); give better ones with `magnitudes`.
 
@@ -412,6 +439,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../markers` | `attachMarkers` and the pure projection, clusters and labels. |
 | `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
 | `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
+| `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
 
 ## Guides
@@ -432,6 +460,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
+| [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |
@@ -442,16 +471,27 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 
 ## Limits
 
-- The outlines are Natural Earth 1:110m: good for a globe, not for a street map. `COUNTRIES` has 177 features, Antarctica included.
-- Three places have no two-letter code (`alpha2` is `null`), and Kosovo is `XK`.
-- The Earth from space and the space view need WebGL; without it the line globe is drawn.
-- Satellite elements are a day's snapshot you supply; the package fetches nothing. The positions are SGP4's, good for a picture, not for pointing an antenna.
+Chikyu Earth is made for learning, teaching, drawing and finding a satellite in the sky with your own eyes. It is not made for pointing an antenna or a telescope, for navigation, or for any work that needs a satellite's place to better than a few kilometres. It says where each number stops:
+
+- **Outlines.** Natural Earth 1:110m: good for a globe, not for a street map. `COUNTRIES` has 177 features, Antarctica included. Three places have no two-letter code (`alpha2` is `null`), and Kosovo is `XK`.
+- **The pictures of the Earth.** The land, the oceans and the clouds of the realistic look are fixed NASA pictures (Blue Marble of September 2004 and its clouds, the city lights of 2016), not today's weather or today's coast. What follows the date is the light: the Sun's place comes from NOAA's low-precision formulas, tested against the almanac to 0.05 degree, so the direction of the light is right to about 0.05 degree, and the dusk is drawn as a soft band; it is not a table of sunrise or twilight times.
+- **Satellite places.** They are SGP4's, from orbital elements you supply, which are only a snapshot: the error grows by a few kilometres a day, the ISS is moved by a reboost every month or two, and elements more than 14 days from the date shown are drawn dimmer and past 30 days left out. Good for a picture.
+- **Passes.** Times, directions and heights matched Skyfield on 249 passes, every time within a second and every direction within 0.06 degree away from straight overhead (the [passes guide](docs/guides/passes.md#how-well-it-matches) has the numbers), but a pass is only as good as the elements are new, and the brightness is a model good to a magnitude or two, not a measurement.
+- **The Sun, the Moon and the planets** come from astronomy-engine and are drawn for a picture: on the compressed scale the distances are squeezed and the bodies drawn larger than life, and between two lookups the Moon is placed by interpolation within 0.1 degree. A table of measured accuracy for the realistic look and the satellites is not published yet.
+- **WebGL.** The Earth from space and the space view need it; without it the line globe is drawn.
+- **Data terms.** [NOTICE.md](NOTICE.md) gives the terms of every source. CelesTrak states no licence or credit rule for its element sets: the demo uses them as a snapshot, within its usage policy and with credit, and never fetches them for a visitor; NOTICE.md says so.
 
 ```ts
 import { countryList } from "@johnmorrisdotca/chikyu-earth";
 
 console.log(countryList().filter((country) => country.alpha2 === null).map((country) => country.name));
 ```
+
+## How to cite
+
+> Morris, J. (2026). *Chikyu Earth* (version 0.25.0) [Computer software]. https://github.com/johnmorrisdotca/chikyu-earth
+
+GitHub's "Cite this repository" button reads [CITATION.cff](CITATION.cff) and gives BibTeX and APA. Cite the version you used (`npm ls @johnmorrisdotca/chikyu-earth`), and credit the sources behind the numbers and pictures: [NOTICE.md](NOTICE.md) says who made each one and under what terms.
 
 ## Accessibility
 
