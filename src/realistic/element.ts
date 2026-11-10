@@ -31,9 +31,13 @@ export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
 const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}";
 const RAD = Math.PI / 180;
-/** The Sun and the clouds are re-placed this often while the time is "now": 15 degrees an hour is 0.25 degree a minute. */
+/** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
 const MIN_TICK_MS = 1000;
+/** The least time between two `chikyu-timechange` events while time runs: a few a second at most, however fast the picture is drawn. */
+const TIME_EVENT_MS = 250;
+/** How fast the Sun goes round the Earth, degrees a second of real time (the light, the night side and the clouds' drift all follow it). */
+const SUN_RATE = 360 / 86_400;
 /** Tilt to the poles; zoom from a tenth of Fit, which leaves the whole Earth small in the view, to 5 times: the package's own pictures are sharp to about 5 times. */
 const LIMITS = { tiltMax: 90, zoomMin: 0.1, zoomMax: 5 };
 /** With the finer tiles the detail runs 4 times further: the finest level is 4 times wider than the widest picture. */
@@ -52,6 +56,25 @@ const readLight = (value: string | null): LightMode => (value === "lit" || value
 const readRatio = (value: string | null): number | undefined => {
   const ratio = Number(value);
   return value !== null && Number.isFinite(ratio) && ratio > 0 ? Math.min(ratio, 2) : undefined;
+};
+
+/**
+ * A `speed` attribute: how many seconds pass for each real second.
+ *
+ * @param value - The attribute's text, or `null` when it is not there.
+ * @returns The speed, or `null` when the value is empty or not a number (the clock then follows `time`: real time for "now", held for a date).
+ *
+ * @example
+ * ```ts no-run
+ * import { readSpeed } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+ *
+ * console.log(readSpeed("86400"), readSpeed("-3600"), readSpeed(null));
+ * ```
+ */
+export const readSpeed = (value: string | null): number | null => {
+  if (value === null || value.trim() === "") return null;
+  const speed = Number(value);
+  return Number.isFinite(speed) ? speed : null;
 };
 
 /**
@@ -76,8 +99,13 @@ export const readTime = (value: string | null): number | "now" => {
 /**
  * The `<chikyu-earth-realistic>` custom element: the Earth from space, drawn with three.js through kazoku-ui's shared renderer (one WebGL context for the page). It takes `center` (`"lon,lat"`), `time` (`now` or an ISO date; the real Sun at that moment), `clouds="off"`, `lights="off"`, `live-seconds`, `texture-base` (where the pictures are served from), `tiles` (where a set of finer map tiles is served from, see the Earth tiles guide: only the tiles in view are loaded, over the package's own pictures, which stay as the far view and the fallback; without it, or when a tile cannot be fetched, the Earth is drawn as before) and `max-ratio` (the most device pixels to a CSS pixel the canvas is drawn at, 2 at most, and `0.5` draws at half the size and scales it up: for a background; read when the element connects, and it is the shared renderer's cap for the whole page), and a shared view controller's camera through `setView`. It draws only when something changes, at most 30 times a second, and nothing while it is out of sight or the tab is hidden.
  *
- * Its only running clock is `time="now"`: the Sun and the clouds are put right every `live-seconds` (a minute by default, a second at the least), and each time it sends `chikyu-timechange` with `detail: { time, running: true }` (the moment shown in
- * milliseconds since 1970; not from a hidden tab). When the time is set to a date it sends one with `running: false`, and a date does not move, so a page's date box has nothing more to follow.
+ * It has a clock, like `<chikyu-space>`'s: `speed` is how many seconds pass for each real second (`1` is real time, `0` holds, `3600` is an hour a second, `86400` a day a second, a negative number runs backwards), and the clock runs from `time`, the moment shown.
+ * The Sun's light, the night side and the clouds follow it. Without a `speed`, nothing about a page from before changes: `time="now"` (or no `time`) follows the real clock, the Sun and the clouds put right every `live-seconds` (a minute by default, a second at the least),
+ * and a date holds still. A `speed` runs the clock from the moment shown at that rate (from now, when `time` is "now"); `speed="0"` holds it. At real time it steps every `live-seconds`; faster, it draws as often as the Sun's turn moves a pixel, once a second at least and 30 a second at most
+ * (a reader who prefers reduced motion gets one step a second), and nothing at all while it is held, out of sight or in a hidden tab.
+ *
+ * While time runs it sends `chikyu-timechange` with `detail: { time, running: true }` (the moment shown in milliseconds since 1970), at most four times a second however fast the picture is drawn and not from a hidden tab, and once with `running: false` when the clock holds
+ * (a date is set, or `speed` is set to 0): a page writes the date into its date box from it. It is not sent for a `time` the page sets itself.
  *
  * @example
  * ```ts no-run
@@ -88,17 +116,29 @@ export const readTime = (value: string | null): number | "now" => {
  * earth.setAttribute("time", "2026-06-21T03:00Z");
  * earth.setAttribute("texture-base", "/textures/");
  * earth.setAttribute("tiles", "/tiles/");
+ * earth.setAttribute("speed", "86400");
+ * earth.addEventListener("chikyu-timechange", (event) => {
+ *   const { time, running } = (event as CustomEvent<{ time: number; running: boolean }>).detail;
+ *   console.log(new Date(time).toISOString(), running ? "running" : "held");
+ * });
  * document.body.append(earth);
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["center", "time", "clouds", "lights", "light", "live-seconds", "tiles"];
+  static observedAttributes = ["center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
   #view: View | undefined;
   #gate: Gate | undefined;
-  #tick: ReturnType<typeof setInterval> | undefined;
+  #tick: ReturnType<typeof setTimeout> | undefined;
+  /** The clock's speed when `speed` is given (attribute or property); `null` follows `time`: real time for "now", held for a date. */
+  #speed: number | null = null;
+  /** The page's own clock, in milliseconds, at the last step. */
+  #last = 0;
+  #announced = -Infinity;
+  /** The clock is running (a `running: false` is owed when it holds). */
+  #running = false;
   #state: EarthState = "loading";
   #tiers: Record<EarthLayer, number> = { day: TIERS.day[0]!, night: TIERS.night[0]!, clouds: TIERS.clouds[0]!, water: TIERS.water[0]! };
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
@@ -119,6 +159,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.centre = readCentre(this.getAttribute("center")) ?? this.#model.centre;
     this.#mode = readTime(this.getAttribute("time"));
     this.#model.time = this.#mode === "now" ? Date.now() : this.#mode;
+    this.#speed = readSpeed(this.getAttribute("speed"));
+    this.#last = performance.now();
     this.#model.clouds = this.getAttribute("clouds") !== "off";
     this.#model.lights = this.getAttribute("lights") !== "off";
     this.#model.light = readLight(this.getAttribute("light"));
@@ -184,6 +226,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.addEventListener("focusin", this.#take);
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#startTick();
+    document.addEventListener("visibilitychange", this.#onVisible);
     this.#locate();
   }
 
@@ -194,8 +237,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#hands = undefined;
     if (this.#reach !== null && this.getAttribute("zoom-max") === this.#reach) this.removeAttribute("zoom-max");
     this.#reach = null;
-    clearInterval(this.#tick);
+    clearTimeout(this.#tick);
     this.#tick = undefined;
+    this.#running = false;
+    document.removeEventListener("visibilitychange", this.#onVisible);
     this.#gate?.cancel();
     this.#view?.dispose();
     this.#view = undefined;
@@ -206,6 +251,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
     else if (name === "time") this.time = readTime(value);
+    else if (name === "speed") this.#setSpeed(readSpeed(value));
     else if (name === "clouds") this.clouds = value !== "off";
     else if (name === "lights") this.lights = value !== "off";
     else if (name === "light") this.light = readLight(value);
@@ -251,14 +297,35 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#gate?.soon();
   }
 
-  /** The moment shown: milliseconds since the epoch, or "now" to follow the clock. */
+  /** The moment shown: milliseconds since the epoch, or "now" while it follows the real clock. The clock runs from it at `speed`, so a number read while time runs is the moment it has reached. */
   get time(): number | "now" {
-    return this.#mode;
+    return this.#mode === "now" && this.speed === 1 ? "now" : this.#model.time;
   }
   set time(value: number | Date | "now") {
     this.#mode = value instanceof Date ? value.getTime() : value;
     if (this.#mode === "now") this.#model.time = Date.now();
     else this.#model.time = this.#mode;
+    this.#last = performance.now();
+    this.#startTick();
+    this.#gate?.soon();
+  }
+
+  /**
+   * Seconds of time for each real second: `1` is real time, `0` holds, `3600` is an hour a second, `86400` a day a second, a negative number runs backwards. Without one (the attribute `speed` left out) the clock
+   * follows `time`: real time for "now", held for a date. Reading it gives the speed in force. Setting it is setting the attribute (and `null`-like, a value that is not a number, takes it off); it works out the moment shown up to now at the old speed first, so a hold keeps the moment the reader saw last.
+   */
+  get speed(): number {
+    return this.#speed ?? (this.#mode === "now" ? 1 : 0);
+  }
+  set speed(value: number) {
+    if (Number.isFinite(value)) this.setAttribute("speed", String(value));
+    else this.removeAttribute("speed");
+  }
+
+  #setSpeed(next: number | null): void {
+    if (this.isConnected && this.speed !== 0) this.#advance(performance.now());
+    this.#speed = next;
+    this.#last = performance.now();
     this.#startTick();
     this.#gate?.soon();
   }
@@ -325,24 +392,60 @@ export class ChikyuEarthRealistic extends HTMLElement {
     return { ...this.#model.view };
   }
 
-  /** While the time is "now", the Sun and the clouds are put right once a minute (`live-seconds` changes that): no frames between. */
-  #startTick(): void {
-    const ran = this.#tick !== undefined;
-    clearInterval(this.#tick);
-    this.#tick = undefined;
-    // the clock was following the real one and now holds a date: told once, so a page's date box stops following it
-    if (ran && this.#mode !== "now") this.dispatchEvent(new CustomEvent("chikyu-timechange", { detail: { time: this.#model.time, running: false } }));
-    if (!this.isConnected || this.#mode !== "now") return;
+  /** Bring the moment shown up to `now` (the page's own clock, in milliseconds) at the speed it has run at. */
+  #advance(now: number): void {
+    if (this.speed === 1 && this.#mode === "now") this.#model.time = Date.now();
+    else this.#model.time += (now - this.#last) * this.speed;
+    this.#last = now;
+  }
+
+  /** The wait before the next step: real time every `live-seconds` (a minute by default); faster time as often as the Sun's turn moves a pixel, 1 to 30 times a second (once a second for a reader who prefers reduced motion). */
+  #wait(): number {
     const seconds = Number(this.getAttribute("live-seconds"));
-    const ms = Number.isFinite(seconds) && seconds > 0 ? Math.max(MIN_TICK_MS, seconds * 1000) : LIVE_TICK_MS;
-    this.#tick = setInterval(this.#onTick, ms);
+    const live = Number.isFinite(seconds) && seconds > 0 ? Math.max(MIN_TICK_MS, seconds * 1000) : LIVE_TICK_MS;
+    const speed = Math.abs(this.speed);
+    if (speed <= 1) return live;
+    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return Math.min(live, 1000);
+    const radius = this.#model.drawn?.radius ?? 200;
+    return Math.min(live, 1000 / Math.min(30, Math.max(1, SUN_RATE * RAD * speed * radius)));
+  }
+
+  /** Tell the page the moment shown: at most four times a second while time runs (`running`, and not from a hidden tab), and once, at once, when it holds. */
+  #announce(running: boolean): void {
+    const now = performance.now();
+    if (running && (now - this.#announced < TIME_EVENT_MS || document.visibilityState === "hidden")) return;
+    this.#announced = running ? now : -Infinity;
+    this.dispatchEvent(new CustomEvent("chikyu-timechange", { detail: { time: this.#model.time, running } }));
+  }
+
+  /** While the clock runs the Sun and the clouds are put right at the pace `#wait` gives, and nothing runs at all while it holds. */
+  #startTick(): void {
+    clearTimeout(this.#tick);
+    this.#tick = undefined;
+    const go = this.isConnected && this.speed !== 0;
+    // the clock was running and now holds: told once, so a page's date box stops following it
+    if (this.#running && !go) {
+      this.#running = false;
+      this.#announce(false);
+    }
+    if (!go) return;
+    this.#running = true;
+    this.#tick = setTimeout(this.#onTick, this.#wait());
   }
 
   #onTick = (): void => {
-    this.#model.time = Date.now();
+    this.#advance(performance.now());
+    this.#tick = setTimeout(this.#onTick, this.#wait());
     this.#gate?.soon();
-    // at most once a second (`live-seconds` is at least 1), and not from a hidden tab: nobody sees the date box
-    if (document.visibilityState !== "hidden") this.dispatchEvent(new CustomEvent("chikyu-timechange", { detail: { time: this.#model.time, running: true } }));
+    this.#announce(true);
+  };
+
+  /** Back in a shown tab: the moment is brought up to date, and drawn. */
+  #onVisible = (): void => {
+    if (document.visibilityState === "hidden" || !this.#running) return;
+    this.#advance(performance.now());
+    this.#gate?.soon();
+    this.#announce(true);
   };
 
   #take = (): void => {
