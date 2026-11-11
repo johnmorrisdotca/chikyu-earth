@@ -15,6 +15,7 @@ import { ridePose, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
+import type { CityFrame } from "../cities/geometry.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
@@ -332,6 +333,8 @@ export interface SpaceDeps {
   onSky?: (frame: SkyFrame) => void;
   /** Where points of the Earth's surface fall on the screen at this draw, for the places drawn on it. Called at each draw. */
   onPlaces?: (view: PlaceView) => void;
+  /** Where the Earth is on the screen and how to find a place on it, for the names of cities. Called at each draw, with `null` while no Earth is shown. */
+  onCities?: (frame: CityFrame | null) => void;
   /** The name written on the Earth could not be made. */
   onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
@@ -917,6 +920,33 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 return sky.z > -1 && sky.z < 1;
               },
             });
+          }
+          if (deps.onCities) {
+            if (hidden === "Earth") deps.onCities(null);
+            else {
+              // a place on the ground, turned with the Earth (the Earth is at the middle, one unit in radius): in sight when the viewer is above its horizon, found through the camera
+              const ground = new three.Vector3();
+              const eye = camera.position;
+              const turned = earth.quaternion;
+              deps.onCities({
+                width: size.width,
+                height: size.height,
+                radius: Math.min(px.Earth, 1e5),
+                project(lon, lat, out) {
+                  const phi = lat * RAD;
+                  const lambda = lon * RAD;
+                  ground.set(Math.cos(phi) * Math.sin(lambda), Math.sin(phi), Math.cos(phi) * Math.cos(lambda)).applyQuaternion(turned);
+                  const dx = eye.x - ground.x;
+                  const dy = eye.y - ground.y;
+                  const dz = eye.z - ground.z;
+                  const facing = (ground.x * dx + ground.y * dy + ground.z * dz) / (Math.hypot(dx, dy, dz) || 1);
+                  ground.project(camera);
+                  out.x = ((ground.x + 1) / 2) * size.width;
+                  out.y = ((1 - ground.y) / 2) * size.height;
+                  return ground.z > 1 || ground.z < -1 ? -1 : facing;
+                },
+              });
+            }
           }
           if (layer && deps.onSelected) {
             const at = model.satellites.selected ? layer.place(camera, size) : null;

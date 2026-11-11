@@ -224,6 +224,14 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 <chikyu-space star-names="12" constellation-lines="0.16"></chikyu-space>
 ```
 
+## City names
+
+`city-names` on `<chikyu-earth-realistic>` and `<chikyu-space>` names cities on the Earth from kuni's list: the capitals first, then the cities of a million and the large ones as the Earth grows on the screen, the most populous first, in the page's language (Japanese where kuni has the name), never overlapping and none on the far side. kuni is an optional peer loaded only when it is set, a tier at a time; the look is the property `cityNamesStyle`; nothing is drawn at rest: [guide](docs/guides/city-names.md).
+
+```html
+<chikyu-earth-realistic city-names="24"></chikyu-earth-realistic>
+```
+
 ## You are here, and places on the Earth
 
 `places` on `<chikyu-space>` and `<chikyu-earth-realistic>` marks places on the Earth, each a beam, a pin or a ring (`places-look`) standing out of the ground, turning with the Earth and hidden on its far side: `kind: "here"` for the reader's own place (brighter, with a quiet pulse) and favourites, quieter. Names never overlap; nothing is drawn at rest. The package never asks for the reader's place and stores or sends nothing: the page asks on a press and rounds the place with `nearby` first: [guide](docs/guides/places.md).
@@ -548,6 +556,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |
+| [City names on the Earth](docs/guides/city-names.md) | Cities named from kuni's list, more as the Earth grows on the screen, in the page's language |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
 | [You are here, and places on the Earth](docs/guides/places.md) | The reader's place and favourite places as markers standing out of the Earth, asked for only on a press, kept on the device |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
