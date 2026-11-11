@@ -623,12 +623,27 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.view = { yaw: view.yaw, tilt, zoom: view.zoom };
     // the whole view is handed back, the yaw as it is, so the controls keep what they held and the element hears nothing it did not already have
     if (tilt !== view.tilt) this.#hands?.controller.set({ yaw: view.yaw, tilt, zoom: view.zoom }, final, "ride");
+    this.#holdTilt(limits);
     const drawn = this.#model.drawnView;
     if (drawn && !final && view.zoom === drawn.zoom) {
       const turned = Math.max(Math.abs(view.yaw - drawn.yaw), Math.abs(view.tilt - drawn.tilt)) * RAD;
       if (turned * (this.#model.heightPx / 2) < 0.5) return;
     }
     this.#gate?.request();
+  }
+
+  /** The most the tilt of the controls was last held to (`setLimits`), so it is told again only when it changes. */
+  #tiltHeld: number = LIMITS.tiltMax;
+
+  /**
+   * Tells the controls (the bar bound to this element, or the element's own hands) how far a tilt does anything: the larger of the two ends of the horizon look's pitch, since the controls take one limit for both ways. The other end has a little left over (a few
+   * degrees of drag at the height of the ISS), which the camera simply does not follow. Without a horizon look riding, the controls' own limit comes back.
+   */
+  #holdTilt(limits: { min: number; max: number } | null): void {
+    const want = limits ? Math.max(-limits.min, limits.max) : LIMITS.tiltMax;
+    if (Math.abs(want - this.#tiltHeld) < 0.25) return;
+    this.#tiltHeld = want;
+    this.#hands?.setLimits({ tiltMax: want });
   }
 
   /** The body the camera looks at: at zoom 1 it fills the view; the yaw and tilt turn the camera round it. */
@@ -658,6 +673,7 @@ export class ChikyuSpace extends HTMLElement {
     if (target === null) {
       model.ride = null;
       model.rideTurn = 0;
+      this.#holdTilt(null);
       model.focus = this.#focusBeforeRide;
     } else {
       if (typeof target === "string" && !BODY_NAMES.includes(target)) return;

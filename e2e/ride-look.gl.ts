@@ -262,7 +262,7 @@ test("up and down drags stop moving at the ends of the pitch: a drag back moves 
   const top = bearing(await statsOf(page), [1, 0, 0]).elevation;
   expect(top, "a little above the horizon, no more").toBeLessThan(21);
   expect(top).toBeGreaterThan(10);
-  await drag(page, [0.5, 0.6], [0.5, 0.5]);
+  await drag(page, [0.5, 0.65], [0.5, 0.5]);
   expect(top - bearing(await statsOf(page), [1, 0, 0]).elevation, "and the first short drag back up moves it").toBeGreaterThan(3);
 });
 
