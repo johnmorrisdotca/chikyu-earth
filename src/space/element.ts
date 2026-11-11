@@ -49,7 +49,7 @@ export function setBodyPainter(next: BodyPainter | undefined): void {
 }
 
 /**
- * Where the 3D models of large satellites come from (MODULES-861), if the page has any: the package ships none. With a painter set, a satellite followed (`ride(ref, { view: "follow" })`) that the painter has a model for is drawn as that model, in the middle
+ * Where the 3D models of large satellites come from if the page has any: the package ships none. With a painter set, a satellite followed (`ride(ref, { view: "follow" })`) that the painter has a model for is drawn as that model, in the middle
  * of the picture at a size that reads, pointed the way it flies, lit by the Sun; a satellite it has none for stays a dot. See `SatellitePainter`.
  *
  * @param next - The painter, or `undefined` for none.
@@ -423,7 +423,6 @@ export class ChikyuSpace extends HTMLElement {
    * fewer and fainter and 0 draws none. It changes nothing that is real: the rates, the showers and `chikyu-meteors` are the same at every strength, and the line under the picture still says the streaks are an illustration.
    * A number outside the range is brought to its nearest end; setting the property writes the attribute.
    */
-
   get meteorsStrength(): number {
     return this.#model.meteors.strength;
   }

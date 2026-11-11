@@ -1,4 +1,4 @@
-// Ring and name every satellite of a group, and say where a satellite is on the screen (MODULES-949), in a real browser (Chromium, drawn in software), with the stations recorded on 2026-11-02:
+// Ring and name every satellite of a group, and say where a satellite is on the screen, in a real browser (Chromium, drawn in software), with the stations recorded on 2026-11-02:
 // every member of the group is ringed and named in the page's language, names never overlap, a satellite behind the Earth is not ringed and the page is told once when one comes into view or goes out,
 // the page can ask where a satellite is (and whether it is hidden) instead of working it out itself, and nothing is drawn at rest.
 import { expect, test, type Page } from "@playwright/test";

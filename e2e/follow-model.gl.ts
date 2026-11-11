@@ -1,4 +1,4 @@
-// Follow a large satellite as a 3D model (MODULES-861), in a real browser (Chromium, drawn in software): the followed ISS is drawn as the page's model, locked in the middle of the picture for a whole orbit while the Earth turns beneath,
+// Follow a large satellite as a 3D model, in a real browser (Chromium, drawn in software): the followed ISS is drawn as the page's model, locked in the middle of the picture for a whole orbit while the Earth turns beneath,
 // the page can list the large satellites it has a model for and hop between them, and nothing is drawn at rest. The demo's models are made-up stand-ins (demo/station-models.ts); the package ships none.
 import { expect, test, type Page } from "@playwright/test";
 import { routeElements } from "./recorded.ts";
