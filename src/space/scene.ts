@@ -12,7 +12,7 @@ import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
-import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
+import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { placeVector } from "../meteors/rate.ts";
 import type { PlaceProjector } from "../places/geometry.ts";
@@ -20,6 +20,8 @@ import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState }
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
 type Three = ThreeParts;
+/** The most satellites ringed and named at once, over all the labelled groups. */
+const MAX_MARKED = 80;
 const RAD = Math.PI / 180;
 const FOV = 35;
 /** How much of the view's shorter side the Earth's disc fills at zoom 1 when the page does not say: 0.9, so the atmosphere's glow (8% beyond the disc) is inside the view and never cut. */
@@ -183,6 +185,8 @@ export interface SpaceModel {
   rideMotion: number;
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
+  /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
+  placeSatellite: ((ref: SatelliteRef) => SatelliteScreen | null) | null;
   ratio(): number;
 }
 
@@ -218,6 +222,7 @@ export const newSpaceModel = (): SpaceModel => ({
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
   pick: null,
+  placeSatellite: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
@@ -327,6 +332,8 @@ export interface SpaceDeps {
   onPlaces?: (view: PlaceProjector | null) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
+  /** Where each member of a labelled group is on the screen at this draw (the groups of `model.satellites.marked`); an empty list once when the last group is let go. */
+  onSatelliteMarks?: (marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[]) => void;
   /** Called at the end of a draw while the camera is moving from one ride to another, so the next frame is asked for (at the page's frame cap). */
   onMoving?: () => void;
   /** The target of the ride could not be placed at this draw. */
@@ -533,6 +540,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
+      let marksTold = false;
 
       let layer: SatelliteLayer | undefined;
       const rideState = new Float64Array(6);
@@ -865,6 +873,26 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               });
             }
           }
+          model.placeSatellite = layer ? (ref) => layer!.placeOf(ref, camera, size) : null;
+          if (deps.onSatelliteMarks) {
+            if (layer && model.satellites.marked.size > 0) {
+              const marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[] = [];
+              for (const name of model.satellites.marked) {
+                const group = model.satellites.groups.get(name);
+                if (!group) continue;
+                for (let index = 0; index < group.satellites.count && marks.length < MAX_MARKED; index += 1) {
+                  const ref = { group: name, index };
+                  const at = layer.placeOf(ref, camera, size);
+                  if (at) marks.push({ ref, ...at });
+                }
+              }
+              marksTold = true;
+              deps.onSatelliteMarks(marks);
+            } else if (marksTold) {
+              marksTold = false;
+              deps.onSatelliteMarks([]);
+            }
+          }
           if (layer && deps.onSelected) {
             const at = model.satellites.selected ? layer.place(camera, size) : null;
             if (at || selectedShown) deps.onSelected(at);
@@ -896,6 +924,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           nameOn?.dispose();
           layer?.dispose();
           model.pick = null;
+          model.placeSatellite = null;
           textures.dispose();
           ended = true;
           empty(sunSlot);

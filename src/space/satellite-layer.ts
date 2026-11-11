@@ -23,11 +23,13 @@ export interface SatelliteGroupState extends SatelliteStyle {
 export interface SatelliteState {
   groups: Map<string, SatelliteGroupState>;
   selected: SatelliteRef | null;
+  /** The groups whose members are ringed and named (`labelSatellites`): the scene tells the page where each is, at every draw. */
+  marked: Set<string>;
   /** Written at each draw: satellites placed, whether the clock is too fast for the groups, and the milliseconds the last update took. */
   drawn: { placed: number; tooFast: boolean; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, drawn: { placed: 0, tooFast: false, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), drawn: { placed: 0, tooFast: false, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -70,7 +72,29 @@ interface Drawn {
   style: string;
 }
 
+/**
+ * Where a satellite is on the screen now: in CSS pixels in the view's box, whether it can be seen (inside the box and not behind the Earth) and how high it is.
+ *
+ * @example
+ * ```ts
+ * import type { SatelliteScreen } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const seen = (place: SatelliteScreen | null): boolean => place !== null && place.visible;
+ * console.log(typeof seen);
+ * ```
+ */
+export interface SatelliteScreen {
+  x: number;
+  y: number;
+  /** Inside the box and in front of the Earth (not hidden by it). */
+  visible: boolean;
+  /** Height above the mean Earth radius, in kilometres, at the moment drawn. */
+  heightKm: number;
+}
+
 export interface SatelliteLayer {
+  /** Where one satellite of a shown group is on the screen as of the last update, or `null` when its group is not shown, it is not placed (its elements are too old) or it is behind the camera. */
+  placeOf(ref: SatelliteRef, camera: THREE.Camera, size: { width: number; height: number }): SatelliteScreen | null;
   /** Place every shown group for `model.time` and the chosen satellite exactly. */
   update(time: number, speed: number): void;
   /** The satellite nearest to a point of the view (CSS pixels) within `radius`, if one is in front of the Earth. */
@@ -279,6 +303,40 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         }
       }
       return best;
+    },
+
+    placeOf(ref, camera, size) {
+      const entry = drawn.get(ref.group);
+      const group = state.groups.get(ref.group);
+      if (!entry || !group || !entry.points.visible || !Number.isInteger(ref.index) || ref.index < 0 || ref.index >= group.satellites.count || !group.satellites.visible(ref.index)) return null;
+      const p = entry.positions;
+      const i = ref.index * 3;
+      world.set(p[i]!, p[i + 1]!, p[i + 2]!).applyMatrix4(scene.matrixWorld);
+      const heightKm = (Math.hypot(p[i]!, p[i + 1]!, p[i + 2]!) - 1) * 6371;
+      projected.copy(world).project(camera);
+      if (projected.z > 1 || projected.z < -1) return null;
+      const x = ((projected.x + 1) / 2) * size.width;
+      const y = ((1 - projected.y) / 2) * size.height;
+      const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
+      const c = camera.position;
+      let hidden: boolean;
+      if (ortho) {
+        const centreDepth = view.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z;
+        view.copy(world).applyMatrix4(camera.matrixWorldInverse);
+        hidden = view.z < centreDepth && view.x * view.x + view.y * view.y < 0.996;
+      } else {
+        // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
+        const px = world.x - c.x;
+        const py = world.y - c.y;
+        const pz = world.z - c.z;
+        const len2 = px * px + py * py + pz * pz;
+        const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
+        const nx = c.x + px * t;
+        const ny = c.y + py * t;
+        const nz = c.z + pz * t;
+        hidden = nx * nx + ny * ny + nz * nz < 0.998;
+      }
+      return { x, y, visible: !hidden && x >= 0 && x <= size.width && y >= 0 && y <= size.height, heightKm };
     },
 
     place(camera, size) {

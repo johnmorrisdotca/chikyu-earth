@@ -10,7 +10,7 @@ import type { Place } from "./types.ts";
 export const PLACES_STYLE =
   "#pl-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#pl-labels{position:absolute;inset:0;overflow:hidden;pointer-events:none}" +
   ".pl-label{position:absolute;left:0;top:0;margin:0;padding:0 5px;height:18px;line-height:18px;border:0;border-radius:3px;background:rgba(7,11,18,.55);color:#e9f6ff;font:12px/18px system-ui,-apple-system,sans-serif;white-space:nowrap;cursor:pointer;pointer-events:auto;text-shadow:0 0 3px #000}" +
-  ".pl-label[data-kind=favourite]{color:#ffe9c4;opacity:.85}.pl-label[hidden]{display:none}.pl-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:1px}" +
+  ".pl-label[data-kind=favourite]{color:#ffe9c4;opacity:.85}.pl-label[data-kind=satellite]{color:#cfeaff;background:rgba(7,11,18,.45);pointer-events:none;cursor:default}.pl-label[hidden]{display:none}.pl-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:1px}" +
   "#pl-list{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:0;padding:0}";
 
 /** What the host needs of its element. */
@@ -23,7 +23,18 @@ export interface PlacesHostOptions {
   reducedMotion?: () => boolean;
 }
 
+/** A satellite ringed and named in the picture just drawn: its name, where it is on the screen and whether it can be seen (in the box and not behind the Earth). */
+export interface MarkOnScreen {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
 export interface PlacesHost {
+  /** Tells where the satellites that are ringed and named fall in the picture just drawn (an empty list takes them away). Drawn with the places, by the same rule for names. */
+  setMarks(marks: readonly MarkOnScreen[]): void;
   /** Replaces the places (already checked with `readPlaces`) and draws them again. */
   set(places: readonly Place[]): void;
   /** Tells where the places fall in the picture just drawn, or `null` when there is no picture (nothing is shown). */
@@ -36,6 +47,8 @@ export interface PlacesHost {
 const PULSE_MS = 2600;
 const PULSE_FRAME_MS = 50;
 const LABEL_H = 18;
+const SATELLITE_COLOR = "#cfeaff";
+const SATELLITE_RING_PX = 8;
 
 /**
  * Makes the places layer of one element, inside its shadow root.
@@ -57,11 +70,12 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
   let view: PlaceProjector | null = null;
   let screen: PlaceOnScreen[] = [];
   let renders = 0;
+  let marks: readonly MarkOnScreen[] = [];
   let shownLabels = 0;
   let pulseTimer: ReturnType<typeof setTimeout> | undefined;
   let inView = true;
   let observer: IntersectionObserver | undefined;
-  const buttons = new Map<string, HTMLButtonElement>();
+  const buttons = new Map<string, HTMLElement>();
   const ruler = doc.createElement("canvas").getContext("2d");
   const widths = new Map<string, number>();
   const max = options.maxLabels ?? 24;
@@ -112,6 +126,17 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, v.width, v.height);
     const calm = options.reducedMotion?.() ?? false;
+    // the satellites that are ringed and named: a ring round each, no beam
+    context.strokeStyle = SATELLITE_COLOR;
+    context.lineWidth = 1.2;
+    context.globalAlpha = 0.85;
+    for (const mark of marks) {
+      if (!mark.visible) continue;
+      context.beginPath();
+      context.arc(mark.x, mark.y, SATELLITE_RING_PX, 0, Math.PI * 2);
+      context.stroke();
+    }
+    context.globalAlpha = 1;
     for (const one of screen) {
       if (!one.facing) continue;
       const here = one.place.kind === "here";
@@ -175,29 +200,41 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
         owners.push(one);
       });
     }
+    // the satellites' names come after the places' (a place is the page's own marker), each beside its ring
+    const named: { id: string; label: string; kind: string }[] = owners.map((one) => ({ id: one.place.id, label: one.place.label ?? "", kind: one.place.kind ?? "favourite" }));
+    if (v) {
+      marks.forEach((mark, index) => {
+        if (!mark.visible || mark.label === "") return;
+        items.push({ x: mark.x, y: mark.y, r: SATELLITE_RING_PX + 2, w: textWidth(mark.label), h: LABEL_H, priority: 500 - index });
+        named.push({ id: `sat:${mark.id}`, label: mark.label, kind: "satellite" });
+      });
+    }
     const placed = v ? placeLabels(items, v.width, v.height, max) : [];
     const shown = new Set<string>();
     for (const spot of placed) {
-      const one = owners[spot.item]!;
-      const place = one.place;
+      const place = named[spot.item]!;
       shown.add(place.id);
       let button = buttons.get(place.id);
       if (!button) {
-        button = doc.createElement("button");
-        button.type = "button";
+        // a place's name is a button that can be pressed; a satellite's is a name beside its ring and nothing more
+        if (place.kind === "satellite") button = doc.createElement("span");
+        else {
+          button = doc.createElement("button");
+          (button as HTMLButtonElement).type = "button";
+        }
         button.className = "pl-label";
         button.dataset["id"] = place.id;
         labels.append(button);
         buttons.set(place.id, button);
       }
-      if (button.textContent !== place.label) button.textContent = place.label ?? "";
-      button.dataset["kind"] = place.kind ?? "favourite";
+      if (button.textContent !== place.label) button.textContent = place.label;
+      button.dataset["kind"] = place.kind;
       if (button.hidden) button.hidden = false;
       button.style.transform = `translate(${Math.round(spot.left)}px,${Math.round(spot.top)}px)`;
     }
     for (const [id, button] of buttons) {
       if (shown.has(id)) continue;
-      if (!places.some((one) => one.id === id)) {
+      if (!places.some((one) => one.id === id) && !marks.some((mark) => `sat:${mark.id}` === id)) {
         button.remove();
         buttons.delete(id);
       } else if (!button.hidden) button.hidden = true;
@@ -231,6 +268,13 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
   }
 
   return {
+    setMarks(next) {
+      marks = next;
+      attach();
+      if (!view) return;
+      arrange();
+      draw();
+    },
     set(next) {
       places = next;
       attach();
