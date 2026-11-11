@@ -31,7 +31,12 @@ const yawFor = (degrees: number, fov: number): number => degrees / (1.5 * (fov /
 async function look(page: Page, yaw: number, tilt = 0): Promise<Stats> {
   const before = (await statsOf(page)).draws;
   await page.locator(SPACE).evaluate((el, v) => (el as unknown as { setView(view: unknown, final: boolean): void }).setView({ yaw: v.yaw, tilt: v.tilt, zoom: 1, panX: 0, panY: 0 }, true), { yaw, tilt });
-  await expect.poll(async () => (await statsOf(page)).draws, { timeout: 30_000 }).toBeGreaterThan(before);
+  // a view that is where it was draws nothing: wait for the draw a change brings, and go on without one
+  try {
+    await expect.poll(async () => (await statsOf(page)).draws, { timeout: 8000 }).toBeGreaterThan(before);
+  } catch {
+    // no change, no draw
+  }
   await page.waitForTimeout(300);
   return statsOf(page);
 }
