@@ -71,6 +71,11 @@ export interface CityLayoutOptions {
   dot: number;
   /** Cities that face the viewer less squarely than this are left out, so none crowds the limb (0.12). */
   facing?: number;
+  /**
+   * The width of a name as the browser draws it, in the font the name is drawn in (a canvas's `measureText`): the estimate from the length is a floor, and the larger of the two is used. A machine whose font has wider letters than the estimate takes
+   * (a fallback font for Japanese, say) would otherwise lay names over one another. Left out, the estimate alone is used, as in Node.
+   */
+  measure?: (text: string) => number;
 }
 
 /**
@@ -218,7 +223,7 @@ export function layoutCities(cities: readonly NamedCity[], frame: CityFrame, lan
   }
   const height = Math.ceil(options.size * 1.35);
   const texts = seen.map((one) => cityNameText(one.city, lang));
-  const items: LabelItem[] = seen.map((one, index) => ({ x: one.x, y: one.y, r: options.dot, w: nameWidth(texts[index]!, options.size), h: height, priority: seen.length - index }));
+  const items: LabelItem[] = seen.map((one, index) => ({ x: one.x, y: one.y, r: options.dot, w: Math.max(nameWidth(texts[index]!, options.size), options.measure ? Math.ceil(options.measure(texts[index]!)) + 4 : 0), h: height, priority: seen.length - index }));
   return placeLabels(items, frame.width, frame.height, options.max).map((place) => {
     const one = seen[place.item]!;
     return { city: one.city, text: texts[place.item]!, x: one.x, y: one.y, left: place.left, top: place.top, width: items[place.item]!.w, height };
