@@ -3,18 +3,31 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createSkyHost, type SkyFrame } from "../src/sky/host.ts";
 
+interface FakeNode {
+  style: { setProperty(): void; removeProperty(): void };
+  hidden: boolean;
+  textContent: string;
+  className: string;
+  width: number;
+  height: number;
+  append(...nodes: FakeNode[]): void;
+  remove(): void;
+  setAttribute(): void;
+  getContext(): unknown;
+  addEventListener(): void;
+}
 const context = new Proxy({}, { get: () => () => undefined, set: () => true });
-const element = (): any => {
-  const node: any = { style: { setProperty() {}, removeProperty() {} }, hidden: false, textContent: "", className: "", children: [] as any[], width: 0, height: 0, append(...c: any[]) { node.children.push(...c); }, remove() {}, setAttribute() {}, getContext: () => context, addEventListener() {} };
+const element = (): FakeNode => {
+  const node: FakeNode = { style: { setProperty() {}, removeProperty() {} }, hidden: false, textContent: "", className: "", width: 0, height: 0, append() {}, remove() {}, setAttribute() {}, getContext: () => context, addEventListener() {} };
   return node;
 };
 const listeners = new Map<string, Set<() => void>>();
-const doc: any = {
+const doc = {
   createElement: element,
   addEventListener: (name: string, fn: () => void) => (listeners.get(name) ?? listeners.set(name, new Set()).get(name)!).add(fn),
   removeEventListener: (name: string, fn: () => void) => listeners.get(name)?.delete(fn),
 };
-const root: any = { ownerDocument: doc, append() {}, host: { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0 }) } };
+const root = { ownerDocument: doc, append() {}, host: { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0 }) } } as unknown as ShadowRoot;
 const frame: SkyFrame = {
   width: 400,
   height: 400,
