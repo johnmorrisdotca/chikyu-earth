@@ -676,7 +676,8 @@ export class ChikyuSpace extends HTMLElement {
       if (typeof target === "string" && !BODY_NAMES.includes(target)) return;
       if (typeof target !== "string" && !model.satellites.groups.get(target.group)) return;
       if (!wasRiding) this.#focusBeforeRide = model.focus;
-      model.rideTurn = 0;
+      // the heading starts from the yaw the controls already hold (an address that carries `yaw` is read before the ride begins), so a ride opened from the address looks where the one that was dragged there looked
+      model.rideTurn = rideTurnDegrees(model.view.yaw, model.view.zoom);
       const view = typeof target === "string" && target === "Earth" ? "follow" : (options.view ?? "from");
       model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: options.look ?? "down", distanceKm: Math.max(100, options.distanceKm ?? 3000) };
       if (typeof target === "string" && view === "follow") model.focus = target;
