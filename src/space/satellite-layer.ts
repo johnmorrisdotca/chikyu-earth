@@ -25,17 +25,19 @@ export interface SatelliteState {
   selected: SatelliteRef | null;
   /** The groups whose members are ringed and named (`labelSatellites`): the scene tells the page where each is, at every draw. */
   marked: Set<string>;
-  /** Written at each draw: satellites placed, whether the clock is too fast for the groups, and the milliseconds the last update took. */
-  drawn: { placed: number; tooFast: boolean; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
+  /** Written at each draw: satellites placed, whether the clock is too fast to interpolate (the groups are then held where they were at `heldAt`, placed again about once a second), and the milliseconds the last update took. */
+  drawn: { placed: number; tooFast: boolean; heldAt: number | null; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), drawn: { placed: 0, tooFast: false, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), drawn: { placed: 0, tooFast: false, heldAt: null, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
 const ORBIT_POINTS = 120;
 const ORBIT_REFRESH_GAME_MS = 30 * 60_000;
 const ORBIT_REFRESH_WALL_MS = 1000;
+/** Above `MAX_SATELLITE_SPEED`, how often (wall time) a group is placed again at the moment shown and held there: one SGP4 batch a second, the same as at real time. */
+const HOLD_WALL_MS = 1000;
 
 const POINT_VERT = /* glsl */ `
 uniform float size;
@@ -70,6 +72,9 @@ interface Drawn {
   linesAt: number;
   linesWall: number;
   style: string;
+  /** While the clock is too fast: the moment the dots were placed at, and when (wall time); NaN when not held. */
+  heldAt: number;
+  heldWall: number;
 }
 
 /**
@@ -192,6 +197,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         }
       }
       let placed = 0;
+      let heldAt: number | null = null;
       for (const [name, group] of state.groups) {
         let entry = drawn.get(name);
         if (!entry) {
@@ -206,7 +212,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           points.frustumCulled = false;
           points.renderOrder = 5;
           scene.add(points);
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "" };
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", heldAt: Number.NaN, heldWall: 0 };
           drawn.set(name, entry);
         }
         const style = `${group.color}|${group.size}|${ratio()}`;
@@ -215,21 +221,33 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           entry.material.uniforms["size"]!.value = group.size * ratio();
           entry.material.uniforms["tint"]!.value.set(group.color);
         }
-        const show = group.visible && !tooFast;
-        entry.points.visible = show;
-        if (!show) {
+        entry.points.visible = group.visible;
+        if (!group.visible) {
           for (const line of entry.lines) line.loop.visible = false;
           continue;
         }
-        group.satellites.setStep(step);
-        group.satellites.at(time, entry.positions);
-        entry.attribute.needsUpdate = true;
+        if (tooFast) {
+          // too fast to interpolate: placed at the moment shown about once a second and held there, each dot where its satellite really was then; no orbits meanwhile
+          if (!Number.isFinite(entry.heldAt) || started - entry.heldWall >= HOLD_WALL_MS || started < entry.heldWall) {
+            group.satellites.hold(time, entry.positions);
+            entry.heldAt = time;
+            entry.heldWall = started;
+            entry.attribute.needsUpdate = true;
+          }
+          heldAt = heldAt === null ? entry.heldAt : Math.min(heldAt, entry.heldAt);
+          for (const line of entry.lines) line.loop.visible = false;
+        } else {
+          entry.heldAt = Number.NaN;
+          group.satellites.setStep(step);
+          group.satellites.at(time, entry.positions);
+          entry.attribute.needsUpdate = true;
+        }
         if (entry.dimVersion !== group.satellites.dimVersion) {
           entry.dimVersion = group.satellites.dimVersion;
           entry.dim.needsUpdate = true;
         }
         placed += group.satellites.placed;
-        orbitsOf(entry, group, time, started);
+        if (!tooFast) orbitsOf(entry, group, time, started);
       }
 
       const chosen = state.selected;
@@ -257,6 +275,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       }
       state.drawn.placed = placed;
       state.drawn.tooFast = tooFast;
+      state.drawn.heldAt = heldAt;
       state.drawn.updateMs = performance.now() - started;
       if (state.drawn.updateMs > state.drawn.maxUpdateMs) state.drawn.maxUpdateMs = state.drawn.updateMs;
       state.drawn.updates += 1;

@@ -224,6 +224,26 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       }
       placed = count;
     },
+    hold(ms, out) {
+      if (n === 0) return;
+      sample(a, okA, ms);
+      ready = false;
+      let count = 0;
+      for (let i = 0; i < n; i += 1) {
+        const k = i * 3;
+        const dim = Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
+        if (dim !== dimmed[i]) {
+          dimmed[i] = dim;
+          dimVersion += 1;
+        }
+        shown[i] = okA[i]!;
+        out[k] = okA[i] === 1 ? a[k]! : 0;
+        out[k + 1] = okA[i] === 1 ? a[k + 1]! : 0;
+        out[k + 2] = okA[i] === 1 ? a[k + 2]! : 0;
+        count += okA[i]!;
+      }
+      placed = count;
+    },
     visible: (index) => shown[index] === 1,
     exact: exactAt,
     orbit(index, ms, points) {

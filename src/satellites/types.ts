@@ -156,7 +156,12 @@ export interface Satellites {
    * steady clock costs one batch a step and every call in between is arithmetic.
    */
   at(ms: number, out: Float32Array): void;
-  /** True if satellite `index` was placed by the last `at` (its elements are not too old at that moment). */
+  /**
+   * Fill `out` with the positions at exactly `ms`: one SGP4 batch for the whole group, nothing interpolated. For a clock too fast to interpolate (above `MAX_SATELLITE_SPEED`): the view places
+   * the group this way about once a second of wall time and holds it there between, so each dot is where its satellite really was at a moment shown. The next `at` starts afresh.
+   */
+  hold(ms: number, out: Float32Array): void;
+  /** True if satellite `index` was placed by the last `at` or `hold` (its elements are not too old at that moment). */
   visible(index: number): boolean;
   /** How many of them the last `at` placed. */
   readonly placed: number;

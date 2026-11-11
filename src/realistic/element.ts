@@ -9,6 +9,7 @@ import { airFor, readAirThickness } from "./air.ts";
 import { NOTES_STYLE, setAirNote } from "./air-note.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
+import { setSatelliteNote } from "../satellites/note.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
@@ -77,7 +78,7 @@ const WHEEL_AS_PINCH = 0.2;
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
-type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+type SatelliteStats = { groups: number; placed: number; tooFast: boolean; heldAt: number | null; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -162,7 +163,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "satellites-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -200,6 +201,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
   #note: HTMLElement | undefined;
+  /** The line under the picture while the clock is too fast to follow the satellites. */
+  #satNote: HTMLElement | undefined;
   /** The names of the stars and the constellation lines (`star-names`, `constellation-lines`), and the look of the names. */
   #sky: SkyHost | undefined;
   #skyStyle: Partial<LabelStyle> = {};
@@ -230,11 +233,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="sat-note" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#overlay = root.getElementById("overlay")!;
     this.#note = root.getElementById("meteor-note")!;
+    this.#satNote = root.getElementById("sat-note")!;
     this.#airNote = root.getElementById("air-note")!;
     this.#sky = createSkyHost({
       root,
@@ -389,6 +393,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#gate?.soon();
     }
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
+    if (name === "satellites-label" || name === "lang") this.#noteSatellites();
   }
 
   #meteorsAsked(): boolean {
@@ -736,7 +741,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds, so every group of the catalogue can be shown at once. Giving the name of a group
    * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations). The groups are placed by SGP4 about once a second and interpolated
-   * between, are hidden while the clock runs faster than `MAX_SATELLITE_SPEED`, are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
+   * between, are placed at the moment shown about once a second and held there while the clock runs faster than `MAX_SATELLITE_SPEED` (a line under the picture says so; `satellites-label="off"` takes it away), are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
    *
    * @param group - The group's name, for `showSatellites`, `selectSatellite` and the events.
    * @param satellites - The group, or `null` to remove it.
@@ -804,7 +809,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       lastBatchMs = Math.max(lastBatchMs, group.satellites.timing.lastBatchMs);
       maxBatchMs = Math.max(maxBatchMs, group.satellites.timing.maxBatchMs);
     }
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, tooFast: drawn.tooFast, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, tooFast: drawn.tooFast, heldAt: drawn.heldAt, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
   }
 
   // A press that does not turn the view (under 6 pixels) on a satellite tells the page, which chooses it with `selectSatellite` if it likes.
@@ -858,6 +863,13 @@ export class ChikyuEarthRealistic extends HTMLElement {
     return Math.min(live, 1000 / Math.min(30, Math.max(1, (satellites ? SATELLITE_RATE : SUN_RATE) * RAD * speed * radius)));
   }
 
+  /** Says under the picture that the satellites are held, while the clock is too fast to follow them and a group is on show. */
+  #noteSatellites(): void {
+    let shown = false;
+    for (const group of this.#model.satellites.groups.values()) if (group.visible && group.satellites.count > 0) shown = true;
+    setSatelliteNote(this.#satNote, this, shown && Math.abs(this.speed) > MAX_SATELLITE_SPEED);
+  }
+
   /** Is anything on show that moves faster than the Earth turns: a group of satellites the clock is slow enough to place? */
   #satellitesMoving(): boolean {
     if (Math.abs(this.speed) > MAX_SATELLITE_SPEED) return false;
@@ -875,6 +887,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /** While the clock runs the Sun and the clouds are put right at the pace `#wait` gives, and nothing runs at all while it holds. */
   #startTick(): void {
+    this.#noteSatellites();
     clearTimeout(this.#tick);
     this.#tick = undefined;
     const go = this.isConnected && this.speed !== 0;

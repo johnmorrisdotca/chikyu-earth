@@ -17,7 +17,7 @@ interface Stats {
   contexts: number;
   canvas: { width: number; height: number; pixels: number };
   time: number;
-  satellites: { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+  satellites: { groups: number; placed: number; tooFast: boolean; heldAt: number | null; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 }
 const statsOf = (page: Page): Promise<Stats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as Stats);
 
@@ -206,20 +206,30 @@ test.describe("moving", () => {
     expect(satellites.maxBatchMs, "one SGP4 batch").toBeLessThan(120);
   });
 
-  test("faster than 60 times real time the groups are hidden and SGP4 is not run, and the frame rate stays capped", async ({ page }) => {
+  test("faster than 60 times real time the groups stay on screen, held where they were and placed again about once a second, the frame rate stays capped, and a line says so", async ({ page }) => {
     await open(page, "", "stations,starlink");
+    const all = 2252;
     await setSpeed(page, 3600);
-    await settle(page, 1000);
+    // the page reports the groups held, every satellite placed, and a moment it placed them at
+    await expect.poll(async () => { const s = (await statsOf(page)).satellites; return s.tooFast && s.heldAt !== null && s.placed > 2000; }, { timeout: 20_000 }).toBe(true);
+    const first = (await statsOf(page)).satellites.heldAt!;
+    // the next placing is at a later moment of the clock
+    await expect.poll(async () => (await statsOf(page)).satellites.heldAt! > first, { timeout: 10_000 }).toBe(true);
     const m = await measure(page, 4000);
-    console.log(`3600x with satellites: ${m.frames.toFixed(1)} frames a second, ${m.propagations.toFixed(0)} SGP4 calls a second, tooFast ${m.stats.satellites.tooFast}`);
-    expect(m.stats.satellites.tooFast).toBe(true);
-    expect(m.propagations).toBe(0);
+    console.log(`3600x with satellites: ${m.frames.toFixed(1)} frames a second, ${m.propagations.toFixed(0)} SGP4 calls a second, held ${m.stats.satellites.placed}`);
+    expect(m.stats.satellites.placed, "the satellites are on screen").toBeGreaterThan(2000);
+    expect(m.propagations, "about one SGP4 batch a second, as at real time").toBeLessThanOrEqual(all * 1.6);
+    expect(m.propagations).toBeGreaterThan(all * 0.4);
     expect(m.frames).toBeLessThanOrEqual(31);
+    const note = page.locator(SPACE).locator("#sat-note");
+    await expect(note).toBeVisible();
+    await expect(note).toContainText("too fast to follow");
     await setSpeed(page, 0);
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "time", Date.parse("2026-11-02T18:00:00Z")));
-    await settle(page, 600);
-    expect((await statsOf(page)).satellites.tooFast).toBe(false);
+    await expect.poll(async () => (await statsOf(page)).satellites.tooFast).toBe(false);
+    expect((await statsOf(page)).satellites.heldAt).toBeNull();
     expect((await statsOf(page)).satellites.placed).toBeGreaterThan(2000);
+    await expect(note).toBeHidden();
   });
 
 

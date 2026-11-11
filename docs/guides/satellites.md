@@ -189,7 +189,7 @@ The same rules as the rest of the space view, each tested at 6,000 satellites:
 - Nothing at rest: paused, nothing is drawn, no frame is asked for, SGP4 does not run.
 - SGP4 about once a second, whatever the frame rate: the whole group at two moments a step apart (the step is the clock's speed in seconds, from 1 to 60), and arithmetic between.
 - At most 30 frames a second, and one a second at real time, or when the reader asked for reduced motion.
-- Above 60 times real time the groups are hidden and SGP4 does not run: the two moments would be too far apart to interpolate. A chosen satellite is still placed exactly.
+- Above 60 times real time the two moments would be too far apart to interpolate, so each group is placed at the moment shown about once a second and held there, every dot where its satellite really was then, with a line under the picture that says the clock is too fast to follow them (`satellites-label="off"` takes it away). A chosen satellite is still placed exactly.
 - Nothing is drawn out of sight or in a hidden tab, one WebGL context, everything freed when a group or the element is taken away, and a lost context comes back with the satellites.
 
 The numbers and the tests are in [docs/satellites.md](https://github.com/johnmorrisdotca/chikyu-earth/blob/main/docs/satellites.md).

@@ -167,3 +167,25 @@ test("an old element set mixed with fresh ones is the only one dimmed", () => {
   const names = group.sets.map((set) => set.NORAD_CAT_ID);
   assert.deepEqual(names.map((id, i) => (group.dimmed[i] === 1 ? id : 0)).filter(Boolean), [806_000]);
 });
+
+test("hold places the whole group at exactly the moment shown, in one batch, and the next at starts afresh", () => {
+  const group = createSatellites(starlink.slice(0, 300));
+  const ms = ISS_EPOCH + 5 * 3_600_000;
+  const held = new Float32Array(group.count * 3);
+  const before = group.propagations;
+  group.hold(ms, held);
+  assert.ok(group.propagations - before <= group.count, "one SGP4 call a satellite at most");
+  assert.ok(group.placed > 250, `${group.placed} placed`);
+  const one = new Float64Array(6);
+  for (const index of [0, 77, 150, 299]) {
+    if (!group.visible(index)) continue;
+    assert.ok(group.exact(index, ms, one));
+    for (let k = 0; k < 3; k += 1) near(held[index * 3 + k]!, one[k]!, 1e-6, `satellite ${index} axis ${k}`);
+  }
+  // an hour of game time later, at() is right again: it does not interpolate from the held batch
+  const later = new Float32Array(group.count * 3);
+  group.setStep(60_000);
+  group.at(ms + 3_600_000, later);
+  assert.ok(group.exact(77, ms + 3_600_000, one));
+  for (let k = 0; k < 3; k += 1) near(later[77 * 3 + k]!, one[k]!, 1e-3, `satellite 77 an hour on, axis ${k}`);
+});
