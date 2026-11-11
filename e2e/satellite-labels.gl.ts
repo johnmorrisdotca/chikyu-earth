@@ -33,7 +33,7 @@ const indexOf = (page: Page, norad: number): Promise<number> =>
 const placeOf = (page: Page, index: number): Promise<Placed | null> => page.locator(SPACE).evaluate((el, i) => (el as unknown as { placeSatellite(ref: unknown): Placed | null }).placeSatellite({ group: "stations", index: i }), index);
 const names = (page: Page): Promise<{ text: string; l: number; t: number; r: number; b: number }[]> =>
   page.locator(SPACE).evaluate((el) =>
-    [...el.shadowRoot!.querySelectorAll<HTMLElement>("#places .pl-name[data-kind=satellite]")]
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("#places .pl-name[data-kind=satellite]:not(.pl-measure)")]
       .filter((b) => !b.hidden)
       .map((b) => {
         const box = b.getBoundingClientRect();

@@ -84,7 +84,7 @@ test.describe("on the realistic Earth", () => {
     expect(Math.abs(foot.x - (box.x + box.width / 2))).toBeLessThan(3);
     expect(Math.abs(foot.y - (box.y + box.height / 2))).toBeLessThan(3);
 
-    const names = await nameBoxes(earth, ".pl-name");
+    const names = await nameBoxes(earth, ".pl-name:not(.pl-measure)");
     expect(names.map((n) => n.text)).toContain("You are here");
     expect(overlapping(names)).toEqual([]);
     for (const name of names) expect(name.l >= box.x - 1 && name.r <= box.x + box.width + 1 && name.t >= box.y - 1 && name.b <= box.y + box.height + 1, `${name.text} inside the picture`).toBe(true);
@@ -118,7 +118,7 @@ test.describe("in the space view", () => {
     await expect.poll(async () => (await placesOf(space)).shown).toBeGreaterThanOrEqual(3);
     const before = (await hereFoot(space))!;
 
-    const names = [...(await nameBoxes(space, ".pl-name")), ...(await nameBoxes(space, ".sp-label"))];
+    const names = [...(await nameBoxes(space, ".pl-name:not(.pl-measure)")), ...(await nameBoxes(space, ".sp-label"))];
     expect(names.map((n) => n.text)).toContain("You are here");
     expect(overlapping(names)).toEqual([]);
 
