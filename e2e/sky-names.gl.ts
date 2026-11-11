@@ -68,8 +68,13 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
   await page.locator(SPACE).evaluate((el) => el.setAttribute("star-names", "12"));
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000, message: "hoshi-stars is loaded when asked for" }).toBe(true);
   await wideSky(page);
-  expect((await skyOf(page)).names, "the layer's count is what is on the page").toBe((await names(page)).length);
-  expect((await names(page)).length).toBeLessThanOrEqual(12);
+  // the layer's count and the names on the page, read in one go so the view cannot move between the two
+  const both = await page.locator(SPACE).evaluate((el) => ({
+    counted: (Reflect.get(el, "stats") as { sky: { names: number } }).sky.names,
+    shown: [...el.shadowRoot!.querySelectorAll<HTMLElement>("#sk-names .sk-name")].filter((b) => !b.hidden).length,
+  }));
+  expect(both.counted, "the layer's count is what is on the page").toBe(both.shown);
+  expect(both.shown).toBeLessThanOrEqual(12);
   await page.locator(SPACE).evaluate((el) => el.removeAttribute("star-names"));
   await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000 }).toBe(0);
   await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBe(0);
