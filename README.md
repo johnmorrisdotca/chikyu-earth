@@ -224,6 +224,14 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 <chikyu-space star-names="12" constellation-lines="0.16"></chikyu-space>
 ```
 
+## City names
+
+`city-names` on `<chikyu-earth-realistic>` and `<chikyu-space>` names cities on the Earth from kuni's list: the capitals first, then the cities of a million and the large ones as the Earth grows on the screen, the most populous first, in the page's language (Japanese where kuni has the name), never overlapping and none on the far side. kuni is an optional peer loaded only when it is set, a tier at a time; the look is the property `cityNamesStyle`; nothing is drawn at rest: [guide](docs/guides/city-names.md).
+
+```html
+<chikyu-earth-realistic city-names="24"></chikyu-earth-realistic>
+```
+
 ## Outside data: the data door
 
 The package draws; you bring the data. `@johnmorrisdotca/chikyu-earth/door` takes a finer map of the Earth, or a list of satellites' orbit data, as a **source**: a small object that carries its own licence and credit, so the screen can always say whose data it shows. With no source nothing changes: the Earth is drawn from the package's own pictures and tiles (`OWN_SOURCES`, written from `NOTICE.md`, never non-commercial or share-alike). A source of yours may be either, and the credit line prints that beside the licence.
@@ -540,6 +548,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |
+| [City names on the Earth](docs/guides/city-names.md) | Cities named from kuni's list, more as the Earth grows on the screen, in the page's language |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
 | [Outside data, the data door](docs/guides/data-door.md) | Hand the package your own maps of the Earth or orbit data with their licence and credit, switch them off, and show whose data is on the screen |

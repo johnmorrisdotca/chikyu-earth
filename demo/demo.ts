@@ -692,6 +692,7 @@ if (flat && controls && stage) {
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
+      if (address.get("city-names") !== null) element.setAttribute("city-names", address.get("city-names")!);
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
@@ -769,6 +770,7 @@ if (flat && controls && stage) {
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
+      if (address.get("city-names") !== null) element.setAttribute("city-names", address.get("city-names")!);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       element.setAttribute("camera", cameraMode);
       turnFor(true);
@@ -974,6 +976,24 @@ if (flat && controls && stage) {
     address.set("air-thickness", on ? "1" : null);
   });
 
+  // The names of cities (`city-names=24` in the address): kuni's cities named on the realistic Earth and the space view, more as the Earth grows on the screen, in the page's language; off by default.
+  const cityNames = document.querySelector<HTMLButtonElement>("#city-names");
+  cityNames?.addEventListener("click", () => {
+    const on = cityNames.getAttribute("aria-pressed") !== "true";
+    cityNames.setAttribute("aria-pressed", String(on));
+    for (const element of [real, space]) {
+      if (on) element?.setAttribute("city-names", "24");
+      else element?.removeAttribute("city-names");
+    }
+    address.set("city-names", on ? "24" : null);
+  });
+  // the elements read the page's language from the nearest `lang`; a change of language is told to them so the names are written again
+  document.addEventListener("kazoku-languagechange", () =>
+    queueMicrotask(() => {
+      for (const element of [real, space]) element?.setAttribute("lang", say("locale").startsWith("ja") ? "ja" : "en");
+    }),
+  );
+
   // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
   // Play runs the clock from the date shown; Pause holds it there and writes the date reached to the address (`time`); Back goes to the date the reader chose. `play=on` and `speed` stay in the address.
   // A link that says nothing about the clock opens moving, from now, at DEFAULT_SPEED (MODULES-815). A link with `speed=0`, `play=off` or a date (`time`) holds; one that names a speed other than 0 runs at it.
@@ -1162,6 +1182,7 @@ if (flat && controls && stage) {
   if (opened["body-label"] !== undefined) markLabel(opened["body-label"]);
   if (opened["meteors-strength"] !== undefined) markStrength(readMeteorStrength(opened["meteors-strength"]));
   if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
+  if (opened["city-names"] !== undefined) cityNames?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");

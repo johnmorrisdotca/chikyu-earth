@@ -20,6 +20,8 @@ import { ownCredit } from "../door/own.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import type { LabelStyle } from "@johnmorrisdotca/hoshi-stars/sky-labels";
+import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
+import { project } from "../markers/project.ts";
 
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
@@ -45,7 +47,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + SKY_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + SKY_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -160,7 +162,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -190,6 +192,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #stage: HTMLElement | undefined;
   #overlay: HTMLElement | undefined;
   #pose: OverlayPose | null = null;
+  /** The names of cities on the Earth (`city-names`), and the look of the names. */
+  #cities: CityHost | undefined;
+  #citiesStyle: CityNamesStyle = {};
   #listeners = new Set<(pose: OverlayPose) => void>();
   #hands: ElementControls | undefined;
   #reach: string | null = null;
@@ -240,6 +245,13 @@ export class ChikyuEarthRealistic extends HTMLElement {
       loadFont: loadMichroma,
     });
     this.#sky.setStyle(this.#skyStyle);
+    this.#cities = createCityHost({
+      root,
+      attribute: (name) => this.getAttribute(name),
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+      onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-city-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+    });
+    this.#cities.setStyle(this.#citiesStyle);
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
@@ -287,6 +299,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
+        this.#cityFrame();
       },
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
@@ -335,6 +348,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#taken = undefined;
     this.#sky?.dispose();
     this.#sky = undefined;
+    this.#cities?.dispose();
+    this.#cities = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -366,9 +381,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
       if (name === "lang") {
         this.#applyBodyLabel();
         this.#sky?.refresh();
+        this.#cities?.refresh();
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
+    else if ((CITY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#cities?.refresh();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -455,6 +472,34 @@ export class ChikyuEarthRealistic extends HTMLElement {
   set skyStyle(value: Partial<LabelStyle>) {
     this.#skyStyle = { ...value };
     this.#sky?.setStyle(this.#skyStyle);
+  }
+
+  /**
+   * The look of the names of cities (`city-names`): font, size, weight, colour, the outline round the text, and the dot's colour and size. Any of them may be left out; the Earth's size, the language and the data are not set here.
+   */
+  get cityNamesStyle(): CityNamesStyle {
+    return { ...this.#citiesStyle };
+  }
+  set cityNamesStyle(value: CityNamesStyle) {
+    this.#citiesStyle = { ...value };
+    this.#cities?.setStyle(this.#citiesStyle);
+  }
+
+  /** Tells the names of cities where the Earth is in the picture just drawn: the orthographic view the markers share. */
+  #cityFrame(): void {
+    const pose = this.#pose;
+    if (!this.#cities || !pose) return;
+    this.#cities.frame({
+      width: pose.width,
+      height: pose.height,
+      radius: pose.radius,
+      project: (lon, lat, out) => {
+        const at = project(lon, lat, pose);
+        out.x = at.x;
+        out.y = at.y;
+        return at.z;
+      },
+    });
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -653,6 +698,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn and the language its names were last laid out in. */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string };
+    /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
+    cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -667,6 +714,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0, lang: "" },
+      cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
     };
   }
 

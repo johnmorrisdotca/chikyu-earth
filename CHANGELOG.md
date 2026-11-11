@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **City names on the Earth** (MODULES-937). `<chikyu-earth-realistic>` and `<chikyu-space>` take `city-names` (bare is 24 names at once, a number is that many, 1 to 80; absent, none) and name cities from kuni's `cities` (an optional peer, `>=1.6.1`, loaded only when it is set, one tier at a time): the capitals from an Earth 60 pixels in radius, the other cities of a million from 170, those of 100,000 from 420, the most populous first with a bonus for capitals. A name goes right of its dot, then left, above, below, never over another and never off the picture; a city that is not facing the viewer, or is within about 7 degrees of the limb, is left out. The names are English, or Japanese on a Japanese page where kuni has the name (`name.jaShort` first when kuni gives it, so Tokyo is written as the city and not as the prefecture). The property `cityNamesStyle` has the font, size, weight, colour, outline and the dot's colour and size. Only the layer is drawn again, and nothing at rest; `chikyu-city-names-unavailable` is sent when kuni is not there and `stats.cityNames` has the counts. The pure parts (`layoutCities`, `cityTiersFor`, `cityRank`, `cityNameText`, `nameWidth`, `readCityNames`) are in `@johnmorrisdotca/chikyu-earth/realistic`. The demo has a City names button (`city-names` in the address). New guide: City names on the Earth (English and Japanese).
+
 ## 0.33.1 - 2026-11-11
 
 ## 0.33.0 - 2026-11-11
