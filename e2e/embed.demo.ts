@@ -31,6 +31,24 @@ test("by default it draws no controls, asks for no location and stays still unti
   expect(await page.locator("chikyu-earth").evaluate((el) => el.shadowRoot?.innerHTML ?? "")).toBe(before);
 });
 
+test("center=me: the embedding page asks the browser once and the globe opens there", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: (ok: (position: { coords: { longitude: number; latitude: number } }) => void) => {
+          Reflect.set(globalThis, "__asked", ((Reflect.get(globalThis, "__asked") as number | undefined) ?? 0) + 1);
+          ok({ coords: { longitude: 139.69, latitude: 35.69 } });
+        },
+      },
+    });
+  });
+  await page.goto(`${EMBED}?center=me`);
+  await expect(page.locator("chikyu-earth svg")).toBeVisible();
+  await expect(page.locator("chikyu-earth")).toHaveAttribute("center", "139.69,35.69");
+  expect(await page.evaluate(() => Reflect.get(globalThis, "__asked"))).toBe(1);
+});
+
 test.describe("turning", () => {
   test.use({ reducedMotion: "no-preference" });
 

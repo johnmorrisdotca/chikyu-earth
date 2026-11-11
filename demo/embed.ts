@@ -52,6 +52,8 @@ function mount(): ChikyuEarth | ChikyuEarthRealistic {
   flat.setAttribute("size", "420");
   flat.setAttribute("look", look === "thick" || look === "realistic" ? "thick" : "line");
   if (centre !== "me") flat.setAttribute("center", centre);
+  // `center=me` is the embedding page's own choice: the page asks the browser (the globe never does by itself)
+  else navigator.geolocation?.getCurrentPosition((position) => flat.setAttribute("center", `${position.coords.longitude},${position.coords.latitude}`), () => undefined, { timeout: 8000, maximumAge: 600_000 });
   if (query.get("graticule") === "1") flat.setAttribute("graticule", "");
   still(flat);
   frame.append(flat);
