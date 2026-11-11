@@ -7,6 +7,22 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.34: no location asked for on load
+
+`<chikyu-earth>` and `<chikyu-earth-realistic>` no longer ask the browser where the reader is when they open with no `center`: they open on 0,0. A page asks only after the reader asks for it.
+
+- You left out `center` to have the globe open on the reader: add a button, ask on its press and set `center` from the answer:
+
+```js no-run
+button.addEventListener("click", () => {
+  navigator.geolocation.getCurrentPosition((position) => {
+    earth.setAttribute("center", `${position.coords.longitude},${position.coords.latitude}`);
+  });
+});
+```
+
+- You set `center` already: nothing changes.
+
 ## To 0.18: every view zooms and turns by itself
 
 `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` now carry kazoku-ui's controls: drag, pinch, Ctrl and the wheel, the keys. A page that did not wire them gets them, and a plain wheel at Fit still scrolls the page. Act on it if:

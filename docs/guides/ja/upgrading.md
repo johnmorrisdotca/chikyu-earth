@@ -7,6 +7,22 @@ description: バージョンごとの変更点と、必要な対応です。パ�
 
 パッケージは 0.x なので、マイナーバージョン (0.5 から 0.6 など) で動きが変わることがあります。各リリースの内容は [変更履歴](../../../CHANGELOG.md) にあります。このページには、対応が必要なことだけを書きます。
 
+## 0.34 へ: 開いたときに現在地をたずねなくなりました
+
+`<chikyu-earth>` と `<chikyu-earth-realistic>` は、`center` なしで開いたときに、ブラウザーへ読む人の現在地をたずねなくなりました。代わりに 0,0 で開きます。現在地をたずねるのは、読む人が求めたあとだけにしてください。
+
+- 読む人の場所で開くために `center` を書いていなかった場合: ボタンを用意し、押されたときにたずねて、その答えで `center` を設定します。
+
+```js no-run
+button.addEventListener("click", () => {
+  navigator.geolocation.getCurrentPosition((position) => {
+    earth.setAttribute("center", `${position.coords.longitude},${position.coords.latitude}`);
+  });
+});
+```
+
+- すでに `center` を設定している場合: 何も変わりません。
+
 ## 0.18 へ: どの表示も自分でズームし、回ります
 
 `<chikyu-earth>`、`<chikyu-earth-realistic>`、`<chikyu-space>` が kazoku-ui の操作 (ドラッグ、ピンチ、Ctrl とホイール、キー) を持つようになりました。これまで何もつないでいなかったページでも、操作できるようになります。「全体」でのふつうのホイールは、これまでどおりページをスクロールします。次のときは対応してください。

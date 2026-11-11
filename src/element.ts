@@ -1,5 +1,5 @@
 // <chikyu-earth>: the globe as a web component. A shared view controller supplies its yaw, tilt, zoom and pan;
-// it opens centred on where you are (the `center` attribute wins over geolocation). Importing registers it once.
+// it opens centred on the `center` attribute (0,0 without one) and never asks the browser where the reader is. Importing registers it once.
 import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "./adopt.ts";
 import { globe } from "./globe.ts";
@@ -84,7 +84,6 @@ export class ChikyuEarth extends HTMLElement {
   connectedCallback(): void {
     this.#centre = readCentre(this.getAttribute("center")) ?? { lon: 0, lat: 0 };
     this.#render();
-    this.#locate();
     this.#hands = carryControls(this, {
       initial: this.#view,
       grabRadius: "fit",
@@ -125,19 +124,6 @@ export class ChikyuEarth extends HTMLElement {
         this.#render();
       }, wait);
     }
-  }
-
-  #locate(): void {
-    if (readCentre(this.getAttribute("center"))) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        this.#centre = { lon: position.coords.longitude, lat: position.coords.latitude };
-        this.#render();
-      },
-      () => {},
-      { timeout: 8000, maximumAge: 600000 },
-    );
   }
 
   #transform(): void {

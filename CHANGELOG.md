@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **No location is asked for on load** (MODULES-1071). `<chikyu-earth>` and `<chikyu-earth-realistic>` asked the browser for the reader's location when they opened with no `center`, before the reader had done anything. They no longer ask at all: without `center` they open on 0,0. A page that wants to centre on the reader asks on a press of its own (the demo's "Centre on me") and sets `center`. See the upgrade guide.
+
 ## 0.33.1 - 2026-11-11
 
 ## 0.33.0 - 2026-11-11
