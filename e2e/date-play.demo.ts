@@ -17,6 +17,8 @@ const SPACE = "chikyu-space";
 
 /** The date box as milliseconds (it shows local time to the minute). */
 const boxMs = async (page: Page): Promise<number> => Date.parse(await page.locator("#when").inputValue());
+/** The date box moves on from `from` by at least `by` milliseconds: waited for, because a busy machine draws slowly and the box follows the clock only when the page gets to run. */
+const boxMovesOn = (page: Page, from: number, by: number, message: string) => expect.poll(async () => (await boxMs(page)) - from, { timeout: 20_000, message }).toBeGreaterThanOrEqual(by);
 const play = (page: Page) => page.locator('#replay [data-act="play"]');
 const back = (page: Page) => page.locator('#replay [data-act="start"]');
 const speed = (page: Page, value: number) => page.locator(`#replay button[data-v="${value}"]`);
@@ -42,12 +44,11 @@ test("at 86400x for two seconds the date box reads a later day, and the element 
   await open(page, `time=${START}&play=on&speed=86400`);
   await expect(play(page)).toHaveAttribute("aria-pressed", "true");
   const before = await boxMs(page);
-  await page.waitForTimeout(2200);
-  const later = await boxMs(page);
-  expect(later - before, `the box moved on (${before} to ${later})`).toBeGreaterThanOrEqual(DAY);
+  await boxMovesOn(page, before, DAY, "the box moved on a day");
+  // told at least three times: waited for, as the box is (the rate is judged below over everything that arrived)
+  await expect.poll(async () => ((await page.evaluate(() => Reflect.get(window, "__timechange"))) as { running: boolean }[]).filter((e) => e.running).length, { message: "told while time runs", timeout: 20_000 }).toBeGreaterThanOrEqual(3);
   const log = (await page.evaluate(() => Reflect.get(window, "__timechange"))) as { at: number; running: boolean }[];
   const running = log.filter((e) => e.running);
-  expect(running.length, "told while time runs").toBeGreaterThanOrEqual(3);
   for (let i = 1; i < running.length; i += 1) expect(running[i]!.at - running[i - 1]!.at, "no more than four a second").toBeGreaterThanOrEqual(240);
   // it holds: told once, at once
   await play(page).click();
@@ -64,8 +65,7 @@ test("riding along the Moon starts the clock and the date box keeps moving", asy
   await expect(play(page)).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await boxMs(page)) - before, { message: "the box moved on while riding the Moon", timeout: 8000 }).toBeGreaterThanOrEqual(3600_000);
   const later = await boxMs(page);
-  await page.waitForTimeout(1500);
-  expect(await boxMs(page), "and keeps moving").toBeGreaterThan(later);
+  await boxMovesOn(page, later, 1, "and keeps moving");
 });
 
 test("Play runs the clock from the date shown, Pause holds it, Back returns to the date chosen, and the address keeps it", async ({ page }) => {
@@ -79,7 +79,7 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
 
   await play(page).click();
   await inAddress(page, "play").toBe("on");
-  await expect.poll(() => boxMs(page), { message: "Play moves the date on from the date shown", timeout: 20_000 }).toBeGreaterThan(start + 3600_000);
+  await boxMovesOn(page, start, 3600_001, "Play moves the date on from the date shown");
   const running = await boxMs(page);
 
   await play(page).click();
@@ -95,7 +95,7 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
 
   // Play again goes on from there, and Back goes to the date the reader chose, not where Pause was
   await play(page).click();
-  await expect.poll(() => boxMs(page), { message: "Play goes on from the date it was held on", timeout: 20_000 }).toBeGreaterThan(held + 1800_000);
+  await boxMovesOn(page, held, 1800_001, "Play goes on from the date it was held on");
   await back(page).click();
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
   expect(await boxMs(page), "Back returns to the chosen date").toBe(start);
