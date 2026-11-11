@@ -140,7 +140,7 @@ test.describe("with motion allowed", () => {
     await openEarth(page, `${GEMINIDS}&speed=60&meteors=on&meteors-strength=0`);
     // the sky is surveyed and the shower found, with no streak started
     await expect.poll(async () => (await meteors(page)).shower, { timeout: 15_000 }).toBe("GEM");
-    expect(await meteors(page)).toMatchObject({ on: true, strength: 0, alive: 0, spawned: 0, perSecond: 0 });
+    await expect.poll(() => meteors(page)).toMatchObject({ on: true, strength: 0, alive: 0, spawned: 0, perSecond: 0 });
     expect(await note(page)).toContain("illustration");
     // the clock is running and the night side is in view: nothing but the strength is holding them back
     await page.locator(EARTH).evaluate((el) => el.setAttribute("meteors-strength", "0.5"));
@@ -255,7 +255,8 @@ test.describe("in the space view", () => {
     expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "meteorsStrength"))).toBe(0.3);
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "meteorsStrength", 0));
     await expect.poll(async () => (await spaceMeteors(page)).alive).toBe(0);
-    expect(await spaceMeteors(page)).toMatchObject({ strength: 0, perSecond: 0 });
+    // the sky is surveyed again at the next draw after the change, and the rate it reports follows: wait for it, never read it the moment the last streak is gone
+    await expect.poll(() => spaceMeteors(page)).toMatchObject({ strength: 0, perSecond: 0 });
     expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.getElementById("meteor-note")!.hidden)).toBe(false);
     const held = (await spaceMeteors(page)).spawned;
     // back to the full look: they start again
