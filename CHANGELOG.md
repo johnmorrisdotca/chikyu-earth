@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.28.0 - 2026-11-11
+
 - **The air is light scattered once, worked out in the shader** (MODULES-843). The realistic Earth and the space view draw the atmosphere as a shell 100 km thick (0.0157 of the Earth's radius), sampled along each ray toward the camera and toward the Sun in the fragment shader, with the samples packed where the air is thick: Rayleigh scattering (a blue haze that thickens toward the limb on the day side), Mie scattering (a glow toward the Sun), the reddening along the day and night line, and the thin lit ring seen from the night side looking toward the Sun are what the sums give, not things drawn. The surface under it is dimmed by what the air takes out of the light. The old rim in the surface program is gone. Our own code, from the published single-scattering model (Nishita and others, 1993; GPU Gems 2, chapter 16), no code taken from any project. `air="light"` (6 samples along the ray and 2 toward the Sun; the default on a small or slow device) or `air="full"` (12 and 4), on both elements. It costs nothing at rest, at most 30 frames a second as before. New in `/realistic`: `AIR_TOP`, `AIR_QUALITY`, `AIR_VERT`, `airFrag`, `airFor` and `AirSamples`. `ATMOSPHERE_OUTER` stays the room the page leaves for it. Guide in English and Japanese: `docs/guides/full-screen-and-camera.md`.
 
 ## 0.27.0 - 2026-11-10
