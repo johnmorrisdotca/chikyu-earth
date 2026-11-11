@@ -45,6 +45,8 @@ else {
 await cp(at("node_modules/@johnmorrisdotca/wakusei-planets/dist/textures"), at("site/planets"), { recursive: true });
 await cp(at("demo/elements"), at("site/elements"), { recursive: true });
 await cp(at("demo/missions"), at("site/missions"), { recursive: true });
+// the Earth-orbit catalogue (made by scripts/catalogue.ts, never committed): published beside the demo once it has been made
+if (existsSync(at("demo/catalogue/manifest.json"))) await cp(at("demo/catalogue"), at("site/catalogue"), { recursive: true });
 // The family's card in the demo's <head> (og:image, twitter:image, the icon), and the three pictures published beside it.
 const ALT = "Chikyu Earth: the globe as a line drawing over Europe and Africa, and as the realistic Earth over Asia with evening in the east.";
 await writeFile(at("site/index.html"), renderIndex().replace("  </head>", `    ${thumbnailHead(pkg, { alt: ALT })}\n  </head>`), "utf8");

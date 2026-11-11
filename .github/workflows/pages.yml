@@ -5,6 +5,8 @@
 # downloaded once per update, and an update comes every two hours). A list is not asked for again within 110 minutes. No server runs per view: the visitor's browser reads files on Pages.
 # A group CelesTrak has left more than 12 hours old is asked of Space-Track instead (its GP class, once a day for each group), when the secrets SPACETRACK_USER and SPACETRACK_PASSWORD are set;
 # without them the step says "CelesTrak only" and the groups keep their last files. The login is only ever passed in the environment of that one step.
+# The Earth-orbit catalogue (demo/catalogue, made by scripts/catalogue.ts): every run carries over the files already on the site, so a push never drops them. Only the Catalogue workflow (once a day, calling this one with
+# `catalogue: true`) asks Space-Track for new ones, and only when the repository variable CATALOGUE_PUBLISH is `yes`. Every step has a timeout, nothing is retried, and nothing here costs anything on a public repository.
 name: Pages
 on:
   push:
@@ -13,6 +15,15 @@ on:
     inputs:
       refresh:
         description: Download new satellite elements from CelesTrak (a list is not asked for again within 110 minutes)
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      refresh:
+        type: boolean
+        default: false
+      catalogue:
+        description: Download the whole Earth-orbit catalogue from Space-Track (the Catalogue workflow sets this once a day)
         type: boolean
         default: false
   schedule:
@@ -27,47 +38,65 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 5
       - uses: pnpm/action-setup@v6
+        timeout-minutes: 5
       - uses: actions/setup-node@v7
+        timeout-minutes: 5
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        timeout-minutes: 10
       - name: Satellites, the files already on the site
+        timeout-minutes: 5
         run: node scripts/elements.ts previous https://johnmorrisdotca.github.io/chikyu-earth/elements
       - name: Satellites, new elements from CelesTrak, Space-Track when it does not answer (every six hours)
+        timeout-minutes: 15
         if: github.event_name == 'schedule' || inputs.refresh
         env:
           SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
           SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
         run: node scripts/elements.ts fetch
       - name: Satellites, the files are fit to publish
+        timeout-minutes: 5
         run: node scripts/elements.ts check demo/elements
       - run: pnpm check
+        timeout-minutes: 20
         if: github.event_name != 'schedule'
       - name: The Earth tiles, cut from NASA's big maps (kept between runs while the script is the same); pnpm site copies them to site/tiles
+        timeout-minutes: 10
         uses: actions/cache@v6
         id: tiles
         with:
           path: .cache/earth-tiles-out
           key: earth-tiles-${{ hashFiles('scripts/make-earth-tiles.py') }}
       - if: steps.tiles.outputs.cache-hit != 'true'
+        timeout-minutes: 20
         run: python3 -m venv .cache/venv && .cache/venv/bin/pip install pillow && .cache/venv/bin/python -I scripts/make-earth-tiles.py build
       - run: pnpm site
+        timeout-minutes: 10
       - run: pnpm docs:site
+        timeout-minutes: 15
       - uses: ./.github/actions/playwright
+        timeout-minutes: 10
         with:
           browsers: chromium
       - name: The ready-made PDFs of the printable sheets
+        timeout-minutes: 15
         run: node scripts/make-pdfs.mjs
       - uses: actions/configure-pages@v6
+        timeout-minutes: 5
       - uses: actions/upload-pages-artifact@v5
+        timeout-minutes: 10
         with:
           path: site
       - id: deployment
+        timeout-minutes: 10
         uses: actions/deploy-pages@v5
