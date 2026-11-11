@@ -193,23 +193,28 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
         { timeout: 60_000, message: "the view is at rest" },
       )
       .toBe(0);
-    const shown = await names(page);
+    // the names' places in the picture, from its own top left (read in one go, so a scroll of the page between the readings cannot change them)
+    const shown = await page.locator(SPACE).evaluate((el) => {
+      const own = el.getBoundingClientRect();
+      return [...el.shadowRoot!.querySelectorAll<HTMLElement>("#sk-names .sk-name")]
+        .filter((b) => !b.hidden)
+        .map((b) => {
+          const box = b.getBoundingClientRect();
+          return { text: b.textContent ?? "", x: (box.left + box.right) / 2 - own.left, y: (box.top + box.bottom) / 2 - own.top };
+        });
+    });
     if (shown.length === 0) continue;
     // the Earth's edge down each column a name is in, found with the names and rings hidden: the brightest step down the column
-    const edges = await page.locator(SPACE).evaluate(async (el, centres) => {
-      const root = el.shadowRoot!;
-      const layer = root.getElementById("sk-names")!;
-      const canvas = root.getElementById("sk-canvas")!;
-      layer.style.visibility = "hidden";
-      canvas.style.visibility = "hidden";
-      return centres as number[];
-    }, shown.map((n) => (n.l + n.r) / 2));
+    await page.locator(SPACE).evaluate((el) => {
+      el.shadowRoot!.getElementById("sk-names")!.style.visibility = "hidden";
+      el.shadowRoot!.getElementById("sk-canvas")!.style.visibility = "hidden";
+    });
     const shot = (await page.locator(SPACE).screenshot()).toString("base64");
     await page.locator(SPACE).evaluate((el) => {
       el.shadowRoot!.getElementById("sk-names")!.style.visibility = "";
       el.shadowRoot!.getElementById("sk-canvas")!.style.visibility = "";
     });
-    const box = (await page.locator(SPACE).boundingBox())!;
+    const width = await page.locator(SPACE).evaluate((el) => el.getBoundingClientRect().width);
     const limbs = await page.evaluate(
       async ({ data, columns }) => {
         const image = new Image();
@@ -236,12 +241,11 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
           return edge / scale;
         });
       },
-      { data: shot, columns: { at: edges.map((c) => c - box.x), width: box.width } },
+      { data: shot, columns: { at: shown.map((n) => n.x), width } },
     );
     shown.forEach((n, i) => {
-      const middle = (n.t + n.b) / 2 - box.y;
-      console.log(`at yaw ${yaw}: ${n.text} is at ${middle.toFixed(0)} px, the Earth's edge there is at ${limbs[i]!.toFixed(0)} px`);
-      expect(middle, `${n.text} is in the sky, above the Earth's edge`).toBeLessThan(limbs[i]! + 6);
+      console.log(`at yaw ${yaw}: ${n.text} is at ${n.y.toFixed(0)} px, the Earth's edge there is at ${limbs[i]!.toFixed(0)} px`);
+      expect(n.y, `${n.text} is in the sky, above the Earth's edge`).toBeLessThan(limbs[i]! + 6);
     });
     checked += shown.length;
   }
