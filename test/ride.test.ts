@@ -65,11 +65,68 @@ test("the angle for each pixel of a drag follows the field of view, so the groun
   near(angle(2), angle(1) / 2, 1e-6, "twice the zoom, half the angle");
 });
 
-test("a drag from the horizon look turns about the camera's own up, so the picture's up stays put", () => {
-  const level = ridePose({ ...iss, look: "horizon" });
-  const turned = ridePose({ ...iss, look: "horizon", yaw: 30 });
-  for (let i = 0; i < 3; i += 1) near(turned.up[i]!, level.up[i]!, 1e-9, "up");
-  assert.ok(Math.abs(turned.forward[1]!) > 0.05, "and it looks to the side");
+/** The cosine of the angle from straight up (the local vertical, from the Earth's centre through the camera) to a direction. */
+const upness = (position: number[], v: number[]): number => dot(v, position) / len(position);
+const cross = (a: number[], b: number[]): number[] => [a[1]! * b[2]! - a[2]! * b[1]!, a[2]! * b[0]! - a[0]! * b[2]!, a[0]! * b[1]! - a[1]! * b[0]!];
+const horizonIss: RideInput = { ...iss, velocity: [0, 0, -7.66], look: "horizon" };
+/** The yaw that turns the camera by `degrees` at zoom 1 (a drag across the view is 180 and turns it 90). */
+const yawFor = (degrees: number): number => degrees / (1.5 * (RIDE_FOV / 180));
+
+test("the horizon look keeps the horizon level through a whole turn: the picture's right is never up or down, and its up always has some of the sky in it", () => {
+  for (let degrees = 0; degrees <= 360; degrees += 15) {
+    const pose = ridePose({ ...horizonIss, yaw: yawFor(degrees) });
+    const right = cross(pose.forward, pose.up);
+    near(upness(iss.position, right), 0, 1e-9, `no roll at ${degrees} degrees`);
+    assert.ok(upness(iss.position, pose.up) > 0.3, `up is above the horizontal at ${degrees} degrees`);
+    near(len(pose.forward), 1, 1e-9, "forward is a unit vector");
+    near(dot(pose.forward, pose.up), 0, 1e-9, "up is square to forward");
+    // the tip down does not change with the turn: the camera only goes round
+    near(upness(iss.position, pose.forward), upness(iss.position, ridePose(horizonIss).forward), 1e-9, `the same tip at ${degrees} degrees`);
+  }
+});
+
+test("a sideways drag turns the camera the whole way round: 90, 180, 270 and 360 degrees from the way it goes", () => {
+  const ahead = [0, 0, -1];
+  const heading = (degrees: number): number[] => {
+    const pose = ridePose({ ...horizonIss, yaw: yawFor(degrees) });
+    const flat = [pose.forward[0]!, pose.forward[1]!, pose.forward[2]!];
+    const lift = upness(iss.position, flat);
+    return flat.map((n, i) => n - lift * [1, 0, 0][i]!);
+  };
+  const along = (degrees: number): number => dot(heading(degrees), ahead) / len(heading(degrees));
+  near(along(0), 1, 1e-9, "at the start it looks the way it goes");
+  near(along(90), 0, 1e-9, "at 90 it looks to the side");
+  near(along(180), -1, 1e-9, "at 180 it looks back along the ground track, which runs away from the camera");
+  near(along(270), 0, 1e-9, "at 270 it looks to the other side");
+  near(along(360), 1, 1e-9, "and at 360 it is where it began");
+  // a drag right turns the camera left (the ground follows the pointer): at 90 the picture looks along +y, the picture's left at the start
+  assert.ok(ridePose({ ...horizonIss, yaw: yawFor(90) }).forward[1]! > 0.1, "the first quarter is to the left");
+  assert.ok(ridePose({ ...horizonIss, yaw: yawFor(-90) }).forward[1]! < -0.1, "and a drag the other way is to the right");
+});
+
+test("up and down is only a tip: from straight down to a little above the horizon, with the heading kept and no roll", () => {
+  const down = ridePose({ ...horizonIss, tilt: 1000 });
+  near(upness(iss.position, down.forward), -1, 1e-9, "as far as straight down");
+  near(upness(iss.position, cross(down.forward, down.up)), 0, 1e-9, "level");
+  const high = ridePose({ ...horizonIss, tilt: -1000 });
+  const degrees = (Math.asin(upness(iss.position, high.forward)) * 180) / Math.PI;
+  near(degrees, 20, 1e-6, "20 degrees above the horizon at most");
+  const turned = { ...horizonIss, yaw: yawFor(120) };
+  for (const tilt of [-30, 0, 30, 60]) {
+    const pose = ridePose({ ...turned, tilt });
+    near(upness(iss.position, cross(pose.forward, pose.up)), 0, 1e-9, `no roll at tilt ${tilt}`);
+    const flat = [pose.forward[0]! - upness(iss.position, pose.forward), pose.forward[1]!, pose.forward[2]!];
+    const base = ridePose({ ...turned, tilt: 0 });
+    const baseFlat = [base.forward[0]! - upness(iss.position, base.forward), base.forward[1]!, base.forward[2]!];
+    near(dot(flat, baseFlat) / (len(flat) * len(baseFlat)), 1, 1e-9, `the heading does not move with the tip (tilt ${tilt})`);
+  }
+});
+
+test("the horizon look from far away, where the horizon is the picture's edge, still turns about the vertical", () => {
+  const far: RideInput = { position: [10, 0, 0], velocity: [0, 0, -1], look: "horizon", yaw: yawFor(90), tilt: 0, zoom: 1 };
+  const pose = ridePose(far);
+  near(pose.forward[0], -1, 1e-9, "it looks straight down");
+  near(pose.up[1], 1, 1e-9, "and the picture's top is where it was turned to, to the left of the way it goes");
 });
 
 test("with no way of travel it still has a sensible up: north, or east at a pole", () => {
