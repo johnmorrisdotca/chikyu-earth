@@ -107,13 +107,29 @@ test("a satellite that goes behind the Earth is not ringed, and the page is told
   expect((await names(page)).length === before, "a different view, a different set of names").toBe(false);
 });
 
-test("nothing is drawn at rest: the places layer is not drawn again while the view and the clock hold", async ({ page }) => {
+test("nothing is drawn at rest: the places layer is drawn again only when the picture is", async ({ page }) => {
   await open(page);
   await labelOn(page);
   await expect.poll(async () => (await placesStats(page)).labels, { timeout: 30_000 }).toBeGreaterThan(0);
+  const draws = (): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+  const frames = (count: number): Promise<void> =>
+    page.evaluate(async (n) => {
+      for (let frame = 0; frame < n; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+    }, count);
+  // pictures still arriving (a sharper texture) draw the picture, and the layer with it: wait until the page has gone thirty frames with no draw at all
+  await expect
+    .poll(
+      async () => {
+        const before = await draws();
+        await frames(30);
+        return (await draws()) - before;
+      },
+      { timeout: 60_000, message: "the picture is at rest" },
+    )
+    .toBe(0);
   const drawn = (await placesStats(page)).renders;
-  await page.evaluate(async () => {
-    for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-  });
-  expect((await placesStats(page)).renders).toBe(drawn);
+  const picture = await draws();
+  await frames(30);
+  expect(await draws(), "the picture is still").toBe(picture);
+  expect((await placesStats(page)).renders, "and the places layer is not drawn again").toBe(drawn);
 });
