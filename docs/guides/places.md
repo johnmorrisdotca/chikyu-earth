@@ -30,7 +30,7 @@ description: "Mark the reader's own place and their favourite places on the spac
 
 The package never asks the browser where the reader is. The page does, and only when the reader asks for it:
 
-```js
+```js no-run
 import { nearby } from "@johnmorrisdotca/chikyu-earth/markers";
 
 const space = document.querySelector("chikyu-space");
@@ -50,7 +50,7 @@ document.querySelector("#here").addEventListener("click", () => {
 
 A favourite is any place without `kind: "here"`. The package has no list of its own and no picker: the page builds the reader's list (from a search of its own, or kuni's cities) and keeps it wherever it likes, then hands the whole list over each time it changes:
 
-```js
+```js no-run
 const saved = [{ id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo" }, { id: "cairo", lon: 31.24, lat: 30.04, label: "Cairo" }];
 space.places = [...(here ? [here] : []), ...saved];
 ```
