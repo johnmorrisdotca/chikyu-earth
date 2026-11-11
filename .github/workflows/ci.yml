@@ -41,6 +41,10 @@ jobs:
     # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium in two parts (one job reached its 15 minutes on 2026-11-09), then in WebKit. Each part may take 25 minutes. Every test still runs once.
     name: demo (${{ matrix.name }})
     runs-on: ubuntu-latest
+    # In the Playwright image at the lockfile's version, which has the browsers' system libraries: no apt mirror (down on 2026-11-11).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --ipc=host
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -67,6 +71,10 @@ jobs:
         run: pnpm test:demo:one ${{ matrix.projects }}
   usage:
     runs-on: ubuntu-latest
+    # In the Playwright image at the lockfile's version, which has the browsers' system libraries: no apt mirror (down on 2026-11-11).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --ipc=host
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

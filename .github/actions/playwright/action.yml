@@ -5,14 +5,24 @@
 #     with:
 #       browsers: chromium        # or webkit, or "chromium webkit"
 #
-# Why it exists: `playwright install --with-deps` did two slow things in one step, and a slow package mirror (the runner's apt mirror served fonts at about
-# 100 kB/s on 2026-11-09 and 2026-11-10) held a job until its time limit, so no test ran and the failure read as a test failure. Here:
-#   1. the browsers are cached by Playwright's version (`~/.cache/ms-playwright`), so a run with a cache hit downloads nothing;
-#   2. the system libraries (apt) are their own step, tried twice, each try cut off after 7 minutes (what apt had already downloaded stays for the second
-#      try), and a failure says it is the runner's package mirror, not a test.
-# Free: GitHub-hosted Linux runners and the cache are free on a public repository.
+# Best in a job that runs in Microsoft's Playwright image at the repository's Playwright version, which has the browsers and every system library:
+#
+#   container:
+#     image: mcr.microsoft.com/playwright:v1.64.1-noble   # the version in pnpm-lock.yaml
+#     options: --ipc=host
+#
+# Why it exists: `playwright install --with-deps` did two slow things in one step, and the runner's apt mirror was slow (fonts at about 100 kB/s on
+# 2026-11-09 and 2026-11-10) and then down (2026-11-11 from about 13:50 UTC: "Temporary failure resolving archive.ubuntu.com"), so no test ran and the
+# failure read as a test failure. Here:
+#   1. in the Playwright image the browsers are already there, so nothing is downloaded and nothing is cached; elsewhere they are cached by Playwright's
+#      version (`~/.cache/ms-playwright`), so a run with a cache hit downloads nothing;
+#   2. the browsers' system libraries are looked for first, the way Playwright itself checks them (`ldd` on the browsers' files); apt runs only when one
+#      is missing, which in the image is never, so the image needs no package mirror at all;
+#   3. when apt does run it is its own step, tried twice, each try cut off after 7 minutes, and a failure says it is the runner's package mirror, not a test;
+#   4. a job whose image is at another Playwright version than the lockfile gets a warning that names both (the browsers are then downloaded, not apt).
+# Free: GitHub-hosted Linux runners, Microsoft's image and the cache are free on a public repository.
 name: Playwright browsers
-description: Playwright's browsers (cached by version) and their system libraries (bounded, retried once), on a GitHub-hosted Linux runner.
+description: Playwright's browsers (from the Playwright image, or cached by version) and their system libraries (only when missing; bounded, retried once), on a GitHub-hosted Linux runner.
 inputs:
   browsers:
     description: The browsers to install, separated by spaces (chromium, webkit, firefox).
@@ -29,12 +39,20 @@ runs:
         version="$(pnpm exec playwright --version | awk '{print $NF}')"
         echo "version=$version" >> "$GITHUB_OUTPUT"
         echo "key=playwright-$RUNNER_OS-$version-$(echo "$BROWSERS" | tr -s ' ' '-')" >> "$GITHUB_OUTPUT"
-    - name: The browsers, cached by Playwright's version
+        # The image named in this repository's workflows, if any, should be the lockfile's version: otherwise the browsers are downloaded every run.
+        image="$(grep -rhoE 'mcr\.microsoft\.com/playwright:v[0-9.]+' .github/workflows 2>/dev/null | sort -u | sed 's/.*:v//' | paste -sd' ' - || true)"
+        for v in $image; do
+          if [ "$v" != "$version" ]; then
+            echo "::warning title=Playwright image and lockfile differ::A workflow runs in mcr.microsoft.com/playwright:v$v but pnpm-lock.yaml has Playwright $version. Set the image to v$version-noble."
+          fi
+        done
+    - name: The browsers, cached by Playwright's version (not in the Playwright image, which has them)
+      if: env.PLAYWRIGHT_BROWSERS_PATH == ''
       uses: actions/cache@v6
       with:
         path: ~/.cache/ms-playwright
         key: ${{ steps.which.outputs.key }}
-    - name: Download the browsers (a cache hit has them already; a download is cut off after 10 minutes, tried twice)
+    - name: Download the browsers (the image or a cache hit has them already; a download is cut off after 10 minutes, tried twice)
       shell: bash
       env:
         BROWSERS: ${{ inputs.browsers }}
@@ -48,12 +66,47 @@ runs:
         done
         echo "::error title=Playwright browsers did not download::playwright install $BROWSERS failed twice. This is the download, not a test: nothing was run."
         exit 1
-    - name: System libraries for the browsers (apt; each try is cut off after 7 minutes, two tries; a slow mirror fails here, not in a test)
+    - name: Are the browsers' system libraries there? (ldd on the browsers' files, as Playwright checks them)
+      id: libs
       if: runner.os == 'Linux'
       shell: bash
       env:
         BROWSERS: ${{ inputs.browsers }}
       run: |
+        root="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+        missing=""
+        checked=0
+        for browser in $BROWSERS; do
+          for dir in "$root/$browser"-* "$root/${browser}"_*-*; do
+            [ -d "$dir" ] || continue
+            checked=$((checked + 1))
+            # A browser finds its own bundled libraries through LD_LIBRARY_PATH, so ldd is given every folder of the browser that holds one. ldd fails on a
+            # file that is not a program and grep fails when nothing is missing; the step runs with pipefail, hence `|| true`.
+            libs="$(find "$dir" -name '*.so*' -printf '%h\n' | sort -u | paste -sd: -)"
+            found="$(find "$dir" -type f \( -perm -u+x -o -name '*.so*' \) -print0 \
+              | LD_LIBRARY_PATH="$libs" xargs -0 -r ldd 2>/dev/null | grep 'not found' | awk '{print $1}' | sort -u | paste -sd' ' - || true)"
+            missing="$missing $found"
+          done
+        done
+        missing="$(echo "$missing" | tr -s ' ' '\n' | sed '/^$/d' | sort -u | paste -sd' ' -)"
+        if [ "$checked" -eq 0 ]; then
+          echo "No browser folder for $BROWSERS in $root, so the libraries cannot be checked: apt is used."
+          echo "missing=yes" >> "$GITHUB_OUTPUT"
+        elif [ -z "$missing" ]; then
+          echo "Every system library the browsers need ($BROWSERS) is there: apt is not used."
+          echo "missing=no" >> "$GITHUB_OUTPUT"
+        else
+          echo "Missing system libraries: $missing"
+          echo "missing=yes" >> "$GITHUB_OUTPUT"
+        fi
+    - name: System libraries for the browsers (apt, only when one is missing; each try is cut off after 7 minutes, two tries; a slow mirror fails here, not in a test)
+      if: runner.os == 'Linux' && steps.libs.outputs.missing != 'no'
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        # In a container the job is root and there is no sudo.
+        sudo="$(command -v sudo || true)"
         for try in 1 2; do
           started=$SECONDS
           # $BROWSERS is left unquoted on purpose: it is a list of words.
@@ -64,13 +117,13 @@ runs:
           fi
           echo "::warning::Installing the system libraries for $BROWSERS failed or passed 7 minutes (try $try of 2, after $((SECONDS - started)) s): the runner's package mirror is slow or down."
           # A try that was cut off may have left apt running, holding its lock, and dpkg half-way: stop apt, wait for the lock (at most a minute), put dpkg right.
-          sudo pkill -x apt-get || true
+          $sudo pkill -x apt-get || true
           for _ in $(seq 1 30); do
-            sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || break
+            $sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || break
             sleep 2
           done
-          sudo dpkg --configure -a || true
+          $sudo dpkg --configure -a || true
           sleep 10
         done
-        echo "::error title=System libraries did not install::playwright install-deps $BROWSERS failed twice, each try cut off after 7 minutes. This is the runner's package mirror (apt), not a test: nothing was run. Run the job again later."
+        echo "::error title=System libraries did not install::playwright install-deps $BROWSERS failed twice, each try cut off after 7 minutes. This is the runner's package mirror (apt), not a test: nothing was run. Run the job in the Playwright image (see this action's header) so it needs no mirror."
         exit 1
