@@ -320,7 +320,6 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#startTick();
     document.addEventListener("visibilitychange", this.#onVisible);
-    this.#locate();
   }
 
   disconnectedCallback(): void {
@@ -930,17 +929,6 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #fail(reason: string): void {
     this.#set("unavailable");
     this.dispatchEvent(new CustomEvent("chikyu-unavailable", { detail: { reason } }));
-  }
-
-  #locate(): void {
-    if (readCentre(this.getAttribute("center")) || typeof navigator === "undefined" || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        this.centre = { lon: position.coords.longitude, lat: position.coords.latitude };
-      },
-      () => undefined,
-      { timeout: 8000, maximumAge: 600000 },
-    );
   }
 }
 

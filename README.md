@@ -2,7 +2,7 @@
 
 <h1 align="center">Chikyu Earth <sub>地球</sub></h1>
 
-<p align="center"><strong>A line-drawn globe that turns at the Earth's own rate, and opens centred on where you are.</strong><br>
+<p align="center"><strong>A line-drawn globe that turns at the Earth's own rate, centred on the place you give it.</strong><br>
 Country outlines in the same thin-line style as Hako Devices and Uchusen Rockets: an orthographic disc, the countries drawn on it, and the rim. One SVG, no canvas.</p>
 
 <p align="center">Part of <strong>Space Program X (SPX)</strong>, the space packages: <a href="https://github.com/johnmorrisdotca/wakusei-planets">Wakusei Planets</a> · <a href="https://github.com/johnmorrisdotca/hoshi-stars">Hoshi Stars</a> · <a href="https://github.com/johnmorrisdotca/chikyu-earth">Chikyu Earth</a> · <a href="https://github.com/johnmorrisdotca/uchusen-rockets">Uchusen Rockets</a></p>
@@ -419,7 +419,7 @@ The rotation is the pair d3-geo's `rotate` takes: `[-longitude, -latitude]` cent
 | Attribute | What it does | Default |
 | --- | --- | --- |
 | `size` | Width and height of the square SVG, in pixels. | `320` |
-| `center` | `"longitude,latitude"` to centre on. Wins over geolocation. | the reader's location, else `0,0` |
+| `center` | `"longitude,latitude"` to centre on. The element never asks the browser where the reader is: a page that wants that asks on a press and sets `center`. | `0,0` |
 | `look` | `line` or `thick`. (`style` is the older name for it: a framework reads `style` as CSS, so use `look` there.) | `line` |
 | `graticule` | Draw a light graticule under the countries. | off |
 | `controls` | `none` takes off the drag, pinch, wheel and keys the element carries. | on |

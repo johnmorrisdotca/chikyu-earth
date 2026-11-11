@@ -7,7 +7,7 @@ import { FAMILY_SCRIPT, familyFooter, familyHead, familyHeader, familyUnreviewed
 
 const id = "chikyu-earth";
 const TITLE = "Chikyu Earth 地球: a line-drawn globe for the web";
-const DESCRIPTION = "A line-drawn globe of the world's countries that turns at the Earth's own rate, centred on where you are, with an optional realistic Earth from space and markers for any place. A web component and an SVG string.";
+const DESCRIPTION = "A line-drawn globe of the world's countries that turns at the Earth's own rate, centred on the place you give it, with an optional realistic Earth from space and markers for any place. A web component and an SVG string.";
 
 /** Where every credit is written in full. */
 const NOTICE = "https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE.md";
