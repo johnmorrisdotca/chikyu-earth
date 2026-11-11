@@ -61,6 +61,7 @@ const GAP = 3;
  * @param height - The height of that area, in pixels.
  * @param max - The most labels to place.
  * @param cell - The side of the grid cell used to find overlaps, in pixels.
+ * @param taken - Boxes already used by something else on the screen (another layer's names), as left, top, width and height: no label is put over one.
  * @returns A placement for each label that fits; the others are left out.
  *
  * @example
@@ -74,7 +75,7 @@ const GAP = 3;
  * console.log(placeLabels(items, 300, 300, 10).map((place) => place.item));
  * ```
  */
-export function placeLabels(items: readonly LabelItem[], width: number, height: number, max: number, cell = 64): Placement[] {
+export function placeLabels(items: readonly LabelItem[], width: number, height: number, max: number, cell = 64, taken: readonly { left: number; top: number; width: number; height: number }[] = []): Placement[] {
   const order = items.map((_, i) => i).sort((a, b) => items[b]!.priority - items[a]!.priority || a - b);
   const grid = new Map<number, Box[]>();
   const placed: Placement[] = [];
@@ -87,6 +88,14 @@ export function placeLabels(items: readonly LabelItem[], width: number, height: 
     for (const key of keys(box)) for (const other of grid.get(key) ?? []) if (box.l < other.r && box.r > other.l && box.t < other.b && box.b > other.t) return false;
     return true;
   };
+  for (const used of taken) {
+    const box: Box = { l: used.left, t: used.top, r: used.left + used.width, b: used.top + used.height };
+    for (const key of keys(box)) {
+      const list = grid.get(key);
+      if (list) list.push(box);
+      else grid.set(key, [box]);
+    }
+  }
   for (const index of order) {
     if (placed.length >= max) break;
     const it = items[index]!;

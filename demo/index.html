@@ -53,6 +53,16 @@
                     <button type="button" data-group="Stadiums" aria-pressed="true" data-say="placesStadiums">Stadiums</button>
                   </div>
                 </div>
+                <div class="fam-row" id="your-places" role="group" aria-label="Your places" data-say-label="yourPlaces" hidden data-help-en="Show where I am asks your browser for your place, only when you press it, and marks it on the Earth. It is rounded to about 10 km and stays in this page: it is not put in the address or sent anywhere. Press it again to take it away. Beam, Pin and Ring change how the places are drawn." data-help-ja="「今いる場所を表示」を押したときだけ、ブラウザーに現在地をたずねて、地球の上に目印を出します。場所は約10 kmにまるめて、このページの中だけで使います。アドレスに入れたり、どこかへ送ったりはしません。もう一度押すと消えます。「光の柱」「ピン」「輪」で目印の形を変えられます。">
+                  <span class="fam-label" data-say="yourPlaces">Your places</span>
+                  <button type="button" class="fam-button" id="here" aria-pressed="false" data-say="here">Show where I am</button>
+                  <div class="group fam-seg" role="group" aria-label="Marker" data-say-label="placeLook">
+                    <button type="button" data-place-look="beam" class="on" aria-pressed="true" data-say="placeLook_beam">Beam</button>
+                    <button type="button" data-place-look="pin" aria-pressed="false" data-say="placeLook_pin">Pin</button>
+                    <button type="button" data-place-look="ring" aria-pressed="false" data-say="placeLook_ring">Ring</button>
+                  </div>
+                </div>
+                <p class="fam-fine" id="here-note" hidden data-say="hereNote">Your place is rounded to about 10 km and stays in this page: it is not put in the address or sent anywhere.</p>
                 <p class="fam-fine" id="picked" role="status" data-say="picked">Hover or tap a place.</p>
                 <p class="fam-fine" id="status" role="status" hidden></p>
               </div>

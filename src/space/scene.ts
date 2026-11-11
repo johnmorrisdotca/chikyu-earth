@@ -13,6 +13,7 @@ import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scal
 import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
 import type { SkyFrame } from "../sky/host.ts";
+import type { PlaceView } from "../markers/places.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
@@ -322,6 +323,8 @@ export interface SpaceDeps {
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
   /** Where the sky falls on the screen at this draw, and the bodies that cover it (the names of the stars and the constellation lines are laid over it). Called at each draw. */
   onSky?: (frame: SkyFrame) => void;
+  /** Where points of the Earth's surface fall on the screen at this draw, for the places drawn on it. Called at each draw. */
+  onPlaces?: (view: PlaceView) => void;
   /** The name written on the Earth could not be made. */
   onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
@@ -832,6 +835,40 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               places[name] = at ? { x: at.x, y: at.y, r: px[name] } : null;
             }
             deps.onLabels(places);
+          }
+          if (deps.onPlaces) {
+            // a place on the ground, turned with the Earth into the scene's axes, seen through the camera: where it falls, which way its upright points on the screen, and whether it faces the camera
+            const turn = earth.rotation.y;
+            const cos = Math.cos(turn);
+            const sin = Math.sin(turn);
+            const eye = camera.position;
+            deps.onPlaces({
+              width: size.width,
+              height: size.height,
+              at(lon, lat, out) {
+                const la = lat * RAD;
+                const lo = lon * RAD;
+                const lx = Math.cos(la) * Math.sin(lo);
+                const lz = Math.cos(la) * Math.cos(lo);
+                const wx = lx * cos + lz * sin;
+                const wy = Math.sin(la);
+                const wz = -lx * sin + lz * cos;
+                const away = Math.hypot(eye.x - wx, eye.y - wy, eye.z - wz) || 1;
+                out.facing = (wx * (eye.x - wx) + wy * (eye.y - wy) + wz * (eye.z - wz)) / away;
+                projected.set(wx, wy, wz).project(camera);
+                if (projected.z > 1 || projected.z < -1) return false;
+                out.x = ((projected.x + 1) / 2) * size.width;
+                out.y = ((1 - projected.y) / 2) * size.height;
+                projected.set(wx * 1.001, wy * 1.001, wz * 1.001).project(camera);
+                const dx = ((projected.x + 1) / 2) * size.width - out.x;
+                const dy = ((1 - projected.y) / 2) * size.height - out.y;
+                const seen = Math.hypot(dx, dy);
+                const side = Math.sqrt(Math.max(0, 1 - out.facing * out.facing));
+                out.upX = seen > 0 ? (dx / seen) * side : 0;
+                out.upY = seen > 0 ? (dy / seen) * side : 0;
+                return true;
+              },
+            });
           }
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });

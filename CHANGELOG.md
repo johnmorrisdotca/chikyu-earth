@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **You are here, and places on the Earth** (MODULES-927). `<chikyu-space>` and `<chikyu-earth-realistic>` take `places`, a list of `{ id, lon, lat, label, kind }` (attribute as JSON, or property), and draw each as a marker standing out of the ground: it turns with the Earth, is hidden on the far side, fades at the edge and keeps its size in pixels at any zoom. `kind: "here"` is the reader's place (taller, brighter, a quiet pulse at its foot); a `favourite` is quieter. `places-look` is `beam` (the default), `pin` or `ring`; colours come from `--chikyu-place-here` and `--chikyu-place-favourite`. Names sit at the top of the markers, `here` first, measured in the page's font and never over one another or the bodies' names. Nothing is drawn again at rest: the places are laid out with the picture, and the pulse is a CSS animation, stopped out of sight and for a reader who asked for less motion. `stats.places` says how many are drawn and named. The package never asks for the reader's place and stores or sends nothing; `nearby` (in `/markers`, with `readPlaces`, `cleanPlaces`, `orthoView` and `layoutPlaces`) rounds a place to about 10 km before a page draws or keeps it. `placeLabels` takes boxes already used by another layer. The demo has "Show where I am" (asked only on the press, rounded, never put in the address) and the three looks. New guide: "You are here, and places on the Earth".
+
 ## 0.33.1 - 2026-11-11
 
 ## 0.33.0 - 2026-11-11
