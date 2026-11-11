@@ -49,12 +49,12 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
   expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.getElementById("sk-canvas"))).toBeNull();
   await page.locator(SPACE).evaluate((el) => el.setAttribute("star-names", "12"));
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000, message: "hoshi-stars is loaded when asked for" }).toBe(true);
-  await expect.poll(async () => (await skyOf(page)).names).toBeGreaterThan(0);
-  await expect.poll(async () => (await names(page)).length, { message: "and they are on the page" }).toBeGreaterThan(0);
+  await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000, message: "the font is in, and the names are laid out" }).toBeGreaterThan(0);
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000, message: "and they are on the page" }).toBeGreaterThan(0);
   expect((await names(page)).length).toBeLessThanOrEqual(12);
   await page.locator(SPACE).evaluate((el) => el.removeAttribute("star-names"));
-  await expect.poll(async () => (await skyOf(page)).names).toBe(0);
-  await expect.poll(async () => (await names(page)).length).toBe(0);
+  await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000 }).toBe(0);
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBe(0);
 });
 
 test("the names are of stars in view, in the page's language, never overlap, and fewer where the Earth covers the sky", async ({ page }) => {
@@ -107,7 +107,7 @@ test("nothing is drawn at rest, with names and lines on and the clock held", asy
   expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws), "and neither is the picture").toBe(draws);
 });
 
-test("the demo's Star names and Constellation lines buttons set the attributes and the address", async ({ page }) => {
+test("the demo's Star names and Constellations buttons set the attributes and the address", async ({ page }) => {
   await open(page);
   await page.locator("#star-names").click();
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000 }).toBe(true);

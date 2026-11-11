@@ -149,7 +149,7 @@ export const WORDS = {
     lights: "City lights",
     meteors: "Meteors",
     starNames: "Star names",
-    constellationLines: "Constellation lines",
+    constellationLines: "Constellations",
     bodyLabel: "Name on the Earth",
     bodyLabel_off: "No name",
     bodyLabel_painted: "Painted",
