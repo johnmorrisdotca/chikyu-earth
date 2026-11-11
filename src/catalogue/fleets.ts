@@ -37,7 +37,7 @@ export const FLEETS: readonly Fleet[] = [
   { id: "gps", label: { en: "GPS", ja: "GPS" }, pattern: /^(NAVSTAR|GPS) / },
   { id: "galileo", label: { en: "Galileo", ja: "ガリレオ" }, pattern: /GALILEO/ },
   { id: "glonass", label: { en: "GLONASS", ja: "グロナス" }, pattern: /GLONASS/ },
-  { id: "beidou", label: { en: "BeiDou", ja: "北斗（ベイドゥー）" }, pattern: /^(BEIDOU|COMPASS)/ },
+  { id: "beidou", label: { en: "BeiDou", ja: "北斗" }, pattern: /^(BEIDOU|COMPASS)/ },
   { id: "iridium", label: { en: "Iridium", ja: "イリジウム" }, pattern: /^IRIDIUM/ },
   { id: "stations", label: { en: "Space stations", ja: "宇宙ステーション" }, pattern: /^(ISS|CSS|TIANHE|WENTIAN|MENGTIAN)( |$)/ },
 ];

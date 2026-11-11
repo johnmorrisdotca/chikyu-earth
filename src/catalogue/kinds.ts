@@ -102,7 +102,7 @@ export const CLASS_LABELS: Readonly<Record<OrbitClass, { en: string; ja: string;
   leo: { en: "Low orbit", ja: "低軌道", rule: "highest point under 2,000 km" },
   meo: { en: "Medium orbit", ja: "中軌道", rule: "lowest point 2,000 km or more, highest point under 34,286 km" },
   geo: { en: "Geostationary", ja: "静止軌道", rule: "35,786 km, within 1,500 km, nearly circular" },
-  heo: { en: "Highly elliptical", ja: "楕円軌道", rule: "eccentricity 0.25 or more" },
+  heo: { en: "Highly elliptical", ja: "高楕円軌道", rule: "eccentricity 0.25 or more" },
   other: { en: "Other", ja: "その他", rule: "none of the above (above the geostationary belt, or between the classes)" },
 };
 

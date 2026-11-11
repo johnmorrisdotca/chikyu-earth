@@ -120,7 +120,7 @@ console.log(`Overhead at ${overhead.lat} N, ${overhead.lon.toFixed(0)} E; Tokyo:
 
 ## Parent bodies and the IAU's lists
 
-Each shower is linked to the comet or asteroid its meteors come from, by the shower's IAU code and the body's designation. The links, and the check of the table against the IAU Meteor Data Center's lists, are in the same entry point:
+Showers are linked to the comet or asteroid its meteors come from, by the shower's IAU code and the body's designation. The links, and the check of the table against the IAU Meteor Data Center's lists, are in the same entry point:
 
 ```js
 import { METEOR_LINKS, parentBodyOf, showerSource, showersOfParent } from "@johnmorrisdotca/chikyu-earth/meteors";
