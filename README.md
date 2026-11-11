@@ -218,7 +218,7 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 
 ## Places
 
-`places` on `<chikyu-earth-realistic>` and `<chikyu-space>` marks places on the Earth: each `{ id, lat, lon, label?, kind? }` stands out of the surface as a ring on the ground and a beam with a head, turning with the Earth and hidden on the far side, with its name beside it that never overlaps another (right, left, above, below, else the lesser place's name is left out). `kind: "here"` is the visitor's own place and stands out with a quiet pulse (none for a reader who prefers reduced motion); other places are quieter. The package never asks where anyone is and stores nothing: the page hands the list in and hears `chikyu-place-click`. [guide](docs/guides/places.md).
+`places` on `<chikyu-earth-realistic>` and `<chikyu-space>` marks places on the Earth: each `{ id, lat, lon, label?, kind? }` stands out of the surface as a ring on the ground and a beam with a head, turning with the Earth and hidden on the far side, with its name beside it that never overlaps another (right, left, above, below, else the lesser place's name is left out). `kind: "here"` is the visitor's own place and stands out with a quiet pulse (none for a reader who prefers reduced motion); other places are quieter. The package never asks where anyone is and stores nothing: the page hands the list in and hears `chikyu-place-click` and `chikyu-places-change` (the whole list, whenever it changes, for a page that saves it). [guide](docs/guides/places.md).
 
 ```js
 import { orthographicProjector, putPlaces, readPlaces } from "@johnmorrisdotca/chikyu-earth/places";

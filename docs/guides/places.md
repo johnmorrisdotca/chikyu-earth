@@ -31,11 +31,19 @@ The package only draws. It never asks where anyone is (a page that wants the vis
 
 ## Names never overlap
 
-Each name is a real button beside its place: to the right of it if it fits, else to the left, above, below, and when none of the four is free the lesser place's name is left out. The visitor's own place is placed first, then the favourites in the order given. A name never covers another name, and every place has its name in a list for a screen reader whether it is drawn or not. A name pressed with the keyboard or a pointer sends `chikyu-place-click` with `detail: { place }`; with the attribute `places-turn` the view also turns to that place.
+Each name is a real button beside its place: to the right of it if it fits, else to the left, above, below, and when none of the four is free the lesser place's name is left out. The visitor's own place is placed first, then the favourites in the order given. A name never covers another name, and every place has its name in a list for a screen reader whether it is drawn or not. A name pressed with the keyboard or a pointer sends `chikyu-place-click` with `detail: { place }`; with the attribute `places-turn` the view also turns to that place (`places-turn="off"` is the same as leaving it out).
+
+## Saving the list
+
+The package keeps nothing, so a page that saves the places (in its own account, in the address, wherever) hears about every change: `chikyu-places-change` is sent with `detail: { places }`, the whole list as the element now has it (a copy, with the entries that could not be drawn already left out). It is sent when the property is set, or the attribute changes, to a list that is not the one the element has; the same list again, or a first empty one, says nothing.
+
+```js no-run
+earth.addEventListener("chikyu-places-change", (event) => localStorage.setItem("places", JSON.stringify(event.detail.places)));
+```
 
 ## Nothing at rest
 
-The marks are drawn when the view changes or the list does. The one thing that moves by itself is the pulse of the visitor's own place, about twenty times a second, and only while the Earth is in view, the tab is shown and the reader has not asked for less motion: for a reader who prefers reduced motion the marks are drawn still. `stats.places` has the counts (`places`, `facing`, `labels`, `renders`, `pulsing`).
+The marks are drawn when the view changes or the list does. The one thing that moves by itself is the pulse of the visitor's own place: it pulses while the view moves, and for about two seconds after the place is added or changed (about twenty times a second), and then rests, so a view at rest draws nothing. It runs only while the Earth is in view, the tab is shown and the reader has not asked for less motion: for a reader who prefers reduced motion the marks are drawn still. `stats.places` has the counts (`places`, `facing`, `labels`, `renders`, `pulsing`).
 
 ## By themselves
 
