@@ -651,8 +651,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
     /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
-    /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked and how many times the layer was drawn. */
-    sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number };
+    /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn and the language its names were last laid out in. */
+    sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -666,7 +666,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
-      sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0 },
+      sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0, lang: "" },
     };
   }
 

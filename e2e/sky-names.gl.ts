@@ -119,16 +119,27 @@ test("the constellations are faint lines, the figure under the pointer is lit, a
 test("nothing is drawn at rest, with names and lines on and the clock held", async ({ page }) => {
   await open(page, "&star-names=12&constellation-lines=0.16");
   await wideSky(page);
-  await page.evaluate(async () => {
-    for (let frame = 0; frame < 10; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-  });
+  const frames = (count: number): Promise<void> =>
+    page.evaluate(async (n) => {
+      for (let frame = 0; frame < n; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+    }, count);
+  const draws = (): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+  // a new view (the smaller Earth, the turn to a richer sky) asks for sharper pictures, and each one is a draw, and the layer follows each: wait until the page has gone thirty frames with no draw at all
+  await expect
+    .poll(
+      async () => {
+        const before = await draws();
+        await frames(30);
+        return (await draws()) - before;
+      },
+      { timeout: 60_000, message: "the picture is at rest" },
+    )
+    .toBe(0);
   const drawn = (await skyOf(page)).renders;
-  const draws = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
-  await page.evaluate(async () => {
-    for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-  });
-  expect((await skyOf(page)).renders, "the layer is not drawn again").toBe(drawn);
-  expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws), "and neither is the picture").toBe(draws);
+  const picture = await draws();
+  await frames(30);
+  expect(await draws(), "the picture is still").toBe(picture);
+  expect((await skyOf(page)).renders, "and the layer is not drawn again").toBe(drawn);
 });
 
 test("the demo's Star names and Constellations buttons set the attributes and the address", async ({ page }) => {
