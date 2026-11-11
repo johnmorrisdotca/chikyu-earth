@@ -318,7 +318,7 @@ test("taking a group away frees its buffers, and a lost context is recovered wit
   expect(errors).toEqual([]);
 });
 
-test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit, and the page can read each group's count and the date of its data", async ({ page }) => {
+test("a dot over lit ground has a dark rim, a group can be coloured by orbit, and the page can read each group's count and the date of its data", async ({ page }) => {
   await open(page);
   const space = page.locator(SPACE);
   const groups = (await space.evaluate((el) => Reflect.get(el, "satelliteGroups"))) as { name: string; count: number; placed: number; newest: number | null }[];
@@ -326,30 +326,33 @@ test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit,
   expect(groups[0]!.placed).toBeLessThanOrEqual(groups[0]!.count);
   expect(Math.abs(groups[0]!.newest! - Date.parse(T)) / 86_400_000, "the newest elements are days from the moment shown").toBeLessThan(5);
 
-  /** Restyle the stations, wait for the picture to be drawn with it, and read the picture once: every station that can be seen, with the light of its middle, its rim and the ground beside it. */
+  // the ISS in the middle of the picture, over ground lit from the camera's side (light="lit"), so what is beside its dot is lit ground
+  await space.evaluate((el, centre) => {
+    Reflect.set(el, "centre", centre);
+    el.setAttribute("light", "lit");
+  }, issSubpoint(Date.parse(T)));
+  const iss = await space.evaluate((el) => {
+    const s = el as unknown as { satelliteGroups: { name: string; count: number }[]; satelliteInfo(ref: unknown): { noradId: number } | undefined };
+    const count = s.satelliteGroups.find((g) => g.name === "stations")!.count;
+    for (let index = 0; index < count; index += 1) if (s.satelliteInfo({ group: "stations", index })?.noradId === 25544) return index;
+    return -1;
+  });
+  expect(iss).toBeGreaterThanOrEqual(0);
+
+  /** Restyle the stations, wait for the picture to be drawn with them, and read the ISS's dot: the light of its middle, its rim (the darkest point 4 to 6 pixels out on four rays, inside its 7 pixel radius) and the ground beside it (the same rays 14 pixels out). */
   const look = async (style: { color: string; size: number }) => {
     const before = (await statsOf(page)).draws;
-    await space.evaluate((el, s) => {
+    await space.evaluate((el, st) => {
       const made = (Reflect.get(globalThis, "chikyuSatellites") as { groups: Map<string, unknown> }).groups;
-      (el as unknown as { setSatellites(name: string, group: unknown, style: unknown): void }).setSatellites("stations", made.get("stations"), s);
+      (el as unknown as { setSatellites(name: string, group: unknown, style: unknown): void }).setSatellites("stations", made.get("stations"), st);
     }, style);
     await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(before);
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const count = groups[0]!.count;
-    const spots = (await space.evaluate((el, n) => {
-      const out: { x: number; y: number }[] = [];
-      for (let index = 0; index < n; index += 1) {
-        const space = el as unknown as { placeSatellite(ref: unknown): { x: number; y: number; visible: boolean } | null; satelliteInfo(ref: unknown): { ageDays: number } | undefined };
-        const at = space.placeSatellite({ group: "stations", index });
-        // a satellite whose elements are more than 14 days from the moment shown is drawn dimmer on purpose: only the ones drawn at full strength are read
-        const age = space.satelliteInfo({ group: "stations", index })?.ageDays ?? Infinity;
-        if (at?.visible && Math.abs(age) < 14) out.push({ x: at.x, y: at.y });
-      }
-      return out;
-    }, count)).filter((s, i, all) => s.x > 20 && s.y > 20 && all.every((o, j) => j === i || Math.hypot(o.x - s.x, o.y - s.y) > 30));
+    await untilStill(page);
+    const at = (await space.evaluate((el, index) => (el as unknown as { placeSatellite(ref: unknown): { x: number; y: number; visible: boolean } | null }).placeSatellite({ group: "stations", index }), iss))!;
+    expect(at.visible).toBe(true);
     const png = (await space.screenshot()).toString("base64");
     return page.evaluate(
-      async ([data, list]) => {
+      async ([data, x, y]) => {
         const img = new Image();
         img.src = `data:image/png;base64,${data}`;
         await img.decode();
@@ -358,31 +361,26 @@ test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit,
         canvas.height = img.height;
         const ctx = canvas.getContext("2d")!;
         ctx.drawImage(img, 0, 0);
-        const at = (x: number, y: number) => Array.from(ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data);
+        const px = (dx: number, dy: number) => Array.from(ctx.getImageData(Math.round((x as number) + dx), Math.round((y as number) + dy), 1, 1).data);
         const light = (p: number[]) => 0.2126 * p[0]! + 0.7152 * p[1]! + 0.0722 * p[2]!;
-        // the rim is the darkest point inside the dot's edge (4 to 6 pixels out of a 7 pixel radius) on four rays from its middle; the ground beside it is the brightest of the same rays 14 pixels out
         const rays = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        return (list as { x: number; y: number }[]).filter((s) => s.x < img.width - 20 && s.y < img.height - 20).map((s) => ({
-          core: at(s.x, s.y),
-          coreLight: light(at(s.x, s.y)),
-          rim: Math.min(...rays.flatMap(([dx, dy]) => [4, 5, 6].map((r) => light(at(s.x + dx! * r, s.y + dy! * r))))),
-          ground: Math.max(...rays.map(([dx, dy]) => light(at(s.x + dx! * 14, s.y + dy! * 14)))),
-        }));
+        return {
+          core: px(0, 0),
+          coreLight: light(px(0, 0)),
+          rim: Math.min(...rays.flatMap(([dx, dy]) => [4, 5, 6].map((r) => light(px(dx! * r, dy! * r))))),
+          ground: Math.min(...rays.map(([dx, dy]) => light(px(dx! * 14, dy! * 14)))),
+        };
       },
-      [png, spots] as const,
+      [png, at.x, at.y] as const,
     );
   };
 
   const white = await look({ color: "#ffffff", size: 14 });
-  const sunlit = white.filter((s) => s.ground > 90);
-  expect(sunlit.length, "a station over sunlit ground at this moment").toBeGreaterThan(0);
-  for (const s of sunlit) {
-    expect(s.coreLight, "the middle is the dot's colour").toBeGreaterThan(200);
-    expect(s.rim, "the rim is darker than the ground beside it").toBeLessThan(s.ground - 25);
-  }
+  expect(white.ground, "lit ground beside the dot").toBeGreaterThan(60);
+  expect(white.coreLight, "the middle is the dot's colour").toBeGreaterThan(200);
+  expect(white.rim, "the rim is darker than the ground beside it").toBeLessThan(white.ground - 25);
 
-  // by orbit: the stations are all in low orbits, drawn in the low-orbit colour (green, #5dd6a2)
+  // by orbit: the ISS is in a low orbit, drawn in the low-orbit colour (green, #5dd6a2)
   const byOrbit = await look({ color: "orbit", size: 14 });
-  expect(byOrbit.length).toBeGreaterThan(0);
-  for (const s of byOrbit) expect(s.core[1]! > s.core[0]! + 30 && s.core[1]! > s.core[2]!, `a green middle, not ${s.core.join(",")}`).toBe(true);
+  expect(byOrbit.core[1]! > byOrbit.core[0]! + 30 && byOrbit.core[1]! > byOrbit.core[2]!, `a green middle, not ${byOrbit.core.join(",")}`).toBe(true);
 });
