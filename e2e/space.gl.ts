@@ -216,8 +216,9 @@ test.describe("the controls' Auto-turn", () => {
     const after = await statsOf(page);
     const c1 = await counts(page);
     console.log(`Auto-turn in the space view: ${after.draws - before.draws} draws in 8 s (the page asked for ${c1.rafCallbacks - c0.rafCallbacks} animation frames)`);
-    expect(c1.rafCallbacks - c0.rafCallbacks, "the controls themselves are turning").toBeGreaterThan(100);
     expect(after.draws - before.draws).toBeLessThanOrEqual(1);
+    // the controls turn at the page's frame rate, which a slow runner keeps low: wait for the hundredth frame rather than count the frames of eight seconds
+    await expect.poll(async () => (await counts(page)).rafCallbacks - c0.rafCallbacks, { message: "the controls themselves are turning", timeout: 40_000 }).toBeGreaterThan(100);
   });
 });
 

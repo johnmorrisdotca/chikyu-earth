@@ -79,9 +79,8 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
 
   await play(page).click();
   await inAddress(page, "play").toBe("on");
-  await page.waitForTimeout(2000);
+  await expect.poll(() => boxMs(page), { message: "Play moves the date on from the date shown", timeout: 20_000 }).toBeGreaterThan(start + 3600_000);
   const running = await boxMs(page);
-  expect(running, "Play moves the date on from the date shown").toBeGreaterThan(start + 3600_000);
 
   await play(page).click();
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
@@ -96,8 +95,7 @@ test("Play runs the clock from the date shown, Pause holds it, Back returns to t
 
   // Play again goes on from there, and Back goes to the date the reader chose, not where Pause was
   await play(page).click();
-  await page.waitForTimeout(1500);
-  expect(await boxMs(page), "Play goes on from the date it was held on").toBeGreaterThan(held + 1800_000);
+  await expect.poll(() => boxMs(page), { message: "Play goes on from the date it was held on", timeout: 20_000 }).toBeGreaterThan(held + 1800_000);
   await back(page).click();
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
   expect(await boxMs(page), "Back returns to the chosen date").toBe(start);
@@ -237,9 +235,10 @@ test("the realistic Earth held at 'now' (play=off) tells the page when its clock
   await page.goto(`${PAGE}?look=realistic&center=-100,40&play=off`);
   await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 90_000 });
   await page.locator("chikyu-earth-realistic").evaluate((el) => el.setAttribute("live-seconds", "1"));
-  await page.waitForTimeout(3300);
+  // told at least twice: wait for the second telling (a slow runner is late, not wrong); the rate is judged below over everything that arrived
+  const told = (): Promise<number> => page.evaluate(() => (Reflect.get(window, "__timechange") as unknown[]).length);
+  await expect.poll(told, { message: "told while it follows the clock", timeout: 30_000 }).toBeGreaterThanOrEqual(2);
   const log = (await page.evaluate(() => Reflect.get(window, "__timechange"))) as { at: number; running: boolean; time: number }[];
-  expect(log.length, "told while it follows the clock").toBeGreaterThanOrEqual(2);
   expect(log.every((e) => e.running && Math.abs(e.time - Date.now()) < 60_000)).toBe(true);
   // a one-second interval: one late tick makes the next gap short on a busy machine (CI saw 1,206 ms then 794 ms), so the rate is checked over the whole run, where a second timer or a double send would show
   const span = log.at(-1)!.at - log[0]!.at;
