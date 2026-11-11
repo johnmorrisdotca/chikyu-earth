@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { readFileSync } from "node:fs";
-import { COUNT_SCRIPT, alive, counts, drainGpu, ownClock, settle, timed } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, drainGpu, ownClock, settle, timed, untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -133,7 +133,8 @@ test("a satellite behind the Earth cannot be pressed", async ({ page }) => {
 test("paused with 6,000 satellites on: nothing is drawn, no frame asked for, no SGP4", async ({ page }) => {
   await open(page, "", "stations,starlink");
   await addMany(page);
-  await settle(page, 800);
+  // rest is what the page reports: its draws and frame requests unchanged a second apart (a last frame already queued can land late on a busy machine)
+  await untilStill(page);
   const s0 = await statsOf(page);
   const rest = await measure(page, 3500);
   console.log(`6,000 satellites paused: ${rest.glDraws} GL draw calls, ${rest.requests} frames asked for, ${rest.propagations.toFixed(0)} SGP4 calls a second; the first batch took ${s0.satellites.maxBatchMs.toFixed(1)} ms`);

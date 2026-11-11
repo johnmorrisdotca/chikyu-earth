@@ -87,7 +87,12 @@ for (const look of LOOKS) {
           document.querySelector("#globe")!.scrollIntoView = () => undefined;
         });
         await expect.poll(async () => page.locator(ELEMENT[look]).evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(1000);
-        await page.waitForTimeout(800);
+        // the controls keep turning (and asking for frames) out of sight, so wait for the element's own drawing to stop: no GL draw for a second (a frame already queued can land late on a busy machine)
+        await expect.poll(async () => {
+          const before = (await readCounts(page)).draws;
+          await page.waitForTimeout(1000);
+          return (await readCounts(page)).draws - before;
+        }, { timeout: 20_000, message: "the drawing stops once out of sight" }).toBe(0);
         const away = await bounded(page, 2500, look);
         expect(away.draws, "no GL draws out of sight").toBe(0);
         expect(away.frames).toBe(0);
