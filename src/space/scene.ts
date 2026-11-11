@@ -12,7 +12,8 @@ import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
-import type { SkyFrame } from "../sky/host.ts";
+import { coverBody, covers } from "../sky/cover.ts";
+import type { SkyFrame } from "../sky/frame.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
@@ -855,10 +856,21 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               if (sky.z > 1 || sky.z < -1) continue;
               discs.push({ x: ((sky.x + 1) / 2) * size.width, y: ((1 - sky.y) / 2) * size.height, radius: Math.min(px[name], 1e5) });
             }
+            // a body covers the sky where the ray through a pixel passes within the body's angular radius of its centre: exact for any field of view, where a circle on the screen is right only on the axis
+            const ray = new three.Vector3();
+            const bodies = (["Earth", "Moon", "Sun"] as const).map((name) => coverBody(pos[name], [camera.position.x, camera.position.y, camera.position.z], radiusOf(name)));
             deps.onSky({
               width: size.width,
               height: size.height,
               discs,
+              covered(x, y) {
+                ray.set((x / size.width) * 2 - 1, 1 - (y / size.height) * 2, 0.5).unproject(camera).sub(camera.position);
+                const length = ray.length() || 1;
+                const rx = ray.x / length;
+                const ry = ray.y / length;
+                const rz = ray.z / length;
+                return covers(bodies, rx, ry, rz);
+              },
               project(rightAscension, declination, out) {
                 const r = rightAscension * RAD;
                 const d = declination * RAD;

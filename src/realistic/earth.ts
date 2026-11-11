@@ -13,7 +13,7 @@ import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type Sate
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
-import type { SkyFrame } from "../sky/host.ts";
+import type { SkyFrame } from "../sky/frame.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 export type { ThreeParts };
