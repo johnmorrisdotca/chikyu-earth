@@ -291,16 +291,14 @@ test("taking a group away frees its buffers, and a lost context is recovered wit
   page.on("pageerror", (e) => errors.push(e.message));
   await open(page, "", "stations,starlink");
   const base = alive(await counts(page), "Buffer");
+  // each step waits for the page to draw it (its own count of draws and of GL buffers), never a fixed time: on a busy machine a draw can come later than any guess
   await addMany(page, 3000);
-  await settle(page, 800);
-  expect(alive(await counts(page), "Buffer")).toBeGreaterThan(base);
+  await expect.poll(async () => alive(await counts(page), "Buffer"), { timeout: 20_000, message: "the new group's buffers once it is drawn" }).toBeGreaterThan(base);
   await page.locator(SPACE).evaluate((el) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites("many", null));
-  await settle(page, 800);
-  expect(alive(await counts(page), "Buffer"), "the group's buffer is freed").toBe(base);
+  await expect.poll(async () => alive(await counts(page), "Buffer"), { timeout: 20_000, message: "the group's buffer is freed" }).toBe(base);
   const programs = alive(await counts(page), "Program");
   for (const name of ["starlink", "stations"]) await page.locator(SPACE).evaluate((el, group) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites(group, null), name);
-  await settle(page, 800);
-  expect(alive(await counts(page), "Buffer"), "and all the others").toBeLessThan(base);
+  await expect.poll(async () => alive(await counts(page), "Buffer"), { timeout: 20_000, message: "and all the others" }).toBeLessThan(base);
   expect(alive(await counts(page), "Program")).toBeLessThanOrEqual(programs);
 
   await open(page, "", "stations,starlink");

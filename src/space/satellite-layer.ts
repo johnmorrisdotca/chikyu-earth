@@ -76,13 +76,18 @@ void main() {
 export const zoomFactor = (radiusPx: number | undefined): number => (radiusPx === undefined || !Number.isFinite(radiusPx) ? 1 : Math.round(Math.min(2.5, Math.max(0.75, Math.sqrt(radiusPx / 210))) * 20) / 20);
 
 /** The newest element set of a group, as milliseconds since 1970 (the date of its data), or `null` for none. */
+const newestOf = new WeakMap<Satellites, number | null>();
 export const newestEpoch = (satellites: Satellites): number | null => {
+  const known = newestOf.get(satellites);
+  if (known !== undefined) return known;
   let newest = Number.NEGATIVE_INFINITY;
   for (const set of satellites.sets) {
     const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(set.EPOCH) ? set.EPOCH : `${set.EPOCH}Z`);
     if (ms > newest) newest = ms;
   }
-  return Number.isFinite(newest) ? newest : null;
+  const found = Number.isFinite(newest) ? newest : null;
+  newestOf.set(satellites, found);
+  return found;
 };
 
 /** Each satellite's colour by its orbit class (`CLASS_COLOURS`), 3 numbers a satellite, from its elements. */
