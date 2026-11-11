@@ -79,3 +79,26 @@ const catalogue = await import(new URL("../dist/catalogue/index.js", import.meta
 const packedBack = await catalogue.unpackAny(await catalogue.gzipBytes(catalogue.packCatalogue([{ set: { ...iss, NORAD_CAT_ID: 123456 }, kind: "DEB" }])));
 if (catalogue.classOfElements(15.49, 0.0007) !== "leo" || catalogue.classOfElements(1.0027, 0.0002) !== "geo" || catalogue.readKind("ROCKET BODY") !== "RB" || packedBack.norad[0] !== 123456 || catalogue.fleetOf("STARLINK-1007", "PAY") !== "starlink" || catalogue.MAX_PACKED !== 200_000) throw new Error("the catalogue is off");
 console.log("catalogue ok");
+
+// the package's own types never import an optional peer a page may not have: following the imports of every entry's .d.ts, none reaches hoshi-stars (the star names' look is `SkyLabelStyle`, written out here)
+{
+  const { readFileSync } = await import("node:fs");
+  const { dirname, resolve } = await import("node:path");
+  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { exports: Record<string, { types?: string } | string> };
+  const seen = new Set<string>();
+  const reaching: string[] = [];
+  const walk = (file: string): void => {
+    if (seen.has(file) || !existsSync(file)) return;
+    seen.add(file);
+    const text = readFileSync(file, "utf8");
+    if (/from ["']@johnmorrisdotca\/hoshi-stars/.test(text) || /import\(["']@johnmorrisdotca\/hoshi-stars/.test(text)) reaching.push(file);
+    for (const match of text.matchAll(/(?:from|import\() ?["'](\.{1,2}\/[^"']+)["']/g)) {
+      const target = resolve(dirname(file), match[1]!.replace(/\.(ts|js)$/, ""));
+      walk(`${target}.d.ts`);
+      walk(resolve(target, "index.d.ts"));
+    }
+  };
+  for (const entry of Object.values(manifest.exports)) if (typeof entry === "object" && entry.types) walk(new URL(`../${entry.types.replace(/^\.\//, "")}`, import.meta.url).pathname);
+  if (reaching.length > 0) throw new Error(`public types import an optional peer, hoshi-stars: ${reaching.join(", ")}`);
+  console.log(`types ok: ${seen.size} declaration files, none imports hoshi-stars`);
+}

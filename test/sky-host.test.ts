@@ -1,7 +1,8 @@
 // The star names' layer at rest: it is laid out and drawn only when the picture is (`frame`), when a setting or the language changes, and never by itself. A fake document stands in for the browser; hoshi-stars is the real one.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSkyHost, type SkyFrame } from "../src/sky/host.ts";
+import type { SkyFrame } from "../src/sky/frame.ts";
+import { createSkyHost } from "../src/sky/host.ts";
 
 interface FakeNode {
   style: { setProperty(): void; removeProperty(): void };
@@ -45,14 +46,18 @@ const frame: SkyFrame = {
   },
 };
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits for what the host reports, not for a time: hoshi-stars is imported and the names laid out. */
+async function until(host: { readonly stats: { loaded: boolean; names: number } }): Promise<void> {
+  for (let waited = 0; waited < 20_000 && !(host.stats.loaded && host.stats.names > 0); waited += 20) await wait(20);
+  assert.ok(host.stats.loaded && host.stats.names > 0, "hoshi-stars is loaded and names are laid out");
+}
 
 test("at rest nothing is laid out or drawn again: only a frame, a change of setting or a change of language does it", async () => {
   let lang: "en" | "ja" = "en";
   let count: string | null = "12";
   const host = createSkyHost({ root, attribute: (name) => (name === "star-names" ? count : null), language: () => lang, onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
   host.frame(frame);
-  await wait(1500);
-  assert.ok(host.stats.loaded && host.stats.names > 0, "hoshi-stars is loaded and names are laid out");
+  await until(host);
   const drawn = host.stats.renders;
   assert.ok(drawn > 0);
   // at rest: time passes, the document says nothing, and the language is read again by nobody
@@ -89,7 +94,7 @@ test("a frame in a new language is laid out in it, without a separate draw", asy
   let lang: "en" | "ja" = "en";
   const host = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => lang, onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
   host.frame(frame);
-  await wait(1500);
+  await until(host);
   const drawn = host.stats.renders;
   lang = "ja";
   host.frame(frame);
@@ -104,16 +109,48 @@ test("names are measured as they are drawn: one that runs over a brighter star's
   made = 0;
   const host = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
   host.frame(frame);
-  await wait(1500);
+  await until(host);
   assert.equal(host.stats.names, 1, "of names on top of one another, the first stays");
   // names that are apart all stay
   measure = (_node, index) => ({ left: index * 300, top: 0, right: index * 300 + 120, bottom: 18 });
   made = 0;
   const apart = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
   apart.frame(frame);
-  await wait(1500);
+  await until(apart);
   assert.equal(apart.stats.names, 12, "names that do not touch are all shown");
   measure = undefined;
   host.dispose();
   apart.dispose();
+});
+
+test("without hoshi-stars the layer says so once, draws nothing, leaves nothing in the page and does not try again", async () => {
+  const errors: unknown[] = [];
+  let tries = 0;
+  const appended: FakeNode[] = [];
+  const bare = { ...(root as unknown as Record<string, unknown>), append: (...nodes: FakeNode[]) => appended.push(...nodes) } as unknown as ShadowRoot;
+  const host = createSkyHost({
+    root: bare,
+    attribute: (name) => (name === "star-names" ? "12" : null),
+    language: () => "en",
+    onError: (error) => errors.push(error),
+    loadFont: async () => undefined,
+    importer: async () => {
+      tries += 1;
+      throw new Error("Cannot find package '@johnmorrisdotca/hoshi-stars'");
+    },
+  });
+  host.frame(frame);
+  for (let waited = 0; waited < 5000 && errors.length === 0; waited += 20) await wait(20);
+  assert.equal(errors.length, 1, "the page is told once");
+  assert.match(String((errors[0] as Error).message), /hoshi-stars/, "with the reason");
+  assert.equal(host.stats.loaded, false);
+  assert.equal(host.stats.names, 0);
+  host.frame(frame);
+  host.frame(frame);
+  host.refresh();
+  await wait(100);
+  assert.equal(tries, 1, "it does not try again");
+  assert.equal(errors.length, 1, "and does not say so again");
+  assert.equal(host.stats.renders, 0, "nothing was drawn");
+  host.dispose();
 });

@@ -10,3 +10,4 @@ export { TILE_KEEP_MS, TILE_LIMIT } from "./tile-set.ts";
 export { BODY_LABEL_ATTRIBUTES, bodyLabelText, readBodyLabel, loadMichroma, setBodyLabelFontUrl, type BodyLabelSettings } from "./body-label.ts";
 export { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_THICKNESS_MAX, AIR_TOP, AIR_VERT, airFor, airFrag, airTop, readAirThickness, type AirSamples } from "./air.ts";
 export { AIR_NOTE } from "./air-note.ts";
+export type { SkyLabelStyle } from "../sky/style.ts";

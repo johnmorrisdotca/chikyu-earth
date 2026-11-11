@@ -19,7 +19,7 @@ import { folderSource } from "../door/map.ts";
 import { ownCredit } from "../door/own.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
-import type { LabelStyle } from "@johnmorrisdotca/hoshi-stars/sky-labels";
+import type { SkyLabelStyle } from "../sky/style.ts";
 
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
@@ -198,7 +198,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #note: HTMLElement | undefined;
   /** The names of the stars and the constellation lines (`star-names`, `constellation-lines`), and the look of the names. */
   #sky: SkyHost | undefined;
-  #skyStyle: Partial<LabelStyle> = {};
+  #skyStyle: Partial<SkyLabelStyle> = {};
   #airNote: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
@@ -447,12 +447,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /**
    * The names of the brightest stars and the constellations as faint lines, laid over the sky the page draws (hoshi-stars' `sky-labels`, an optional peer loaded only when one of these is set). The plain attributes are hoshi's: `star-names` (a count of the brightest stars in view and not covered by the
    * Earth, the Moon or the Sun; bare is 10), `star-names-magnitude` (only stars at least that bright) and `constellation-lines` (the 88 figures as lines at this strength, 0 to 1; bare is 0.16): none of them, and nothing is loaded. The figure under the pointer or touched is at full strength and shows its name. Names are in the
-   * page's language and never overlap. Nothing is redrawn at rest. `chikyu-sky-unavailable` is sent when hoshi-stars is not there. The property is the look of the names, a partial hoshi-stars `LabelStyle` (font, size, case, ring, leader and the rest).
+   * page's language and never overlap. Nothing is redrawn at rest. `chikyu-sky-unavailable` is sent when hoshi-stars is not there. The property is the look of the names, a partial `SkyLabelStyle` (font, size, case, ring, leader and the rest).
    */
-  get skyStyle(): Partial<LabelStyle> {
+  get skyStyle(): Partial<SkyLabelStyle> {
     return { ...this.#skyStyle };
   }
-  set skyStyle(value: Partial<LabelStyle>) {
+  set skyStyle(value: Partial<SkyLabelStyle>) {
     this.#skyStyle = { ...value };
     this.#sky?.setStyle(this.#skyStyle);
   }

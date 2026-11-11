@@ -215,6 +215,13 @@ await step("typescript", () => {
   if (!/\d+ Japan 177/.test(run)) throw new Error(`unexpected output: ${run}`);
 });
 
+// The star names are hoshi-stars' sky labels, an optional peer: a page without it still type-checks (the look of the names is chikyu-earth's own type), and bundles with it left out.
+await step("sky-names-without-hoshi", () => {
+  if (existsSync(join(usage, "node_modules", "@johnmorrisdotca", "hoshi-stars"))) throw new Error("hoshi-stars is installed: this step is about a page without it");
+  writeFileSync(join(examples("typescript"), "tsconfig.sky.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "esnext", moduleResolution: "bundler", strict: true, noEmit: true, lib: ["es2023", "dom", "dom.iterable"], types: [], skipLibCheck: false }, include: ["sky-names.ts"] }));
+  sh(process.execPath, [require.resolve("typescript/bin/tsc"), "-p", join(examples("typescript"), "tsconfig.sky.json")], usage);
+});
+
 // The one script tag and the one element: with nothing else on the page it zooms, drags and takes the keys, at a desk's size and a phone's.
 for (const [name, phone] of [["cdn-jsdelivr", false], ["cdn-jsdelivr-phone", true]] as const) {
   await step(name, async () => {
@@ -460,6 +467,7 @@ const FILES: Record<string, string[]> = {
   "svelte/ChikyuEarth.svelte": ["docs/guides/frameworks.md", "docs/guides/ja/frameworks.md"],
   "angular/chikyu-earth.component.ts": ["docs/guides/frameworks.md", "docs/guides/ja/frameworks.md"],
   "typescript/index.ts": ["docs/guides/typescript-and-node.md", "docs/guides/ja/typescript-and-node.md"],
+  "typescript/sky-names.ts": ["docs/guides/sky-names.md", "docs/guides/ja/sky-names.md"],
   "node/server.mjs": ["docs/guides/typescript-and-node.md", "docs/guides/ja/typescript-and-node.md"],
   "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/meteors.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],

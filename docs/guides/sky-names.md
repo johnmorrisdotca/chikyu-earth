@@ -26,3 +26,22 @@ These are hoshi-stars' own attribute names and mean what hoshi's guide says. The
 - **Where the sky is.** `<chikyu-space>` has no stars of its own: it lays the names where the stars of the page's own sky are, using the picture's camera, so a page that draws its stars behind the view in the family's axes (x to the vernal equinox, y north) finds the names on them. On `<chikyu-earth-realistic>`, whose camera looks straight at the Earth, the sky is the directions seen along the picture's own axes, shown across the box.
 - **How many you see.** `star-names="12"` is a most, not a count. The space view opens with the Earth filling 90% of the picture, so only its corners show sky: about two named stars are in view on average, and none in one view out of ten. A smaller Earth (the `earth-size` attribute) or a view turned to a richer part of the sky leaves room for all twelve. On `<chikyu-earth-realistic>`, which shows half the sky across the box, there are always many.
 - **Not installed.** Without hoshi-stars (version 0.30 or later) `chikyu-sky-unavailable` is sent with the reason, and nothing is drawn.
+
+## A page without hoshi-stars
+
+hoshi-stars is an optional peer, so a page that has not installed it still type-checks. The look of the names, `skyStyle`, is this package's own type, `SkyLabelStyle`, the same shape as hoshi-stars' `LabelStyle`. Without hoshi-stars `chikyu-sky-unavailable` is sent with the reason, no name is drawn and the picture is as it was.
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+import type { SkyLabelStyle } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+// A page without hoshi-stars installed still type-checks: the look of the names is chikyu-earth's own type.
+const space = document.querySelector<ChikyuSpace>("chikyu-space")!;
+const look: Partial<SkyLabelStyle> = { size: 12, colour: "#ffe9b0", ring: 0 };
+space.skyStyle = look;
+space.setAttribute("star-names", "12");
+
+// With no hoshi-stars the element says so and draws no names; the picture is as it was.
+space.addEventListener("chikyu-sky-unavailable", (event) => console.log((event as CustomEvent<{ reason: string }>).detail.reason));
+```

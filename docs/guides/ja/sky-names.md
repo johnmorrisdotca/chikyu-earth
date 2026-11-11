@@ -26,3 +26,22 @@ description: "宇宙の見た目やリアルな地球の後ろの空に、いち
 - **空の位置。** `<chikyu-space>` には自分の星がありません。名前は、ページが自分で描いた空の星の位置に、絵のカメラを使って置きます。そのため、ページが星をビューの後ろにファミリーの軸 (x は春分点の向き、y は北) で描いていれば、名前はその星の上に重なります。`<chikyu-earth-realistic>` はカメラが地球をまっすぐ見ているので、空は絵自身の軸に沿って見える方向を、枠いっぱいに映したものになります。
 - **見える数。** `star-names="12"` は上限で、実際に出る数ではありません。宇宙の見た目は、地球が絵の90%を占める状態で開くので、空が見えるのは四隅だけです。名前のつく星は平均して2つほどで、10回に1回は1つもありません。地球を小さくする (`earth-size` 属性) か、星の多い方向へ視点を向ければ、12個すべてに名前がつきます。`<chikyu-earth-realistic>` は、空の半分を枠いっぱいに映すので、いつもたくさん出ます。
 - **インストールされていないとき。** hoshi-stars (バージョン0.30以降) がなければ、理由を添えた `chikyu-sky-unavailable` イベントが送られ、何も描きません。
+
+## hoshi-stars がないページ
+
+hoshi-stars は任意のピア依存なので、入れていないページでも型は通ります。名前の見た目 `skyStyle` は、このパッケージ自身の型 `SkyLabelStyle` で、hoshi-stars の `LabelStyle` と同じ形です。hoshi-stars がなければ `chikyu-sky-unavailable` が理由つきで送られ、名前は出ず、絵はいつものままです。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+import type { SkyLabelStyle } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+// A page without hoshi-stars installed still type-checks: the look of the names is chikyu-earth's own type.
+const space = document.querySelector<ChikyuSpace>("chikyu-space")!;
+const look: Partial<SkyLabelStyle> = { size: 12, colour: "#ffe9b0", ring: 0 };
+space.skyStyle = look;
+space.setAttribute("star-names", "12");
+
+// With no hoshi-stars the element says so and draws no names; the picture is as it was.
+space.addEventListener("chikyu-sky-unavailable", (event) => console.log((event as CustomEvent<{ reason: string }>).detail.reason));
+```

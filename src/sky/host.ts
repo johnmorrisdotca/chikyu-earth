@@ -1,7 +1,9 @@
 // The names of the brightest stars and the constellations as faint lines, over the sky an element's page draws (hoshi-stars' `sky-labels`, loaded only when an attribute asks for it). The element tells this where the camera looks and what covers the sky at each draw
 // (`frame`); it draws the names and lines on a canvas and a few labels over the picture, never redraws at rest, and lights the figure under the pointer. Stars are directions, so only the camera's turn matters, never its distance.
-import type { CoverMask, FigureLines, LabelStyle, ScreenPoint, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
+import type { CoverMask, FigureLines, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
+import type { SkyFrame } from "./frame.ts";
+import type { SkyLabelStyle } from "./style.ts";
 
 /** The styles of the layer, for an element to add to its own (`#sk-canvas`, `#sk-names` and the labels in its shadow root). */
 export const SKY_STYLE =
@@ -10,23 +12,13 @@ export const SKY_STYLE =
   ".sk-designation{font-family:var(--hoshi-label-designation-font,ui-monospace,monospace);font-size:calc(var(--hoshi-label-designation-size,9) * 1px);color:var(--hoshi-label-designation-colour,#b8c6e0);letter-spacing:0;font-variant:normal;text-transform:none}" +
   ".sk-figure{color:var(--hoshi-label-colour,#e9f1ff)}[hidden]{display:none}";
 
-/** What an element tells the layer at each draw: where a direction in the sky falls on the screen, the size of the box, and the bodies that cover the sky (round, in pixels). */
-export interface SkyFrame {
-  /** Writes where the direction (right ascension and declination, degrees) falls on the screen in CSS pixels and answers whether it is in front of the camera. */
-  project(rightAscension: number, declination: number, out: ScreenPoint): boolean;
-  width: number;
-  height: number;
-  /** Bodies in front of the sky, each a disc on the screen: the Earth, the Moon, the Sun. */
-  discs: readonly { x: number; y: number; radius: number }[];
-}
-
 export interface SkyHost {
   /** Tells where the sky falls in the picture just drawn, or `null` when there is no picture. */
   frame(frame: SkyFrame | null): void;
   /** What the settings are now (`star-names`, `star-names-magnitude`, `constellation-lines`, the language): read again after any of them changed. */
   refresh(): void;
   /** The look of the names, as a partial hoshi-stars `LabelStyle` (the property `skyStyle`). */
-  setStyle(style: Partial<LabelStyle>): void;
+  setStyle(style: Partial<SkyLabelStyle>): void;
   readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string };
   dispose(): void;
 }
@@ -42,6 +34,8 @@ export interface SkyHostOptions {
   onError(error: unknown): void;
   /** Loads Michroma for the names, when the page has named no font of its own: kazoku-ui's `loadBodyLabelFont`. */
   loadFont(): Promise<unknown>;
+  /** Brings hoshi-stars' `sky-labels` in: a dynamic import of the package by default, a page's own (or a test's) where it has one. */
+  importer?: () => Promise<typeof import("@johnmorrisdotca/hoshi-stars/sky-labels")>;
 }
 
 const NAME_POOL = 40;
@@ -65,7 +59,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let lines: FigureLines | undefined;
   let last: SkyFrame | null = null;
   let renders = 0;
-  let style: Partial<LabelStyle> = {};
+  let style: Partial<SkyLabelStyle> = {};
   let canvas: HTMLCanvasElement | undefined;
   let box: HTMLElement | undefined;
   const pool: HTMLElement[] = [];
@@ -292,7 +286,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     if (module || loading || failed || !wanted()) return;
     loading = true;
     attach();
-    void import("@johnmorrisdotca/hoshi-stars/sky-labels")
+    void (options.importer ?? (() => import("@johnmorrisdotca/hoshi-stars/sky-labels")))()
       .then(async (loaded) => {
         module = loaded;
         if (!style.font) await options.loadFont().catch(() => undefined);
@@ -303,6 +297,14 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       .catch((error: unknown) => {
         loading = false;
         failed = true;
+        // nothing of the layer stays in the page when hoshi-stars is not there
+        canvas?.remove();
+        box?.remove();
+        canvas = undefined;
+        box = undefined;
+        attached = false;
+        pool.length = 0;
+        designations.length = 0;
         options.onError(error);
       });
   };
@@ -313,7 +315,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     if (!frame || !module) return;
     if (usedLang !== undefined && options.language() !== usedLang) configure();
     const discs = frame.discs;
-    covered = discs.length === 0 ? undefined : (x, y) => discs.some((d) => (x - d.x) * (x - d.x) + (y - d.y) * (y - d.y) <= d.radius * d.radius);
+    covered = frame.covered ?? (discs.length === 0 ? undefined : (x, y) => discs.some((d) => (x - d.x) * (x - d.x) + (y - d.y) * (y - d.y) <= d.radius * d.radius));
     const view = { width: frame.width, height: frame.height };
     if (names) names.update(frame.project, view, covered);
     if (lines) lines.update(frame.project, view, names ? names.labels : undefined);
@@ -390,3 +392,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     },
   };
 }
+
+// The look chikyu-earth names (`SkyLabelStyle`) and hoshi-stars' `LabelStyle` are the same type: either one given where the other is asked for must compile, or this file does not.
+const sameStyle: [LabelStyle, SkyLabelStyle] = [{} as SkyLabelStyle, {} as LabelStyle];
+void sameStyle;
