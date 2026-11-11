@@ -92,12 +92,15 @@ for (const [name, tag, open] of [
 test("the demo's Name buttons set the look on the element and in the address, and No name takes it away", async ({ page }) => {
   await openEarth(page, HELD);
   await expect(page.locator('#body-label-look [data-body-label=""]')).toHaveClass(/\bon\b/);
+  // a press scrolls the buttons into view, which can take the Earth out of sight, where nothing is drawn: a reader looks back at the Earth to see its name
   await page.locator('#body-label-look [data-body-label="etched"]').click();
+  await page.locator(EARTH).scrollIntoViewIfNeeded();
   await expect.poll(async () => (await labelOf(page, EARTH)).made, { timeout: 30_000 }).toBe(true);
   expect(await page.locator(EARTH).evaluate((el) => el.getAttribute("body-label"))).toBe("etched");
   await expect.poll(() => new URL(page.url()).searchParams.get("body-label")).toBe("etched");
   await expect(page.locator('#body-label-look [data-body-label="etched"]')).toHaveClass(/\bon\b/);
   await page.locator('#body-label-look [data-body-label=""]').click();
+  await page.locator(EARTH).scrollIntoViewIfNeeded();
   await expect.poll(async () => (await labelOf(page, EARTH)).made).toBe(false);
   await expect.poll(() => new URL(page.url()).searchParams.get("body-label")).toBeNull();
 });
