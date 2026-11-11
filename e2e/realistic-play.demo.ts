@@ -15,8 +15,8 @@ const START = "2026-11-02T14:00:00Z";
 const DAY = 86_400_000;
 const EARTH = "chikyu-earth-realistic";
 
-/** The date box as milliseconds (it shows local time to the minute). */
-const boxMs = async (page: Page): Promise<number> => Date.parse(await page.locator("#when").inputValue());
+/** The date box as milliseconds. It shows local time to the minute, so it is read in the page's own time zone: the runner's time-zone data can differ from the browser's (in November 2026 Node put America/Vancouver at UTC-8 and Chromium at UTC-7). */
+const boxMs = (page: Page): Promise<number> => page.locator("#when").evaluate((el) => new Date((el as HTMLInputElement).value).getTime());
 const play = (page: Page) => page.locator('#replay [data-act="play"]');
 const back = (page: Page) => page.locator('#replay [data-act="start"]');
 const speed = (page: Page, value: number) => page.locator(`#replay button[data-v="${value}"]`);

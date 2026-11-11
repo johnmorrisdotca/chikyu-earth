@@ -15,8 +15,8 @@ const START = "2026-11-02T14:00:00Z";
 const DAY = 86_400_000;
 const SPACE = "chikyu-space";
 
-/** The date box as milliseconds (it shows local time to the minute). */
-const boxMs = async (page: Page): Promise<number> => Date.parse(await page.locator("#when").inputValue());
+/** The date box as milliseconds. It shows local time to the minute, so it is read in the page's own time zone: the runner's time-zone data can differ from the browser's (in November 2026 Node put America/Vancouver at UTC-8 and Chromium at UTC-7). */
+const boxMs = (page: Page): Promise<number> => page.locator("#when").evaluate((el) => new Date((el as HTMLInputElement).value).getTime());
 /** The date box moves on from `from` by at least `by` milliseconds: waited for, because a busy machine draws slowly and the box follows the clock only when the page gets to run. */
 const boxMovesOn = (page: Page, from: number, by: number, message: string) => expect.poll(async () => (await boxMs(page)) - from, { timeout: 20_000, message }).toBeGreaterThanOrEqual(by);
 const play = (page: Page) => page.locator('#replay [data-act="play"]');
