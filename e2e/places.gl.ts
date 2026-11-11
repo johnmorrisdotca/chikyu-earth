@@ -201,7 +201,7 @@ test("the demo's favourites come from the address, are drawn quieter than here, 
   const listed = (): Promise<{ id: string; kind: string; label: string }[]> => space.evaluate((el) => Reflect.get(el, "places"));
   await expect.poll(async () => (await listed()).map((p) => p.id)).toEqual(["city:Tokyo", "city:Cairo"]);
   expect((await listed()).every((p) => p.kind === "favourite")).toBe(true);
-  await expect(page.getByRole("button", { name: "Tokyo", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("group", { name: "Favourites" }).getByRole("button", { name: "Tokyo", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await placesOf(space)).shown).toBeGreaterThanOrEqual(1);
   expect(await space.evaluate((el) => el.shadowRoot!.querySelector(".pl-mark[data-kind=here]"))).toBeNull();
 
