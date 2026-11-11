@@ -4,6 +4,7 @@ import { adoptStyles } from "../adopt.ts";
 import { fetchElements } from "../satellites/source.ts";
 import type { ElementSet } from "../satellites/types.ts";
 import { creditLine, type Credit, type DataSource } from "../data-door.ts";
+import { SHORT_NAMES } from "../satellites/names.ts";
 import { createDoorHost, type DoorHost } from "../door/host.ts";
 import { mergeElementSets } from "../door/elements.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../satellites/limits.ts";
@@ -122,11 +123,7 @@ const WORDS: Record<Lang, Record<string, string>> = {
 };
 
 /** The short names of the satellites this element knows, in each language; any other satellite is shown under the name in its elements. */
-const SHORT: Record<number, Record<Lang, string>> = {
-  25544: { en: "ISS", ja: "ISS" },
-  48274: { en: "Tiangong", ja: "天宮" },
-  20580: { en: "Hubble", ja: "ハッブル" },
-};
+const SHORT: Readonly<Record<number, Record<Lang, string>>> = SHORT_NAMES;
 
 const CSS = `
 :host{display:block;color:inherit;font:inherit;container-type:inline-size}

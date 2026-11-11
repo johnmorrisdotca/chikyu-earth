@@ -78,6 +78,21 @@ space.addEventListener("chikyu-satellite-click", (event) => console.log((event a
 
 グループは、何機入っていても**描画の呼び出しは1回**です。グループには名前を付けます (`"stations"`、`"starlink"`)。`showSatellites(name, false)` で隠し、`setSatellites(name, null)` で取り除いて、持っていたものを解放します。`orbits: true` を付けると、40機以下のグループで、すべての軌道を描きます。
 
+## 群の全部に輪と名前をつける
+
+`space.labelSatellites("stations")` は、群のすべての衛星に輪をつけ、横に名前を書きます。宇宙ステーションのような小さな群のためのものです。名前はページの言語で出ます (`ISS`、`Tiangong` または `天宮`、`Hubble` または `ハッブル`。ほかの衛星は軌道要素にある名前で、`space.satelliteNames = { 25544: "Space Station" }` と指定すればその名前で出ます)。名前は `places` の場所の名前のあとに置き、場所の名前、天体の名前、ほかの衛星の名前とは重なりません。入るなら輪の右、だめなら左、上、下の順に置き、置く場所がない名前は出しません。輪をつけるのは、画面に入っていて地球の裏にない衛星だけで、すべての群をあわせて最大80機までです。止まっているときは何も描き直しません。`space.labelSatellites("stations", false)` で止め、`space.labelledSatellites` でその群の一覧が分かります。
+
+`space.placeSatellite({ group: "stations", index })` は、直前の描画で衛星が画面のどこにあるかを答えます。`{ x, y, visible, heightKm }` で、位置はビューの左上からの CSS ピクセルです。`visible` は、枠の中にあり、地球の裏でないことを表します。群が表示されていないとき、または位置を出せないときは `null` です。これは画面自身のカメラの計算と、地球に隠れるかどうかの判定そのものなので、自分で輪を描くページが、どちらも繰り返さなくて済みます。輪をつけた衛星が見えるようになったときと見えなくなったときには、`detail: { ref, visible }` をつけた `chikyu-satellite-visibility` が送られます (フレームごとではありません)。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+
+const space = document.querySelector("chikyu-space")!;
+space.labelSatellites("stations");
+space.addEventListener("chikyu-satellite-visibility", (event) => console.log((event as CustomEvent).detail.ref.index, (event as CustomEvent).detail.visible));
+console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, visible, heightKm } or null
+```
+
 ## 1機を選ぶ
 
 衛星を押すと (表示を回すドラッグや、地球の裏側の衛星は対象外です)、`chikyu-satellite-click` が `{ group, index, info }` と一緒に発生します。`info` には、名前、NORAD 番号、軌道要素の古さ、高さ、速さ、周期が入っています。`selectSatellite({ group, index })` はコードから1機を選び (リング、軌道、横に名前が出ます)、`satelliteInfo(ref)` はその情報を返します。検索ボックスや名前の一覧があるページでは、この2つを使えば、キーボードだけの人も選べます。
