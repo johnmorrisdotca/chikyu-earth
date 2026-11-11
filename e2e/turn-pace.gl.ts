@@ -31,9 +31,8 @@ test("the 3D look a link opens on keeps the pace the link names, and a look chos
   await expect(page.locator(CONTROLS), "the line globe starts at its own pace, a turn in a minute").toHaveAttribute("pace", "1440");
 });
 
-// The view controls leave a pace of 1 off the address, as though every page started at 1, so a reload reads no pace and opens on the 1440× this page starts at.
-// fixme until kazoku-ui's view controls keep a pace of 1 when the page starts at another; with that release this test is switched on.
-test.fixme("the line globe's 1× (the Earth's real rate) is kept in the address, and a reload opens on it", async ({ page }) => {
+// The view controls keep a pace of 1 in the address when the page starts at another (kazoku-ui 0.38.1), so a reload opens on the 1× chosen and not on the 1440× this page starts at.
+test("the line globe's 1× (the Earth's real rate) is kept in the address, and a reload opens on it", async ({ page }) => {
   await page.goto("/chikyu-earth/");
   await showPaces(page);
   await expect(paceButton(page, 1440)).toHaveAttribute("aria-pressed", "true");
