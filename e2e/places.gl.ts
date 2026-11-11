@@ -61,6 +61,8 @@ async function openSpace(page: Page, query: string): Promise<Locator> {
   await page.goto(`/chikyu-earth/?look=space&speed=0&${query}`);
   const space = page.locator(SPACE);
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+  // with motion allowed the demo opens with the view turning: hold it, so what is measured is the places
+  await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
   return space;
 }
 
