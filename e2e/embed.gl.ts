@@ -64,6 +64,9 @@ test("the address chooses the clock, the scale, the body and the part of the sky
 });
 
 test("a day a second in the embed draws at most 30 times a second, and nothing in a hidden tab", async ({ page }) => {
+  // The test counts draws, not pixels. On the clock it owns, `timed` has every frame of the span drawn at once and then waits for the software GPU to finish them (11 s for 4 s of frames at the full 1280 by 900 here,
+  // past the test's 60 s in CI), so the picture is made small: the draw rate the page asks for does not depend on its size.
+  await page.setViewportSize({ width: 480, height: 320 });
   await ownClock(page);
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/embed.html?look=space&time=${NOV2}&speed=86400&center=-100,40`);

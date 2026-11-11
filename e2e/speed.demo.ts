@@ -18,7 +18,11 @@ test("Auto-turn has the steps 0.5×, 1×, 2× and 1440× of the Earth's own rate
   expect(await page.locator(CONTROLS).evaluate((el) => Reflect.get(el, "controller").speed as number)).toBeCloseTo(0.008356, 6);
   await expect(page.locator(CONTROLS)).toHaveAttribute("pace", "2");
   await expect(page).toHaveURL(/pace=2/);
+  // this page starts at 1440×, so a 1× is the reader's choice and is kept in the address (kazoku-ui 0.38.1); only the page's own start stays out of it
   await speedButton(page, 1).click();
+  await expect(page).toHaveURL(/[?&]pace=1(&|$)/);
+  await speedButton(page, 1440).click();
+  await expect(speedButton(page, 1440)).toHaveAttribute("aria-pressed", "true");
   await expect(page).not.toHaveURL(/pace=/);
 });
 
