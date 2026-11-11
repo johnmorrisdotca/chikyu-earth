@@ -17,7 +17,7 @@ export const SOURCE = "Space-Track.org (USSPACECOM)";
 export const USER_AGENT = "chikyu-earth-catalogue (+https://github.com/johnmorrisdotca/chikyu-earth)";
 /** The groups the site hosts, in the order a page lists them. */
 export const GROUPS = [
-  { id: "working", en: "Working satellites", ja: "稼働中の人工衛星" },
+  { id: "working", en: "Working satellites", ja: "運用中の人工衛星" },
   { id: "inactive", en: "Inactive payloads", ja: "運用を終えた人工衛星" },
   { id: "rocket-bodies", en: "Rocket bodies", ja: "ロケット本体" },
   { id: "debris", en: "Debris and unidentified objects", ja: "デブリと種類不明の物体" },
