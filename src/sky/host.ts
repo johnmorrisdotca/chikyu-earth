@@ -75,6 +75,9 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let covered: CoverMask | undefined;
   /** The language the names were last laid out in: the page may change its language after the element was made, so it is read again at each draw. */
   let usedLang: "en" | "ja" | undefined;
+  /** The names drawn at the last frame that were left out because they ran over another as the browser draws them (by label), and how many names are shown. */
+  const culled: boolean[] = [];
+  let drawnNames = 0;
 
   const wanted = (): boolean => options.attribute("star-names") !== null || options.attribute("constellation-lines") !== null;
 
@@ -156,7 +159,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       const s = names.style;
       context.lineWidth = s.ringWidth;
       context.strokeStyle = s.ringColour;
-      for (const label of names.labels) {
+      for (const [index, label] of names.labels.entries()) {
+        if (culled[index]) continue;
         if (label.ring > 0) {
           context.beginPath();
           context.arc(label.x, label.y, label.ring, 0, Math.PI * 2);
@@ -184,7 +188,10 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   }
 
   function placeNames(): void {
-    if (!box || !names) return;
+    if (!box || !names) {
+      drawnNames = 0;
+      return;
+    }
     const shown = names.labels.length;
     while (pool.length < Math.min(NAME_POOL, shown)) {
       const name = doc.createElement("span");
@@ -217,6 +224,41 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         designation.style.transform = `translate(${Math.round(label.designationX)}px,${Math.round(label.designationY)}px) translate(${shift},-100%)`;
       } else designation.hidden = true;
     }
+    cullOverlaps(shown);
+  }
+
+  /**
+   * hoshi-stars lays the names out by the width it works a name to have (a letter is about 0.6 of the size, a Japanese letter the whole size), and the browser draws them with the font it has: Michroma where it has loaded, another font where it has not, or where
+   * the page has none that has the letters (a Japanese name on a machine with no Japanese font). The two can differ, so the names are measured as they are drawn, and a name that runs over one placed before it (the brighter star's) is left out, with its ring.
+   */
+  function cullOverlaps(shown: number): void {
+    culled.length = 0;
+    let visible = 0;
+    const kept: { l: number; t: number; r: number; b: number }[] = [];
+    for (let i = 0; i < shown; i += 1) {
+      const name = pool[i];
+      if (!name || name.hidden) {
+        culled.push(true);
+        continue;
+      }
+      if (typeof name.getBoundingClientRect !== "function") {
+        culled.push(false);
+        visible += 1;
+        continue;
+      }
+      const rect = name.getBoundingClientRect();
+      const over = kept.some((one) => rect.left < one.r && rect.right > one.l && rect.top < one.b && rect.bottom > one.t);
+      if (over) {
+        name.hidden = true;
+        designations[i]!.hidden = true;
+        culled.push(true);
+        continue;
+      }
+      kept.push({ l: rect.left, t: rect.top, r: rect.right, b: rect.bottom });
+      culled.push(false);
+      visible += 1;
+    }
+    drawnNames = visible;
   }
 
   const vars = (): void => {
@@ -288,6 +330,11 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
     });
   doc.addEventListener("kazoku-languagechange", onLanguage);
+  // a font arrives (Michroma, or the one a Japanese name falls back to): the names are measured as they are drawn, so they are laid out again
+  const onFonts = (): void => {
+    if (module && wanted() && last) compute();
+  };
+  doc.fonts?.addEventListener?.("loadingdone", onFonts);
 
   return {
     frame(next) {
@@ -331,10 +378,11 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
     },
     get stats() {
-      return { on: wanted(), loaded: module !== undefined, names: names?.labels.length ?? 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "" };
+      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "" };
     },
     dispose() {
       doc.removeEventListener("kazoku-languagechange", onLanguage);
+      doc.fonts?.removeEventListener?.("loadingdone", onFonts);
       canvas?.remove();
       box?.remove();
       pool.length = 0;

@@ -15,10 +15,16 @@ interface FakeNode {
   setAttribute(): void;
   getContext(): unknown;
   addEventListener(): void;
+  getBoundingClientRect?(): { left: number; top: number; right: number; bottom: number };
 }
 const context = new Proxy({}, { get: () => () => undefined, set: () => true });
+let measure: ((node: FakeNode, index: number) => { left: number; top: number; right: number; bottom: number }) | undefined;
+let made = 0;
 const element = (): FakeNode => {
+  const index = made;
+  made += 1;
   const node: FakeNode = { style: { setProperty() {}, removeProperty() {} }, hidden: false, textContent: "", className: "", width: 0, height: 0, append() {}, remove() {}, setAttribute() {}, getContext: () => context, addEventListener() {} };
+  if (measure) node.getBoundingClientRect = () => measure!(node, index);
   return node;
 };
 const listeners = new Map<string, Set<() => void>>();
@@ -90,4 +96,24 @@ test("a frame in a new language is laid out in it, without a separate draw", asy
   assert.equal(host.stats.renders, drawn + 1, "the frame is the one draw");
   assert.equal(host.stats.lang, "ja");
   host.dispose();
+});
+
+test("names are measured as they are drawn: one that runs over a brighter star's name is left out, with its ring, and the count is what is shown", async () => {
+  // every name is drawn on the same box, as if a font with wider letters made them cover one another
+  measure = () => ({ left: 100, top: 100, right: 220, bottom: 118 });
+  made = 0;
+  const host = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+  host.frame(frame);
+  await wait(1500);
+  assert.equal(host.stats.names, 1, "of names on top of one another, the first stays");
+  // names that are apart all stay
+  measure = (_node, index) => ({ left: index * 300, top: 0, right: index * 300 + 120, bottom: 18 });
+  made = 0;
+  const apart = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+  apart.frame(frame);
+  await wait(1500);
+  assert.equal(apart.stats.names, 12, "names that do not touch are all shown");
+  measure = undefined;
+  host.dispose();
+  apart.dispose();
 });
