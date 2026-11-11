@@ -189,10 +189,21 @@ test.describe("moving", () => {
     await open(page, "", "stations,starlink");
     await setSpeed(page, 60);
     await addMany(page);
-    await settle(page, 1500);
-    const many = await measure(page, 6000);
-    expect(many.stats.satellites.averageUpdateMs, "JavaScript a frame").toBeLessThan(4);
-    expect(many.stats.satellites.maxBatchMs, "one SGP4 batch").toBeLessThan(120);
+    // the page counts its own work, so the test waits on that, never on a fixed time: SGP4 has gone over every satellite twice and 30 frames are drawn since the 6,000 came
+    const all = 2252 + 6000;
+    const start = (await statsOf(page)).satellites;
+    await expect
+      .poll(
+        async () => {
+          const now = (await statsOf(page)).satellites;
+          return now.propagations - start.propagations >= 2 * all && now.updates - start.updates >= 30;
+        },
+        { timeout: 30_000, message: "two SGP4 passes over every satellite and 30 frames" },
+      )
+      .toBe(true);
+    const { satellites } = await statsOf(page);
+    expect(satellites.averageUpdateMs, "JavaScript a frame").toBeLessThan(4);
+    expect(satellites.maxBatchMs, "one SGP4 batch").toBeLessThan(120);
   });
 
   test("faster than 60 times real time the groups are hidden and SGP4 is not run, and the frame rate stays capped", async ({ page }) => {
