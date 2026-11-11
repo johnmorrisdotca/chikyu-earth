@@ -194,6 +194,7 @@
     "d3-geo": "^3.1.1"
   },
   "peerDependencies": {
+    "@johnmorrisdotca/kuni": ">=1.6.1",
     "@johnmorrisdotca/wakusei-planets": ">=0.5.0",
     "astronomy-engine": ">=2.1.0",
     "satellite.js": ">=6.0.0",
@@ -211,6 +212,9 @@
     },
     "@johnmorrisdotca/wakusei-planets": {
       "optional": true
+    },
+    "@johnmorrisdotca/kuni": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -220,7 +224,7 @@
     "@angular/platform-browser": "^22.2.4",
     "@eslint/js": "^9.0.0",
     "@johnmorrisdotca/hata": "^1.8.0",
-    "@johnmorrisdotca/kuni": "^1.5.0",
+    "@johnmorrisdotca/kuni": "^1.6.1",
     "@johnmorrisdotca/wakusei-planets": "^0.5.0",
     "@playwright/test": "1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
