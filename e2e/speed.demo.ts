@@ -22,7 +22,7 @@ test("Auto-turn has the steps 0.5×, 1×, 2× and 1440× of the Earth's own rate
   await expect(page).not.toHaveURL(/pace=/);
 });
 
-test("Auto-turn's 1× (the Earth's own rate) is kept in the address, and a reload or a shared link opens on it, not on the 1440× the page opens on", async ({ page }) => {
+test("Auto-turn's 1× (the Earth's own rate) is kept in the address (the family's own `pace` leaves its start off, so the page keeps `turn=real`), and a reload or a shared link opens on it, not on the 1440× the page opens on", async ({ page }) => {
   await page.goto("/chikyu-earth/");
   await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
   if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
@@ -30,15 +30,15 @@ test("Auto-turn's 1× (the Earth's own rate) is kept in the address, and a reloa
   await speedButton(page, 1).click();
   await expect(speedButton(page, 1)).toHaveAttribute("aria-pressed", "true");
   // the choice is in the address (a moment after: the family's address state waits to write)
-  await expect.poll(() => new URL(page.url()).searchParams.get("pace")).toBe("1");
+  await expect.poll(() => new URL(page.url()).searchParams.get("turn")).toBe("real");
   await page.reload();
   await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
   if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
   await expect(speedButton(page, 1), "the 1× opens pressed").toHaveAttribute("aria-pressed", "true");
   expect(Math.abs(await page.locator(CONTROLS).evaluate((el) => Reflect.get(el, "controller").speed as number))).toBeCloseTo(0.004178, 6);
-  // and the page's own 1440× is still what it opens on when the link says nothing, and choosing it again takes the pace out of the address
+  // and the page's own 1440× is still what it opens on when the link says nothing, and choosing it again takes `turn` out of the address
   await speedButton(page, 1440).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get("pace")).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get("turn")).toBeNull();
   await page.goto("/chikyu-earth/");
   await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
   if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
