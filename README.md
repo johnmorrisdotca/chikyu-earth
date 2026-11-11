@@ -511,6 +511,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
 | `.../door` | The data door: sources of your own maps and orbit data with their licence and credit, `creditLine`, the package's own sources. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
+| `.../catalogue` | The Earth-orbit catalogue's pure parts: the class of an orbit from its elements, the kind of an object, colours, legend, fleets, and the packed file of up to 200,000 objects. No data, no DOM, no dependency. |
 
 ## Guides
 
@@ -540,6 +541,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Architecture](docs/guides/architecture.md) | How the layers fit |
 | [Troubleshooting](docs/guides/troubleshooting.md) | Something does not appear |
 | [Upgrading](docs/guides/upgrading.md) | What to act on between versions |
+| [The catalogue of objects in Earth orbit](docs/guides/catalogue.md) | The orbit class and kind of any object, colours, fleets, and the packed file a site hosts for up to 200,000 objects |
 
 ## Limits
 

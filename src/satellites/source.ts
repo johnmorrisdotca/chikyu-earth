@@ -36,7 +36,7 @@ const NUMBERS = ["MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE",
 const OPTIONAL_NUMBERS = ["EPHEMERIS_TYPE", "ELEMENT_SET_NO", "REV_AT_EPOCH"] as const;
 
 /** A record with the fields of an OMM, from text or numbers, or the reason it is not one. */
-function toElementSet(record: Record<string, unknown>): ElementSet | string {
+export function toElementSet(record: Record<string, unknown>): ElementSet | string {
   const out: Record<string, unknown> = {};
   const name = typeof record["OBJECT_NAME"] === "string" ? record["OBJECT_NAME"].trim() : "";
   out["OBJECT_NAME"] = name || `NORAD ${String(record["NORAD_CAT_ID"] ?? "?")}`;
@@ -75,7 +75,7 @@ function fromRecords(records: unknown[], format: ElementFormat): ParsedElements 
 }
 
 /** The cells of one CSV line (a cell may be in double quotes, with `""` for a quote). */
-function cellsOf(line: string): string[] {
+export function cellsOf(line: string): string[] {
   const cells: string[] = [];
   let at = 0;
   while (at <= line.length) {

@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js", "dist/catalogue/index.js", "dist/catalogue/index.d.ts"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -72,3 +72,9 @@ const found = passes.findPasses(iss, { latitude: 51.5, longitude: -0.13 }, { fro
 if (found.length < 8 || found.some((one: { highest: { altitude: number } }) => one.highest.altitude < 10) || passes.compassOf(180) !== "S") throw new Error("findPasses is off");
 if (!passes.skySvg(found[0], passes.passPath(iss, { latitude: 51.5, longitude: -0.13 }, found[0])).includes("data-mark")) throw new Error("skySvg is off");
 console.log("passes ok");
+
+// the Earth-orbit catalogue: the orbit class, the kinds and the packed file import with no browser and no dependency
+const catalogue = await import(new URL("../dist/catalogue/index.js", import.meta.url).href);
+const packedBack = await catalogue.unpackAny(await catalogue.gzipBytes(catalogue.packCatalogue([{ set: { ...iss, NORAD_CAT_ID: 123456 }, kind: "DEB" }])));
+if (catalogue.classOfElements(15.49, 0.0007) !== "leo" || catalogue.classOfElements(1.0027, 0.0002) !== "geo" || catalogue.readKind("ROCKET BODY") !== "RB" || packedBack.norad[0] !== 123456 || catalogue.fleetOf("STARLINK-1007", "PAY") !== "starlink" || catalogue.MAX_PACKED !== 200_000) throw new Error("the catalogue is off");
+console.log("catalogue ok");

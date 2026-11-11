@@ -149,6 +149,11 @@
       "import": "./dist/sheets/index.js",
       "default": "./dist/sheets/index.js"
     },
+    "./catalogue": {
+      "types": "./dist/catalogue/index.d.ts",
+      "import": "./dist/catalogue/index.js",
+      "default": "./dist/catalogue/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
