@@ -68,10 +68,10 @@ console.log(debris.info.id);
 
 ## Making the files
 
-The repository's own `scripts/catalogue.ts` makes four files for a site to host, `working`, `inactive`, `rocket-bodies` and `debris` (each `.pack.gz`), and a `manifest.json` that names the source and the citation "Data from Space-Track.org (USSPACECOM)", says how many objects each holds and when the elements were retrieved. It is a script for the demo's site and is not part of the package. Its rules:
+The repository's own `scripts/catalogue.ts` makes three files for a site to host, `payloads`, `rocket-bodies` and `debris` (each `.pack.gz`; `debris` also holds the unidentified objects), and a `manifest.json` that names the source and the citation "Data from Space-Track.org (USSPACECOM)", says how many objects each holds and when the elements were retrieved. It is a script for the demo's site and is not part of the package. Its rules:
 
 - **One login, two asks.** One request for every object on orbit (Space-Track's own filter for objects that can be propagated), a pause, then one request for the SATCAT, only after 17:00 UTC. The first non-200 answer stops the asking.
-- **Working and inactive payloads** are told apart by a list of working satellites, because Space-Track has no field that says whether a payload still works. The script takes the catalogue numbers of CelesTrak's list of active satellites, one request, and keeps nothing else from it.
+- **Working and inactive payloads** can be told apart, but only on request: Space-Track has no field that says whether a payload still works. With `CATALOGUE_WORKING_LIST=celestrak` the script takes the catalogue numbers of CelesTrak's list of active satellites, one request, keeps nothing else from it, and writes `working` and `inactive` in place of `payloads`. Without it, CelesTrak is never asked.
 - **If Space-Track fails** the last files are kept and the log says how old they are.
 - **The total is stated honestly** as catalogued objects with public elements, not everything in orbit, and every object carries the age of its elements.
 

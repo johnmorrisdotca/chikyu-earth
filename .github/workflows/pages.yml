@@ -5,8 +5,9 @@
 # downloaded once per update, and an update comes every two hours). A list is not asked for again within 110 minutes. No server runs per view: the visitor's browser reads files on Pages.
 # A group CelesTrak has left more than 12 hours old is asked of Space-Track instead (its GP class, once a day for each group), when the secrets SPACETRACK_USER and SPACETRACK_PASSWORD are set;
 # without them the step says "CelesTrak only" and the groups keep their last files. The login is only ever passed in the environment of that one step.
-# The Earth-orbit catalogue (demo/catalogue, made by scripts/catalogue.ts): every run carries over the files already on the site, so a push never drops them. Only the Catalogue workflow (once a day, calling this one with
-# `catalogue: true`) asks Space-Track for new ones, and only when the repository variable CATALOGUE_PUBLISH is `yes`. Every step has a timeout, nothing is retried, and nothing here costs anything on a public repository.
+# The Earth-orbit catalogue (demo/catalogue, made by scripts/catalogue.ts): every run carries over the files already on the site, so a push never drops them. Only a call with `catalogue: true` (the Catalogue
+# workflow, once a day) asks Space-Track for new ones, and only when the repository variable CATALOGUE_PUBLISH is `yes`; that call skips the six-hourly satellite refresh above (a called workflow still sees the
+# caller's schedule event, and it would ask Space-Track twice) and runs `pnpm check` like a push. Every step has a timeout, nothing is retried, and nothing here costs anything on a public repository.
 name: Pages
 on:
   push:
@@ -59,7 +60,7 @@ jobs:
         run: node scripts/elements.ts previous https://johnmorrisdotca.github.io/chikyu-earth/elements
       - name: Satellites, new elements from CelesTrak, Space-Track when it does not answer (every six hours)
         timeout-minutes: 15
-        if: github.event_name == 'schedule' || inputs.refresh
+        if: (github.event_name == 'schedule' || inputs.refresh) && !inputs.catalogue
         env:
           SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
           SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
@@ -67,9 +68,23 @@ jobs:
       - name: Satellites, the files are fit to publish
         timeout-minutes: 5
         run: node scripts/elements.ts check demo/elements
+      - name: Catalogue, the files already on the site
+        timeout-minutes: 5
+        run: node scripts/catalogue.ts previous https://johnmorrisdotca.github.io/chikyu-earth/catalogue
+      - name: Catalogue, new files from Space-Track (once a day, only for the Catalogue workflow, only once CATALOGUE_PUBLISH is yes)
+        timeout-minutes: 15
+        if: inputs.catalogue && vars.CATALOGUE_PUBLISH == 'yes'
+        env:
+          SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
+          SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
+          CATALOGUE_WORKING_LIST: ${{ vars.CATALOGUE_WORKING_LIST }}
+        run: node scripts/catalogue.ts fetch
+      - name: Catalogue, the files are fit to publish
+        timeout-minutes: 5
+        run: node scripts/catalogue.ts check demo/catalogue --optional
       - run: pnpm check
         timeout-minutes: 20
-        if: github.event_name != 'schedule'
+        if: github.event_name != 'schedule' || inputs.catalogue
       - name: The Earth tiles, cut from NASA's big maps (kept between runs while the script is the same); pnpm site copies them to site/tiles
         timeout-minutes: 10
         uses: actions/cache@v6

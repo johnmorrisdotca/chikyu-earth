@@ -5,7 +5,7 @@ const MU = 398_600.4418;
 const EARTH_RADIUS_KM = 6371;
 
 /**
- * The height of the geostationary orbit above the mean Earth radius, in kilometres: the radius of a circular orbit that goes round once a sidereal day, less 6,371 km.
+ * The height of the geostationary orbit above the equator, in kilometres: the radius of a circular orbit that goes round once a sidereal day (42,164 km) less the equatorial radius (6,378 km). The heights in this module are above the mean Earth radius of 6,371 km, which differs by 7 km, well inside the 1,500 km band.
  *
  * @example
  * ```ts

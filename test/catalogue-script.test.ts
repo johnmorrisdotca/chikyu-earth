@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { unpackAny } from "../src/catalogue/index.ts";
-import { ACTIVE_URL, GP_PATH, GROUPS, SATCAT_PATH, SPACING_MS, buildGroups, groupOf, packBuilt, problems, readDir, refresh, satcatInfo, workingIds, writeAll, type Answer, type Manifest } from "../scripts/catalogue.ts";
+import { ACTIVE_URL, GP_PATH, SATCAT_PATH, SPACING_MS, buildGroups, groupOf, packBuilt, problems, readDir, refresh, satcatInfo, workingIds, writeAll, type Answer, type Manifest } from "../scripts/catalogue.ts";
 import { CITATION, type Reply, type Send } from "../scripts/spacetrack.ts";
 
 const recorded = (name: string): string => readFileSync(new URL(`./recorded/${name}`, import.meta.url), "utf8");
@@ -47,7 +47,7 @@ function madeUp(options: { failAt?: number; failStatus?: number; celestrak?: num
   return { send, asks, ask, celestrakAsks, pauses, pause: async (ms) => void pauses.push(ms) };
 }
 
-const sets = (built: ReturnType<typeof buildGroups>, id: (typeof GROUPS)[number]["id"]): number[] => built.groups[id].map((record) => record.set.NORAD_CAT_ID).sort((a, b) => a - b);
+const sets = (built: ReturnType<typeof buildGroups>, id: keyof ReturnType<typeof buildGroups>["groups"]): number[] => built.groups[id].map((record) => record.set.NORAD_CAT_ID).sort((a, b) => a - b);
 
 test("the four groups: working and inactive payloads by the active list, rocket bodies, and debris with what has no kind", () => {
   const built = buildGroups({ gp: GP, satcat: SATCAT, working: workingIds(ACTIVE) }, "2026-11-11T18:05Z");
@@ -94,7 +94,7 @@ test("the asks: one login, one gp ask with the on-orbit filter, a pause, one sat
   assert.ok(GP_PATH.endsWith("/format/json"));
   assert.ok(SATCAT_PATH.includes("/class/satcat/"));
   const spy = madeUp();
-  const done = await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING);
+  const done = await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING, true);
   assert.deepEqual(spy.asks, [GP_PATH, SATCAT_PATH]);
   assert.deepEqual(spy.celestrakAsks, [ACTIVE_URL]);
   assert.deepEqual(spy.pauses, [SPACING_MS, SPACING_MS], "a pause between the two Space-Track asks, and one before CelesTrak's");
@@ -106,13 +106,13 @@ test("the asks: one login, one gp ask with the on-orbit filter, a pause, one sat
 
 test("before 17:00 UTC satcat is not asked, and the owner and launch details come from the last files", async () => {
   const first = madeUp();
-  const evening = await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING);
+  const evening = await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING, true);
   const dir = mkdtempSync(`${tmpdir()}/catalogue-`);
   writeAll(dir, await packBuilt(evening.built!));
   const last = await readDir(dir);
   assert.ok(last);
   const spy = madeUp();
-  const done = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, MORNING);
+  const done = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, MORNING, true);
   assert.deepEqual(spy.asks, [GP_PATH], "only the gp ask");
   assert.ok(done.log.some((line) => line.includes("satcat: not asked")));
   const tba = done.built!.groups.debris.find((record) => record.set.NORAD_CAT_ID === 1_000_002)!;
@@ -124,20 +124,20 @@ test("before 17:00 UTC satcat is not asked, and the owner and launch details com
 test("if the gp ask fails nothing is made, the last files are kept and their age is said, and nobody else is asked", async () => {
   const dir = mkdtempSync(`${tmpdir()}/catalogue-`);
   const first = madeUp();
-  writeAll(dir, await packBuilt((await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING)).built!));
+  writeAll(dir, await packBuilt((await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING, true)).built!));
   const last = await readDir(dir);
   const spy = madeUp({ failAt: 1, failStatus: 503 });
-  const done = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, EVENING + 30 * 3_600_000);
+  const done = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, EVENING + 30 * 3_600_000, true);
   assert.equal(done.built, undefined);
   assert.deepEqual(spy.asks, [GP_PATH], "stopped at the first answer that was not 200: no satcat ask");
   assert.equal(spy.celestrakAsks.length, 0);
   assert.ok(done.log.some((line) => line.includes("answer 503")));
   assert.ok(done.log.some((line) => line.includes("the last files are kept, retrieved 2026-11-11T18:05Z (30 hours old)")), done.log.join("\n"));
   const again = madeUp({ failAt: 1 });
-  const none = await refresh(undefined, LOGIN, again.send, again.ask, again.pause, EVENING);
+  const none = await refresh(undefined, LOGIN, again.send, again.ask, again.pause, EVENING, true);
   assert.equal(none.built, undefined);
   assert.ok(none.log.some((line) => line.includes("there are no last files either")));
-  const nologin = await refresh(last, undefined, spy.send, spy.ask, spy.pause, EVENING);
+  const nologin = await refresh(last, undefined, spy.send, spy.ask, spy.pause, EVENING, true);
   assert.equal(nologin.built, undefined);
   assert.ok(nologin.log[0]?.includes("no Space-Track login"));
 });
@@ -145,10 +145,10 @@ test("if the gp ask fails nothing is made, the last files are kept and their age
 test("if the satcat ask fails the gp elements are still used, CelesTrak is not asked, and the working list is the last one", async () => {
   const dir = mkdtempSync(`${tmpdir()}/catalogue-`);
   const first = madeUp();
-  writeAll(dir, await packBuilt((await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING)).built!));
+  writeAll(dir, await packBuilt((await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING, true)).built!));
   const last = await readDir(dir);
   const spy = madeUp({ failAt: 2, failStatus: 500 });
-  const done = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, EVENING + 3_600_000);
+  const done = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, EVENING + 3_600_000, true);
   assert.ok(done.built);
   assert.equal(spy.celestrakAsks.length, 0);
   assert.deepEqual(sets(done.built, "working"), [20_580, 25_544, 26_407, 123_456, 900_001]);
@@ -159,22 +159,22 @@ test("if the satcat ask fails the gp elements are still used, CelesTrak is not a
 test("if CelesTrak does not answer 200 the last working list is used, and with no last files nothing is made", async () => {
   const dir = mkdtempSync(`${tmpdir()}/catalogue-`);
   const first = madeUp();
-  writeAll(dir, await packBuilt((await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING)).built!));
+  writeAll(dir, await packBuilt((await refresh(undefined, LOGIN, first.send, first.ask, first.pause, EVENING, true)).built!));
   const last = await readDir(dir);
   const spy = madeUp({ celestrak: 503 });
-  const kept = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, EVENING + 86_400_000);
+  const kept = await refresh(last, LOGIN, spy.send, spy.ask, spy.pause, EVENING + 86_400_000, true);
   assert.ok(kept.built);
-  assert.equal(kept.built.working.retrieved, "2026-11-11T18:05Z", "the working list is dated by when it was read");
+  assert.equal(kept.built.working?.retrieved, "2026-11-11T18:05Z", "the working list is dated by when it was read");
   assert.equal(sets(kept.built, "working").length, 5);
   const none = madeUp({ celestrak: 503 });
-  const refused = await refresh(undefined, LOGIN, none.send, none.ask, none.pause, EVENING);
+  const refused = await refresh(undefined, LOGIN, none.send, none.ask, none.pause, EVENING, true);
   assert.equal(refused.built, undefined);
   assert.ok(refused.log.some((line) => line.includes("no list of working satellites")));
 });
 
 test("the files: four packed groups and a manifest with the source, the count, the time and the citation, which read back and pass the check", async () => {
   const spy = madeUp();
-  const done = await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING);
+  const done = await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING, true);
   const made = await packBuilt(done.built!);
   assert.deepEqual(Object.keys(made.files), ["working.pack.gz", "inactive.pack.gz", "rocket-bodies.pack.gz", "debris.pack.gz"]);
   const m = made.manifest;
@@ -192,12 +192,12 @@ test("the files: four packed groups and a manifest with the source, the count, t
   assert.deepEqual(await problems(dir, EVENING), []);
   const back = await readDir(dir);
   assert.equal(back?.previous.records.size, 10);
-  assert.equal(back?.previous.working.size, 5);
+  assert.equal(back?.previous.working?.size, 5);
 });
 
 test("the check names what is wrong: no citation, old files, a count that is not the file's, a missing group, no manifest", async () => {
   const spy = madeUp();
-  const made = await packBuilt((await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING)).built!);
+  const made = await packBuilt((await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING, true)).built!);
   const dir = mkdtempSync(`${tmpdir()}/catalogue-`);
   writeAll(dir, made);
   assert.match((await problems(dir, EVENING + 31 * 86_400_000)).join("|"), /more than 30 days/);
@@ -211,4 +211,38 @@ test("the check names what is wrong: no citation, old files, a count that is not
   write({ groups: rest });
   assert.match((await problems(dir, EVENING)).join("|"), /group debris is not in the manifest/);
   assert.match((await problems(`${dir}/nowhere`, EVENING)).join("|"), /missing/);
+});
+
+test("by default payloads are one group and CelesTrak is never asked; the files, the manifest and the check follow", async () => {
+  const spy = madeUp();
+  const done = await refresh(undefined, LOGIN, spy.send, spy.ask, spy.pause, EVENING);
+  assert.equal(spy.celestrakAsks.length, 0);
+  assert.deepEqual(spy.asks, [GP_PATH, SATCAT_PATH]);
+  assert.ok(done.log.some((line) => line.includes("payloads are one group")));
+  assert.ok(done.built);
+  assert.equal(done.built.working, null);
+  assert.deepEqual(sets(done.built, "payloads"), [20_580, 25_544, 26_407, 100_000, 123_456, 900_001]);
+  assert.equal(done.built.groups.working.length + done.built.groups.inactive.length, 0);
+  const made = await packBuilt(done.built);
+  assert.deepEqual(Object.keys(made.files), ["payloads.pack.gz", "rocket-bodies.pack.gz", "debris.pack.gz"]);
+  assert.equal(made.manifest.working, null);
+  assert.equal(made.manifest.total, 10);
+  const dir = mkdtempSync(`${tmpdir()}/catalogue-`);
+  writeAll(dir, made);
+  assert.deepEqual(await problems(dir, EVENING), []);
+  const last = await readDir(dir);
+  assert.equal(last?.previous.working, undefined);
+  assert.equal(last?.previous.records.size, 10);
+  const again = madeUp({ failAt: 1 });
+  const kept = await refresh(last, LOGIN, again.send, again.ask, again.pause, EVENING + 3_600_000);
+  assert.equal(kept.built, undefined);
+  assert.ok(kept.log.some((line) => line.includes("the last files are kept")));
+  const turnedOn = madeUp();
+  const split = await refresh(last, LOGIN, turnedOn.send, turnedOn.ask, turnedOn.pause, EVENING + 86_400_000, true);
+  assert.deepEqual(sets(split.built!, "working"), [20_580, 25_544, 26_407, 123_456, 900_001], "switching the list on splits the payloads");
+});
+
+test("the CelesTrak list is read with a CSV reader: a quoted name with a comma does not move the number", () => {
+  assert.deepEqual([...workingIds('OBJECT_NAME,NORAD_CAT_ID\n"A, B",25544\n"C",100000\n')], [25_544, 100_000]);
+  assert.deepEqual([...workingIds("NORAD_CAT_ID,OBJECT_NAME\n7,X\n")], [7]);
 });
