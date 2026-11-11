@@ -1,6 +1,7 @@
 // The names of the brightest stars and the constellations as faint lines, over the space view's sky (hoshi-stars' sky labels), in a real browser (Chromium, drawn in software): off unless an attribute asks for it, names that never overlap and are
 // in the page's language, none behind the Earth, a figure lit by the pointer, and nothing drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
+import { routeElements } from "./recorded.ts";
 
 test.describe.configure({ mode: "serial" });
 test.use({ reducedMotion: "reduce" });
@@ -168,4 +169,81 @@ test("the demo's Star names and Constellations buttons set the attributes and th
   await page.locator("#constellation-lines").click();
   await expect.poll(() => new URL(page.url()).searchParams.get("constellation-lines")).toBeNull();
   await expect.poll(async () => (await skyOf(page)).on).toBe(false);
+});
+
+test("riding along the ISS, with the Earth 70 degrees across, no star is named on the Earth: the cover is the ray's, not a circle on the screen", async ({ page }) => {
+  await routeElements(page);
+  await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=-100,40&sats=stations&ride=iss&rlook=horizon&light=lit&star-names=40`);
+  await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+  await expect.poll(async () => (await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean; gliding: boolean } }).ride)).gliding, { timeout: 30_000 }).toBe(false);
+  await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
+  // turn round the sky, a step at a time as a drag gives it, until some of it is in the picture above the Earth's edge
+  let checked = 0;
+  for (const yaw of [0, 100, 200, 300, 400, 500]) {
+    await page.locator("kazoku-view-controls").evaluate((el, v) => (el as unknown as { controller: { set(view: unknown, final: boolean, why: string): void } }).controller.set({ yaw: ((v + 180) % 360) - 180, tilt: 0, zoom: 1 }, true, "test"), yaw);
+    await expect
+      .poll(
+        async () => {
+          const before = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+          await page.evaluate(async () => {
+            for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+          });
+          return (await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws)) - before;
+        },
+        { timeout: 60_000, message: "the view is at rest" },
+      )
+      .toBe(0);
+    const shown = await names(page);
+    if (shown.length === 0) continue;
+    // the Earth's edge down each column a name is in, found with the names and rings hidden: the brightest step down the column
+    const edges = await page.locator(SPACE).evaluate(async (el, centres) => {
+      const root = el.shadowRoot!;
+      const layer = root.getElementById("sk-names")!;
+      const canvas = root.getElementById("sk-canvas")!;
+      layer.style.visibility = "hidden";
+      canvas.style.visibility = "hidden";
+      return centres as number[];
+    }, shown.map((n) => (n.l + n.r) / 2));
+    const shot = (await page.locator(SPACE).screenshot()).toString("base64");
+    await page.locator(SPACE).evaluate((el) => {
+      el.shadowRoot!.getElementById("sk-names")!.style.visibility = "";
+      el.shadowRoot!.getElementById("sk-canvas")!.style.visibility = "";
+    });
+    const box = (await page.locator(SPACE).boundingBox())!;
+    const limbs = await page.evaluate(
+      async ({ data, columns }) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext("2d")!;
+        context.drawImage(image, 0, 0);
+        const scale = image.width / (columns.width as number);
+        return (columns.at as number[]).map((x) => {
+          const column = context.getImageData(Math.max(0, Math.min(image.width - 1, Math.round(x * scale))), 0, 1, image.height).data;
+          const light = (y: number): number => column[y * 4]! + column[y * 4 + 1]! + column[y * 4 + 2]!;
+          let best = 0;
+          let edge = image.height;
+          for (let y = 4; y < image.height - 4; y += 1) {
+            const step = (light(y + 3) + light(y + 2) + light(y + 1)) / 3 - (light(y - 1) + light(y - 2) + light(y - 3)) / 3;
+            if (step > best) {
+              best = step;
+              edge = y;
+            }
+          }
+          return edge / scale;
+        });
+      },
+      { data: shot, columns: { at: edges.map((c) => c - box.x), width: box.width } },
+    );
+    shown.forEach((n, i) => {
+      const middle = (n.t + n.b) / 2 - box.y;
+      console.log(`at yaw ${yaw}: ${n.text} is at ${middle.toFixed(0)} px, the Earth's edge there is at ${limbs[i]!.toFixed(0)} px`);
+      expect(middle, `${n.text} is in the sky, above the Earth's edge`).toBeLessThan(limbs[i]! + 6);
+    });
+    checked += shown.length;
+  }
+  expect(checked, "some stars were named in the sky above the Earth").toBeGreaterThan(0);
 });
