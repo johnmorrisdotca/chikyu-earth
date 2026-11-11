@@ -171,5 +171,5 @@ test("the controls' turn buttons do what a drag does: a quarter turn is 90 degre
   expect(Math.abs(dot(a.right, zenith)), "the horizon is level").toBeLessThan(0.01);
   const turned = (Math.acos(Math.max(-1, Math.min(1, dot(heading(a.forward), start)))) * 180) / Math.PI;
   console.log(`the controls turned the view from yaw ${yawBefore} to ${yawAfter}: the camera went ${turned.toFixed(1)} degrees round the vertical`);
-  expect(turned, "yaw 180 is 90 degrees at a field of view of 60").toBeCloseTo((yawAfter - yawBefore) * 1.5 * (first.camera.fov / 180), 0);
+  expect(turned, "yaw 180 is 90 degrees at a field of view of 60").toBeCloseTo(Math.abs(yawAfter - yawBefore) * 1.5 * (first.camera.fov / 180), 0);
 });
