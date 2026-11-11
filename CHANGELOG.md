@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.33.1 - 2026-11-11
+
 ## 0.33.0 - 2026-11-11
 
 - **The data door names licences in Japanese** (KAZOKU-UI-105): `src/data-door.ts` copied again, unchanged, from kazoku-ui's template: a licence may carry `nameJa` for a Japanese credit line.
