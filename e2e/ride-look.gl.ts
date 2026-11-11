@@ -56,7 +56,8 @@ async function look(page: Page, yaw: number, tilt = 0): Promise<Stats> {
   for (let i = 1; i <= steps; i += 1) {
     const next = heldYaw + ((yaw - heldYaw) * i) / steps;
     const wrapped = ((((next + 180) % 360) + 360) % 360) - 180;
-    await page.locator(SPACE).evaluate((el, v) => (el as unknown as { setView(view: unknown, final: boolean): void }).setView({ yaw: v.wrapped, tilt: v.tilt, zoom: 1, panX: 0, panY: 0 }, true), { wrapped, tilt });
+    // through the controls, as a drag is: they hold the yaw and the tilt, and the element hears them
+    await page.locator("kazoku-view-controls").evaluate((el, v) => (el as unknown as { controller: { set(view: unknown, final: boolean, why: string): void } }).controller.set({ yaw: v.wrapped, tilt: v.tilt, zoom: 1 }, true, "test"), { wrapped, tilt });
   }
   heldYaw = yaw;
   await atRest(page);
@@ -277,10 +278,7 @@ test("a change of zoom does not swing the heading", async ({ page }) => {
   const turned = bearing(await statsOf(page), start).heading;
   expect(Math.abs(turned)).toBeGreaterThan(50);
   for (const zoom of [3, 6, 1]) {
-    await page.locator(SPACE).evaluate((el, z) => {
-      const controls = document.querySelector("kazoku-view-controls") as unknown as { state: { yaw: number; tilt: number } };
-      (el as unknown as { setView(view: unknown, final: boolean): void }).setView({ yaw: controls.state.yaw, tilt: controls.state.tilt, zoom: z, panX: 0, panY: 0 }, true);
-    }, zoom);
+    await page.locator("kazoku-view-controls").evaluate((el, z) => (el as unknown as { controller: { set(view: unknown, final: boolean, why: string): void } }).controller.set({ zoom: z }, true, "test"), zoom);
     await atRest(page);
     const now = bearing(await statsOf(page), start).heading;
     expect(Math.abs(((now - turned + 540) % 360) - 180), `the same heading at zoom ${zoom}`).toBeLessThan(1);
