@@ -102,3 +102,22 @@ test("with kuni's capitals: Tokyo is named, in Japanese on a Japanese page, and 
     }
   }
 });
+
+test("a name is as wide as the browser draws it where that is wider than the estimate: no two names overlap in a font with wider letters", () => {
+  const cities = [city("a", "Alpha", 10, 10, 9_000_000), city("b", "Bravo", 12, 10.5, 8_000_000), city("c", "Charlie", 14, 11, 7_000_000), city("d", "Delta", 16, 10, 6_000_000)];
+  const estimate = layoutCities(cities, frameAt(0, 0, 160), "en", { max: 10, size: 12, dot: 3 });
+  // a font whose letters are 40% wider than the estimate takes them to be
+  const wide = layoutCities(cities, frameAt(0, 0, 160), "en", { max: 10, size: 12, dot: 3, measure: (text) => nameWidth(text, 12) * 1.4 });
+  for (const one of wide) assert.ok(one.width >= Math.ceil(nameWidth(one.text, 12) * 1.4), `${one.text} is as wide as it is drawn`);
+  for (let i = 0; i < wide.length; i += 1) {
+    for (let j = i + 1; j < wide.length; j += 1) {
+      const a = wide[i]!;
+      const b = wide[j]!;
+      assert.ok(a.left + a.width <= b.left || b.left + b.width <= a.left || a.top + a.height <= b.top || b.top + b.height <= a.top, `${a.text} and ${b.text} do not overlap`);
+    }
+  }
+  assert.ok(wide.length <= estimate.length, "no more names fit when each is wider");
+  // a measure that is narrower than the estimate does not make the estimate smaller
+  const narrow = layoutCities(cities, frameAt(0, 0, 160), "en", { max: 10, size: 12, dot: 3, measure: () => 1 });
+  assert.deepEqual(narrow.map((one) => one.width), estimate.map((one) => one.width));
+});
