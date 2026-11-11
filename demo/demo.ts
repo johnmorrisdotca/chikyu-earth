@@ -125,18 +125,23 @@ if (flat && controls && stage) {
    */
   const REAL_TURN = "0.004178";
   const VISIBLE_TURN = "6";
+  /** The pace a link asks for belongs to the look it opens on: that look keeps it, and a look chosen later starts at its own pace. */
+  let linkPace: number | null = address.get("pace") === null ? null : Number(address.get("pace"));
   const turnFor = (visible: boolean): void => {
     const set = (name: string, value: string): void => {
       if (controls!.getAttribute(name) !== value) controls!.setAttribute(name, value);
     };
+    const paces = visible ? [0.5, 1, 2] : [0.5, 1, 2, 1440];
+    const asked = linkPace !== null && paces.includes(linkPace) ? String(linkPace) : null;
+    linkPace = null;
     if (visible) {
       set("speed", VISIBLE_TURN);
-      set("paces", "0.5 1 2");
-      set("pace", "1");
+      set("paces", paces.join(" "));
+      set("pace", asked ?? "1");
     } else {
       set("speed", REAL_TURN);
-      set("paces", "0.5 1 2 1440");
-      set("pace", "1440");
+      set("paces", paces.join(" "));
+      set("pace", asked ?? "1440");
     }
   };
 
@@ -840,6 +845,7 @@ if (flat && controls && stage) {
       flat!.setAttribute("style", next);
       flat!.setView(state(), true);
     }
+    linkPace = null;
     markGrab(next);
     if (earthStage) earthStage.dataset["look"] = next;
     address.set("look", next);
@@ -1154,6 +1160,7 @@ if (flat && controls && stage) {
   if (opened["labels"] === "off") names?.setAttribute("aria-pressed", "false");
   markGrab("line");
   if (first === "thick" || first === "realistic" || first === "space") void setLook(first);
+  else linkPace = null;
   new ResizeObserver(() => markGrab(shownLook)).observe(stage);
 }
 

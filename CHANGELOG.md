@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A link to the demo's realistic Earth or space view keeps its Auto-turn pace** (MODULES-900). Opening a 3D look reset the pace to 1×, so `?look=realistic&pace=2` (or a reload after choosing 0.5× or 2×) opened at 1×; the look a link opens on now keeps the pace it names, and a look chosen later starts at its own. The line globe's 1× is still left out of the address by kazoku-ui's view controls (KAZOKU-UI-133); its test waits for that release.
 - **The demo's gesture check has the room the full-screen one has** (MODULES-933). Thirteen gestures with screenshots in software GL take up to 39 s of a 60 s limit in CI; a run cut off there reads as failed gestures.
 
 ## 0.32.0 - 2026-11-11
