@@ -896,8 +896,18 @@ if (flat && controls && stage) {
   const lookChoices = [...document.querySelectorAll<HTMLButtonElement>("[data-place-look]")];
   let here: Place | null = null;
   let placeLook: PlaceLook = readPlaceLook(address.get("place-look"));
+  // the favourites are example cities; the ones chosen are kept in the address (`fav`), as a site would keep them in the reader's account
+  const favButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-fav]")];
+  const favouriteNames = favButtons.map((b) => b.dataset["fav"] ?? "");
+  const favourites = new Set((address.get("fav") ?? "").split(",").filter((name) => favouriteNames.includes(name)));
   function showPlaces(): void {
     const list: Place[] = here ? [{ ...here, label: say("hereLabel") }] : [];
+    for (const b of favButtons) {
+      const name = b.dataset["fav"] ?? "";
+      const city = PLACES.find((m) => m.id === `city:${name}`);
+      b.setAttribute("aria-pressed", String(favourites.has(name)));
+      if (city && favourites.has(name)) list.push({ id: city.id, lon: city.lon, lat: city.lat, label: say(b.dataset["say"] ?? ""), kind: "favourite" });
+    }
     for (const element of [real, space]) {
       if (!element) continue;
       element.places = list;
@@ -932,6 +942,14 @@ if (flat && controls && stage) {
       { timeout: 10_000, maximumAge: 600_000 },
     );
   });
+  for (const button of favButtons) {
+    button.addEventListener("click", () => {
+      const name = button.dataset["fav"] ?? "";
+      if (!favourites.delete(name)) favourites.add(name);
+      address.set("fav", favourites.size ? favouriteNames.filter((n) => favourites.has(n)).join(",") : null);
+      showPlaces();
+    });
+  }
   for (const button of lookChoices) {
     button.addEventListener("click", () => {
       placeLook = readPlaceLook(button.dataset["placeLook"] ?? null);

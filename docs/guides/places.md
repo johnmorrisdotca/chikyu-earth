@@ -46,6 +46,18 @@ document.querySelector("#here").addEventListener("click", () => {
 - **Round it.** `nearby(point, km)` puts a place on a grid about `km` kilometres across (10 by default), so the marker never shows a street. Round before you draw it or keep it.
 - **Keep it on the device.** The element stores nothing and sends nothing. Do not put the reader's place in the page's address or send it to a server unless they choose to share it. The demo keeps it only in the open page: it is gone when the page is closed.
 
+## Favourite places
+
+A favourite is any place without `kind: "here"`. The package has no list of its own and no picker: the page builds the reader's list (from a search of its own, or kuni's cities) and keeps it wherever it likes, then hands the whole list over each time it changes:
+
+```js
+const saved = [{ id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo" }, { id: "cairo", lon: 31.24, lat: 30.04, label: "Cairo" }];
+space.places = [...(here ? [here] : []), ...saved];
+```
+
+- **Where the list lives is the page's choice.** A site with accounts keeps it in the reader's account; the demo keeps the cities chosen in its own address (`fav=Tokyo,Cairo`), so a link opens with them. The reader's own place is never put there.
+- **Quieter than here.** Favourites are shorter, thinner and still, so the reader's own place stands out among them. Their names give way to `here` when they crowd.
+
 ## The parts without a browser
 
 `@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box) and `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`).
