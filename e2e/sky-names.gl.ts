@@ -63,21 +63,22 @@ const aLine = (page: Page): Promise<{ x: number; y: number } | null> =>
 
 test("off unless asked for: no layer, nothing loaded, then the attributes switch it on and off", async ({ page }) => {
   await open(page);
+  const heightBefore = await page.locator(SPACE).evaluate((el) => el.getBoundingClientRect().height);
   expect(await skyOf(page)).toMatchObject({ on: false, loaded: false, names: 0, figures: 0 });
   expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.getElementById("sk-canvas"))).toBeNull();
   await page.locator(SPACE).evaluate((el) => el.setAttribute("star-names", "12"));
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000, message: "hoshi-stars is loaded when asked for" }).toBe(true);
   await wideSky(page);
-  // the layer is styled: the names are laid over the picture (absolutely placed) and add nothing to its height, which stays as square as the element is
+  // the layer is styled: the names are laid over the picture (absolutely placed) and add nothing to its height
   const layout = await page.locator(SPACE).evaluate((el) => {
     const name = el.shadowRoot!.querySelector<HTMLElement>("#sk-names .sk-name:not([hidden])")!;
     const canvas = el.shadowRoot!.getElementById("sk-canvas")!;
     const own = el.getBoundingClientRect();
-    return { name: getComputedStyle(name).position, canvas: getComputedStyle(canvas).position, width: own.width, height: own.height, halo: getComputedStyle(name).textShadow };
+    return { name: getComputedStyle(name).position, canvas: getComputedStyle(canvas).position, height: own.height, halo: getComputedStyle(name).textShadow };
   });
   expect(layout.name, "a name is placed over the picture").toBe("absolute");
   expect(layout.canvas, "and so is the lines' canvas").toBe("absolute");
-  expect(Math.abs(layout.height - layout.width), "the picture is as high as it is wide: the layer adds no height").toBeLessThan(2);
+  expect(Math.abs(layout.height - heightBefore), "the picture is as high as it was: the layer adds no height").toBeLessThan(2);
   expect(layout.halo, "a name has its outline").not.toBe("none");
   await wideSky(page);
   // the layer's count and the names on the page, read in one go so the view cannot move between the two
