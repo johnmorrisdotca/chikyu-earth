@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.30.0 - 2026-11-11
+
 - **A strength setting for the meteors** (MODULES-906). `meteors-strength` (the property `meteorsStrength`) on `<chikyu-earth-realistic>` and `<chikyu-space>` is a number from 0 to 1 that scales how bright each streak is and how many are drawn, so a page can show them subtly. It is 1, the look they have always had, when the page says nothing; a number outside the range is brought to its nearest end and one that is not a number is 1. At 0 no streak is drawn, and the line under the picture, the survey of the sky and `chikyu-meteors` are as they were. Nothing that is real changes at any strength: the hourly rates and the showers' `zhr` are the same, and the line still says the streaks are an illustration. `stats.meteors` gains `strength` (and its `perSecond` is the streaks a second drawn, so it follows the strength). New in `@johnmorrisdotca/chikyu-earth/meteors`: `readMeteorStrength`, `METEOR_STRENGTH_DEFAULT`, and `streaksPerSecond(rate, strength)`. The demo has a Subtle, Medium and Full choice beside the Meteors button (`meteors-strength` in the address). The guide, in English and Japanese, has a section on it.
 
 ## 0.29.0 - 2026-11-11
