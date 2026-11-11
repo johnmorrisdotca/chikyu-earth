@@ -6,7 +6,7 @@ import type { AssetCache, BuildContext, Item3D, Scene3D } from "@johnmorrisdotca
 import type { GeoPoint, GlobeView } from "../types.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { HOME_VIEW, lookAt } from "../view.ts";
-import { AIR_QUALITY, AIR_TOP, AIR_VERT, airFrag } from "./air.ts";
+import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "./air.ts";
 import { CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
 import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "../space/satellite-layer.ts";
@@ -73,6 +73,8 @@ export interface EarthModel {
   light: LightMode;
   /** How the camera is held (see `CameraMode`). */
   camera: CameraMode;
+  /** How many times its real thickness the air is drawn, 1 to 5 (`AIR_THICKNESS_DEFAULT` until the element says otherwise); read at every draw. */
+  airThickness: number;
   /** How fast the cloud picture is made to move eastward against the ground, degrees an hour: 0 (the default) keeps the clouds where the picture has them. The picture is one snapshot, not a forecast; a drift is only for life. */
   cloudDrift: number;
   /** For the `space` camera: the Earth's turn against the stars (degrees) when the camera was set; null until the next draw sets it. */
@@ -124,6 +126,7 @@ export const newModel = (): EarthModel => ({
   lights: true,
   light: "sun",
   camera: "space",
+  airThickness: AIR_THICKNESS_DEFAULT,
   cloudDrift: 0,
   cameraSpin: null,
   speed: 1,
@@ -253,7 +256,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       const atmosphere = new three.ShaderMaterial({
         vertexShader: AIR_VERT,
         fragmentShader: airFrag(AIR_QUALITY[deps.air?.() ?? "full"]),
-        uniforms: { sunDir, ortho: { value: 1 } },
+        uniforms: { sunDir, ortho: { value: 1 }, thick: { value: model.airThickness } },
         transparent: true,
         premultipliedAlpha: true,
         depthWrite: false,
@@ -273,7 +276,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       clouds.renderOrder = 2;
       turned.add(earth, clouds);
       const glow = new three.Mesh(grid, atmosphere);
-      glow.scale.setScalar(AIR_TOP);
+      glow.scale.setScalar(airTop(model.airThickness));
       glow.renderOrder = 3;
       glow.frustumCulled = false;
       const scene = new three.Scene();
@@ -309,6 +312,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           if (model.light === "lit") sunDir.value.set(0, 0, 1);
           cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
           clouds.visible = model.clouds;
+          atmosphere.uniforms["thick"]!.value = model.airThickness;
+          glow.scale.setScalar(airTop(model.airThickness));
           surface.uniforms["lights"]!.value = model.lights && model.light !== "lit" ? 1 : 0;
           surface.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
           const radius = discRadius(size.width, size.height, view.zoom);

@@ -681,6 +681,7 @@ if (flat && controls && stage) {
       // the clock runs only while Play is on; a held space view draws nothing
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
@@ -753,6 +754,7 @@ if (flat && controls && stage) {
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       element.setAttribute("camera", cameraMode);
       turnFor(true);
@@ -881,6 +883,18 @@ if (flat && controls && stage) {
     if (real) real.meteors = on;
     if (space) space.meteors = on;
     address.set("meteors", on ? "on" : null);
+  });
+
+  // The air is drawn 3 times its real thickness so it can be seen (the elements' default, and they say so); this button draws it as it is (`air-thickness=1` in the address).
+  const airTrue = document.querySelector<HTMLButtonElement>("#air-true");
+  airTrue?.addEventListener("click", () => {
+    const on = airTrue.getAttribute("aria-pressed") !== "true";
+    airTrue.setAttribute("aria-pressed", String(on));
+    for (const element of [real, space]) {
+      if (on) element?.setAttribute("air-thickness", "1");
+      else element?.removeAttribute("air-thickness");
+    }
+    address.set("air-thickness", on ? "1" : null);
   });
 
   // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
@@ -1068,6 +1082,7 @@ if (flat && controls && stage) {
   if (opened["clouds"] === "off") clouds?.setAttribute("aria-pressed", "false");
   if (opened["lights"] === "off") lights?.setAttribute("aria-pressed", "false");
   if (opened["meteors"] === "on") meteors?.setAttribute("aria-pressed", "true");
+  if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");

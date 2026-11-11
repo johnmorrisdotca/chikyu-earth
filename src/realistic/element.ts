@@ -5,7 +5,8 @@ import { carryControls, type ElementControls, type ViewController } from "@johnm
 import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
-import { airFor } from "./air.ts";
+import { airFor, readAirThickness } from "./air.ts";
+import { NOTES_STYLE, setAirNote } from "./air-note.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
@@ -35,7 +36,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + METEOR_NOTE_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -149,7 +150,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive", "meteors", "meteors-label", "lang"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive", "meteors", "meteors-label", "air-thickness", "air-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -175,6 +176,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
   #note: HTMLElement | undefined;
+  #airNote: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
   };
@@ -193,21 +195,24 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.light = readLight(this.getAttribute("light"));
     this.#model.camera = readCamera(this.getAttribute("camera"));
     this.#model.cloudDrift = readDrift(this.getAttribute("cloud-drift"));
+    this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#model.speed = this.speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="overlay"></div><p id="meteor-note" hidden></p>`;
+    root.innerHTML = `<div id="stage"></div><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#overlay = root.getElementById("overlay")!;
     this.#note = root.getElementById("meteor-note")!;
+    this.#airNote = root.getElementById("air-note")!;
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.running = () => this.speed !== 0 && document.visibilityState !== "hidden" && (this.#played || !prefersLessMotion());
     this.#model.meteors.onShower = (shower, zhr) => this.dispatchEvent(new CustomEvent("chikyu-meteors", { detail: { shower, zhr } }));
     this.#meteorNote();
+    setAirNote(this.#airNote, this, this.#model.airThickness);
     this.#stage.addEventListener("webglcontextlost", this.#lost, true);
     this.#stage.addEventListener("webglcontextrestored", this.#restored, true);
 
@@ -307,7 +312,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#gate?.soon();
     }
     else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "air-thickness") {
+      this.#model.airThickness = readAirThickness(value);
+      this.#gate?.soon();
+    }
     else if (name === "meteors-label" || name === "lang") this.#meteorNote();
+    if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
   #meteorsAsked(): boolean {
@@ -317,6 +327,17 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The line under the picture that says the streaks are an illustration, in the language of the element or the page. */
   #meteorNote(): void {
     setMeteorNote(this.#note, this, this.#model.meteors.on);
+  }
+
+  /**
+   * How many times its real thickness the air is drawn, from 1 (the true thickness) to 5 (the attribute `air-thickness`; 3 when the page says nothing). The shell, and the heights over which the air thins, are that many times larger, and the
+   * air's own light is the same, so a ring that is a hair's breadth at whole-Earth zoom can be seen. While it is above 1 the element says so in a line under the picture (`air-label="off"` takes the line away, for a page that says it itself).
+   */
+  get airThickness(): number {
+    return this.#model.airThickness;
+  }
+  set airThickness(value: number) {
+    this.setAttribute("air-thickness", String(value));
   }
 
   /**

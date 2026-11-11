@@ -84,7 +84,7 @@ the `chikyu-satellite-click` event and `stats.satellites` go with it. Elements c
 
 ## Properties, events, stats
 
-Attributes and properties: `camera` (`space`, the default: held in the stars so the Earth turns beneath it; `ground`; `sun`), `earth-size`, `earth-x`, `earth-y`, `cloud-drift`, `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`; property `body`. `setView(view)` takes
+Attributes and properties: `camera` (`space`, the default: held in the stars so the Earth turns beneath it; `ground`; `sun`), `earth-size`, `earth-x`, `earth-y`, `cloud-drift`, `air-thickness` (how many times its real thickness the air is drawn, 1 to 5; 3 when left out, with a line under the picture that says so, which `air-label="off"` takes away; see [the realistic Earth](realistic.md)), `center`, `time`, `speed`, `scale`, `labels` (names beside the bodies), `orbits` (the planets' paths round the Sun), `texture-base`, `max-texture`; property `body`. `setView(view)` takes
 the shared controls' yaw, tilt and zoom (pan is not used). Events: `chikyu-ready`, `chikyu-unavailable`, `chikyu-timechange` (`{ time, running }`: four a second at most while time runs, and once when it holds), `chikyu-time` (every step the clock takes, up to thirty a second), `chikyu-body-click`, `chikyu-body-focus`. `stats` has `state`, `draws`, `contexts`, `canvas`,
 `tiers`, `distance`, `time` and `lookups`.
 

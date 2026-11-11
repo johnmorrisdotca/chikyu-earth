@@ -15,6 +15,8 @@
       .top > * { pointer-events: auto; }
       .top h1 { margin: 0 auto 0 0; font-size: 1rem; font-weight: 600; text-shadow: 0 0 6px #000; pointer-events: none; }
       .top a { color: var(--ink); }
+      .air-line { flex: 1 0 100%; margin: 0; font-size: 12px; text-shadow: 0 0 4px #000; pointer-events: none; }
+      .air-line[hidden] { display: none; }
       time { font-variant-numeric: tabular-nums; padding: 6px 10px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); min-height: 20px; }
       .strip { position: absolute; inset-inline: 0; bottom: 56px; display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; padding: 0 8px; pointer-events: none; }
       .strip > * { pointer-events: auto; }
@@ -37,6 +39,7 @@
         <h1><span data-say="title">Chikyu Earth, full screen</span></h1>
         <time id="when" aria-live="off"></time>
         <a href="./" data-say="back">The demo</a>
+        <p class="air-line" id="air-line"></p>
       </div>
       <div class="strip">
         <div class="group" role="group" aria-label="Clock" data-say-label="clock"><button type="button" class="pill" id="play" aria-pressed="true" data-say="play">Pause</button></div>
@@ -47,6 +50,9 @@
         </div>
         <div class="group" role="group" aria-label="Satellites" data-say-label="sats">
           <button type="button" class="pill" id="sats" aria-pressed="false" data-say="sats_all">All satellites</button>
+        </div>
+        <div class="group" role="group" aria-label="Air" data-say-label="air">
+          <button type="button" class="pill" id="air" aria-pressed="false" data-say="air_true">True air thickness</button>
         </div>
       </div>
       <kazoku-view-controls id="bar" layout="compact" overlay tilt-max="90" zoom-min="0.1" zoom-max="5"></kazoku-view-controls>

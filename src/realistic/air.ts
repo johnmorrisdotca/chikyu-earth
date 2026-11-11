@@ -13,6 +13,62 @@
 export const AIR_TOP = 1 + 100 / 6371;
 
 /**
+ * How many times its real thickness the air is drawn when a page says nothing: 3. The air is a shell 100 km thick on a globe 12,742 km across, a hair's breadth, and at whole-Earth zoom it comes to a line a pixel or two wide (on a phone, thinner still);
+ * three times is a ring the eye can find, with the same physics and the same colours. `1` is the true thickness. The page's `air-thickness` attribute chooses.
+ *
+ * @example
+ * ```ts
+ * import { AIR_THICKNESS_DEFAULT } from "@johnmorrisdotca/chikyu-earth/realistic";
+ * console.log(AIR_THICKNESS_DEFAULT);
+ * ```
+ */
+export const AIR_THICKNESS_DEFAULT = 3;
+
+/**
+ * The most the air may be thickened: 5, which is as far as the element's box leaves room for (its top is then 1.0785 Earth radii out, inside the 1.08 the box is fitted to).
+ *
+ * @example
+ * ```ts
+ * import { AIR_THICKNESS_MAX } from "@johnmorrisdotca/chikyu-earth/realistic";
+ * console.log(AIR_THICKNESS_MAX);
+ * ```
+ */
+export const AIR_THICKNESS_MAX = 5;
+
+/**
+ * What a page's `air-thickness` attribute means: a number from 1 (the true thickness) to 5, given as it is written; with none, or something that is not a number, `AIR_THICKNESS_DEFAULT`. A number outside the range is brought to its nearest end.
+ *
+ * @param given - The attribute's value, or `null` when the page has none.
+ * @returns How many times its real thickness the air is drawn, between 1 and 5.
+ *
+ * @example
+ * ```ts
+ * import { readAirThickness } from "@johnmorrisdotca/chikyu-earth/realistic";
+ * console.log(readAirThickness(null), readAirThickness("1"), readAirThickness("9"));
+ * ```
+ */
+export function readAirThickness(given: string | null): number {
+  if (given === null || given.trim() === "") return AIR_THICKNESS_DEFAULT;
+  const value = Number(given);
+  if (!Number.isFinite(value)) return AIR_THICKNESS_DEFAULT;
+  return Math.min(AIR_THICKNESS_MAX, Math.max(1, value));
+}
+
+/**
+ * Where the air's top is, in Earth radii, when it is drawn `thickness` times its real thickness: 1 plus 100 km times that, over the Earth's 6,371.
+ *
+ * @param thickness - 1 for the true thickness (the top is then `AIR_TOP`).
+ * @returns The radius of the shell's outside, in Earth radii.
+ *
+ * @example
+ * ```ts
+ * import { airTop } from "@johnmorrisdotca/chikyu-earth/realistic";
+ * console.log(airTop(3).toFixed(4));
+ * ```
+ */
+export const airTop = (thickness: number): number => 1 + (thickness * 100) / 6371;
+
+/**
  * How many samples the air takes: along the ray toward the camera and, at each of those, along the ray toward the Sun.
  *
  * @example
@@ -84,6 +140,7 @@ void main() {
  * the glow toward the Sun, the reddening along the day and night line (the Sun's light has crossed a long, low path) and the thin lit ring seen from the night side looking toward the Sun.
  * The surface under it is dimmed by what the air takes out of the light (the shader's alpha is what gets through) and what it adds is the colour.
  * Our own code, from the published single-scattering model (Nishita and others, 1993; O'Neil, GPU Gems 2, chapter 16), no code taken from any project.
+ * The air can be drawn thicker than it is (`thick`, a uniform: 1 is the true 100 km, 3 the default of the elements): the shell and both scale heights grow by it and what each unit of length holds shrinks by it, so the same air gives the same colours over a wider glow.
  * The Sun is in the world's axes (`sunDir`, toward the Sun); `ortho` is 1 when the camera looks down the z axis from far away (the realistic Earth) and 0 for a camera at a place (the space view).
  *
  * @param samples - How many samples to take (`AIR_QUALITY.full` or `AIR_QUALITY.light`).
@@ -100,10 +157,17 @@ export const airFrag = (samples: AirSamples): string => /* glsl */ `
 #define N_LIGHT ${samples.light}
 uniform vec3 sunDir;
 uniform float ortho;
+uniform float thick;
 varying vec3 vWorld;
-const float TOP = ${AIR_TOP.toFixed(6)};
-const float HR = 0.001256;
-const float HM = 0.000188;
+const float TOP1 = ${AIR_TOP.toFixed(6)};
+const float HR1 = 0.001256;
+const float HM1 = 0.000188;
+// drawn thick times its real thickness: the shell and both scale heights are that many times larger
+#define TOP (1.0 + (TOP1 - 1.0) * thick)
+#define HR (HR1 * thick)
+#define HM (HM1 * thick)
+// the same amount of air, spread over the taller shell: each unit of length holds that much less of it, so the air looks straight down through is as thin a veil as ever, and only the glow at the limb is wider
+#define DENS (1.0 / thick)
 const vec3 BETA_R = vec3(36.95, 86.0, 210.9);
 const float BETA_M = 53.5;
 const float G = 0.76;
@@ -179,13 +243,13 @@ void main() {
     if (ahead < 0.0) shade = smoothstep(1.0 - 0.003, 1.0 + 0.003, sqrt(max(dot(p, p) - ahead * ahead, 0.0)));
     vec2 sun = shade > 0.0 ? column(p, sunDir) : vec2(0.0);
     vec2 path = depth + 0.5 * here;
-    vec3 gone = exp(-(BETA_R * (path.x + sun.x) + BETA_M * 1.1 * (path.y + sun.y)));
+    vec3 gone = exp(-DENS * (BETA_R * (path.x + sun.x) + BETA_M * 1.1 * (path.y + sun.y)));
     sumR += gone * here.x * shade;
     sumM += gone * here.y * shade;
     depth += here;
   }
-  vec3 colour = SUN * (sumR * BETA_R * phaseR + sumM * BETA_M * phaseM);
-  vec3 through = exp(-(BETA_R * depth.x + BETA_M * 1.1 * depth.y));
+  vec3 colour = SUN * DENS * (sumR * BETA_R * phaseR + sumM * BETA_M * phaseM);
+  vec3 through = exp(-DENS * (BETA_R * depth.x + BETA_M * 1.1 * depth.y));
   // the colour is premultiplied: what is added, and how much of what is behind it gets through
   // a steep look at the ground through the air has only a thin veil over it; the haze gathers toward the limb, where the path through the air is long
   colour *= onGround ? 0.1 + 0.9 * smoothstep(0.02, 0.16, tEnd) : 1.0;

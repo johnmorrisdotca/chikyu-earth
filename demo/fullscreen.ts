@@ -4,15 +4,17 @@
 //   &camera=space|sun|ground  how the camera is held (space by default: the Earth turns beneath it)
 //   &center=lon,lat           where the camera looks
 //   &sats=all|stations,gps    the satellite groups shown (`all` is every group of the catalogue, at once)
+//   &air-thickness=1          the air at its true thickness (it is drawn 3 times as thick, so that it can be seen, when the address says nothing)
 import "@johnmorrisdotca/kazoku-ui/view-controls/define";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import type { CameraMode, ChikyuEarthRealistic } from "../src/realistic/element.ts";
+import { airNoteText } from "../src/realistic/air-note.ts";
 import { fetchGroup, GROUP_STYLE, setsOfGroup } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);
 const WORDS = {
-  en: { title: "Chikyu Earth, full screen", back: "The demo", play: "Play", pause: "Pause", clock: "Clock", camera: "Camera", sats: "Satellites", cam_space: "In the stars", cam_sun: "Sun side", cam_ground: "Ground", sats_all: "All satellites", sats_off: "Hide satellites", label: "The Earth from space, with its sunlit and dark sides", help: "Drag to turn. Wheel or pinch to zoom.", loading: "Loading satellites", shown: "{n} satellites shown" },
-  ja: { title: "地球 (全画面)", back: "デモ", play: "再生", pause: "一時停止", clock: "時計", camera: "カメラ", sats: "人工衛星", cam_space: "星に固定", cam_sun: "太陽側", cam_ground: "地上", sats_all: "すべての人工衛星", sats_off: "人工衛星を隠す", label: "宇宙から見た地球。昼の側と夜の側", help: "ドラッグで回転します。ホイールかピンチで拡大・縮小します。", loading: "人工衛星を読み込み中", shown: "{n} 機の人工衛星を表示中" },
+  en: { title: "Chikyu Earth, full screen", back: "The demo", play: "Play", pause: "Pause", clock: "Clock", camera: "Camera", sats: "Satellites", air: "Air", air_true: "True air thickness", cam_space: "In the stars", cam_sun: "Sun side", cam_ground: "Ground", sats_all: "All satellites", sats_off: "Hide satellites", label: "The Earth from space, with its sunlit and dark sides", help: "Drag to turn. Wheel or pinch to zoom.", loading: "Loading satellites", shown: "{n} satellites shown" },
+  ja: { title: "地球 (全画面)", back: "デモ", play: "再生", pause: "一時停止", clock: "時計", camera: "カメラ", sats: "人工衛星", air: "大気", air_true: "大気を実際の厚さで", cam_space: "星に固定", cam_sun: "太陽側", cam_ground: "地上", sats_all: "すべての人工衛星", sats_off: "人工衛星を隠す", label: "宇宙から見た地球。昼の側と夜の側", help: "ドラッグで回転します。ホイールかピンチで拡大・縮小します。", loading: "人工衛星を読み込み中", shown: "{n} 機の人工衛星を表示中" },
 };
 type Key = keyof (typeof WORDS)["en"];
 const lang = (query.get("lang") ?? navigator.language).toLowerCase().startsWith("ja") ? "ja" : "en";
@@ -32,6 +34,9 @@ earth.setAttribute("texture-base", "textures/");
 earth.setAttribute("tiles", "tiles/");
 earth.setAttribute("center", query.get("center") ?? "0,20");
 earth.setAttribute("aria-label", say("label"));
+// the page says the air is drawn thicker itself (in the line under the title, where the controls at the bottom do not cover it)
+earth.setAttribute("air-label", "off");
+if (query.get("air-thickness")) earth.setAttribute("air-thickness", query.get("air-thickness")!);
 const bar = document.querySelector<HTMLElement & { controller: import("@johnmorrisdotca/kazoku-ui/view-controls").ViewController }>("kazoku-view-controls")!;
 const when = document.querySelector<HTMLTimeElement>("#when")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -83,6 +88,20 @@ bar.addEventListener("kazoku-viewchange", (event) => {
   const detail = (event as CustomEvent<ViewChangeDetail>).detail;
   earth.setView(detail, detail.final);
 });
+
+const airButton = document.querySelector<HTMLButtonElement>("#air")!;
+const airLine = document.querySelector<HTMLElement>("#air-line")!;
+const markAir = (): void => {
+  airButton.setAttribute("aria-pressed", String(earth.airThickness <= 1));
+  airLine.hidden = earth.airThickness <= 1;
+  airLine.textContent = airNoteText(lang, earth.airThickness);
+};
+airButton.addEventListener("click", () => {
+  if (earth.airThickness <= 1) earth.removeAttribute("air-thickness");
+  else earth.setAttribute("air-thickness", "1");
+  markAir();
+});
+markAir();
 
 const cameraButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-camera]")];
 const markCamera = (): void => {

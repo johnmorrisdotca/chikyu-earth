@@ -4,11 +4,12 @@ import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "../adopt.ts";
 import type { GeoPoint } from "../types.ts";
-import { airFor } from "../realistic/air.ts";
+import { airFor, readAirThickness } from "../realistic/air.ts";
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import type { LightMode } from "../realistic/earth.ts";
+import { NOTES_STYLE, setAirNote } from "../realistic/air-note.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
@@ -168,7 +169,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${METEOR_NOTE_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -195,7 +196,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "lang"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "air-thickness", "air-label", "lang"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -204,6 +205,7 @@ export class ChikyuSpace extends HTMLElement {
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
   #note: HTMLElement | undefined;
+  #airNote: HTMLElement | undefined;
   #gate: Gate | undefined;
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
   #stage: HTMLElement | undefined;
@@ -247,11 +249,14 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="labels" aria-hidden="true"></div><p id="meteor-note" hidden></p>`;
+    root.innerHTML = `<div id="stage"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#note = root.getElementById("meteor-note")!;
+    this.#airNote = root.getElementById("air-note")!;
+    this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
+    setAirNote(this.#airNote, this, this.#model.airThickness);
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.running = () => this.#speed !== 0 && document.visibilityState !== "hidden" && (this.#played || !prefersLessMotion());
@@ -335,7 +340,12 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "earth-x") this.earthX = readNumber(value, 0.5, -2, 3);
     else if (name === "earth-y") this.earthY = readNumber(value, 0.5, -2, 3);
     else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "air-thickness") {
+      this.#model.airThickness = readAirThickness(value);
+      this.#gate?.request();
+    }
     else if (name === "meteors-label" || name === "lang") setMeteorNote(this.#note, this, this.#model.meteors.on);
+    if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
   #meteorsAsked(): boolean {
@@ -360,6 +370,17 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.meteors.on = value;
     setMeteorNote(this.#note, this, value);
     this.#gate?.request();
+  }
+
+  /**
+   * How many times its real thickness the air is drawn, from 1 (the true thickness) to 5 (the attribute `air-thickness`; 3 when the page says nothing): see `<chikyu-earth-realistic>`. While it is above 1 the element says so in a line
+   * under the picture (`air-label="off"` takes the line away, for a page that says it itself).
+   */
+  get airThickness(): number {
+    return this.#model.airThickness;
+  }
+  set airThickness(value: number) {
+    this.setAttribute("air-thickness", String(value));
   }
 
   get centre(): GeoPoint {

@@ -2,7 +2,7 @@
 // the Earth's centre, lit by the Sun so that the Moon's phase and the Earth's day side come out of the light, not out of a table. Draws only when asked.
 import type * as THREE from "three";
 import type { AssetCache, BuildContext, Item3D, Scene3D } from "@johnmorrisdotca/kazoku-ui/renderer";
-import { AIR_QUALITY, AIR_TOP, AIR_VERT, airFrag } from "../realistic/air.ts";
+import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "../realistic/air.ts";
 import { sphere } from "../realistic/earth.ts";
 import { BODY_FRAG, CLOUD_FRAG, GLOW_FRAG, GLOW_VERT, SURFACE_FRAG, SURFACE_VERT } from "../realistic/shaders.ts";
 import { createTextureSet, type ThreeParts } from "../realistic/textures.ts";
@@ -132,6 +132,8 @@ export interface SpaceModel {
   centre: { lon: number; lat: number };
   /** Which way the camera is held (see `CameraMode`). */
   camera: CameraMode;
+  /** How many times its real thickness the air is drawn, 1 to 5 (`AIR_THICKNESS_DEFAULT` until the element says otherwise); read at every draw. */
+  airThickness: number;
   /** Degrees an hour the cloud picture is made to move eastward against the ground: 0, the default (it is one snapshot, not a forecast). */
   cloudDrift: number;
   /** For the `space` camera: the Earth's turn against the stars (degrees) at the moment the camera was set, so it stays in the stars while the Earth turns beneath; null until the next draw sets it. */
@@ -185,6 +187,7 @@ export const newSpaceModel = (): SpaceModel => ({
   view: { yaw: 0, tilt: 0, zoom: 1 },
   centre: { lon: 0, lat: 0 },
   camera: "space",
+  airThickness: AIR_THICKNESS_DEFAULT,
   cloudDrift: 0,
   cameraSpin: null,
   earth: { size: DEFAULT_EARTH_SIZE, x: 0.5, y: 0.5 },
@@ -428,7 +431,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const atmosphereMaterial = new three.ShaderMaterial({
         vertexShader: AIR_VERT,
         fragmentShader: airFrag(AIR_QUALITY[deps.air?.() ?? "full"]),
-        uniforms: { sunDir: sunEarth, ortho: { value: 0 } },
+        uniforms: { sunDir: sunEarth, ortho: { value: 0 }, thick: { value: model.airThickness } },
         transparent: true,
         premultipliedAlpha: true,
         depthWrite: false,
@@ -439,7 +442,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       clouds.scale.setScalar(1.006);
       clouds.renderOrder = 3;
       const glow = new three.Mesh(grid, atmosphereMaterial);
-      glow.scale.setScalar(AIR_TOP);
+      glow.scale.setScalar(airTop(model.airThickness));
       glow.renderOrder = 4;
       glow.frustumCulled = false;
 
@@ -569,6 +572,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             sunLocal.value.set(toSun[0] * Math.cos(back) + toSun[2] * Math.sin(back), toSun[1], -toSun[0] * Math.sin(back) + toSun[2] * Math.cos(back));
           }
           cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
+          atmosphereMaterial.uniforms["thick"]!.value = model.airThickness;
+          glow.scale.setScalar(airTop(model.airThickness));
           earthMaterial.uniforms["lights"]!.value = model.light === "lit" ? 0 : 1;
           earthMaterial.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
 
