@@ -174,6 +174,12 @@ await step("node-body-label", () => {
   if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
 });
 
+await step("node-places", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "places.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  const want = ["2 places, 1 left out", "Tokyo: drawn", "Lima: far side"];
+  if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
+});
+
 await step("door-node", () => {
   const out = execFileSync(process.execPath, [join(examples("door"), "source.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
   const want = [/^1 element set kept, 1 left out: ISS \(ZARYA\)$/, /^the day map answers mine\/3\/7\/3, mine\/3\/8\/3, mine\/3\/7\/4, mine\/3\/8\/4$/, /^Earth pictures: NASA Earth Observatory .*\(Public domain\); My map, A\. Person \(2026\) \(CC BY-NC 4\.0; non-commercial\)\.$/, /^地球の画像：NASA Earth Observatory.*（パブリックドメイン）／私のデータ（A\. Person、2026年）（CC BY-NC 4\.0、非営利のみ）$/, /^0 day maps with the source off$/];
@@ -459,6 +465,7 @@ const FILES: Record<string, string[]> = {
   "node/meteors.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/meteor-strength.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/body-label.mjs": ["docs/guides/body-label.md", "docs/guides/ja/body-label.md"],
+  "node/places.mjs": ["docs/guides/places.md", "docs/guides/ja/places.md"],
   "door/source.mjs": ["README.md", "docs/guides/data-door.md", "docs/guides/ja/data-door.md"],
   "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],

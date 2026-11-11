@@ -119,6 +119,11 @@
       "import": "./dist/space/element.js",
       "default": "./dist/space/element.js"
     },
+    "./places": {
+      "types": "./dist/places/index.d.ts",
+      "import": "./dist/places/index.js",
+      "default": "./dist/places/index.js"
+    },
     "./door": {
       "types": "./dist/door/index.d.ts",
       "import": "./dist/door/index.js",
