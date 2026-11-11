@@ -189,3 +189,16 @@ test("hold places the whole group at exactly the moment shown, in one batch, and
   assert.ok(group.exact(77, ms + 3_600_000, one));
   for (let k = 0; k < 3; k += 1) near(later[77 * 3 + k]!, one[k]!, 1e-3, `satellite 77 an hour on, axis ${k}`);
 });
+
+test("dots grow a little with the Earth on screen, within limits, and a group's data date is its newest element set", async () => {
+  const { zoomFactor, newestEpoch } = await import("../src/space/satellite-layer.ts");
+  assert.equal(zoomFactor(210), 1);
+  assert.equal(zoomFactor(undefined), 1);
+  assert.equal(zoomFactor(10), 0.75);
+  assert.equal(zoomFactor(1e6), 2.5);
+  assert.ok(zoomFactor(840) > zoomFactor(420) && zoomFactor(420) > 1);
+  const group = createSatellites(stations);
+  const newest = Math.max(...stations.map((set) => Date.parse(`${set.EPOCH}Z`)));
+  assert.equal(newestEpoch(group), newest);
+  assert.equal(newestEpoch(createSatellites([])), null);
+});

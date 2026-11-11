@@ -11,7 +11,7 @@ import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, new
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import { setSatelliteNote } from "../satellites/note.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
-import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
+import { MAX_ORBIT_GROUP, newestEpoch, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import type { Credit, DataSource } from "../data-door.ts";
@@ -740,7 +740,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   // --- satellites ---------------------------------------------------------------------------------------------------------------------------------
   /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds, so every group of the catalogue can be shown at once. Giving the name of a group
-   * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations). The groups are placed by SGP4 about once a second and interpolated
+   * that is already shown replaces it. `style`: `color` (`orbit` colours each dot by its orbit class: low, medium, geostationary, highly elliptical or other, as the catalogue's `CLASS_COLOURS`) and `size` (CSS pixels at the Earth's opening size; the dots grow a little as the Earth is drawn bigger) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations). The groups are placed by SGP4 about once a second and interpolated
    * between, are placed at the moment shown about once a second and held there while the clock runs faster than `MAX_SATELLITE_SPEED` (a line under the picture says so; `satellites-label="off"` takes it away), are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
    *
    * @param group - The group's name, for `showSatellites`, `selectSatellite` and the events.
@@ -776,9 +776,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#gate?.soon();
   }
 
-  /** The groups now set, with how many satellites each holds and whether it is shown. */
-  get satelliteGroups(): { name: string; count: number; visible: boolean }[] {
-    return [...this.#model.satellites.groups].map(([name, group]) => ({ name, count: group.satellites.count, visible: group.visible }));
+  /** The groups now set: how many satellites each holds, whether it is shown, how many were placed at the last draw (those whose elements are not too old for the moment shown), and `newest`, the date of its newest element set (milliseconds since 1970), for a page to say how old its data is. */
+  get satelliteGroups(): { name: string; count: number; visible: boolean; placed: number; newest: number | null }[] {
+    return [...this.#model.satellites.groups].map(([name, group]) => ({ name, count: group.satellites.count, visible: group.visible, placed: group.satellites.placed, newest: newestEpoch(group.satellites) }));
   }
 
   /** Mark one satellite: a larger ring round it and its orbit drawn. `null` lets it go. */

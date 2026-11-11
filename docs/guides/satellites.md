@@ -78,6 +78,11 @@ space.addEventListener("chikyu-satellite-click", (event) => console.log((event a
 
 A group is **one draw call** however many satellites it holds. Name each group (`"stations"`, `"starlink"`): `showSatellites(name, false)` hides one, `setSatellites(name, null)` takes it away and frees what it held. `orbits: true` draws every orbit of a group of 40 or fewer.
 
+- **Colour by orbit.** `color: "orbit"` colours each dot by its orbit class, worked out from its elements: low, medium, geostationary, highly elliptical or other, in the catalogue's `CLASS_COLOURS` (`legend("class", lang)` in `/catalogue` gives a page the key).
+- **Seen over the day side.** Every dot has a thin dark rim, so a pale one still shows over bright, sunlit ground.
+- **Size.** `size` is the dot's size at the Earth's opening size; the dots grow a little as the Earth is drawn bigger (the square root of the zoom, up to 2.5 times) and shrink a little as it gets smaller.
+- **What a page can print.** `satelliteGroups` gives each group's `count`, `placed` (those placed at the last draw) and `newest`, the date of its newest element set in milliseconds since 1970, so a page can say how many it shows and how old its data is.
+
 ## Ring and name a whole group
 
 `space.labelSatellites("stations")` rings every member of a group and writes its name beside it, for a small group such as the stations. The names are in the page's language (`ISS`, `Tiangong` or `天宮`, `Hubble` or `ハッブル`; any other satellite under the name in its elements, or as `space.satelliteNames = { 25544: "Space Station" }` says). They are laid out after the names of `places` and never over them, a body's name or one another: each name goes to the right of its ring if it fits, else left, above, below, and one with no free place is left out. Only satellites that are in the picture and not behind the Earth are ringed, at most 80 over all the groups, and nothing is drawn at rest. `space.labelSatellites("stations", false)` stops; `space.labelledSatellites` lists the groups.

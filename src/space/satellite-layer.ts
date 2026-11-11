@@ -4,10 +4,12 @@ import type * as THREE from "three";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteRef, Satellites } from "../satellites/types.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
+import { CLASS_COLOURS } from "../catalogue/kinds.ts";
+import { classOfElements } from "../catalogue/orbit.ts";
 
 type Three = ThreeParts;
 
-/** How a group looks: the colour of its dots and their size in CSS pixels, and whether every orbit is drawn (only for a small group). */
+/** How a group looks: the colour of its dots (`orbit` colours each by its orbit class, as the catalogue's `CLASS_COLOURS`), their size in CSS pixels at the Earth's opening size, and whether every orbit is drawn (only for a small group). */
 export interface SatelliteStyle {
   color: string;
   size: number;
@@ -42,22 +44,59 @@ const HOLD_WALL_MS = 1000;
 const POINT_VERT = /* glsl */ `
 uniform float size;
 attribute float dim;
+attribute vec3 hue;
 varying float vDim;
+varying vec3 vHue;
 void main() {
   vDim = dim;
+  vHue = hue;
   gl_PointSize = size;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
+// a dot is its colour in the middle with a thin dark rim, so a pale one still shows over bright, sunlit ground
 const POINT_FRAG = /* glsl */ `
 uniform vec3 tint;
 uniform float ring;
+uniform float byHue;
 varying float vDim;
+varying vec3 vHue;
 void main() {
   float d = length(gl_PointCoord - vec2(0.5));
   if (d > 0.5) discard;
-  float a = ring > 0.5 ? smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d)) : smoothstep(0.5, 0.2, d);
-  gl_FragColor = vec4(tint, a * (1.0 - 0.7 * vDim));
+  vec3 colour = byHue > 0.5 ? vHue : tint;
+  if (ring > 0.5) {
+    gl_FragColor = vec4(colour, smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d)) * (1.0 - 0.7 * vDim));
+    return;
+  }
+  vec3 rimmed = mix(vec3(0.02, 0.03, 0.06), colour, smoothstep(0.40, 0.30, d));
+  gl_FragColor = vec4(rimmed, smoothstep(0.5, 0.42, d) * (1.0 - 0.7 * vDim));
 }`;
+
+/** How much bigger the dots are drawn as the Earth is drawn bigger: the square root of its radius over 210 pixels (its opening size in a 420 pixel view), from 0.75 to 2.5. */
+export const zoomFactor = (radiusPx: number | undefined): number => (radiusPx === undefined || !Number.isFinite(radiusPx) ? 1 : Math.round(Math.min(2.5, Math.max(0.75, Math.sqrt(radiusPx / 210))) * 20) / 20);
+
+/** The newest element set of a group, as milliseconds since 1970 (the date of its data), or `null` for none. */
+export const newestEpoch = (satellites: Satellites): number | null => {
+  let newest = Number.NEGATIVE_INFINITY;
+  for (const set of satellites.sets) {
+    const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(set.EPOCH) ? set.EPOCH : `${set.EPOCH}Z`);
+    if (ms > newest) newest = ms;
+  }
+  return Number.isFinite(newest) ? newest : null;
+};
+
+/** Each satellite's colour by its orbit class (`CLASS_COLOURS`), 3 numbers a satellite, from its elements. */
+function orbitHues(three: Three, satellites: Satellites): Float32Array {
+  const hues = new Float32Array(satellites.count * 3);
+  const colour = new three.Color();
+  satellites.sets.forEach((set, i) => {
+    colour.set(CLASS_COLOURS[classOfElements(set.MEAN_MOTION, set.ECCENTRICITY) ?? "other"]);
+    hues[i * 3] = colour.r;
+    hues[i * 3 + 1] = colour.g;
+    hues[i * 3 + 2] = colour.b;
+  });
+  return hues;
+}
 
 interface Drawn {
   source: Satellites;
@@ -101,7 +140,7 @@ export interface SatelliteLayer {
   /** Where one satellite of a shown group is on the screen as of the last update, or `null` when its group is not shown, it is not placed (its elements are too old) or it is behind the camera. */
   placeOf(ref: SatelliteRef, camera: THREE.Camera, size: { width: number; height: number }): SatelliteScreen | null;
   /** Place every shown group for `model.time` and the chosen satellite exactly. */
-  update(time: number, speed: number): void;
+  update(time: number, speed: number, radiusPx?: number): void;
   /** The satellite nearest to a point of the view (CSS pixels) within `radius`, if one is in front of the Earth. */
   pick(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): SatelliteRef | null;
   /** Where the chosen satellite is in the view, if it is. */
@@ -120,7 +159,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   const world = new three.Vector3();
   const view = new three.Vector3();
 
-  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 } }, transparent: true, depthWrite: false });
+  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byHue: { value: 0 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
   const selectedGeometry = new three.BufferGeometry();
   selectedGeometry.setAttribute("position", new three.BufferAttribute(selectedPosition, 3));
@@ -166,7 +205,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       const positions = new Float32Array(ORBIT_POINTS * 3);
       const geometry = new three.BufferGeometry();
       geometry.setAttribute("position", new three.BufferAttribute(positions, 3));
-      const material = new three.LineBasicMaterial({ color: group.color, transparent: true, opacity: 0.45 });
+      const material = new three.LineBasicMaterial({ color: group.color === "orbit" ? "#cfd8e3" : group.color, transparent: true, opacity: 0.45 });
       const loop = new three.LineLoop(geometry, material);
       loop.frustumCulled = false;
       scene.add(loop);
@@ -186,7 +225,8 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   const find = (ref: SatelliteRef): Satellites | undefined => state.groups.get(ref.group)?.satellites;
 
   return {
-    update(time, speed) {
+    update(time, speed, radiusPx) {
+      const grow = zoomFactor(radiusPx);
       const started = performance.now();
       const tooFast = Math.abs(speed) > MAX_SATELLITE_SPEED;
       const step = Math.min(60_000, Math.max(1000, Math.abs(speed) * 1000));
@@ -207,7 +247,8 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           geometry.setAttribute("position", attribute);
           const dim = new three.BufferAttribute(group.satellites.dimmed, 1);
           geometry.setAttribute("dim", dim);
-          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 } }, transparent: true, depthWrite: false });
+          if (group.color === "orbit") geometry.setAttribute("hue", new three.BufferAttribute(orbitHues(three, group.satellites), 3));
+          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() * grow }, tint: { value: new three.Color("#ffffff") }, ring: { value: 0 }, byHue: { value: 0 } }, transparent: true, depthWrite: false });
           const points = new Points(geometry, material);
           points.frustumCulled = false;
           points.renderOrder = 5;
@@ -215,11 +256,14 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", heldAt: Number.NaN, heldWall: 0 };
           drawn.set(name, entry);
         }
-        const style = `${group.color}|${group.size}|${ratio()}`;
+        const style = `${group.color}|${group.size}|${ratio()}|${grow}`;
         if (style !== entry.style) {
           entry.style = style;
-          entry.material.uniforms["size"]!.value = group.size * ratio();
-          entry.material.uniforms["tint"]!.value.set(group.color);
+          entry.material.uniforms["size"]!.value = group.size * ratio() * grow;
+          const byOrbit = group.color === "orbit";
+          if (byOrbit && !entry.geometry.getAttribute("hue")) entry.geometry.setAttribute("hue", new three.BufferAttribute(orbitHues(three, group.satellites), 3));
+          entry.material.uniforms["byHue"]!.value = byOrbit ? 1 : 0;
+          if (!byOrbit) entry.material.uniforms["tint"]!.value.set(group.color);
         }
         entry.points.visible = group.visible;
         if (!group.visible) {

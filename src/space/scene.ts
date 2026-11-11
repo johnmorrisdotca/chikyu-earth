@@ -684,7 +684,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               deps.onSatellitesError?.(error);
             }
           }
-          layer?.update(model.time, model.speed);
+          layer?.update(model.time, model.speed, model.drawn?.radiusPx);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
 
           // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says; or, riding along, sits at the

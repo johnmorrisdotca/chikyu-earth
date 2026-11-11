@@ -318,3 +318,62 @@ test("taking a group away frees its buffers, and a lost context is recovered wit
   expect((await statsOf(page)).satellites.placed).toBeGreaterThan(2000);
   expect(errors).toEqual([]);
 });
+
+test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit, and the page can read each group's count and the date of its data", async ({ page }) => {
+  await open(page);
+  const space = page.locator(SPACE);
+  const groups = (await space.evaluate((el) => Reflect.get(el, "satelliteGroups"))) as { name: string; count: number; placed: number; newest: number | null }[];
+  expect(groups[0]!.placed).toBeGreaterThan(10);
+  expect(groups[0]!.placed).toBeLessThanOrEqual(groups[0]!.count);
+  expect(Math.abs(groups[0]!.newest! - Date.parse(T)) / 86_400_000, "the newest elements are days from the moment shown").toBeLessThan(5);
+
+  /** Restyle the stations, wait for the picture to be drawn with it, and read the picture once: every station that can be seen, with the light of its middle, its rim and the ground beside it. */
+  const look = async (style: { color: string; size: number }) => {
+    const before = (await statsOf(page)).draws;
+    await space.evaluate((el, s) => {
+      const made = (Reflect.get(globalThis, "chikyuSatellites") as { groups: Map<string, unknown> }).groups;
+      (el as unknown as { setSatellites(name: string, group: unknown, style: unknown): void }).setSatellites("stations", made.get("stations"), s);
+    }, style);
+    await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(before);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const count = groups[0]!.count;
+    const spots = (await space.evaluate((el, n) => {
+      const out: { x: number; y: number }[] = [];
+      for (let index = 0; index < n; index += 1) {
+        const at = (el as unknown as { placeSatellite(ref: unknown): { x: number; y: number; visible: boolean } | null }).placeSatellite({ group: "stations", index });
+        if (at?.visible) out.push({ x: at.x, y: at.y });
+      }
+      return out;
+    }, count)).filter((s, i, all) => s.x > 20 && s.y > 20 && all.every((o, j) => j === i || Math.hypot(o.x - s.x, o.y - s.y) > 30));
+    const png = (await space.screenshot()).toString("base64");
+    return page.evaluate(
+      async ([data, list]) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${data}`;
+        await img.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const at = (x: number, y: number) => Array.from(ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data);
+        const light = (p: number[]) => 0.2126 * p[0]! + 0.7152 * p[1]! + 0.0722 * p[2]!;
+        return (list as { x: number; y: number }[]).filter((s) => s.x < img.width - 20 && s.y < img.height - 20).map((s) => ({ core: at(s.x, s.y), coreLight: light(at(s.x, s.y)), rim: light(at(s.x + 5, s.y)), ground: light(at(s.x + 14, s.y)) }));
+      },
+      [png, spots] as const,
+    );
+  };
+
+  const white = await look({ color: "#ffffff", size: 14 });
+  const sunlit = white.filter((s) => s.ground > 90);
+  expect(sunlit.length, "a station over sunlit ground at this moment").toBeGreaterThan(0);
+  for (const s of sunlit) {
+    expect(s.coreLight, "the middle is the dot's colour").toBeGreaterThan(200);
+    expect(s.rim, "the rim is darker than the ground beside it").toBeLessThan(s.ground - 25);
+  }
+
+  // by orbit: the stations are all in low orbits, drawn in the low-orbit colour (green, #5dd6a2)
+  const byOrbit = await look({ color: "orbit", size: 14 });
+  expect(byOrbit.length).toBeGreaterThan(0);
+  for (const s of byOrbit) expect(s.core[1]! > s.core[0]! + 30 && s.core[1]! > s.core[2]!, `a green middle, not ${s.core.join(",")}`).toBe(true);
+});
