@@ -144,6 +144,23 @@ export interface PlaceOnScreen {
 const MAX_UP = 0.5;
 /** The ring is drawn with this many points. */
 const RING_POINTS = 28;
+/** The places of the ring's points on the ground, worked out once for a place and a ring size: they depend on nothing the view does, so only the projection is done at each draw. */
+const ringCache = new WeakMap<Place, { angle: number; lons: Float64Array; lats: Float64Array }>();
+
+const ringOn = (place: Place, angle: number): { lons: Float64Array; lats: Float64Array } => {
+  const held = ringCache.get(place);
+  if (held && held.angle === angle) return held;
+  const lons = new Float64Array(RING_POINTS);
+  const lats = new Float64Array(RING_POINTS);
+  for (let k = 0; k < RING_POINTS; k += 1) {
+    const at = destination(place.lon, place.lat, (360 * k) / RING_POINTS, angle);
+    lons[k] = at.lon;
+    lats[k] = at.lat;
+  }
+  const made = { angle, lons, lats };
+  ringCache.set(place, made);
+  return made;
+};
 
 /**
  * Puts places on the screen: for each one, its foot, the head of a beam `beamPx` tall (taken as a height above the surface that is that many pixels, kept to half an Earth radius), and its foot ring of `ringPx` pixels across the surface. The beam is
@@ -173,9 +190,9 @@ export function putPlaces(places: readonly Place[], view: PlaceProjector, styles
     const angle = style.ringPx / Math.max(view.radiusPx, 1);
     const ring: { x: number; y: number }[] = [];
     if (foot.facing) {
+      const ground = ringOn(place, angle);
       for (let k = 0; k < RING_POINTS; k += 1) {
-        const at = destination(place.lon, place.lat, (360 * k) / RING_POINTS, angle);
-        const point = view.at(at.lon, at.lat, 0);
+        const point = view.at(ground.lons[k]!, ground.lats[k]!, 0);
         ring.push({ x: point.x, y: point.y });
       }
     }

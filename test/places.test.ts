@@ -103,3 +103,16 @@ test("names never overlap: right of the marker, then left, above, below, and the
   assert.equal(placed[0]!.item, 0, "the visitor's own place is placed first");
   assert.ok(placed.every((p) => p.left >= 0 && p.top >= 0), "inside the box");
 });
+
+test("the ring's points are worked out once for a place and a size: the same places give the same rings, and a new size gives new ones", () => {
+  const places = [{ id: "a", lat: 35.68, lon: 139.69 }];
+  const view = orthographicProjector({ lon: 139.69, lat: 35.68, radius: 200, cx: 210, cy: 210 }, 420, 420);
+  const first = putPlaces(places, view)[0]!;
+  const again = putPlaces(places, view)[0]!;
+  assert.equal(first.ring.length, 28);
+  assert.deepEqual(again.ring, first.ring);
+  const bigger = putPlaces(places, orthographicProjector({ lon: 139.69, lat: 35.68, radius: 400, cx: 210, cy: 210 }, 420, 420))[0]!;
+  const reach = (one: typeof first): number => Math.max(...one.ring.map((p) => Math.hypot(p.x - one.footX, p.y - one.footY)));
+  assert.ok(reach(bigger) < reach(first) * 1.5 + 1, "the ring is a number of pixels across, so it does not grow with the Earth");
+  assert.deepEqual(putPlaces(places, view)[0]!.ring, first.ring, "and the size it had before still gives the ring it had");
+});

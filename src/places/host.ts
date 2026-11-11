@@ -1,6 +1,6 @@
 // What an element does with its places: a canvas laid over the picture where the markers are drawn (a ring on the ground, a beam standing out of it, a head), a button for each name that fits (never over another
-// name or marker: right of it, then left, above, below, and a lesser place is left out when none is free), and a quiet pulse on the visitor's own place while it is in view. The element tells it where the places fall at each draw
-// (`frame`); it draws nothing else on its own, and its pulse stops when nothing pulses, when the tab is hidden or the element is out of view, and for a reader who prefers reduced motion.
+// name: right of it, then left, above, below, and a lesser place is left out when none is free), and a quiet pulse on the visitor's own place while the view moves and for two seconds after the place is added or changed. The element tells it where the places
+// fall at each draw (`frame`); it draws nothing else on its own, and its pulse stops when nothing pulses, when the tab is hidden or the element is out of view, and for a reader who prefers reduced motion.
 import { placeLabels, type LabelItem } from "../markers/labels.ts";
 import { canvasRatio } from "../markers/project.ts";
 import { PLACE_STYLES, putPlaces, type PlaceOnScreen, type PlaceProjector } from "./geometry.ts";
@@ -46,6 +46,10 @@ export interface PlacesHost {
 
 const PULSE_MS = 2600;
 const PULSE_FRAME_MS = 50;
+/** How long a place that was just added or changed pulses with nothing else moving. */
+const PULSE_AFTER_SET_MS = 2000;
+/** How long after the last draw the view counts as still moving. */
+const SETTLE_MS = 160;
 const LABEL_H = 18;
 const SATELLITE_COLOR = "#cfeaff";
 const SATELLITE_RING_PX = 8;
@@ -73,10 +77,19 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
   let marks: readonly MarkOnScreen[] = [];
   let shownLabels = 0;
   let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Until when a place that was just added or changed pulses with nothing else moving. */
+  let pulseUntil = 0;
+  /** The view moved a moment ago: the pulse runs with the draws that move it. */
+  let moving = false;
+  let hereKey = "";
+  let painted = false;
+  let placeIds = new Set<string>();
+  let markIds = new Set<string>();
   let inView = true;
   let observer: IntersectionObserver | undefined;
   const buttons = new Map<string, HTMLElement>();
-  const ruler = doc.createElement("canvas").getContext("2d");
+  let ruler: CanvasRenderingContext2D | null | undefined;
   const widths = new Map<string, number>();
   const max = options.maxLabels ?? 24;
 
@@ -101,6 +114,7 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
   const textWidth = (text: string): number => {
     let width = widths.get(text);
     if (width === undefined) {
+      if (ruler === undefined) ruler = doc.createElement("canvas").getContext("2d");
       if (ruler) ruler.font = "12px system-ui, -apple-system, sans-serif";
       width = Math.ceil((ruler?.measureText(text).width ?? text.length * 7) + 10);
       widths.set(text, width);
@@ -109,7 +123,9 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
     return width;
   };
 
-  const pulsing = (): boolean => screen.some((one) => one.facing && one.place.kind === "here" && PLACE_STYLES.here.pulse) && !(options.reducedMotion?.() ?? false);
+  const hereFacing = (): boolean => screen.some((one) => one.facing && one.place.kind === "here" && PLACE_STYLES.here.pulse) && !(options.reducedMotion?.() ?? false);
+  /** The timer runs only for the two seconds after a place was added or changed; while the view moves the draws that move it carry the pulse, and at rest there is none. */
+  const pulsing = (): boolean => hereFacing() && performance.now() < pulseUntil;
 
   function paint(now: number): void {
     const v = view;
@@ -125,7 +141,8 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
     if (!context) return;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, v.width, v.height);
-    const calm = options.reducedMotion?.() ?? false;
+    const calm = (options.reducedMotion?.() ?? false) || !(moving || now < pulseUntil);
+    painted = true;
     // the satellites that are ringed and named: a ring round each, no beam
     context.strokeStyle = SATELLITE_COLOR;
     context.lineWidth = 1.2;
@@ -188,64 +205,71 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
     }
   }
 
+  /** Lays the names out for the places and the ringed satellites at the last frame, and hides the ones that do not fit (or all of them, with no view). */
   function arrange(): void {
     const v = view;
     const items: LabelItem[] = [];
-    const owners: PlaceOnScreen[] = [];
+    const named: { key: string; id: string; label: string; kind: string }[] = [];
     if (v) {
       screen.forEach((one, index) => {
         if (!one.facing || !one.place.label) return;
         const style = one.place.kind === "here" ? PLACE_STYLES.here : PLACE_STYLES.favourite;
         items.push({ x: one.headX, y: one.headY, r: style.headPx + 3, w: textWidth(one.place.label), h: LABEL_H, priority: one.place.kind === "here" ? 1_000_000 : 1000 - index });
-        owners.push(one);
+        named.push({ key: `p:${one.place.id}`, id: one.place.id, label: one.place.label, kind: one.place.kind ?? "favourite" });
       });
-    }
-    // the satellites' names come after the places' (a place is the page's own marker), each beside its ring
-    const named: { id: string; label: string; kind: string }[] = owners.map((one) => ({ id: one.place.id, label: one.place.label ?? "", kind: one.place.kind ?? "favourite" }));
-    if (v) {
+      // the satellites' names come after the places' (a place is the page's own marker), each beside its ring
       marks.forEach((mark, index) => {
         if (!mark.visible || mark.label === "") return;
         items.push({ x: mark.x, y: mark.y, r: SATELLITE_RING_PX + 2, w: textWidth(mark.label), h: LABEL_H, priority: 500 - index });
-        named.push({ id: `sat:${mark.id}`, label: mark.label, kind: "satellite" });
+        named.push({ key: `s:${mark.id}`, id: mark.id, label: mark.label, kind: "satellite" });
       });
     }
     const placed = v ? placeLabels(items, v.width, v.height, max) : [];
     const shown = new Set<string>();
     for (const spot of placed) {
-      const place = named[spot.item]!;
-      shown.add(place.id);
-      let button = buttons.get(place.id);
+      const one = named[spot.item]!;
+      shown.add(one.key);
+      let button = buttons.get(one.key);
       if (!button) {
         // a place's name is a button that can be pressed; a satellite's is a name beside its ring and nothing more
-        if (place.kind === "satellite") button = doc.createElement("span");
+        if (one.kind === "satellite") button = doc.createElement("span");
         else {
           button = doc.createElement("button");
           (button as HTMLButtonElement).type = "button";
+          button.dataset["id"] = one.id;
         }
         button.className = "pl-label";
-        button.dataset["id"] = place.id;
         labels.append(button);
-        buttons.set(place.id, button);
+        buttons.set(one.key, button);
       }
-      if (button.textContent !== place.label) button.textContent = place.label;
-      button.dataset["kind"] = place.kind;
+      if (button.textContent !== one.label) button.textContent = one.label;
+      if (button.dataset["kind"] !== one.kind) button.dataset["kind"] = one.kind;
       if (button.hidden) button.hidden = false;
       button.style.transform = `translate(${Math.round(spot.left)}px,${Math.round(spot.top)}px)`;
     }
-    for (const [id, button] of buttons) {
-      if (shown.has(id)) continue;
-      if (!places.some((one) => one.id === id) && !marks.some((mark) => `sat:${mark.id}` === id)) {
+    for (const [key, button] of buttons) {
+      if (shown.has(key)) continue;
+      // a name whose place or satellite has gone is taken away; one that did not fit this time is only hidden
+      const alive = key.startsWith("p:") ? placeIds.has(key.slice(2)) : markIds.has(key.slice(2));
+      if (!alive) {
         button.remove();
-        buttons.delete(id);
+        buttons.delete(key);
       } else if (!button.hidden) button.hidden = true;
     }
     shownLabels = shown.size;
-    // the list for a screen reader holds every place, drawn or not
-    const text = places.map((one) => one.label ?? one.id).join("\n");
-    if (list.dataset["text"] !== text) {
-      list.dataset["text"] = text;
-      list.replaceChildren(...places.map((one) => Object.assign(doc.createElement("li"), { textContent: one.label ?? one.id })));
-    }
+  }
+
+  /** The list for a screen reader holds every place, drawn or not: made when the places are set, not at each draw. */
+  function describe(): void {
+    list.replaceChildren(...places.map((one) => Object.assign(doc.createElement("li"), { textContent: one.label ?? one.id })));
+  }
+
+  function clearCanvas(): void {
+    if (!painted) return;
+    painted = false;
+    const context = canvas.getContext("2d");
+    context?.setTransform(1, 0, 0, 1, 0, 0);
+    context?.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   function draw(): void {
@@ -260,38 +284,69 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
     if (!pulsing() || !inView || doc.visibilityState === "hidden") return;
     pulseTimer = setTimeout(() => {
       pulseTimer = undefined;
-      if (!view || !pulsing() || !inView || doc.visibilityState === "hidden") return;
+      if (!view || !inView || doc.visibilityState === "hidden") return;
       renders += 1;
       paint(performance.now());
-      schedule();
+      if (pulsing()) schedule();
+      else if (hereFacing()) {
+        // the two seconds are over: one last drawing with no pulse in it, and the layer rests
+        renders += 1;
+        paint(performance.now());
+      }
     }, PULSE_FRAME_MS);
+  }
+
+  /** The view has moved: the pulse rides on the draws that move it, and one more drawing, with no pulse, follows when they stop. */
+  function moved(): void {
+    moving = true;
+    clearTimeout(settleTimer);
+    if (!hereFacing()) {
+      settleTimer = undefined;
+      return;
+    }
+    settleTimer = setTimeout(() => {
+      settleTimer = undefined;
+      moving = false;
+      if (!view || !hereFacing() || performance.now() < pulseUntil) return;
+      renders += 1;
+      paint(performance.now());
+    }, SETTLE_MS);
   }
 
   return {
     setMarks(next) {
       marks = next;
+      markIds = new Set(next.map((mark) => mark.id));
       attach();
-      if (!view) return;
       arrange();
-      draw();
+      if (!view) clearCanvas();
+      else draw();
     },
     set(next) {
       places = next;
+      placeIds = new Set(next.map((one) => one.id));
       attach();
+      describe();
+      // a place of the visitor's own that is new or has moved pulses for two seconds, then rests
+      const here = next.filter((one) => one.kind === "here").map((one) => `${one.id}|${one.lat}|${one.lon}`).join(";");
+      if (here !== "" && here !== hereKey) pulseUntil = performance.now() + PULSE_AFTER_SET_MS;
+      hereKey = here;
       screen = view ? putPlaces(places, view) : [];
       arrange();
-      draw();
+      if (!view) clearCanvas();
+      else draw();
     },
     frame(next) {
       view = next;
-      if (places.length === 0 && screen.length === 0) return;
+      if (places.length === 0 && marks.length === 0 && screen.length === 0 && !painted && shownLabels === 0) return;
       attach();
       screen = next ? putPlaces(places, next) : [];
       arrange();
       if (!next) {
-        canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+        clearCanvas();
         return;
       }
+      moved();
       draw();
     },
     get stats() {
@@ -299,7 +354,9 @@ export function createPlacesHost(root: ShadowRoot, options: PlacesHostOptions): 
     },
     dispose() {
       clearTimeout(pulseTimer);
+      clearTimeout(settleTimer);
       pulseTimer = undefined;
+      settleTimer = undefined;
       observer?.disconnect();
       canvas.remove();
       labels.remove();
