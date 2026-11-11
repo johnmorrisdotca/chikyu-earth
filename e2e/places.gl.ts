@@ -188,3 +188,20 @@ test("the demo asks for the reader's place only when they press for it, rounds i
   await expect(button).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await placesOf(earth)).shown).toBe(0);
 });
+
+test("the demo's favourites come from the address, are drawn quieter than here, and a press keeps the choice in the address", async ({ page }) => {
+  await page.goto(`/chikyu-earth/?look=space&speed=0&time=2026-11-02T03:00Z&center=139.69,35.69&fav=Tokyo,Cairo,Nowhere`);
+  const space = page.locator(SPACE);
+  await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+  const listed = (): Promise<{ id: string; kind: string; label: string }[]> => space.evaluate((el) => Reflect.get(el, "places"));
+  await expect.poll(async () => (await listed()).map((p) => p.id)).toEqual(["city:Tokyo", "city:Cairo"]);
+  expect((await listed()).every((p) => p.kind === "favourite")).toBe(true);
+  await expect(page.getByRole("button", { name: "Tokyo", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await placesOf(space)).shown).toBeGreaterThanOrEqual(1);
+  expect(await space.evaluate((el) => el.shadowRoot!.querySelector(".pl-mark[data-kind=here]"))).toBeNull();
+
+  await page.getByRole("group", { name: "Favourites" }).getByRole("button", { name: "London", exact: true }).click();
+  await expect.poll(() => decodeURIComponent(page.url())).toContain("fav=Tokyo,London,Cairo");
+  await page.getByRole("group", { name: "Favourites" }).getByRole("button", { name: "Tokyo", exact: true }).click();
+  await expect.poll(async () => (await listed()).map((p) => p.id)).toEqual(["city:London", "city:Cairo"]);
+});
