@@ -1,4 +1,4 @@
-// The time the page shows is the reader's local time, in any zone (MODULES-955): the date box of the demo is checked against the page's own `Date`, worked out in the page and never parsed in the runner, in two zones, one with a daylight-saving
+// The time the page shows is the reader's local time, in any zone: the date box of the demo is checked against the page's own `Date`, worked out in the page and never parsed in the runner, in two zones, one with a daylight-saving
 // change in the autumn of 2026 (Vancouver, where Node and Chromium can disagree on the offset by an hour) and one with none (Tokyo). Instants either side of each change are included. CI runs in UTC, so without this a mismatch only shows on a Mac.
 import { expect, test, type Page } from "@playwright/test";
 
@@ -35,7 +35,7 @@ for (const zone of ["America/Vancouver", "Asia/Tokyo"]) {
 
     test("the zone is really set, and the hour on the box is the instant's hour in that offset, whichever offset this browser's zone data gives", async ({ page }) => {
       const read = await readBox(page, "2026-11-10T12:00:00Z");
-      // Tokyo has no change of the clocks: 9 hours ahead. Vancouver is 7 or 8 behind: which of the two this browser says for the middle of November 2026 is its own zone data's (MODULES-951), so both are allowed and the box must agree with whichever it is
+      // Tokyo has no change of the clocks: 9 hours ahead. Vancouver is 7 or 8 behind: which of the two this browser says for the middle of November 2026 is its own zone data's so both are allowed and the box must agree with whichever it is
       if (zone === "Asia/Tokyo") expect(read.offset).toBe(-540);
       else expect([420, 480]).toContain(read.offset);
       const minutes = 12 * 60 - read.offset;

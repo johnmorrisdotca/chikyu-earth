@@ -40,6 +40,23 @@ const names = (page: Page): Promise<{ text: string; l: number; t: number; r: num
         return { text: b.textContent ?? "", l: box.left, t: box.top, r: box.right, b: box.bottom };
       }),
   );
+/** Gives each station a name of the page's own (`S` and its NORAD number), and answers them by index in the group. */
+const ownNames = (page: Page): Promise<Map<number, string>> =>
+  page.locator(SPACE).evaluate((el) => {
+    const space = el as unknown as { satelliteGroups: { name: string; count: number }[]; satelliteInfo(ref: unknown): { noradId: number } | undefined; satelliteNames: Record<number, string> };
+    const count = space.satelliteGroups.find((g) => g.name === "stations")!.count;
+    const given: Record<number, string> = {};
+    const byIndex: [number, string][] = [];
+    for (let index = 0; index < count; index += 1) {
+      const id = space.satelliteInfo({ group: "stations", index })?.noradId;
+      if (id !== undefined) {
+        given[id] = `S${id}`;
+        byIndex.push([index, `S${id}`]);
+      }
+    }
+    space.satelliteNames = given;
+    return byIndex;
+  }).then((list) => new Map(list));
 const labelOn = (page: Page, on = true): Promise<void> => page.locator(SPACE).evaluate((el, value) => (el as unknown as { labelSatellites(group: string, on: boolean): void }).labelSatellites("stations", value), on);
 const placesStats = (page: Page): Promise<{ renders: number; labels: number }> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { places: { renders: number; labels: number } }).places);
 
@@ -70,14 +87,13 @@ test("every satellite of the group is ringed and named in the page's language, n
       expect(a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t, `${a.text} and ${b.text} do not overlap`).toBe(true);
     }
   }
-  // the ISS is named by its short name, Tiangong in Japanese, when they are in view
-  const texts = shown.map((n) => n.text);
-  expect(texts.every((t) => t !== "")).toBe(true);
-  for (const [norad, ja] of [[48274, "天宮"], [20580, "ハッブル"]] as const) {
-    const index = await indexOf(page, norad);
-    const at = index >= 0 ? await placeOf(page, index) : null;
-    if (at?.visible && texts.includes(ja)) expect(texts).toContain(ja);
-  }
+  expect(shown.every((n) => n.text !== "")).toBe(true);
+  // a satellite is named as the page says (satelliteNames) and, left alone, by its short name in the page's language: the first of those in view is placed first, so it always has its name
+  const own = await ownNames(page);
+  const inView: number[] = [];
+  for (const index of own.keys()) if ((await placeOf(page, index))?.visible) inView.push(index);
+  expect(inView.length, "some of the stations are in view").toBeGreaterThan(0);
+  await expect.poll(async () => (await names(page)).map((n) => n.text), { message: "the page's own name for the first satellite in view" }).toContain(own.get(inView[0]!)!);
   expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "labelledSatellites") as string[]))).toEqual(["stations"]);
   await labelOn(page, false);
   await expect.poll(async () => (await names(page)).length).toBe(0);
@@ -89,6 +105,7 @@ test("a satellite that goes behind the Earth is not ringed, and the page is told
     Reflect.set(window, "__seen", [] as unknown[]);
     el.addEventListener("chikyu-satellite-visibility", (event) => (Reflect.get(window, "__seen") as unknown[]).push((event as CustomEvent).detail));
   });
+  const own = await ownNames(page);
   await labelOn(page);
   await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
   const before = (await names(page)).length;
@@ -104,7 +121,33 @@ test("a satellite that goes behind the Earth is not ringed, and the page is told
   }
   // the last thing said about each is what placeSatellite says now
   for (const [index, visible] of last) expect((await placeOf(page, index))?.visible ?? false, `satellite ${index}`).toBe(visible);
-  expect((await names(page)).length === before, "a different view, a different set of names").toBe(false);
+  // the names are the satellites' own: none is written beside a satellite that was reported out of view, and one that was reported in view is named
+  const texts = (await names(page)).map((n) => n.text);
+  for (const [index, visible] of last) {
+    const name = own.get(index)!;
+    if (!visible) expect(texts, `${name} went out of view and its name with it`).not.toContain(name);
+  }
+  expect(texts.length === before, "a different view, a different set of names").toBe(false);
+});
+
+test("riding along a body takes the rings and names away, and letting it go brings them back", async ({ page }) => {
+  await open(page);
+  await labelOn(page);
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
+  const inked = (): Promise<number> =>
+    page.locator(SPACE).evaluate((el) => {
+      const canvas = el.shadowRoot!.getElementById("pl-canvas") as HTMLCanvasElement;
+      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) count += 1;
+      return count;
+    });
+  expect(await inked(), "the rings are drawn").toBeGreaterThan(20);
+  await page.locator(SPACE).evaluate((el) => (el as unknown as { ride(target: string): void }).ride("Moon"));
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000, message: "no names while the camera rides the Moon" }).toBe(0);
+  await expect.poll(inked, { message: "and no rings" }).toBe(0);
+  await page.locator(SPACE).evaluate((el) => (el as unknown as { ride(target: null): void }).ride(null));
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000, message: "back they come" }).toBeGreaterThan(0);
 });
 
 test("nothing is drawn at rest: the places layer is drawn again only when the picture is", async ({ page }) => {

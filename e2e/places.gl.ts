@@ -30,6 +30,10 @@ const names = (page: Page, tag = EARTH): Promise<{ id: string; text: string; l: 
         return { id: b.dataset["id"] ?? "", text: b.textContent ?? "", l: box.left, t: box.top, r: box.right, b: box.bottom };
       }),
   );
+const frames = (page: Page, count: number): Promise<void> =>
+  page.evaluate(async (n) => {
+    for (let frame = 0; frame < n; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  }, count);
 /** How many pixels of the places' canvas are drawn on. */
 const inked = (page: Page, tag = EARTH): Promise<number> =>
   page.locator(tag).evaluate((el) => {
@@ -57,6 +61,12 @@ test.describe("with motion allowed", () => {
     await expect.poll(async () => (await placesOf(page)).pulsing).toBe(true);
     const first = (await placesOf(page)).renders;
     await expect.poll(async () => (await placesOf(page)).renders, { message: "the pulse draws again" }).toBeGreaterThan(first + 3);
+    // it pulses for two seconds after it was set, with nothing moving, and then the layer rests
+    await expect.poll(async () => (await placesOf(page)).pulsing, { timeout: 15_000, message: "the pulse ends" }).toBe(false);
+    await frames(page, 30);
+    const rested = (await placesOf(page)).renders;
+    await frames(page, 30);
+    expect((await placesOf(page)).renders, "and nothing is drawn after it").toBe(rested);
     // the far side comes round: Lima is where the view is, Tokyo is not
     await page.locator(EARTH).evaluate((el) => Reflect.set(el, "centre", { lon: -77.04, lat: -12.05 }));
     await expect.poll(async () => (await names(page)).map((n) => n.text)).toEqual(["Lima"]);
@@ -107,6 +117,32 @@ test.describe("with motion allowed", () => {
     expect(await names(page)).toEqual([]);
   });
 
+  test("the page is told with the whole list whenever it changes, by the property and by the attribute, and not when it did not", async ({ page }) => {
+    await openEarth(page, OVER_TOKYO);
+    await page.locator(EARTH).evaluate((el) => {
+      Reflect.set(window, "__changes", [] as unknown[]);
+      el.addEventListener("chikyu-places-change", (event) => (Reflect.get(window, "__changes") as unknown[]).push((event as CustomEvent).detail.places.map((p: { id: string }) => p.id)));
+    });
+    const told = (): Promise<string[][]> => page.evaluate(() => Reflect.get(window, "__changes") as string[][]);
+    await setPlaces(page, [TOKYO, SEOUL]);
+    expect(await told()).toEqual([["here", "seoul"]]);
+    await setPlaces(page, [TOKYO, SEOUL]);
+    expect(await told(), "the same list is no change").toHaveLength(1);
+    await page.locator(EARTH).evaluate((el, list) => el.setAttribute("places", JSON.stringify(list)), [TOKYO, SEOUL, LIMA]);
+    expect(await told()).toEqual([["here", "seoul"], ["here", "seoul", "lima"]]);
+    await page.locator(EARTH).evaluate((el, list) => el.setAttribute("places", JSON.stringify(list)), [TOKYO, { id: "bad", lat: 200, lon: 0 }]);
+    expect(await told(), "a place left out is a change the page hears as it is").toEqual([["here", "seoul"], ["here", "seoul", "lima"], ["here"]]);
+    await setPlaces(page, []);
+    expect((await told()).at(-1)).toEqual([]);
+    // the detail is a copy: changing it does not change the element's list
+    await setPlaces(page, [TOKYO]);
+    await page.locator(EARTH).evaluate((el) => {
+      el.addEventListener("chikyu-places-change", (event) => ((event as CustomEvent).detail.places as { label?: string }[]).forEach((p) => (p.label = "changed")), { once: true });
+    });
+    await setPlaces(page, [TOKYO, SEOUL]);
+    expect((await page.locator(EARTH).evaluate((el) => (Reflect.get(el, "places") as { label: string }[]).map((p) => p.label)))).toEqual(["Tokyo", "Seoul"]);
+  });
+
   test("in the space view the same places stand out of the Earth, the far side is not drawn, and the name never overlaps", async ({ page }) => {
     await page.goto(`/chikyu-earth/?look=space&${OVER_TOKYO}`);
     await page.locator("chikyu-space[data-state=live]").waitFor();
@@ -126,11 +162,19 @@ test.describe("for a reader who prefers reduced motion", () => {
     await setPlaces(page, [TOKYO]);
     await expect.poll(async () => (await placesOf(page)).facing).toBe(1);
     expect((await placesOf(page)).pulsing).toBe(false);
+    // pictures still arriving (a sharper texture) draw the picture, and the layer with it: wait until the layer has gone thirty frames of the page's own with no drawing at all
+    await expect
+      .poll(
+        async () => {
+          const before = (await placesOf(page)).renders;
+          await frames(page, 30);
+          return (await placesOf(page)).renders - before;
+        },
+        { timeout: 60_000, message: "the layer is at rest" },
+      )
+      .toBe(0);
     const drawn = (await placesOf(page)).renders;
-    // thirty frames of the page's own: whatever would draw at rest would draw in these
-    await page.evaluate(async () => {
-      for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-    });
-    expect((await placesOf(page)).renders).toBe(drawn);
+    await frames(page, 30);
+    expect((await placesOf(page)).renders, "whatever would draw at rest would draw in these frames").toBe(drawn);
   });
 });

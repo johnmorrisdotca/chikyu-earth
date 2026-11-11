@@ -163,6 +163,52 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   await expect.poll(async () => page.evaluate(() => document.querySelectorAll("canvas").length + [...document.querySelectorAll("*")].filter((el) => el.shadowRoot?.querySelector("canvas:not(.cm-canvas)")).length), { timeout: 15_000 }).toBe(0);
 });
 
+// The places the page marks on the Earth (the demo's sample places: the visitor's own place and three favourites) are a 2D layer over the picture. The visitor's own place pulses while the view moves and for two seconds after it is set,
+// and then the layer rests: nothing is drawn by the layer, the picture or the frames.
+for (const look of ["realistic", "space"] as const) {
+  test.describe(`places on the ${look} look`, () => {
+    test.use({ reducedMotion: "no-preference" });
+    const placesOf = (page: Page) => page.locator(ELEMENT[look]).evaluate((el) => (Reflect.get(el, "stats") as { places: { places: number; facing: number; labels: number; renders: number; pulsing: boolean } }).places);
+
+    test("the pulse runs for two seconds and then nothing is drawn: not the layer, not the picture, not a frame", async ({ page }) => {
+      await open(page, look, "&places=sample");
+      await turn(page);
+      await expect.poll(async () => (await placesOf(page)).facing, { timeout: 30_000, message: "the sample places are on the Earth" }).toBeGreaterThan(0);
+      // the controls are held: the view stops, and the pulse with it
+      await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
+      await expect.poll(async () => (await placesOf(page)).pulsing, { timeout: 20_000, message: "the pulse ends" }).toBe(false);
+      await page.waitForTimeout(1500);
+      const layer = (await placesOf(page)).renders;
+      const rest = await bounded(page, 3000, look);
+      expect(rest.draws, "no GL draws at rest with places on").toBe(0);
+      expect(rest.frames).toBe(0);
+      expect(rest.requests).toBeLessThanOrEqual(2);
+      expect((await placesOf(page)).renders, "and the places layer is not drawn again").toBe(layer);
+      expect((await placesOf(page)).pulsing).toBe(false);
+    });
+  });
+}
+
+test("following the ISS as a model, letting it go and following again gives back what it took: GPU objects stay flat in the one context", async ({ page }) => {
+  await open(page, "satellites");
+  const space = page.locator("chikyu-space");
+  const model = () => space.evaluate((el) => (Reflect.get(el, "stats") as { followModel: unknown | null }).followModel);
+  const settled: number[] = [];
+  for (let round = 0; round < 5; round += 1) {
+    await space.evaluate((el) => void (el as unknown as { followNext(step?: number): unknown }).followNext());
+    await expect.poll(model, { timeout: 60_000, message: "the model is made and drawn" }).not.toBeNull();
+    await page.waitForTimeout(1000);
+    await space.evaluate((el) => (el as unknown as { ride(target: null): void }).ride(null));
+    await expect.poll(model, { timeout: 30_000, message: "and is let go" }).toBeNull();
+    await page.waitForTimeout(2000);
+    const counted = await readCounts(page);
+    settled.push(gpuObjects(counted));
+    expect(counted.contexts, "one WebGL context").toBe(1);
+  }
+  console.log(`live GPU objects after each follow and let go: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after five rounds than after the second, give or take three.js's own fixtures").toBeLessThanOrEqual(settled[1]! + 8);
+});
+
 test("the map tiles: zooming in and out over and over gives back what it took, holds few tiles, and draws nothing at rest", async ({ page }) => {
   const log = await routeTiles(page);
   await open(page, "realistic");
