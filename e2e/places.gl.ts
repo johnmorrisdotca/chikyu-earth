@@ -184,7 +184,10 @@ test("the demo asks for the reader's place only when they press for it, rounds i
 
   await page.getByRole("button", { name: "Pin", exact: true }).click();
   expect(await earth.getAttribute("places-look")).toBe("pin");
-  expect(page.url()).toContain("place-look=pin");
+  // the demo writes its address a moment after a change: wait for it
+  await expect.poll(() => page.url()).toContain("place-look=pin");
+  expect(page.url(), "the reader's place is not in the address once it is written").not.toContain("43.6");
+  expect(page.url()).not.toContain("79.3");
 
   await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "false");
