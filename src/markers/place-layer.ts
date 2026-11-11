@@ -1,5 +1,6 @@
 // The places' markers in an element: a small box for each place, moved by CSS transforms when the picture is drawn, and a name for each that has room. The pulse of a `here` place is a CSS
 // animation, so the picture is never drawn again for it; it stops while the element is out of sight, and a reader who asked for less motion gets none. Names are measured as the page draws them.
+import { placeLabels } from "./labels.ts";
 import { layoutPlaces, PLACE_LOOKS, type Place, type PlaceLook, type PlaceView } from "./places.ts";
 
 /** A `places-look` attribute: one of `PLACE_LOOKS`, else `beam`. */
@@ -29,7 +30,22 @@ export const PLACE_STYLE =
   "#places[data-look=ring] .pl-stick,#places[data-look=ring] .pl-head{display:none}" +
   ".pl-name{position:absolute;left:0;top:0;box-sizing:border-box;padding:1px 6px;font:600 11px/16px system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:.04em;white-space:nowrap;color:#eefcff;background:rgba(4,10,20,.72);border:1px solid color-mix(in srgb,var(--c) 60%,transparent);border-radius:3px;will-change:transform;--c:var(--chikyu-place-favourite,#ffd27a)}" +
   ".pl-name[data-kind=here]{--c:var(--chikyu-place-here,#7df9ff);color:#fff}" +
+  ".pl-name[data-kind=satellite]{--c:#cfeaff;color:#cfeaff;font-weight:500;background:rgba(4,10,20,.5);border-color:transparent}" +
+  ".pl-sat{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border:1.2px solid #cfeaff;border-radius:50%;opacity:.85;will-change:transform}" +
+  ".pl-sat[hidden]{display:none}" +
   ".pl-name.pl-measure{visibility:hidden}";
+
+/** A satellite ringed and named in the picture just drawn: its name, where it is and whether it can be seen (in the box and not behind the Earth). */
+export interface SatelliteMark {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
+/** The ring round a named satellite, in CSS pixels. */
+const SATELLITE_RING = 8;
 
 /**
  * The places' markers in one element: hand it the places and the look, and a view at each draw.
@@ -37,9 +53,9 @@ export const PLACE_STYLE =
 export interface PlaceLayer {
   set(places: readonly Place[]): void;
   look: PlaceLook;
-  /** Lay the places on the picture just drawn; `null` hides them (the Earth is not in the picture). `taken` is boxes other names use. */
-  frame(view: PlaceView | null, taken?: readonly { left: number; top: number; width: number; height: number }[]): void;
-  readonly stats: { places: number; shown: number; labels: number; renders: number };
+  /** Lay the places on the picture just drawn; `null` hides them (the Earth is not in the picture). `taken` is boxes other names use; `marks` are satellites to ring and name, after the places' names and never over them. */
+  frame(view: PlaceView | null, taken?: readonly { left: number; top: number; width: number; height: number }[], marks?: readonly SatelliteMark[]): void;
+  readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
   dispose(): void;
 }
 
@@ -67,12 +83,13 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const marks: Mark[] = [];
   const names: HTMLElement[] = [];
   const sizes = new Map<string, { width: number; height: number }>();
-  const stats = { places: 0, shown: 0, labels: 0, renders: 0 };
+  const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0 };
+  const rings: HTMLElement[] = [];
   let measure: HTMLElement | null = null;
 
-  const size = (place: Place): { width: number; height: number } | null => {
+  const size = (place: Pick<Place, "label" | "kind"> | { label: string; kind: "satellite" }): { width: number; height: number } | null => {
     if (!place.label) return null;
-    const kind = place.kind === "here" ? "here" : "favourite";
+    const kind = place.kind === "here" || place.kind === "satellite" ? place.kind : "favourite";
     const key = `${kind}\n${place.label}`;
     let found = sizes.get(key);
     if (!found) {
@@ -145,12 +162,15 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       look = value;
       box.dataset["look"] = value;
     },
-    frame(view, taken = []) {
-      if (!view || places.length === 0) {
+    frame(view, taken = [], satellites = []) {
+      if (!view || (places.length === 0 && satellites.length === 0)) {
         hideFrom(marks.map((m) => m.root), 0);
         hideFrom(names, 0);
+        hideFrom(rings, 0);
         stats.shown = 0;
         stats.labels = 0;
+        stats.rings = 0;
+        stats.satelliteNames = 0;
         if (places.length > 0) stats.renders += 1;
         return;
       }
@@ -186,9 +206,47 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         if (name.hidden) name.hidden = false;
         name.style.transform = `translate(${Math.round(spot.left)}px,${Math.round(spot.top)}px)`;
       }
-      hideFrom(names, layout.labels.length);
+      // the ringed satellites: a ring round each that can be seen, and its name where it is free of the places' names and the boxes taken
+      const used = [...taken];
+      for (const spot of layout.labels) {
+        const found = size(places[spot.index]!);
+        if (found) used.push({ left: spot.left, top: spot.top, ...found });
+      }
+      const seen = satellites.filter((mark) => mark.visible);
+      for (const [i, mark] of seen.entries()) {
+        let ring = rings[i];
+        if (!ring) {
+          ring = doc.createElement("i");
+          ring.className = "pl-sat";
+          box.append(ring);
+          rings[i] = ring;
+        }
+        if (ring.hidden) ring.hidden = false;
+        ring.style.transform = `translate(${mark.x.toFixed(1)}px,${mark.y.toFixed(1)}px)`;
+      }
+      hideFrom(rings, seen.length);
+      const items: { x: number; y: number; r: number; w: number; h: number; priority: number }[] = [];
+      const owners: SatelliteMark[] = [];
+      for (const [i, mark] of seen.entries()) {
+        const found = mark.label ? size({ label: mark.label, kind: "satellite" }) : null;
+        if (!found) continue;
+        items.push({ x: mark.x, y: mark.y, r: SATELLITE_RING + 2, w: found.width, h: found.height, priority: -i });
+        owners.push(mark);
+      }
+      const placed = placeLabels(items, view.width, view.height, 24, 64, used);
+      for (const [k, spot] of placed.entries()) {
+        const mark = owners[spot.item]!;
+        const name = nameAt(layout.labels.length + k);
+        if (name.textContent !== mark.label) name.textContent = mark.label;
+        if (name.dataset["kind"] !== "satellite") name.dataset["kind"] = "satellite";
+        if (name.hidden) name.hidden = false;
+        name.style.transform = `translate(${Math.round(spot.left)}px,${Math.round(spot.top)}px)`;
+      }
+      hideFrom(names, layout.labels.length + placed.length);
       stats.shown = order.length;
       stats.labels = layout.labels.length;
+      stats.rings = seen.length;
+      stats.satelliteNames = placed.length;
     },
     stats,
     dispose() {

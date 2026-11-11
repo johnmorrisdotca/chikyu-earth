@@ -8,7 +8,8 @@ import { airFor, readAirThickness } from "../realistic/air.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "../realistic/body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import { cleanPlaces, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
-import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
+import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
+import { SHORT_NAMES } from "../satellites/names.ts";
 import type { LabelStyle } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
@@ -215,6 +216,9 @@ export class ChikyuSpace extends HTMLElement {
   /** The names of the stars and the constellation lines (`star-names`, `constellation-lines`), and the look of the names. */
   #sky: SkyHost | undefined;
   #skyStyle: Partial<LabelStyle> = {};
+  #satNames: Record<number, string> = {};
+  /** The ringed satellites of the last draw (`labelSatellites`), laid out with the places. */
+  #marks: SatelliteMark[] = [];
   #airNote: HTMLElement | undefined;
   #gate: Gate | undefined;
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
@@ -314,6 +318,7 @@ export class ChikyuSpace extends HTMLElement {
       onSky: (sky) => this.#sky?.frame(sky),
       onPlaces: (view) => this.#drawPlaces(view),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      onSatelliteMarks: (marks) => this.#showMarks(marks),
       onSelected: (place) => this.#placeChosen(place),
       onMoving: () => this.#gate?.request(),
       onRideLost: () => this.#rideLost(),
@@ -499,7 +504,7 @@ export class ChikyuSpace extends HTMLElement {
   /** Lays the places on the picture just drawn, clear of the bodies' names shown beside it. */
   #drawPlaces(view: PlaceView): void {
     const layer = this.#placeLayer;
-    if (!layer || (this.#placeList.length === 0 && layer.stats.shown === 0)) return;
+    if (!layer || (this.#placeList.length === 0 && this.#marks.length === 0 && layer.stats.shown === 0 && layer.stats.rings === 0)) return;
     const taken: { left: number; top: number; width: number; height: number }[] = [];
     if (this.#model.labels && this.#places) {
       for (const name of BODY_NAMES) {
@@ -516,7 +521,7 @@ export class ChikyuSpace extends HTMLElement {
         taken.push({ left: at.x + Math.max(4, Math.min(at.r, 40)), top: at.y - 8, ...box });
       }
     }
-    layer.frame(view, taken);
+    layer.frame(view, taken, this.#marks);
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -817,6 +822,72 @@ export class ChikyuSpace extends HTMLElement {
   get selectedSatellite(): SatelliteRef | null {
     const chosen = this.#model.satellites.selected;
     return chosen ? { ...chosen } : null;
+  }
+
+  /**
+   * Ring and name every satellite of a group (or stop): a ring round each and its name beside it, in the page's language (the ISS, Tiangong and Hubble by their short names, the rest as their elements name them, or as `satelliteNames` says), never over another name, a place's or a ring's.
+   * Names and rings are drawn with the places, only for satellites that are in the picture and not behind the Earth, and nothing is drawn at rest. `chikyu-satellite-visibility` is sent with `detail: { ref, visible }` when a labelled satellite comes into view or goes out of it (not at every frame).
+   * At most 80 satellites are ringed, over all the groups. A group that is not set, or is not shown, has none.
+   *
+   * @param group - The group's name, as given to `setSatellites`.
+   * @param on - `true` to ring and name its members (the default), `false` to stop.
+   */
+  labelSatellites(group: string, on = true): void {
+    if (on) this.#model.satellites.marked.add(group);
+    else this.#model.satellites.marked.delete(group);
+    this.#gate?.request();
+  }
+
+  /** The groups whose satellites are ringed and named now (`labelSatellites`). */
+  get labelledSatellites(): string[] {
+    return [...this.#model.satellites.marked];
+  }
+
+  /**
+   * The names written beside the ringed satellites, by NORAD number, for a page in another language or with names of its own (`{ 25544: "Space Station" }`). One left out keeps its short name (the ISS, Tiangong and Hubble) or the name in its elements.
+   */
+  get satelliteNames(): Record<number, string> {
+    return { ...this.#satNames };
+  }
+  set satelliteNames(value: Record<number, string>) {
+    this.#satNames = { ...value };
+    this.#gate?.request();
+  }
+
+  /**
+   * Where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm }` in CSS pixels from the view's top left, `visible` meaning it is inside the box and not behind the Earth. `null` when its group is not set or not shown, it cannot be
+   * placed (its elements are too old), or it is behind the camera. It is the picture's own camera maths and its own test for the Earth in the way, so a page that draws its own rings need not repeat either.
+   */
+  placeSatellite(ref: SatelliteRef): { x: number; y: number; visible: boolean; heightKm: number } | null {
+    return this.#model.placeSatellite?.(ref) ?? null;
+  }
+
+  /** The name beside a ringed satellite: the page's own (`satelliteNames`), else the short one in the page's language, else the name in its elements. */
+  #satelliteName(ref: SatelliteRef): string {
+    const info = this.satelliteInfo(ref);
+    if (!info) return "";
+    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+    return this.#satNames[info.noradId] ?? SHORT_NAMES[info.noradId]?.[lang] ?? info.name;
+  }
+
+  #markSeen = new Map<string, boolean>();
+
+  /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
+  #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean }[]): void {
+    this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible }));
+    const now = new Map<string, boolean>();
+    for (const m of marks) {
+      const key = `${m.ref.group}:${m.ref.index}`;
+      now.set(key, m.visible);
+      if (this.#markSeen.get(key) !== m.visible && (this.#markSeen.has(key) || m.visible)) this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: m.ref, visible: m.visible }, bubbles: true, composed: true }));
+    }
+    for (const [key, was] of this.#markSeen) {
+      if (!now.has(key) && was) {
+        const [group, index] = key.split(":");
+        this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: { group: group!, index: Number(index) }, visible: false }, bubbles: true, composed: true }));
+      }
+    }
+    this.#markSeen = now;
   }
 
   /** Facts about one satellite at the moment shown (name, number, element age, height, speed, period); undefined if it cannot be placed then. */
