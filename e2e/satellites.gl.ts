@@ -357,13 +357,13 @@ test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit,
         ctx.drawImage(img, 0, 0);
         const at = (x: number, y: number) => Array.from(ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data);
         const light = (p: number[]) => 0.2126 * p[0]! + 0.7152 * p[1]! + 0.0722 * p[2]!;
-        // the rim is the darkest point on four rays out of the middle, 3 to 9 pixels out; the ground is the same rays 14 pixels out, at its darkest
+        // the rim is the darkest point inside the dot's edge (4 to 6 pixels out of a 7 pixel radius) on four rays from its middle; the ground beside it is the brightest of the same rays 14 pixels out
         const rays = [[1, 0], [-1, 0], [0, 1], [0, -1]];
         return (list as { x: number; y: number }[]).filter((s) => s.x < img.width - 20 && s.y < img.height - 20).map((s) => ({
           core: at(s.x, s.y),
           coreLight: light(at(s.x, s.y)),
-          rim: Math.min(...rays.flatMap(([dx, dy]) => [3, 4, 5, 6, 7, 8, 9].map((r) => light(at(s.x + dx! * r, s.y + dy! * r))))),
-          ground: Math.min(...rays.map(([dx, dy]) => light(at(s.x + dx! * 14, s.y + dy! * 14)))),
+          rim: Math.min(...rays.flatMap(([dx, dy]) => [4, 5, 6].map((r) => light(at(s.x + dx! * r, s.y + dy! * r))))),
+          ground: Math.max(...rays.map(([dx, dy]) => light(at(s.x + dx! * 14, s.y + dy! * 14)))),
         }));
       },
       [png, spots] as const,
