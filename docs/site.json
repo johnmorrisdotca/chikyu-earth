@@ -69,6 +69,11 @@
       "en": "Printable sheets: the globe and a world map to colour, my country, day and night, the seasons",
       "ja": "印刷できるシート: 色をぬる地球と世界地図、わたしの国、昼と夜、季節",
       "platform": "node"
+    },
+    "./catalogue": {
+      "en": "The Earth-orbit catalogue: orbit class, object kind, colours, fleets and the packed file format (no data)",
+      "ja": "地球周回軌道のカタログ: 軌道の分類、物体の種類、色、衛星群、パック形式のファイル（データは含みません）",
+      "platform": "node"
     }
   }
 }

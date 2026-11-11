@@ -9,3 +9,4 @@ export { DEFAULT_LEVELS, earthTiles, imageBytes, mapKeys, tileKeyParts, tilePlac
 export { elementsFrom, mergeElementSets, readElementSets, type ElementRecordSource, type ElementSetsRead } from "./elements.ts";
 export { OWN_SOURCES, ownCredit } from "./own.ts";
 export { createSourceBook, creditsOf, type SourceBook, type SourceBookOptions, type SourceStats } from "./book.ts";
+export { packedElementsFrom, readPackedFrom, type PackedElementsOptions } from "./packed.ts";

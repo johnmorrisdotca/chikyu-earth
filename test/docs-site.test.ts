@@ -42,7 +42,7 @@ test("they are wired in: the scripts, the dev dependencies, the Pages step and t
     assert.ok(pkg.devDependencies?.[name], name);
     assert.equal(pkg.dependencies?.[name], undefined, `${name} builds the docs and is never a dependency of the package`);
   }
-  assert.ok(read(".github/workflows/pages.yml").includes("      - run: pnpm site\n      - run: pnpm docs:site\n"));
+  assert.match(read(".github/workflows/pages.yml"), /^ {6}- run: pnpm site\n(?: {8}timeout-minutes: \d+\n)? {6}- run: pnpm docs:site\n/m);
   assert.match(read(".gitignore"), /^\.docs-examples\/$/m);
 });
 

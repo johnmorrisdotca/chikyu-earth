@@ -168,6 +168,12 @@ await step("node-meteor-strength", () => {
   if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
 });
 
+await step("node-catalogue", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "catalogue.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  const want = ["MADE-UP COMSAT PAY geo", "MADE-UP DEB DEB leo", "2 100123 PRC Payloads, Rocket bodies, Debris, Unknown"];
+  if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
+});
+
 await step("node-body-label", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "body-label.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
   const want = ['null {"look":"painted","strength":0.5,"repeat":"once","latitude":0,"facing":false}', '{"look":"etched","strength":0.8,"repeat":"both","latitude":55,"facing":false}', "EARTH 地球 7"];
@@ -387,7 +393,7 @@ await step("together", async () => {
 await step("earth-only", async () => {
   // Every entry point of chikyu-earth bundles with wakusei-planets missing: nothing in the package imports it.
   const refuse = { name: "no-wakusei", setup: (build: import("esbuild").PluginBuild) => build.onResolve({ filter: /wakusei-planets/ }, (args) => ({ errors: [{ text: `${args.importer} imports ${args.path}` }] })) };
-  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "passes/index.js", "passes/element.js", "space/element.js"]) {
+  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "passes/index.js", "passes/element.js", "space/element.js", "catalogue/index.js"]) {
     await esbuild({ entryPoints: [modules(entry)], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [refuse], external: ["three", "astronomy-engine", "satellite.js", "@johnmorrisdotca/kazoku-ui", "@johnmorrisdotca/kazoku-ui/*", "three/*"] });
   }
 });
@@ -459,6 +465,7 @@ const FILES: Record<string, string[]> = {
   "node/meteors.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/meteor-strength.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/body-label.mjs": ["docs/guides/body-label.md", "docs/guides/ja/body-label.md"],
+  "node/catalogue.mjs": ["docs/guides/catalogue.md", "docs/guides/ja/catalogue.md"],
   "door/source.mjs": ["README.md", "docs/guides/data-door.md", "docs/guides/ja/data-door.md"],
   "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
