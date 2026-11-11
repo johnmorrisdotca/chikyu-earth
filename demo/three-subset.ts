@@ -2,12 +2,16 @@
 // hundred kilobytes of three instead of all of it. A page does the same with `setThreeLoader(() => import("./three-subset"))`.
 export {
   AdditiveBlending,
+  AmbientLight,
   BackSide,
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
   Color,
+  CylinderGeometry,
   DataTexture,
+  DirectionalLight,
   DoubleSide,
   ClampToEdgeWrapping,
   Group,

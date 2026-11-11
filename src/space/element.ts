@@ -27,11 +27,12 @@ import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
 import { rideTiltLimits, rideTurnDegrees, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
-import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SpaceModel } from "./scene.ts";
+import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
 
 export { BODY_NAMES, type BodyName, type CameraMode, type RideTarget };
 
 let painter: BodyPainter | undefined;
+let satellitePainter: SatellitePainter | undefined;
 
 /**
  * Change how the Sun and the planets are drawn (before the first element connects): the space view keeps their places, sizes, light, names and orbits and asks
@@ -49,6 +50,23 @@ let painter: BodyPainter | undefined;
  */
 export function setBodyPainter(next: BodyPainter | undefined): void {
   painter = next;
+}
+
+/**
+ * Where the 3D models of large satellites come from (MODULES-861), if the page has any: the package ships none. With a painter set, a satellite followed (`ride(ref, { view: "follow" })`) that the painter has a model for is drawn as that model, in the middle
+ * of the picture at a size that reads, pointed the way it flies, lit by the Sun; a satellite it has none for stays a dot. See `SatellitePainter`.
+ *
+ * @param next - The painter, or `undefined` for none.
+ *
+ * @example
+ * ```ts no-run
+ * import { setSatellitePainter } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * setSatellitePainter({ has: (norad) => norad === 25544, make: async () => null });
+ * ```
+ */
+export function setSatellitePainter(next: SatellitePainter | undefined): void {
+  satellitePainter = next;
 }
 
 /** Mean radii in kilometres (IAU), for what a click tells. */
@@ -336,6 +354,7 @@ export class ChikyuSpace extends HTMLElement {
       onRideLost: () => this.#rideLost(),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       ...(painter ? { painter } : {}),
+      satellitePainter: () => satellitePainter,
       onPainterError: (error) => this.dispatchEvent(new CustomEvent("chikyu-bodies-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
     });
     this.#view = taken.renderer.view(this.#stage, item, { still: null });
@@ -806,6 +825,36 @@ export class ChikyuSpace extends HTMLElement {
     }
   }
 
+  /**
+   * The satellites the page has a model for (`setSatellitePainter`) in the groups now set, each with its name in the page's language: the large satellites that can be followed as a model. Empty with no painter.
+   */
+  largeSatellites(): { ref: SatelliteRef; noradId: number; name: string }[] {
+    const out: { ref: SatelliteRef; noradId: number; name: string }[] = [];
+    if (!satellitePainter) return out;
+    for (const [group, state] of this.#model.satellites.groups) {
+      state.satellites.sets.forEach((set, index) => {
+        if (satellitePainter!.has(set.NORAD_CAT_ID)) out.push({ ref: { group, index }, noradId: set.NORAD_CAT_ID, name: this.#satelliteName({ group, index }) });
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Follow the next (or, with a negative `step`, the previous) of the large satellites in `largeSatellites()`, going round: the first when none is followed yet. The followed satellite stays in the middle of the picture, as a model where the page has one,
+   * with the Earth turning and sliding beneath. Returns the satellite now followed, or `null` when there is none to follow.
+   *
+   * @param step - How many places to hop: 1 (the default) is the next.
+   */
+  followNext(step = 1): { ref: SatelliteRef; noradId: number; name: string } | null {
+    const list = this.largeSatellites();
+    if (list.length === 0) return null;
+    const ride = this.#model.ride;
+    const current = ride && typeof ride.target !== "string" ? list.findIndex((one) => one.ref.group === (ride.target as SatelliteRef).group && one.ref.index === (ride.target as SatelliteRef).index) : -1;
+    const next = list[(((current < 0 ? (step > 0 ? -1 : 0) : current) + step) % list.length + list.length) % list.length]!;
+    this.ride(next.ref, { view: "follow" });
+    return next;
+  }
+
   /** What the camera is riding along with now, or null. */
   get riding(): Riding | null {
     const ride = this.#model.ride;
@@ -1018,8 +1067,10 @@ export class ChikyuSpace extends HTMLElement {
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
+    /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
+    followModel: { x: number; y: number; shown: boolean } | null;
     /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
-    places: { places: number; shown: number; labels: number; renders: number };
+    places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
   } {
@@ -1041,7 +1092,8 @@ export class ChikyuSpace extends HTMLElement {
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0, lang: "", stars: [] },
-      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0 }) },
+      followModel: this.#model.followModel,
+      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
     };
   }

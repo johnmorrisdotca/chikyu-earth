@@ -16,6 +16,7 @@ import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
 import type { CityFrame } from "../cities/geometry.ts";
+import { MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
@@ -191,6 +192,8 @@ export interface SpaceModel {
   rideDistance: number | null;
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
+  /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
+  followModel: { x: number; y: number; shown: boolean } | null;
   /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
   placeSatellite: ((ref: SatelliteRef) => SatelliteScreen | null) | null;
   ratio(): number;
@@ -231,6 +234,7 @@ export const newSpaceModel = (): SpaceModel => ({
   bodyLabel: newBodyLabelState(),
   pick: null,
   placeSatellite: null,
+  followModel: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
@@ -261,6 +265,24 @@ export interface BodyDrawing {
   /** True to have the scene turn the object to face the camera (a disc or a glow). */
   billboard?: boolean;
   dispose(): void;
+}
+
+/**
+ * The seam for drawing a followed satellite as a 3D model (MODULES-861): the package ships no model, the page supplies them. `has` says whether there is a model for a satellite (by NORAD number: `25544` is the ISS); `make` makes it as a drawing of radius 1
+ * (its middle at the origin, its long axis along +x, its top, the side that faces space, along +z, and its left along +y), at once or later (a promise); the view places it where the satellite is, points it the way it flies, sizes it to read and
+ * gives it the Sun's direction (`light`, `update`). `null` from `make` is no model: the satellite stays a dot.
+ *
+ * @example
+ * ```ts no-run
+ * import type { SatellitePainter } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const painter: SatellitePainter = { has: (norad) => norad === 25544, make: async () => null };
+ * console.log(painter.has(25544));
+ * ```
+ */
+export interface SatellitePainter {
+  has(noradId: number): boolean;
+  make(three: Three, noradId: number, context: PaintContext): BodyDrawing | null | Promise<BodyDrawing | null>;
 }
 
 /**
@@ -354,6 +376,8 @@ export interface SpaceDeps {
   onSatellitesError?: (error: unknown) => void;
   /** How the Sun, the planets and their moons are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
   painter?: BodyPainter;
+  /** The models of large satellites, for a followed satellite (see `SatellitePainter`); none, and a satellite is a dot. */
+  satellitePainter?: () => SatellitePainter | undefined;
   /** The painter could not make a body (the three.js parts handed over lack something it needs); the body is drawn plain instead. */
   onPainterError?: (error: unknown) => void;
 }
@@ -553,6 +577,14 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
       let marksTold = false;
+      // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
+      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number } = { key: "", drawing: null, turn: 0 };
+      const dropModel = (): void => {
+        if (!modelSlot.drawing) return;
+        scene.remove(modelSlot.drawing.object);
+        modelSlot.drawing.dispose();
+        modelSlot.drawing = null;
+      };
 
       let layer: SatelliteLayer | undefined;
       const rideState = new Float64Array(6);
@@ -671,6 +703,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let focusPos: Vec3 = pos[focus];
           let focusRadius = radiusOf(focus);
           let rideFrom: { position: Vec3; velocity: Vec3; hidden: BodyName | null; gameSeconds: number } | null = null;
+          let followed: { place: Vec3; velocity: Vec3; ref: SatelliteRef } | null = null;
           model.rideLost = false;
           model.rideMotion = 0;
           model.rideDistance = null;
@@ -693,6 +726,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               if (ride.view === "follow") {
                 focusPos = place;
                 focusRadius = Math.max(1e-4, ride.distanceKm / 6371 / fit);
+                followed = { place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], ref: ride.target };
               } else rideFrom = { position: place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], hidden: null, gameSeconds: 0 };
             } else model.rideLost = true;
           }
@@ -797,6 +831,48 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let paintedMoons = 0;
           for (const held of moonSlots.values()) if (held.slot.drawing?.object.visible) paintedMoons += 1;
           model.painted = { bodies: paintedBodies, moons: paintedMoons };
+          // the followed satellite as a model, when the page has one for it: made once, placed where the satellite is, pointed the way it flies, sized to read and lit by the Sun
+          const satellitePainter = deps.satellitePainter?.();
+          const group = followed ? model.satellites.groups.get(followed.ref.group) : undefined;
+          const norad = followed && group ? group.satellites.sets[followed.ref.index]?.NORAD_CAT_ID : undefined;
+          const modelKey = norad !== undefined && satellitePainter?.has(norad) ? String(norad) : "";
+          if (modelKey !== modelSlot.key) {
+            dropModel();
+            modelSlot.key = modelKey;
+            const turn = (modelSlot.turn += 1);
+            if (modelKey && satellitePainter && norad !== undefined) {
+              void Promise.resolve(satellitePainter.make(three, norad, { look: "", invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap() }))
+                .then((made) => {
+                  if (!made) return;
+                  if (ended || modelSlot.turn !== turn) {
+                    made.dispose();
+                    return;
+                  }
+                  made.object.matrixAutoUpdate = false;
+                  made.object.visible = false;
+                  scene.add(made.object);
+                  modelSlot.drawing = made;
+                  deps.invalidate();
+                })
+                .catch((error: unknown) => deps.onPainterError?.(error));
+            }
+          }
+          const axes = followed ? satelliteAxes(followed.place, followed.velocity) : null;
+          if (modelSlot.drawing && followed && axes) {
+            const object = modelSlot.drawing.object;
+            const away = Math.hypot(followed.place[0] - camera.position.x, followed.place[1] - camera.position.y, followed.place[2] - camera.position.z);
+            object.matrix.set(...(modelMatrix(followed.place, axes, modelRadius(away, half, MODEL_RADIUS_SHARE, 1e-9)) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
+            object.matrixWorldNeedsUpdate = true;
+            object.visible = true;
+            const toSunNow = unit(frame.sun);
+            modelSlot.drawing.light?.(toSunNow);
+            modelSlot.drawing.update?.({ toSun: toSunNow, ms: model.time, radiusPx: size.height * MODEL_RADIUS_SHARE });
+            projected.set(followed.place[0], followed.place[1], followed.place[2]).project(camera);
+            model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true };
+          } else {
+            if (modelSlot.drawing) modelSlot.drawing.object.visible = false;
+            model.followModel = null;
+          }
           const sunToSun = unit([-frame.sun[0], -frame.sun[1], -frame.sun[2]]);
           sunDrawing?.update?.({ toSun: sunToSun, ms: model.time, radiusPx: px.Sun });
           for (const name of PLANETS) {
@@ -1006,6 +1082,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
+          modelSlot.turn += 1;
+          dropModel();
           layer?.dispose();
           model.pick = null;
           model.placeSatellite = null;
