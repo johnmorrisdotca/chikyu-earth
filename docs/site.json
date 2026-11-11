@@ -45,6 +45,11 @@
       "ja": "<chikyu-space> 要素",
       "platform": "browser"
     },
+    "./door": {
+      "en": "The data door: hand the package your own maps of the Earth or orbit data as a source with its own licence and credit, and see whose data is on the screen",
+      "ja": "データの入口（自分で用意した地球の地図や軌道データを、ライセンスと出典つきのソースとして渡し、いま画面にあるのは誰のデータかを示します）",
+      "platform": "neutral"
+    },
     "./satellites": {
       "en": "Satellites: orbital elements in, positions out",
       "ja": "人工衛星: 軌道要素から位置を計算",

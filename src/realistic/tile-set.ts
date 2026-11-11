@@ -3,10 +3,11 @@
 // three.js is passed in; nothing here imports it.
 import type * as THREE from "three";
 import type { AssetCache } from "@johnmorrisdotca/kazoku-ui/renderer";
+import { DEFAULT_LEVELS, tileKeyParts, tilePlace, type EarthMapSource } from "../door/map.ts";
 import { TILE_FRAG, TILE_VERT } from "./shaders.ts";
 import type { ThreeParts } from "./textures.ts";
 import { MAX_TEXTURE, TIERS } from "./tiers.ts";
-import { coveringTile, parseManifest, tileColumns, tileLevel, tileRect, tileRows, tilesInView, type TileCamera, type TileId, type TileLayer, type VisibleTile } from "./tiles.ts";
+import { coveringTile, tileColumns, tileLevel, tileRect, tileRows, tilesInView, type TileCamera, type TileId, type TileLayer, type VisibleTile } from "./tiles.ts";
 
 /**
  * The most tiles held at once, day and night together, about a megabyte and a third of graphics memory each (a 512 pixel square with its mipmaps).
@@ -32,9 +33,21 @@ export const TILE_LIMIT = 48;
  */
 export const TILE_KEEP_MS = 4000;
 
+/**
+ * The bytes of decoded tiles the view holds, all sources together: 72 MB, which is the 48 tiles it has always held (`TILE_LIMIT`, a 512 pixel square with its mipmaps is 1.4 MB). A tile that arrives when the view needs every tile it holds,
+ * and does not fit, is refused and counted (`stats.refused`): the view draws what it holds.
+ *
+ * @example
+ * ```ts
+ * import { TILE_BUDGET } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * console.log(TILE_BUDGET / 1024 / 1024);
+ * ```
+ */
+export const TILE_BUDGET = 72 * 1024 * 1024;
+
 const IN_FLIGHT = 6;
 const NEW_PER_DRAW = 8;
-const RETRY_MS = 30_000;
 // the day mix reaches full light at 0.22: a tile whose darkest point is brighter than that never shows the night picture
 const NIGHT_BELOW = 0.25;
 const GRID = 16;
@@ -44,6 +57,8 @@ type Uniform<T> = { value: T };
 
 interface Asset {
   texture: THREE.Texture;
+  /** The decoded tile's size in memory, once it has arrived. */
+  bytes: number;
   ready: Promise<void>;
   release(): void;
   closed: boolean;
@@ -53,6 +68,8 @@ interface Entry {
   key: string;
   layer: "day" | "night";
   id: TileId;
+  /** The source the tile was asked of. */
+  source: EarthMapSource;
   asset: Asset;
   ready: boolean;
   integrated: boolean;
@@ -75,10 +92,15 @@ export interface TileShared {
   extra?: Record<string, Uniform<unknown>>;
 }
 
+/** The map source each layer is drawn from now, or none: read at every draw. A layer's tiles come from its source alone, and the night tiles go with day tiles (no day source, no tiles). */
+export type TileSources = { day?: EarthMapSource; night?: EarthMapSource };
+
 export interface TileSetDeps {
   assets: AssetCache;
-  /** Where the tile set is, ending with a slash, or `undefined` for none. Read at every draw. */
-  base: () => string | undefined;
+  /** The sources of the layers now (the data door's: a source a page added, else the `tiles` folder). Read at every draw; the objects are the same while nothing changed. */
+  sources: () => TileSources;
+  /** The bytes of decoded tiles held, all sources together: `TILE_BUDGET` where left out. */
+  budgetBytes?: number;
   /** The widest picture this device holds: tiles are only used where the day picture reaches 4096. */
   cap: () => number;
   /** Ask for one draw. */
@@ -103,6 +125,11 @@ export interface TileStats {
   failed: number;
   /** Tile fetches made. */
   requested: number;
+  /** The bytes of decoded tiles held, which never pass the budget except by tiles the view needs now, and tiles that arrived and did not fit, which are not held. */
+  heldBytes: number;
+  refused: number;
+  /** The tiles in view that came from each source, by the source's id: what a credit line counts. */
+  used: Record<string, number>;
 }
 
 export interface TileSet {
@@ -112,6 +139,32 @@ export interface TileSet {
 }
 
 const keyOf = (layer: string, id: TileId): string => `${layer}/${id.level}/${id.col}/${id.row}`;
+
+const tags = new WeakMap<object, number>();
+let tagged = 0;
+/** A name for a source object, so that two sources with the same id never share a tile in the page's cache. */
+const tagOf = (source: object): number => {
+  let tag = tags.get(source);
+  if (tag === undefined) tags.set(source, (tag = tagged += 1));
+  return tag;
+};
+
+/** The levels a source says it has, kept to those the pyramid's rule allows: a tile's place on the sphere would be wrong otherwise. */
+function cleanLayer(given: unknown): TileLayer | undefined {
+  if (typeof given !== "object" || given === null) return undefined;
+  const levels: TileLayer["levels"] = [];
+  for (const entry of (given as { levels?: unknown }).levels instanceof Array ? ((given as { levels: unknown[] }).levels as { level?: unknown; width?: unknown }[]) : []) {
+    if (typeof entry?.level !== "number" || !Number.isInteger(entry.level) || entry.level < 0 || entry.level > 8 || entry.width !== 1024 * 2 ** entry.level) continue;
+    levels.push({ level: entry.level, width: entry.width });
+  }
+  return levels.length > 0 ? { tileSize: 512, levels: levels.sort((a, b) => a.level - b.level) } : undefined;
+}
+
+const isTile = (tile: unknown): tile is { image: object; width: number; height: number } => {
+  if (typeof tile !== "object" || tile === null) return false;
+  const one = tile as { width?: unknown; height?: unknown; image?: unknown };
+  return typeof one.width === "number" && one.width > 0 && Number.isFinite(one.width) && typeof one.height === "number" && one.height > 0 && Number.isFinite(one.height) && typeof one.image === "object" && one.image !== null;
+};
 
 /** A 0 to 1 grid, the same for every tile: the vertex shader puts it on the sphere. */
 function patch(three: Three): THREE.BufferGeometry {
@@ -146,28 +199,37 @@ function patch(three: Three): THREE.BufferGeometry {
 /** Make the set that puts tiles on `parent`, a group that turns with the Earth. */
 export function createTileSet(three: Three, parent: THREE.Group, shared: TileShared, deps: TileSetDeps): TileSet {
   const limit = deps.limit ?? TILE_LIMIT;
+  const budget = deps.budgetBytes ?? TILE_BUDGET;
   const clock = deps.now ?? (() => performance.now());
   const geometry = patch(three);
   const entries = new Map<string, Entry>();
   const failed = new Map<string, number>();
   let queue: { layer: "day" | "night"; id: TileId }[] = [];
   let wantedKeys = new Set<string>();
-  let current: string | undefined;
+  /** The sources the levels were read for. */
+  let current: TileSources = {};
+  /** Counts the times the sources changed: an answer for an earlier set of them is let go. */
+  let generation = 0;
+  let refused = 0;
   let manifest: { layers: Record<string, TileLayer> } | null | undefined;
   let manifestFetch: AbortController | undefined;
   let inFlight = 0;
   let requested = 0;
   let wantedLevel: number | null = null;
   let shown = 0;
+  /** The tiles in view from each source, by the source's id, as of the last placing. */
+  let used = new Map<string, number>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: { camera: TileCamera } | undefined;
   let disposed = false;
   const baseDay = TIERS.day[TIERS.day.length - 1]!;
   const baseNight = TIERS.night[TIERS.night.length - 1]!;
 
-  const take = (layer: "day" | "night", id: TileId, base: string): Asset =>
+  const accountOf = (source: EarthMapSource, key: string): string => `chikyu-earth:tile:${tagOf(source)}:${key}`;
+
+  const take = (layer: "day" | "night", id: TileId, source: EarthMapSource): Asset =>
     deps.assets.acquire<Asset>(
-      `chikyu-earth:tile:${base}${keyOf(layer, id)}`,
+      accountOf(source, keyOf(layer, id)),
       () => {
         const texture = new three.Texture();
         texture.wrapS = three.ClampToEdgeWrapping;
@@ -176,17 +238,31 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         texture.magFilter = three.LinearFilter;
         texture.anisotropy = 8;
         const controller = new AbortController();
-        const made: Asset = { texture, closed: false, ready: Promise.resolve(), release: () => undefined };
-        made.ready = fetch(`${base}${keyOf(layer, id)}.webp`, { signal: controller.signal })
-          .then((response) => {
-            if (!response.ok) throw new Error(`${keyOf(layer, id)}: ${response.status}`);
-            return response.blob();
+        const made: Asset = { texture, bytes: 0, closed: false, ready: Promise.resolve(), release: () => undefined };
+        made.ready = Promise.resolve()
+          .then(() => {
+            // the source names its tiles: the one for this place is the key of the pyramid's tile that matches
+            const key = source.need({ ...tilePlace(id), layer }, 1024 * 2 ** id.level).find((one) => {
+              const parts = tileKeyParts(one);
+              return parts !== undefined && parts.level === id.level && parts.col === id.col && parts.row === id.row;
+            });
+            if (key === undefined) throw new Error(`${keyOf(layer, id)}: the source "${source.info.id}" names no tile for this place`);
+            return source.load(key, controller.signal);
           })
-          .then((blob) => createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" }))
-          .then((bitmap) => {
-            if (made.closed) bitmap.close();
+          .then((tile) => {
+            if (!isTile(tile)) {
+              (tile as { image?: { close?: () => void } } | null | undefined)?.image?.close?.();
+              throw new TypeError(`${keyOf(layer, id)}: the source "${source.info.id}" gave something that is not a picture`);
+            }
+            const bytes = source.bytes(tile);
+            if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) {
+              (tile.image as { close?: () => void }).close?.();
+              throw new TypeError(`${keyOf(layer, id)}: the source "${source.info.id}" gave a tile with a size that is not a number`);
+            }
+            if (made.closed) (tile.image as { close?: () => void }).close?.();
             else {
-              texture.image = bitmap;
+              made.bytes = bytes;
+              texture.image = tile.image;
               texture.needsUpdate = true;
             }
           });
@@ -208,7 +284,14 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
       parent.remove(entry.mesh);
       (entry.mesh.material as THREE.ShaderMaterial).dispose();
     }
-    if (current !== undefined) deps.assets.release(`chikyu-earth:tile:${current}${entry.key}`);
+    deps.assets.release(accountOf(entry.source, entry.key));
+  };
+
+  /** The bytes of the tiles that have arrived and are held. */
+  const heldBytes = (): number => {
+    let sum = 0;
+    for (const entry of entries.values()) if (entry.ready) sum += entry.asset.bytes;
+    return sum;
   };
 
   const reset = (): void => {
@@ -221,38 +304,46 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
     manifest = undefined;
     wantedLevel = null;
     shown = 0;
+    used = new Map();
+    generation += 1;
   };
 
-  const readManifest = (base: string): void => {
+  /** Asks each layer's source for its levels, once, when the sources change: a source that has no `levels` has `DEFAULT_LEVELS`, and one that cannot say leaves the layer without tiles. */
+  const readManifest = (set: TileSources): void => {
     manifest = undefined;
     const controller = new AbortController();
     manifestFetch = controller;
-    fetch(`${base}manifest.json`, { signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : undefined))
-      .then(
-        (json: unknown) => {
-          if (disposed || current !== base || manifestFetch !== controller) return;
-          const read = parseManifest(json);
-          manifest = read ?? null;
-          if (read) {
-            deps.onManifest?.(Object.fromEntries(Object.entries(read.layers).map(([name, layer]) => [name, layer.levels[layer.levels.length - 1]!.width])));
-            deps.invalidate();
-          }
-        },
-        () => {
-          if (!disposed && current === base && manifestFetch === controller) manifest = null;
-        },
-      );
+    const turn = generation;
+    const ask = async (layer: "day" | "night"): Promise<TileLayer | undefined> => {
+      const source = set[layer];
+      if (source === undefined) return undefined;
+      try {
+        return cleanLayer(source.levels === undefined ? DEFAULT_LEVELS : await source.levels(layer, controller.signal));
+      } catch {
+        return undefined;
+      }
+    };
+    void Promise.all([ask("day"), ask("night")]).then(([day, night]) => {
+      if (disposed || generation !== turn || manifestFetch !== controller) return;
+      if (day === undefined) {
+        manifest = null;
+        return;
+      }
+      const layers: Record<string, TileLayer> = night === undefined ? { day } : { day, night };
+      manifest = { layers };
+      deps.onManifest?.(Object.fromEntries(Object.entries(layers).map(([name, layer]) => [name, layer.levels[layer.levels.length - 1]!.width])));
+      deps.invalidate();
+    });
   };
 
   const pump = (): void => {
-    const base = current;
-    if (base === undefined) return;
     while (inFlight < IN_FLIGHT && queue.length > 0) {
       const next = queue.shift()!;
       const key = keyOf(next.layer, next.id);
       if (entries.has(key)) continue;
-      const entry: Entry = { key, layer: next.layer, id: next.id, asset: take(next.layer, next.id, base), ready: false, integrated: false, lastWanted: clock() };
+      const source = current[next.layer];
+      if (source === undefined) continue;
+      const entry: Entry = { key, layer: next.layer, id: next.id, source, asset: take(next.layer, next.id, source), ready: false, integrated: false, lastWanted: clock() };
       entries.set(key, entry);
       inFlight += 1;
       requested += 1;
@@ -264,7 +355,13 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         () => {
           if (entries.get(key) === entry) {
             entry.ready = true;
-            deps.invalidate();
+            // a tile that does not fit under the budget even when everything not needed is let go is refused, and counted: the view draws what it holds
+            if (heldBytes() > budget) sweep(true);
+            if (heldBytes() > budget) {
+              refused += 1;
+              failed.set(key, clock());
+              drop(entry);
+            } else deps.invalidate();
           }
           settled();
         },
@@ -376,6 +473,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
 
   const place = (camera: TileCamera, visible: Map<number, Set<number>>): void => {
     shown = 0;
+    used = new Map();
+    const nightBy = new Map<THREE.Texture, Entry>();
+    for (const entry of entries.values()) if (entry.layer === "night" && entry.integrated && entry.ready) nightBy.set(entry.asset.texture, entry);
     for (const entry of entries.values()) {
       if (!entry.mesh) continue;
       let set = visible.get(entry.id.level);
@@ -384,17 +484,24 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         visible.set(entry.id.level, set);
       }
       entry.mesh.visible = set.has(entry.id.row * tileColumns(entry.id.level) + entry.id.col);
-      if (entry.mesh.visible) shown += 1;
+      if (entry.mesh.visible) {
+        shown += 1;
+        used.set(entry.source.info.id, (used.get(entry.source.info.id) ?? 0) + 1);
+        // a night tile is in view when a day tile in view reads it
+        const dark = entry.nightMap?.value ? nightBy.get(entry.nightMap.value) : undefined;
+        if (dark) used.set(dark.source.info.id, (used.get(dark.source.info.id) ?? 0) + 1);
+      }
     }
   };
 
-  /** Free what is no longer wanted: past its time, or the oldest first when over the limit. True when something on the sphere went. */
-  const sweep = (): boolean => {
+  /** Free what is no longer wanted: past its time, or the oldest first when over the limit or the budget (`all`: everything not wanted, for room). True when something on the sphere went. */
+  const sweep = (all = false): boolean => {
     const now = clock();
     let changed = false;
     const unwanted = [...entries.values()].filter((entry) => !wantedKeys.has(entry.key)).sort((a, b) => a.lastWanted - b.lastWanted);
     for (const entry of unwanted) {
-      if (now - entry.lastWanted < TILE_KEEP_MS && entries.size <= limit) continue;
+      if (!all && now - entry.lastWanted < TILE_KEEP_MS && entries.size <= limit && heldBytes() <= budget) continue;
+      if (all && heldBytes() <= budget) break;
       if (entry.mesh?.visible || entry.integrated) changed = true;
       drop(entry);
     }
@@ -430,26 +537,30 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         loading: [...entries.values()].filter((entry) => !entry.ready).length,
         failed: failed.size,
         requested,
+        heldBytes: heldBytes(),
+        refused,
+        used: Object.fromEntries(used),
       };
     },
     sync(camera, sun, night, ratio) {
       if (disposed) return;
-      const base = deps.base();
-      if (base !== current) {
+      const now = deps.sources();
+      if (now.day !== current.day || now.night !== current.night) {
         reset();
-        current = base;
-        if (base !== undefined) readManifest(base);
+        current = { ...(now.day ? { day: now.day } : {}), ...(now.night ? { night: now.night } : {}) };
+        if (current.day !== undefined) readManifest(current);
       }
       last = { camera };
-      if (current === undefined || !manifest) return;
-      const now = clock();
+      if (current.day === undefined || !manifest) return;
+      const at = clock();
       const wanted = choose(camera, sun, night, ratio);
       wantedLevel = wanted.level;
       wantedKeys = new Set([...wanted.day.map((tile) => keyOf("day", tile)), ...wanted.night.map((id) => keyOf("night", id))]);
-      for (const [key, when] of failed) if (now - when >= RETRY_MS) failed.delete(key);
+      // a tile that failed is asked for again only after it has left the view and come back (the view changed), never on a timer and never while it stays in view: at rest the door sends nothing
+      for (const key of [...failed.keys()]) if (!wantedKeys.has(key)) failed.delete(key);
       for (const key of wantedKeys) {
         const entry = entries.get(key);
-        if (entry) entry.lastWanted = now;
+        if (entry) entry.lastWanted = at;
       }
       queue = [...wanted.day.map((tile) => ({ layer: "day" as const, id: { level: tile.level, col: tile.col, row: tile.row } })), ...wanted.night.map((id) => ({ layer: "night" as const, id }))].filter(
         (item) => !failed.has(keyOf(item.layer, item.id)) && !entries.has(keyOf(item.layer, item.id)),
@@ -481,7 +592,7 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
       clearTimeout(timer);
       timer = undefined;
       reset();
-      current = undefined;
+      current = {};
       geometry.dispose();
     },
   };

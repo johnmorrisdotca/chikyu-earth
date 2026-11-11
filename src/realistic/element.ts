@@ -13,13 +13,17 @@ import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/type
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
+import type { Credit, DataSource } from "../data-door.ts";
+import { createDoorHost, type DoorHost } from "../door/host.ts";
+import { folderSource } from "../door/map.ts";
+import { ownCredit } from "../door/own.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
 export type { CameraMode };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
-import type { TileStats } from "./tile-set.ts";
+import type { TileSources, TileStats } from "./tile-set.ts";
 
 type EarthLayer = Extract<Layer, "day" | "night" | "clouds" | "water">;
 
@@ -152,7 +156,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", "air-thickness", "air-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -169,6 +173,16 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #state: EarthState = "loading";
   #tiers: Record<EarthLayer, number> = { day: TIERS.day[0]!, night: TIERS.night[0]!, clouds: TIERS.clouds[0]!, water: TIERS.water[0]! };
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
+  /** The data door: the outside sources of map this Earth draws from, and whose data is on the screen. */
+  #door: DoorHost = createDoorHost(
+    this,
+    {
+      own: () => this.#ownCredits(),
+      used: () => new Map(Object.entries(this.#model.tiles?.stats.used ?? {})),
+    },
+    { kinds: ["tiles"] },
+    () => this.#gate?.soon(),
+  );
   #stage: HTMLElement | undefined;
   #overlay: HTMLElement | undefined;
   #pose: OverlayPose | null = null;
@@ -198,6 +212,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.camera = readCamera(this.getAttribute("camera"));
     this.#model.cloudDrift = readDrift(this.getAttribute("cloud-drift"));
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
+    this.#door.book.ownOnly(this.getAttribute("data") === "own");
     this.#model.speed = this.speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
@@ -237,17 +252,19 @@ export class ChikyuEarthRealistic extends HTMLElement {
       assets: taken.renderer.assets,
       textureBase: () => this.#textureBase(),
       cap: () => this.#textureCap(),
-      tiles: () => this.tiles ?? undefined,
+      sources: () => this.#tileSources(),
       onTiles: (layers) => {
         if (!this.hasAttribute("zoom-max") || this.getAttribute("zoom-max") === this.#reach) {
           this.#reach = TILES_ZOOM_MAX;
-          this.setAttribute("zoom-max", TILES_ZOOM_MAX);
+          // not written again when it is already there: the view controls take a written attribute as a new limit and bring the view back to fit, which a change of source must not do to a reader's zoom
+          if (this.getAttribute("zoom-max") !== TILES_ZOOM_MAX) this.setAttribute("zoom-max", TILES_ZOOM_MAX);
         }
         this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } }));
       },
       air: () => airFor(this.getAttribute("air")),
       invalidate: () => this.#gate?.soon(),
       onDraw: () => this.#gate?.drawn(),
+      onTiled: () => this.#door.announce(),
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
@@ -309,6 +326,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
     else if (name === "tiles") this.#gate?.soon();
+    else if (name === "data") this.#door.book.ownOnly(value === "own");
     else if (name === "camera") this.camera = readCamera(value);
     else if (name === "cloud-drift") {
       this.#model.cloudDrift = readDrift(value);
@@ -379,6 +397,56 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
   get controller(): ViewController | undefined {
     return this.#hands?.controller;
+  }
+
+  /** The map source of each layer now: the last one a page added for it, else the folder of the `tiles` attribute. */
+  #tileSources(): TileSources {
+    const folder = this.tiles === null ? undefined : folderSource(this.tiles);
+    const day = this.#door.book.mapSources("day")[0] ?? folder;
+    const night = this.#door.book.mapSources("night")[0] ?? folder;
+    return { ...(day ? { day } : {}), ...(night ? { night } : {}) };
+  }
+
+  /** The package's own credits for the last drawn frame: its pictures while it is drawn, and its finer tiles when a window of them is in view (unless a page added the folder itself, which the door counts). */
+  #ownCredits(): Credit[] {
+    const used = this.#model.tiles?.stats.used ?? {};
+    const own: Credit[] = [ownCredit("chikyu-pictures", this.#state === "live" ? 1 : 0)];
+    if (this.#door.book.get("chikyu-tiles") === undefined) own.push(ownCredit("chikyu-tiles", used["chikyu-tiles"] ?? 0));
+    return own;
+  }
+
+  /**
+   * The outside sources of map this Earth draws from (the data door): each carries its own licence and credit, and a map source for the `day` or `night` layer takes the place of the folder of tiles for that layer. Assign a list to
+   * replace them; a source that is refused (an empty credit, no licence, a clashing id, a kind the Earth does not draw, a layer it does not know) throws a `TypeError` and nothing changes. A property, never an attribute: data is not text.
+   */
+  get sources(): readonly DataSource[] {
+    return this.#door.sources();
+  }
+  set sources(list: readonly unknown[]) {
+    this.#door.setSources(list);
+  }
+
+  /** Adds an outside source of map: checked at once (a `TypeError` for one that is refused), and the Earth draws from it. Returns the function that takes it away. */
+  addSource(source: unknown): () => void {
+    return this.#door.book.addSource(source);
+  }
+
+  /** Takes a source away by its id: its loads stop, its tiles are freed, its credit goes. Returns whether there was one. */
+  removeSource(id: string): boolean {
+    return this.#door.book.removeSource(id);
+  }
+
+  /** Switches a source off (`false`) or on again, and keeps it in the Earth: a layers panel's switch. The attribute `data="own"` ignores every outside source at once. */
+  enableSource(id: string, on: boolean): void {
+    this.#door.book.enableSource(id, on);
+  }
+
+  /**
+   * Whose data is in the last drawn frame: the package's own first (its pictures; its finer tiles while a window of them is in view) and then each outside source that gave a tile, with how many (`used`). `creditLine(credits, "en" | "ja")`
+   * from `@johnmorrisdotca/chikyu-earth/door` writes them as a line with the licences. `chikyu-creditschange` fires when this set changes (not at each frame), with `detail: { credits }`.
+   */
+  credits(): Credit[] {
+    return this.#door.credits();
   }
 
   /** Where the finer map tiles are served from (a folder with `manifest.json`), or `null` for none; the attribute `tiles`. The Earth loads only the tiles in view, over its own pictures. */
@@ -517,7 +585,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       state: this.#state,
       tiers: { ...this.#tiers },
       satellites: this.#satelliteStats(),
-      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0 },
+      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {} },
       draws: stats?.draws ?? 0,
       contexts: stats?.contexts ?? 0,
       canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },

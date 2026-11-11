@@ -3,6 +3,9 @@
 import { adoptStyles } from "../adopt.ts";
 import { fetchElements } from "../satellites/source.ts";
 import type { ElementSet } from "../satellites/types.ts";
+import { creditLine, type Credit, type DataSource } from "../data-door.ts";
+import { createDoorHost, type DoorHost } from "../door/host.ts";
+import { mergeElementSets } from "../door/elements.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../satellites/limits.ts";
 import { findPasses, passPath, type PassPoint, type SatellitePass, type SkyName } from "./passes.ts";
 import { skySvg, type SkyLabels } from "./sky.ts";
@@ -183,9 +186,15 @@ const number = (value: string | null, fallback: number): number => (value === nu
  * ```
  */
 export class ChikyuPasses extends HTMLElement {
-  static observedAttributes = ["latitude", "longitude", "height", "days", "show", "sky", "satellite", "from", "min-altitude", "lang", "time-zone", "utc-offset", "selected", "elements-src", "credit"];
+  static observedAttributes = ["latitude", "longitude", "height", "days", "show", "sky", "satellite", "from", "min-altitude", "lang", "time-zone", "utc-offset", "selected", "elements-src", "credit", "data"];
 
   #sets: ElementSet[] = [];
+  /** The element sets the passes are worked out from: the page's own (`elements`, `elements-src`) and those of the sources of the data door, one set a satellite, the newest epoch winning. */
+  #all: ElementSet[] = [];
+  /** Which source each satellite's set came from (`null`: the page's own sets), by NORAD number. */
+  #origin = new Map<number, string | null>();
+  /** The data door: the outside sources of orbital elements, and whose data is on the screen. */
+  #door: DoorHost = createDoorHost(this, { own: () => [], used: () => this.#used() }, { kinds: ["records"] }, () => this.#schedule());
   #passes: SatellitePass[] = [];
   #chosen: SatellitePass | undefined;
   #problem = "";
@@ -205,6 +214,53 @@ export class ChikyuPasses extends HTMLElement {
     this.#waiting = false;
     this.#problem = "";
     this.#schedule();
+  }
+
+  /**
+   * The outside sources of orbital elements (the data door): each carries its own licence and credit (`elementsFrom` makes one of an address), is read once when it is added, and its sets are worked out with the page's own.
+   * Assign a list to replace them; a source that is refused throws a `TypeError` and nothing changes. A property, never an attribute: data is not text.
+   */
+  get sources(): readonly DataSource[] {
+    return this.#door.sources();
+  }
+  set sources(list: readonly unknown[]) {
+    this.#door.setSources(list);
+  }
+
+  /** Adds a source of orbital elements: checked at once (a `TypeError` for one that is refused). Returns the function that takes it away. */
+  addSource(source: unknown): () => void {
+    return this.#door.book.addSource(source);
+  }
+
+  /** Takes a source away by its id. Returns whether there was one. */
+  removeSource(id: string): boolean {
+    return this.#door.book.removeSource(id);
+  }
+
+  /** Switches a source off (`false`) or on again, and keeps it in the element. The attribute `data="own"` ignores every outside source at once. */
+  enableSource(id: string, on: boolean): void {
+    this.#door.book.enableSource(id, on);
+  }
+
+  /**
+   * Whose orbit data is in the list now: each source of the data door that gave a satellite to a pass listed, with how many satellites (`used`). `creditLine(credits, "en" | "ja")` from `@johnmorrisdotca/chikyu-earth/door` writes them
+   * as a line with the licences, and the element shows that line under the list (after the text of the `credit` attribute, which stays). `chikyu-creditschange` fires when this set changes, with `detail: { credits }`.
+   */
+  credits(): Credit[] {
+    return this.#door.credits();
+  }
+
+  /** How many satellites of the passes listed came from each source of the door, by id. */
+  #used(): Map<string, number> {
+    const seen = new Set<number>();
+    const used = new Map<string, number>();
+    for (const pass of this.#passes) {
+      if (seen.has(pass.noradId)) continue;
+      seen.add(pass.noradId);
+      const id = this.#origin.get(pass.noradId);
+      if (id !== null && id !== undefined) used.set(id, (used.get(id) ?? 0) + 1);
+    }
+    return used;
   }
 
   /** The passes listed now, earliest first. */
@@ -236,12 +292,14 @@ export class ChikyuPasses extends HTMLElement {
   connectedCallback(): void {
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
     adoptStyles(root, CSS, this.getAttribute("nonce") ?? "");
+    this.#door.book.ownOnly(this.getAttribute("data") === "own");
     this.#load();
     this.#schedule();
   }
 
   attributeChangedCallback(name: string): void {
     if (!this.isConnected) return;
+    if (name === "data") this.#door.book.ownOnly(this.getAttribute("data") === "own");
     if (name === "elements-src") this.#load();
     this.#schedule();
   }
@@ -343,8 +401,13 @@ export class ChikyuPasses extends HTMLElement {
       holder.innerHTML = `<p class="empty" role="status">${escape(say("unreadable", { why: this.#problem }))}</p>`;
       return;
     }
+    const lists = this.#door.book.elementLists();
+    // with no source the page's own sets are used as they are, every one
+    const merged = lists.length === 0 ? this.#sets.map((set) => ({ set, id: null })) : mergeElementSets([{ id: null, sets: this.#sets }, ...lists]);
+    this.#all = merged.map((one) => one.set);
+    this.#origin = new Map(merged.map((one) => [one.set.NORAD_CAT_ID, one.id]));
     const chosenSet = this.getAttribute("satellite");
-    const sets = chosenSet ? this.#sets.filter((one) => String(one.NORAD_CAT_ID) === chosenSet) : this.#sets;
+    const sets = chosenSet ? this.#all.filter((one) => String(one.NORAD_CAT_ID) === chosenSet) : this.#all;
     if (this.#waiting && sets.length === 0) {
       holder.innerHTML = `<p class="empty" role="status">${escape(say("waiting"))}</p>`;
       return;
@@ -382,7 +445,8 @@ export class ChikyuPasses extends HTMLElement {
     for (const pass of this.#passes) if (!ages.has(pass.noradId)) ages.set(pass.noradId, pass);
     const oldest = Math.max(0, ...[...ages.values()].map((one) => one.elementAgeDays));
     const note = `<p class="note">${escape(f.zone)} ${escape(say("reboost"))}${oldest > DEFAULT_DIM_AFTER_DAYS ? ` ${escape(say("stale"))}${lang === "ja" ? "。" : "."}` : ""}</p>`;
-    const credit = this.getAttribute("credit");
+    // the `credit` attribute stays as the page's own words; the sources of the door add their credit line, with the licences, after it
+    const credit = [this.getAttribute("credit") ?? "", creditLine(this.#door.credits(), lang)].filter((part) => part.trim() !== "").join(" ");
     const list = this.#passes.length === 0 ? `<p class="empty" role="status">${escape(say(all ? "noneAll" : "none", { days }))}</p>` : `<ul class="list" aria-label="${escape(say("list"))}">${rows}</ul>`;
     holder.innerHTML = `${note}<div class="layout"><div>${list}</div><div class="detail">${this.#chosen ? this.#detail(this.#chosen, f, say, lang) : ""}</div></div>${credit ? `<p class="credit">${escape(credit)}</p>` : ""}`;
     this.dispatchEvent(new CustomEvent("chikyu-passes", { detail: { passes: this.#passes, ageDays: oldest }, bubbles: true, composed: true }));
@@ -390,12 +454,13 @@ export class ChikyuPasses extends HTMLElement {
     const shown = this.#chosen?.highest.ms;
     if (shown !== this.#announced) {
       this.#announced = shown;
-      this.dispatchEvent(new CustomEvent("chikyu-pass-select", { detail: { pass: this.#chosen, set: this.#chosen ? this.#sets.find((one) => one.NORAD_CAT_ID === this.#chosen!.noradId) : undefined }, bubbles: true, composed: true }));
+      this.dispatchEvent(new CustomEvent("chikyu-pass-select", { detail: { pass: this.#chosen, set: this.#chosen ? this.#all.find((one) => one.NORAD_CAT_ID === this.#chosen!.noradId) : undefined }, bubbles: true, composed: true }));
     }
+    this.#door.announce();
   }
 
   #detail(pass: SatellitePass, f: Formats, say: (key: string, values?: Record<string, string | number>) => string, lang: Lang): string {
-    const set = this.#sets.find((one) => one.NORAD_CAT_ID === pass.noradId);
+    const set = this.#all.find((one) => one.NORAD_CAT_ID === pass.noradId);
     const place = { latitude: number(this.getAttribute("latitude"), 0), longitude: number(this.getAttribute("longitude"), 0), heightM: number(this.getAttribute("height"), 0) };
     const short = SHORT[pass.noradId]?.[lang] ?? pass.name;
     const labels: SkyLabels = { north: say("skyN"), east: say("skyE"), south: say("skyS"), west: say("skyW"), start: say("skyStart"), highest: say("skyHighest"), end: say("skyEnd"), zenith: say("skyZenith") };

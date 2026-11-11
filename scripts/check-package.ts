@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -49,6 +49,12 @@ const meteors = await import(new URL("../dist/meteors/index.js", import.meta.url
 const geminids = meteors.activeShowers(Date.UTC(2026, 11, 14, 8))[0];
 if (meteors.METEOR_SHOWERS.length !== 37 || geminids?.shower.code !== "GEM" || !(geminids.zhr > 100) || meteors.streaksPerSecond(8) !== 2.5) throw new Error("the meteors are off");
 console.log("meteors ok");
+
+// the data door: sources, credits and the package's own data import with no browser and no dependency
+const door = await import(new URL("../dist/door/index.js", import.meta.url).href);
+const doorCredit = door.creditLine([door.ownCredit("chikyu-tiles", 3)], "en");
+if (door.OWN_SOURCES.length !== 2 || !doorCredit.includes("NASA Earth Observatory") || !doorCredit.includes("Public domain") || door.earthTiles("/tiles/").need({ lonMin: -180, lonMax: -170, latMin: 80, latMax: 90, layer: "day" }, 8192).join() !== "day/3/0/0") throw new Error("the data door is off");
+console.log("door ok");
 
 const sheets = await import(new URL("../dist/sheets/index.js", import.meta.url).href);
 const room = { widthMm: 184.6, heightMm: 170 };

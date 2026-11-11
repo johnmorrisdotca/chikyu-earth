@@ -234,3 +234,50 @@ test("the ground-track globe has kazoku-ui's view controls with their zoom reado
     await expect.poll(async () => (await page.locator("chikyu-passes .dome svg").boundingBox())!.width).toBeGreaterThan(narrow);
   }
 });
+
+test("the data door: a source of orbit data a page hands in makes the list, its credit is under the list with its licence, and taking it away empties the list", async ({ page }) => {
+  await page.goto(PAGE);
+  await expect(rows(page).first()).toBeVisible();
+  const listing = async (): Promise<number> => rows(page).count();
+  const credits = (): Promise<{ id: string; own: boolean; used: number }[]> =>
+    page.locator("chikyu-passes").evaluate((el) => (el as unknown as { credits(): { source: { id: string }; own: boolean; used: number }[] }).credits().map((c) => ({ id: c.source.id, own: c.own, used: c.used })));
+  expect(await credits(), "no outside source: no credit").toEqual([]);
+  const own = await listing();
+  // the page's own sets become the records of a source of its own, and the element is left with none
+  await page.locator("chikyu-passes").evaluate((el) => {
+    const passes = el as unknown as { elements: unknown[]; addSource(s: unknown): void };
+    const sets = [...passes.elements];
+    Reflect.set(window, "__events", [] as unknown[]);
+    el.addEventListener("chikyu-creditschange", (event) => (Reflect.get(window, "__events") as unknown[]).push((event as CustomEvent).detail.credits.map((c: { source: { id: string } }) => c.source.id)));
+    passes.elements = [];
+    passes.addSource({
+      kind: "records",
+      info: {
+        id: "mine",
+        name: { en: "My orbits", ja: "私の軌道" },
+        credit: { en: "Orbit data: mine, A. Person (2026)", ja: "軌道データ：私の（A. Person、2026年）" },
+        licence: { name: "CC BY-NC 4.0", url: "https://creativecommons.org/licenses/by-nc/4.0/", nonCommercial: true },
+        url: "https://example.org/mine",
+        retrieved: "2026-11-11",
+      },
+      records: () => sets,
+    });
+  });
+  await expect.poll(listing, { timeout: MADE, message: "the list is made from the source's sets" }).toBe(own);
+  await expect.poll(async () => (await credits()).map((c) => c.id), { timeout: MADE }).toEqual(["mine"]);
+  expect((await credits())[0]!.used, "the satellites the list shows").toBeGreaterThan(0);
+  await expect(page.locator("chikyu-passes .credit")).toContainText("Orbit data: mine, A. Person (2026) (CC BY-NC 4.0; non-commercial).");
+  expect(await page.evaluate(() => Reflect.get(window, "__events"))).toEqual([["mine"]]);
+  // switched off, the sets go and so does the credit; the event says so once
+  await page.locator("chikyu-passes").evaluate((el) => (el as unknown as { enableSource(id: string, on: boolean): void }).enableSource("mine", false));
+  await expect.poll(listing, { timeout: MADE, message: "no sets, no passes" }).toBe(0);
+  await expect.poll(async () => (await credits()).length).toBe(0);
+  expect(await page.evaluate(() => Reflect.get(window, "__events"))).toEqual([["mine"], []]);
+  // and back on
+  await page.locator("chikyu-passes").evaluate((el) => (el as unknown as { enableSource(id: string, on: boolean): void }).enableSource("mine", true));
+  await expect.poll(listing, { timeout: MADE }).toBe(own);
+  // `data="own"` ignores it at once
+  await page.locator("chikyu-passes").evaluate((el) => el.setAttribute("data", "own"));
+  await expect.poll(listing, { timeout: MADE }).toBe(0);
+  expect(await credits()).toEqual([]);
+});

@@ -198,6 +198,57 @@ import { activeShowers } from "@johnmorrisdotca/chikyu-earth/meteors";
 for (const { shower, zhr } of activeShowers(Date.UTC(2026, 11, 14, 8))) console.log(`${shower.name}: ${zhr.toFixed(1)} an hour`);
 ```
 
+## Outside data: the data door
+
+The package draws; you bring the data. `@johnmorrisdotca/chikyu-earth/door` takes a finer map of the Earth, or a list of satellites' orbit data, as a **source**: a small object that carries its own licence and credit, so the screen can always say whose data it shows. With no source nothing changes: the Earth is drawn from the package's own pictures and tiles (`OWN_SOURCES`, written from `NOTICE.md`, never non-commercial or share-alike). A source of yours may be either, and the credit line prints that beside the licence.
+
+```js
+import { createSourceBook, creditLine, mapKeys, mergeElementSets, ownCredit } from "@johnmorrisdotca/chikyu-earth/door";
+
+// A map of your own: here a day picture with no pictures behind it, only the keys it would answer. A real one fetches tiles, and says whose they are and under what licence.
+const info = (id, name) => ({
+  id,
+  name: { en: name, ja: "私のデータ" },
+  credit: { en: `${name}, A. Person (2026)`, ja: `私のデータ（A. Person、2026年）` },
+  licence: { name: "CC BY-NC 4.0", url: "https://creativecommons.org/licenses/by-nc/4.0/", nonCommercial: true },
+  url: "https://example.org/mine",
+  retrieved: "2026-11-11",
+});
+const myMap = {
+  kind: "tiles",
+  layer: "day",
+  info: info("my-map", "My map"),
+  need: (place, detail) => mapKeys(place, detail, undefined, "mine/"),
+  load: async () => ({ width: 512, height: 512, image: { width: 512, height: 512 } }),
+  bytes: (tile) => tile.width * tile.height * 4,
+};
+
+// An element keeps a book like this one: `earth.addSource(myMap)` is `book.addSource(myMap)`, and `passes.addSource(mine)` is the same for orbit data.
+const book = createSourceBook();
+book.addSource(myMap);
+const mine = {
+  kind: "records",
+  info: info("my-orbits", "My orbits"),
+  records: () => [
+    { OBJECT_NAME: "ISS (ZARYA)", EPOCH: "2026-11-10T00:00:00", MEAN_MOTION: 15.49, ECCENTRICITY: 0.0007, INCLINATION: 51.6, RA_OF_ASC_NODE: 335.9, ARG_OF_PERICENTER: 339.3, MEAN_ANOMALY: 20.6, NORAD_CAT_ID: 25544, BSTAR: 0.0001, MEAN_MOTION_DOT: 0.0001, MEAN_MOTION_DDOT: 0 },
+    { OBJECT_NAME: "Broken", EPOCH: "2026-11-10T00:00:00", MEAN_MOTION: Number.NaN, ECCENTRICITY: 0, INCLINATION: 0, RA_OF_ASC_NODE: 0, ARG_OF_PERICENTER: 0, MEAN_ANOMALY: 0, NORAD_CAT_ID: 1, BSTAR: 0, MEAN_MOTION_DOT: 0, MEAN_MOTION_DDOT: 0 },
+  ],
+};
+book.addSource(mine);
+await book.ready();
+const sets = mergeElementSets(book.elementLists());
+console.log(`${sets.length} element set kept, ${book.stats().records["my-orbits"].skipped} left out: ${sets[0].set.OBJECT_NAME}`);
+console.log(`the day map answers ${book.mapSources("day")[0].need({ lonMin: -10, lonMax: 10, latMin: -5, latMax: 5 }, 8192).join(", ")}`);
+const credits = [ownCredit("chikyu-pictures", 1), { source: myMap.info, own: false, used: 6 }];
+console.log(creditLine(credits, "en"));
+console.log(creditLine(credits, "ja"));
+
+book.enableSource("my-map", false);
+console.log(`${book.mapSources("day").length} day maps with the source off`);
+```
+
+`<chikyu-earth-realistic>` takes map sources and `<chikyu-passes>` takes orbit data: `sources`, `addSource(source)` (checked at once, returns the way to take it away), `removeSource(id)`, `enableSource(id, on)`, `data="own"` to ignore every outside source, and `credits()` with `chikyu-creditschange` to say whose data was in the last drawn frame. `earthTiles(base)` is the package's own folder of tiles as a source (what `tiles="..."` means), and `elementsFrom(url, info)` makes a source of an address you chose, read politely. The tiles of a view share one 72 MB budget, six loads at a time, and nothing is sent at rest. Every old attribute and function stays: [guide](docs/guides/data-door.md).
+
 ## Satellites
 
 The ISS, a space station or thousands of Starlink satellites at the places SGP4 puts them for the date and time shown, on `<chikyu-space>`: a group is one draw call however many it holds, press one to get its name, height and speed, and its orbit is drawn. Chikyu fetches nothing: your page passes in orbital elements (CelesTrak's JSON, within its usage policy), and satellite.js (MIT, an optional peer) does the maths about once a second, with every frame between interpolated. `fetchElements(url)` reads OMM JSON, CSV or TLE from an address you choose, politely (https, not again within two hours, stop on any answer that is not 200). A satellite whose elements are more than 14 days from the time shown is drawn dimmer, and one more than 30 days away is left out. A group is hidden while the clock runs faster than 60 times real time. A small catalogue (`SATELLITE_GROUPS`, `CATALOGUE`, `findInCatalogue`) names fourteen groups (stations, weather, GPS, Galileo, OneWeb and more) and about forty satellites worth following, with no elements in it. The guide has the rules for getting elements and the budget, each line tested: [satellites guide](docs/guides/satellites.md), [docs/satellites.md](docs/satellites.md).
@@ -440,6 +491,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
 | `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
 | `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
+| `.../door` | The data door: sources of your own maps and orbit data with their licence and credit, `creditLine`, the package's own sources. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
 
 ## Guides
@@ -461,6 +513,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
+| [Outside data, the data door](docs/guides/data-door.md) | Hand the package your own maps of the Earth or orbit data with their licence and credit, switch them off, and show whose data is on the screen |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |

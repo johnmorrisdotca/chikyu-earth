@@ -21,6 +21,7 @@ import type { RideTarget } from "../src/space/element.ts";
 import type { BodyPainter } from "../src/space/index.ts";
 import { discRadius } from "../src/realistic/earth.ts";
 import { readMeteorStrength } from "../src/meteors/strength.ts";
+import { creditLine } from "../src/door/index.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../src/satellites/limits.ts";
 import { mountMissions } from "./missions.ts";
 
@@ -783,6 +784,17 @@ if (flat && controls && stage) {
       stage!.append(element);
       barFor(element);
       real = element;
+      // whose data is on the screen: the credit line of the realistic Earth, in the page's language (the data door); `?data=own` ignores every outside source
+      if (address.get("data") === "own") element.setAttribute("data", "own");
+      const doorLine = document.querySelector<HTMLElement>("#door-credit");
+      if (doorLine) {
+        const show = (): void => {
+          doorLine.textContent = creditLine(element.credits(), say("locale").startsWith("ja") ? "ja" : "en");
+        };
+        element.addEventListener("chikyu-creditschange", show);
+        document.addEventListener("kazoku-languagechange", () => queueMicrotask(show));
+        show();
+      }
       element.setView(state(), true);
       mountMarkers(element);
     }

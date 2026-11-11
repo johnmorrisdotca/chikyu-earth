@@ -12,7 +12,7 @@ import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "../space/satellite-layer.ts";
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
-import { createTileSet, type TileSet } from "./tile-set.ts";
+import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 export type { ThreeParts };
 
@@ -101,8 +101,8 @@ export interface EarthDeps {
   textureBase: () => string;
   /** The widest texture, 4096 at most. */
   cap: () => number;
-  /** Where the finer map tiles are (a URL ending with a slash), or `undefined`: the Earth then keeps the package's own pictures. */
-  tiles?: () => string | undefined;
+  /** The map source of each layer now (the data door's: a source a page added, else the `tiles` folder), or none: the Earth then keeps the package's own pictures. */
+  sources?: () => TileSources;
   /** Told once when the tile set has been read: the width in pixels of the finest level of each of its layers. */
   onTiles?: (layers: Record<string, number>) => void;
   invalidate: () => void;
@@ -112,6 +112,8 @@ export interface EarthDeps {
   air?: () => "full" | "light";
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
+  /** Told after the tiles were put right for a draw: what the draw shows from each source is known now. */
+  onTiled?: () => void;
   /** Told at the start of every draw, before anything is read for it. */
   onDraw?: () => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
@@ -268,7 +270,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         three,
         turned,
         { sunDir, lights: surface.uniforms["lights"] as { value: number }, boost: surface.uniforms["boost"] as { value: number }, ortho: surface.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night, extra: { cloudMap: uniform.clouds, sunLocal, cloudShift } },
-        { assets: deps.assets, base: () => deps.tiles?.(), cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
+        { assets: deps.assets, sources: () => deps.sources?.() ?? {}, cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
       );
       model.tiles = tiles;
       const clouds = new three.Mesh(grid, cloudMaterial);
@@ -335,6 +337,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...centre } };
           textures.sync(radius * model.ratio());
           tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
+          deps.onTiled?.();
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {
