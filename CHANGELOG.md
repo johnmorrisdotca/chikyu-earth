@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.29.0 - 2026-11-11
+
 - **The air is drawn 3 times its real thickness unless a page says otherwise, so the ring can be seen** (MODULES-904). At whole-Earth zoom the true 100 km shell is a line a pixel or two wide, and on a phone thinner than the old painted glow. `air-thickness` (and the property `airThickness`) on `<chikyu-earth-realistic>` and `<chikyu-space>` takes a number from 1 (the true thickness) to 5, and 3 when left out; the shell and the heights over which the air thins grow by it and the air is the same amount, so the physics and the colours do not change. While it is above 1 the element says so in a line under the picture, "The air is drawn 3 times its real thickness so it can be seen." (and in Japanese), which `air-label="off"` takes away. New exports `AIR_THICKNESS_DEFAULT`, `AIR_THICKNESS_MAX`, `readAirThickness`, `airTop` and `AIR_NOTE`. The demo has a True air thickness button on the realistic and space looks and on the full-screen page (`air-thickness=1` in the address). The cost is the same: a draw is the same program with one more uniform. Tests: `test/air.test.ts`, `e2e/air-visible.gl.ts`.
 
 ## 0.28.0 - 2026-11-11
