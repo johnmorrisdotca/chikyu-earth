@@ -30,6 +30,24 @@ const names = (page: Page): Promise<{ text: string; l: number; t: number; r: num
         return { text: b.textContent ?? "", l: box.left, t: box.top, r: box.right, b: box.bottom };
       }),
   );
+/**
+ * The picture opens with the Earth filling most of it, so the sky shows only in its corners and holds few named stars (a view of 35 degrees has about two on average): make the Earth small and turn the view round until the picture has at least
+ * `least` names (or figures), so what is asserted is the layer and not where the camera happened to look.
+ */
+async function wideSky(page: Page, least = 4, what: "names" | "figures" = "names"): Promise<void> {
+  await page.locator(SPACE).evaluate((el) => el.setAttribute("earth-size", "0.3"));
+  for (const lon of [-100, -40, 20, 80, 140, 200]) {
+    await page.locator(SPACE).evaluate((el, at) => el.setAttribute("center", `${at},20`), lon);
+    try {
+      if (what === "names") await expect.poll(async () => (await names(page)).length, { timeout: 8000 }).toBeGreaterThanOrEqual(least);
+      else await expect.poll(async () => (await skyOf(page)).figures, { timeout: 8000 }).toBeGreaterThanOrEqual(least);
+      return;
+    } catch {
+      // the next direction
+    }
+  }
+  throw new Error(`no direction of the sky showed ${least} ${what}`);
+}
 /** A point on the canvas that is drawn on (a line of a figure), found by looking, in CSS pixels from the element's top left. */
 const aLine = (page: Page): Promise<{ x: number; y: number } | null> =>
   page.locator(SPACE).evaluate((el) => {
@@ -49,8 +67,8 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
   expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.getElementById("sk-canvas"))).toBeNull();
   await page.locator(SPACE).evaluate((el) => el.setAttribute("star-names", "12"));
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000, message: "hoshi-stars is loaded when asked for" }).toBe(true);
-  await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000, message: "the font is in, and the names are laid out" }).toBeGreaterThan(0);
-  await expect.poll(async () => (await names(page)).length, { timeout: 30_000, message: "and they are on the page" }).toBeGreaterThan(0);
+  await wideSky(page);
+  expect((await skyOf(page)).names, "the layer's count is what is on the page").toBe((await names(page)).length);
   expect((await names(page)).length).toBeLessThanOrEqual(12);
   await page.locator(SPACE).evaluate((el) => el.removeAttribute("star-names"));
   await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000 }).toBe(0);
@@ -59,8 +77,7 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
 
 test("the names are of stars in view, in the page's language, never overlap, and fewer where the Earth covers the sky", async ({ page }) => {
   await open(page, "&lang=ja&star-names=12");
-  // what the reader sees is the names on the page: wait for those, not for the count the layer reports
-  await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
+  await wideSky(page);
   // the page's language may arrive after the names were first laid out: they are written again in it
   await expect.poll(async () => (await names(page)).some((n) => /[゠-ヿ]/.test(n.text)), { timeout: 30_000, message: "the names are in katakana" }).toBe(true);
   const shown = await names(page);
@@ -76,12 +93,12 @@ test("the names are of stars in view, in the page's language, never overlap, and
   const fewer = shown.length;
   // the Earth fills the view: it covers the sky, so the stars behind it are not named
   await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: 8, panX: 0, panY: 0 }, true));
-  await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeLessThanOrEqual(fewer);
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000, message: "fewer stars are named when the Earth covers the sky" }).toBeLessThan(fewer);
 });
 
 test("the constellations are faint lines, the figure under the pointer is lit, and a name shows", async ({ page }) => {
   await open(page, "&constellation-lines=0.16");
-  await expect.poll(async () => (await skyOf(page)).figures, { timeout: 30_000 }).toBeGreaterThan(0);
+  await wideSky(page, 3, "figures");
   await expect.poll(async () => (await aLine(page)) !== null, { timeout: 30_000, message: "a line is drawn" }).toBe(true);
   const at = (await aLine(page))!;
   expect((await skyOf(page)).picked).toBeNull();
@@ -96,7 +113,7 @@ test("the constellations are faint lines, the figure under the pointer is lit, a
 
 test("nothing is drawn at rest, with names and lines on and the clock held", async ({ page }) => {
   await open(page, "&star-names=12&constellation-lines=0.16");
-  await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000 }).toBeGreaterThan(0);
+  await wideSky(page);
   await page.evaluate(async () => {
     for (let frame = 0; frame < 10; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
   });
@@ -116,7 +133,8 @@ test("the demo's Star names and Constellations buttons set the attributes and th
   expect(await page.locator(SPACE).evaluate((el) => el.getAttribute("star-names"))).toBe("12");
   await expect.poll(() => new URL(page.url()).searchParams.get("star-names")).toBe("12");
   await page.locator("#constellation-lines").click();
-  await expect.poll(async () => (await skyOf(page)).figures, { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect.poll(() => page.locator(SPACE).evaluate((el) => el.getAttribute("constellation-lines"))).toBe("0.16");
+  await expect.poll(() => new URL(page.url()).searchParams.get("constellation-lines")).toBe("0.16");
   await page.locator("#star-names").click();
   await page.locator("#constellation-lines").click();
   await expect.poll(() => new URL(page.url()).searchParams.get("constellation-lines")).toBeNull();
