@@ -161,7 +161,7 @@ if (flat && controls && stage) {
   const DEFAULT_SPEED = 3600;
   /**
    * Does a link that says nothing about the clock open moving for a reader who prefers reduced motion? John has not decided (MODULES-815), so today it opens still, as it did.
-   * Changing this to `true` is half the change: kazoku-ui's replay bar also switches Play off under reduced motion (its own rule), and that needs a kazoku-ui option first.
+   * kazoku-ui's replay bar keeps Play ready under reduced motion (0.34.0): nothing starts by itself, and the reader's own press starts it; changing this to `true` would also let a link that says nothing open moving for such a reader.
    */
   const OPEN_MOVING_WITH_REDUCED_MOTION = false;
   const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;

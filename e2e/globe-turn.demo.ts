@@ -50,12 +50,12 @@ test.describe("with no preference for reduced motion", () => {
     });
   }
 
-  test("1× on the buttons is still the Earth's own rate, and the page opens on the 1440× button (a day a minute)", async ({ page }) => {
+  test("the buttons are named by the time a turn takes, the 1× is still the Earth's own rate, and the page opens on the 1440× one (a day a minute: a turn in 60 s)", async ({ page }) => {
     await page.goto("/chikyu-earth/");
     await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
     if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
     const buttons = page.locator(`${CONTROLS} kazoku-speed-buttons button`);
-    await expect(buttons).toHaveText(["0.5×", "1×", "2×", "1440×"]);
+    await expect(buttons).toHaveText(["2900 min", "1400 min", "720 min", "60 s"]);
     await expect(page.locator(`${CONTROLS} kazoku-speed-buttons button[data-v="1440"]`)).toHaveAttribute("aria-pressed", "true");
     await page.locator(`${CONTROLS} kazoku-speed-buttons button[data-v="1"]`).click();
     expect(Math.abs(await controller<number>(page, "speed"))).toBeCloseTo(0.004178, 6);

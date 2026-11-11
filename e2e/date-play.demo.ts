@@ -252,16 +252,20 @@ test("the realistic Earth held at 'now' (play=off) tells the page when its clock
 
 test.describe("a reader who prefers reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
-  test("gets Play left off, even from an address that asks for it", async ({ page }) => {
+  test("gets Play left off but ready, even from an address that asks for it, and the reader's own press starts it", async ({ page }) => {
     await open(page, `time=${START}&play=on&speed=86400`);
     await expect(play(page)).toHaveAttribute("aria-pressed", "false");
-    await expect(play(page)).toBeDisabled();
+    await expect(play(page)).toBeEnabled();
     expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "speed") as number)).toBe(0);
     const before = await boxMs(page);
     await page.waitForTimeout(1200);
     expect(await boxMs(page)).toBe(before);
     await page.waitForTimeout(400);
     expect(param(page, "play")).toBeNull();
+    // the reader's own press is what starts it, at the speed the address asked for
+    await play(page).click();
+    await expect(play(page)).toHaveAttribute("aria-pressed", "true");
+    await boxMovesOn(page, before, 1800_000, "the reader's press starts the clock");
   });
 
   test("a link that says nothing opens still, with Play off (John has not decided yet whether it moves: OPEN_MOVING_WITH_REDUCED_MOTION in demo/demo.ts)", async ({ page }) => {

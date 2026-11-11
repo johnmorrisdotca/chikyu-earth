@@ -93,11 +93,18 @@ test("leaving the space look takes the row and the craft away", async ({ page })
   await expect(page.locator("#mission-info")).toBeHidden();
 });
 
-test("a reader who asked for reduced motion gets no autoplay: Play does nothing, and the time can still be set", async ({ page }) => {
+test("a reader who asked for reduced motion gets no autoplay, Play is ready, and the reader's own press starts the flight", async ({ page }) => {
   await open(page, "&mission=sts-1");
   const start = await time(page);
-  await play(page).dispatchEvent("click");
-  await page.waitForTimeout(800);
-  expect(await time(page)).toBe(start);
+  await expect(play(page)).toBeEnabled();
   await expect(play(page)).toHaveAttribute("aria-pressed", "false");
+  // nothing starts by itself: thirty frames of the page's own go by with the date where it was
+  await page.evaluate(async () => {
+    for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+  expect(await time(page)).toBe(start);
+  // the reader's own press starts it, and the date moves on
+  await play(page).dispatchEvent("click");
+  await expect(play(page)).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => time(page), { message: "the flight runs after the reader's press" }).toBeGreaterThan(start);
 });
