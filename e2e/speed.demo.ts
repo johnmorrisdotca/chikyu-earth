@@ -22,6 +22,29 @@ test("Auto-turn has the steps 0.5×, 1×, 2× and 1440× of the Earth's own rate
   await expect(page).not.toHaveURL(/pace=/);
 });
 
+test("Auto-turn's 1× (the Earth's own rate) is kept in the address, and a reload or a shared link opens on it, not on the 1440× the page opens on", async ({ page }) => {
+  await page.goto("/chikyu-earth/");
+  await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
+  if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
+  await expect(speedButton(page, 1440)).toHaveAttribute("aria-pressed", "true");
+  await speedButton(page, 1).click();
+  await expect(speedButton(page, 1)).toHaveAttribute("aria-pressed", "true");
+  // the choice is in the address (a moment after: the family's address state waits to write)
+  await expect.poll(() => new URL(page.url()).searchParams.get("pace")).toBe("1");
+  await page.reload();
+  await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
+  if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
+  await expect(speedButton(page, 1), "the 1× opens pressed").toHaveAttribute("aria-pressed", "true");
+  expect(Math.abs(await page.locator(CONTROLS).evaluate((el) => Reflect.get(el, "controller").speed as number))).toBeCloseTo(0.004178, 6);
+  // and the page's own 1440× is still what it opens on when the link says nothing, and choosing it again takes the pace out of the address
+  await speedButton(page, 1440).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("pace")).toBeNull();
+  await page.goto("/chikyu-earth/");
+  await expect(page.locator(`${CONTROLS} .bar`)).toBeVisible();
+  if ((await page.locator(`${CONTROLS} [data-b="more"]`).getAttribute("aria-expanded")) !== "true") await page.locator(`${CONTROLS} [data-b="more"]`).click();
+  await expect(speedButton(page, 1440)).toHaveAttribute("aria-pressed", "true");
+});
+
 test("the time row is the family's replay bar: Play, Back to the date and the speeds in multiples of real time, and the page keeps no buttons of its own for it", async ({ page }) => {
   await page.goto("/chikyu-earth/?look=space&play=on&speed=86400&time=2026-11-02T14:00Z");
   const bar = page.locator("#replay");
