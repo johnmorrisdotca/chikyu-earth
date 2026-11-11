@@ -78,6 +78,21 @@ space.addEventListener("chikyu-satellite-click", (event) => console.log((event a
 
 A group is **one draw call** however many satellites it holds. Name each group (`"stations"`, `"starlink"`): `showSatellites(name, false)` hides one, `setSatellites(name, null)` takes it away and frees what it held. `orbits: true` draws every orbit of a group of 40 or fewer.
 
+## Ring and name a whole group
+
+`space.labelSatellites("stations")` rings every member of a group and writes its name beside it, for a small group such as the stations. The names are in the page's language (`ISS`, `Tiangong` or `天宮`, `Hubble` or `ハッブル`; any other satellite under the name in its elements, or as `space.satelliteNames = { 25544: "Space Station" }` says). They are drawn with the places of `places`, by the same rule: each name goes to the right of its ring if it fits, else left, above, below, and a lesser one is left out rather than overlap another. Only satellites that are in the picture and not behind the Earth are ringed, at most 80 over all the groups, and nothing is drawn at rest. `space.labelSatellites("stations", false)` stops; `space.labelledSatellites` lists the groups.
+
+`space.placeSatellite({ group: "stations", index })` says where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm }` in CSS pixels from the view's top left, `visible` meaning inside the box and not behind the Earth, and `null` when its group is not shown or it cannot be placed. It is the picture's own camera maths and its own test for the Earth in the way, so a page that draws its own rings need not repeat either. `chikyu-satellite-visibility` is sent with `detail: { ref, visible }` when a ringed satellite comes into view or goes out of it, not at every frame.
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+
+const space = document.querySelector("chikyu-space")!;
+space.labelSatellites("stations");
+space.addEventListener("chikyu-satellite-visibility", (event) => console.log((event as CustomEvent).detail.ref.index, (event as CustomEvent).detail.visible));
+console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, visible, heightKm } or null
+```
+
 ## Choosing one
 
 A press on a satellite (not a drag that turns the view, and not one behind the Earth) fires `chikyu-satellite-click` with `{ group, index, info }`; `info` has its name, NORAD number, the age of its elements, its height, speed and period. `selectSatellite({ group, index })` marks one from code (a ring, its orbit and its name beside it), and `satelliteInfo(ref)` tells you about it. A page with a search box or a list of names uses those two, so a keyboard reader can choose too.
