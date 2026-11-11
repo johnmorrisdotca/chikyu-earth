@@ -247,23 +247,23 @@ test("a real drag goes all the way round: five drags across the picture turn the
 
 test("up and down drags stop moving at the ends of the pitch: a drag back moves the view at once, not after the excess is dragged back", async ({ page }) => {
   await open(page);
-  // four long drags down: far past where the camera looks straight down
-  for (let i = 0; i < 4; i += 1) await drag(page, [0.5, 0.05], [0.5, 0.95]);
+  // the ground follows the pointer: a drag up tips the camera down. Four long drags up, far past where it looks straight down
+  for (let i = 0; i < 4; i += 1) await drag(page, [0.5, 0.95], [0.5, 0.05]);
   const bottom = bearing(await statsOf(page), [1, 0, 0]).elevation;
   expect(bottom, "straight down").toBeLessThan(-85);
   const tiltAtBottom = await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "state") as { tilt: number }).tilt);
   expect(Math.abs(tiltAtBottom), "the controls' tilt is held to what does something").toBeLessThan(45);
-  // a short drag back up: the camera lifts at once
-  await drag(page, [0.5, 0.5], [0.5, 0.4]);
+  // a short drag back down: the camera lifts at once
+  await drag(page, [0.5, 0.4], [0.5, 0.5]);
   const lifted = bearing(await statsOf(page), [1, 0, 0]).elevation;
   expect(lifted - bottom, "lifted by the first short drag back").toBeGreaterThan(3);
-  // and the same at the top: four long drags up, then a short one down
-  for (let i = 0; i < 4; i += 1) await drag(page, [0.5, 0.95], [0.5, 0.05]);
+  // and the same at the top: four long drags down, then a short one up
+  for (let i = 0; i < 4; i += 1) await drag(page, [0.5, 0.05], [0.5, 0.95]);
   const top = bearing(await statsOf(page), [1, 0, 0]).elevation;
   expect(top, "a little above the horizon, no more").toBeLessThan(21);
   expect(top).toBeGreaterThan(10);
-  await drag(page, [0.5, 0.5], [0.5, 0.6]);
-  expect(top - bearing(await statsOf(page), [1, 0, 0]).elevation, "and the first short drag back down moves it").toBeGreaterThan(3);
+  await drag(page, [0.5, 0.6], [0.5, 0.5]);
+  expect(top - bearing(await statsOf(page), [1, 0, 0]).elevation, "and the first short drag back up moves it").toBeGreaterThan(3);
 });
 
 test("a change of zoom does not swing the heading", async ({ page }) => {
