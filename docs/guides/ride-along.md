@@ -64,6 +64,37 @@ space.addEventListener("chikyu-ride-lost", () => console.log("the elements are t
 
 The space view has no markers; the places of `attachMarkers` belong to the flat and the realistic globe.
 
+## Follow a satellite as a model
+
+`space.ride(ref, { view: "follow" })` already keeps a distance from a satellite and watches it, with the Earth turning and sliding beneath. With a model, the satellite is no longer a dot: **the package ships no model**, the page supplies them, and a followed satellite that the page has a model for is drawn as it, locked in the middle of the picture at a size that reads, pointed the way it really flies, lit by the real Sun. A satellite with no model stays a dot.
+
+```ts no-run
+import { setSatellitePainter } from "@johnmorrisdotca/chikyu-earth/space/element";
+import type { SatellitePainter } from "@johnmorrisdotca/chikyu-earth/space";
+
+const painter: SatellitePainter = {
+  has: (norad) => norad === 25544, // the ISS
+  make: async (three, norad) => {
+    const group = new three.Group(); // your model, scaled to a radius of 1 about the origin
+    return { object: group, light: (toSun) => undefined, dispose: () => undefined };
+  },
+};
+setSatellitePainter(painter);
+
+const space = document.querySelector("chikyu-space")!;
+space.ride({ group: "stations", index: 0 }, { view: "follow" });
+console.log(space.largeSatellites().map((one) => one.name), space.followNext()?.name);
+```
+
+- **The model's axes.** A model has a radius of 1 about its middle: its long axis along +x (the way the satellite flies), its top, the side that faces space, along +z, and its left along +y. The view turns it to the satellite's real direction of flight (`satelliteAxes`) and puts its middle on the satellite.
+- **Its size.** Its radius on the screen is 17 per cent of the height of the view whatever distance the camera keeps (`MODEL_RADIUS_SHARE`, `modelRadius`), and never under its true size, so a camera that comes close sees it as big as it is.
+- **The Sun.** `light(toSun)` is told at every draw the unit direction from the satellite to the Sun in the scene's axes (x to the vernal equinox, y north); the model's own turn is in `object.matrix` (set by the view, with `matrixAutoUpdate` off), so a model with one light takes the Sun's direction in its own axes from the matrix's columns. `update({ toSun, ms, radiusPx })` is told how many pixels across its radius is, for a picture that is worth fetching sharper.
+- **Which satellites.** `has(noradId)` says by NORAD number (`25544` the ISS, `48274` Tiangong, `20580` Hubble) whether there is a model. `make` may answer at once or later (a promise); `null` is no model. A model made for a satellite that is no longer followed is let go.
+- **The list and the hop.** `space.largeSatellites()` lists the satellites of the groups now set that have a model, with their names in the page's language; `space.followNext(step = 1)` follows the next (or, with `-1`, the previous), going round, and returns it. `stats.followModel` has the model's middle on the screen as of the last draw, `null` when none is drawn.
+- **Nothing at rest.** The model is part of the picture: with the clock held and the view still nothing is drawn, and the glide to the next satellite is the view's own, a second and a bit (a jump for a reader who prefers reduced motion).
+
+The demo draws made-up stand-ins (`demo/station-models.ts`, boxes and cylinders in the shape of the ISS, Tiangong and Hubble) so the follow view can be seen; they are not pictures of the real ones. NASA's own ISS model is public domain, and a model a page's author made, or that carries a licence its page can pass on, is the page's to supply.
+
 ## The camera, as numbers
 
 The maths of where the camera looks is a pure function that needs no browser, `ridePose`. Here it is for a camera 420 km up going along -z, tipped towards the horizon:
