@@ -502,7 +502,7 @@ test("7. the package's own sources are clear to pass on: none is non-commercial 
 test("8. src/data-door.ts is kazoku-ui's templates/data-door.ts, byte for byte", () => {
   const copy = readFileSync(new URL("../src/data-door.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   // kazoku-ui's scripts/check-standard.mjs holds this line (DATA_DOOR_SHA256); a change to the template changes it, and then every package's copy
-  assert.equal(createHash("sha256").update(copy).digest("hex"), "ae12207f4c1b89670b208baf306ea988df8c5f2213ae791a7044ca8681c31793");
+  assert.equal(createHash("sha256").update(copy).digest("hex"), "b90af1f8e0f2ffc59485d5cc98995e54ee21fd98cd5ae027b90efe8c6673d5fa");
 });
 
 test("the keys of a place are the tiles it touches on the package's pyramid, a tile's own place asks for itself alone, and a key's end says where the tile is", () => {
