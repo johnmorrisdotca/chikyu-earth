@@ -112,11 +112,31 @@ const overhead = pointBeneath(perseids.radiant, moment);
 console.log(`Overhead at ${overhead.lat} N, ${overhead.lon.toFixed(0)} E; Tokyo: ${hourlyRateAt(meteorSky(moment), { lon: 139.7, lat: 35.7 }).toFixed(0)} an hour`);
 ```
 
-- `METEOR_SHOWERS`: 37の流星群。それぞれに、コード、IAU の番号、英語と日本語の名前、活動の最初の日と最後の日、極大 (2026年の日付と、どの年にも使える太陽黄経)、放射点、速さ、光度比、極大のときの ZHR (一覧が「変動する」としているものは `null`)、出典に書かれている場合は母天体があります。
+- `METEOR_SHOWERS`: 37の流星群。それぞれに、コード、IAU の番号、英語と日本語の名前、活動の最初の日と最後の日、極大 (2026年の日付と、どの年にも使える太陽黄経)、放射点、速さ、光度比、極大のときの ZHR (一覧が「変動する」としているものは `null`)、IAU 流星データセンターが母天体を挙げている場合はその母天体があります。
 - `showerRate(shower, ms)` と `activeShowers(ms)`: ある時刻での流星群の活発さ。
 - `pointBeneath(radiant, ms)` と `apexPoint(ms)`: 空の1点 (放射点など) や、地球の進む向きの点が、真上に来る場所。
 - `meteorSky(ms)` と `hourlyRateAt(sky, place)`: ある場所で、理想的な条件の人が1時間に数える出現数。
 - `darkness(place, sun)`、`streaksPerSecond(rate, strength)`、`streakPath(place, radiant)`: 流星の描画が使う値。
+
+## 母天体と IAU の一覧
+
+どの流星群も、その流星のもとになった彗星や小惑星に、流星群の IAU コードと天体の符号でつながっています。つながりと、表を IAU 流星データセンターの一覧と照らし合わせた結果は、同じエントリーポイントにあります。
+
+```js
+import { METEOR_LINKS, parentBodyOf, showerSource, showersOfParent } from "@johnmorrisdotca/chikyu-earth/meteors";
+
+// The Perseids' parent body, found by the shower's IAU code, and every shower that comes from comet Halley.
+console.log(parentBodyOf("PER")?.designation, showersOfParent("1P/Halley").map((shower) => shower.name).join(", "));
+
+// Where one row's figures come from.
+console.log(showerSource(METEOR_LINKS.find((link) => link.code === "LYR")));
+```
+
+- `METEOR_LINKS`: 各流星群について、IAU での名前、データセンターが「確立した流星群」(`established`) としているか作業リストにだけ載せているか、母天体 (`designation` と `kind`)、放射点と速さが合っているデータセンターの解、そして放射点と速さがそれぞれ IMO の表のものかデータセンターのものか、が入っています。
+- `parentBodyOf(code)` は流星群の母天体を返します (データセンターが挙げていなければ `null`)。`showersOfParent(designation)` は、ひとつの天体の流星群を、符号全体、番号 (`2P`)、名前 (`Encke`) のどれからでも探します。
+- `showerSource(link)` は、表の1行の数値がどこから来たかを、英語の1文で言います。
+- **照らし合わせた内容。** 放射点と速さを、データセンターの解のうち、流星が100個以上で、平均の太陽黄経が極大から3度以内のものと比べました。放射点は、その解自身の日々の動きで極大の黄経まで動かしてあります。どれかの解と、放射点が2度以内、速さが2 km/s 以内であれば、そのままにしました。3つの行は、データセンターの解どうしのばらつきよりも大きくずれていたので、データセンターの値に直しました。4月こと座流星群の速さ (49 ではなく 47 km/s)、いっかくじゅう座α流星群の速さ (65 ではなく 62)、エリダヌス座η流星群の放射点 (赤経 42、赤緯 -13) です。データセンターには極大の日付も出現数 (ZHR) もないので、日付と ZHR は IMO のままです。条件に合う解がない4つの確立した流星群は、IMO の値のままです。
+- **データセンターの呼び方。** データセンターでは、表の「Draconids」が October Draconids、「Monocerotids」が December Monocerotids (`iauName`) で、IMO の Puppid-Velids (IAU 301) は gamma-Puppids です。3つの流星群 (α-Centaurids、September Lyncids、gamma-Puppids) は、作業リストにだけ載っています。データセンターのデータファイルの求めに従って、引用は Jenniskens ほか (2020、`Planetary and Space Science` 182、104821) と Jopek・Kanuchova (2017、`Planetary and Space Science` 143、3-6) としてください。
 
 ## できないこと
 
