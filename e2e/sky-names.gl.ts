@@ -61,6 +61,8 @@ test("the names are of stars in view, in the page's language, never overlap, and
   await open(page, "&lang=ja&star-names=12");
   // what the reader sees is the names on the page: wait for those, not for the count the layer reports
   await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
+  // the page's language may arrive after the names were first laid out: they are written again in it
+  await expect.poll(async () => (await names(page)).some((n) => /[゠-ヿ]/.test(n.text)), { timeout: 30_000, message: "the names are in katakana" }).toBe(true);
   const shown = await names(page);
   for (let i = 0; i < shown.length; i += 1) {
     for (let j = i + 1; j < shown.length; j += 1) {

@@ -73,6 +73,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let figureName: HTMLElement | undefined;
   let attached = false;
   let covered: CoverMask | undefined;
+  /** The language the names were last laid out in: the page may change its language after the element was made, so it is read again at each draw. */
+  let usedLang: "en" | "ja" | undefined;
 
   const wanted = (): boolean => options.attribute("star-names") !== null || options.attribute("constellation-lines") !== null;
 
@@ -232,6 +234,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     const settings = module.starNamesFromAttributes(count, magnitude);
     const strength = module.lineStrengthFromAttribute(options.attribute("constellation-lines"));
     const lang = options.language();
+    usedLang = lang;
     if (settings) {
       if (!names) names = module.createStarNames({ ...settings, lang, style });
       else names.set({ ...settings, lang, style });
@@ -266,6 +269,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   function compute(): void {
     const frame = last;
     if (!frame || !module) return;
+    if (usedLang !== undefined && options.language() !== usedLang) configure();
     const discs = frame.discs;
     covered = discs.length === 0 ? undefined : (x, y) => discs.some((d) => (x - d.x) * (x - d.x) + (y - d.y) * (y - d.y) <= d.radius * d.radius);
     const view = { width: frame.width, height: frame.height };
@@ -274,6 +278,16 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     placeNames();
     drawLines();
   }
+
+  // the family's chooser tells the document when the page's language changes: the names are written again, though nothing else is drawn
+  const onLanguage = (): void =>
+    queueMicrotask(() => {
+      if (module && wanted() && usedLang !== options.language()) {
+        configure();
+        compute();
+      }
+    });
+  doc.addEventListener("kazoku-languagechange", onLanguage);
 
   return {
     frame(next) {
@@ -320,6 +334,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       return { on: wanted(), loaded: module !== undefined, names: names?.labels.length ?? 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders };
     },
     dispose() {
+      doc.removeEventListener("kazoku-languagechange", onLanguage);
       canvas?.remove();
       box?.remove();
       pool.length = 0;
