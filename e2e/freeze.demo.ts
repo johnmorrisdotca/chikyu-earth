@@ -3,6 +3,8 @@
 // canvas past 6 million pixels or 4096 a side on a 5K screen at a pixel ratio of 2. `pnpm test:freeze` runs it; CI and the release run it.
 import { canvasSize, COUNT_SCRIPT, gpuObjects, readCounts, withinPixelBudget } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
+import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
+import { MOON_KEEP_MS } from "../src/space/scene.ts";
 import { untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 import { routeTiles } from "./tiles-fixture.ts";
@@ -30,6 +32,35 @@ async function open(page: Page, look: (typeof LOOKS)[number], query = ""): Promi
   if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
   await page.waitForTimeout(look === "ride" ? 8000 : 800);
+}
+
+/**
+ * The space view at rest after a ride: the glide over, the larger Earth pictures it no longer needs let go (the texture set keeps one DOWNGRADE_AFTER_MS after a smaller one is enough, and a moon out of
+ * sight is kept MOON_KEEP_MS), nothing in the renderer's cache without a user (it keeps one a second before it frees it), and a second in which nothing changes and nothing is drawn. A count read before
+ * that counts what is about to go: 122 or 123 against 114 at rest, now and then (MODULES-1095).
+ */
+async function atRest(page: Page): Promise<void> {
+  const now = () =>
+    page.locator("chikyu-space").evaluate((el) => {
+      const s = Reflect.get(el, "stats") as { draws: number; tiers: Record<string, number>; assets: { entries: number; refs: number }; ride: { gliding: boolean } };
+      return { gliding: s.ride.gliding, unused: s.assets.entries - s.assets.refs, mark: JSON.stringify([s.draws, s.tiers, s.assets.entries, s.assets.refs]) };
+    });
+  await expect.poll(async () => (await now()).gliding, { timeout: 30_000, message: "the ride's glide ends" }).toBe(false);
+  // the keeps run on their own timers, not on a draw, so nothing the page reports says one is waiting: wait them out from the glide's end
+  await page.waitForTimeout(Math.max(DOWNGRADE_AFTER_MS, MOON_KEEP_MS) + 500);
+  let before = await now();
+  await expect
+    .poll(
+      async () => {
+        await page.waitForTimeout(1000);
+        const after = await now();
+        const still = after.mark === before.mark && after.unused === 0;
+        before = after;
+        return still;
+      },
+      { timeout: 20_000, intervals: [0], message: "the pictures it no longer needs are let go and nothing changes for a second" },
+    )
+    .toBe(true);
 }
 
 /** Make sure the controls are turning the view (a page that opens with `autoplay` already is). */
@@ -128,6 +159,8 @@ for (const look of LOOKS) {
 }
 
 test("changing the look over and over gives back what it took: GPU objects stay flat in the one context, and the line look lets the context go", async ({ page }) => {
+  // six rounds, each waiting for the space view's 4 s keeps before it counts: about 12 s a round
+  test.setTimeout(150_000);
   await page.addInitScript(COUNT_SCRIPT);
   // a moment near the satellites' elements, so every orbit is drawn and counted
   await page.goto(`/chikyu-earth/?time=2026-11-02T18:00Z&center=10,20`);
@@ -147,8 +180,8 @@ test("changing the look over and over gives back what it took: GPU objects stay 
     await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
     // the camera on the ISS and off it again, as a reader would
     await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: round % 2 === 0 ? "ISS" : "Moon", exact: true }).dispatchEvent("click");
-    // the satellites are drawn at least once (their buffers are made by the first draw) before the objects are counted
-    await page.waitForTimeout(2500);
+    // the satellites are drawn at least once (their buffers are made by the first draw), and what the last place needed is let go, before the objects are counted
+    await atRest(page);
     const counted = await readCounts(page);
     settled.push(gpuObjects(counted));
     expect(counted.contexts, "one WebGL context for the page, however the look changes").toBe(1);

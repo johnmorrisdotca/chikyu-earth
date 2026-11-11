@@ -64,7 +64,7 @@ const LAYERS: Layer[] = ["day", "night", "clouds", "water", "moon"];
 const MOON_MIN_PLANET_PX = 4;
 const MOON_MIN_PX = 2.2;
 /** A moon that has been out of sight this long is let go (its pictures too). */
-const MOON_KEEP_MS = 4000;
+export const MOON_KEEP_MS = 4000;
 
 const PLAIN_COLOR = (name: string): string => (name === "Sun" ? "#ffb347" : (COLORS as Record<string, string>)[name] ?? "#9a948b");
 /**
