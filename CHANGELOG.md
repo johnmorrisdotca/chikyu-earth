@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The map-tiles freeze test waits for the tile sweep's frame before it counts rest.** The tile set lets the coarser tiles go 4 s after a zoom and draws the sphere once more when one of them was on it; when the finer tiles took about 2 to 3.5 s to come, that frame fell inside the count and the test failed (2 runs in 3 on a busy Mac, whatever the kazoku-ui version). It now waits for the page to let them go and for that frame, and has 150 s for its six rounds.
+
 ## 0.33.1 - 2026-11-11
 
 ## 0.33.0 - 2026-11-11

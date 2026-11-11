@@ -164,6 +164,8 @@ test("changing the look over and over gives back what it took: GPU objects stay 
 });
 
 test("the map tiles: zooming in and out over and over gives back what it took, holds few tiles, and draws nothing at rest", async ({ page }) => {
+  // six rounds, each waiting the tile set's 4 s for the coarser tiles to go before it counts rest: 10 to 15 s a round on a busy machine
+  test.setTimeout(150_000);
   const log = await routeTiles(page);
   await open(page, "realistic");
   const earth = page.locator("chikyu-earth-realistic");
@@ -182,11 +184,21 @@ test("the map tiles: zooming in and out over and over gives back what it took, h
     await expect.poll(async () => (await tiles()).level, { timeout: 30_000 }).toBe(3);
     await expect.poll(async () => (await tiles()).shown, { timeout: 30_000 }).toBeGreaterThan(2);
     await view(await radiusFor(2600), round * 7);
-    await expect.poll(async () => (await tiles()).level, { timeout: 30_000 }).toBe(4);
-    await expect.poll(async () => (await tiles()).loading, { timeout: 30_000 }).toBe(0);
+    let most = 0;
+    const watched = async () => {
+      const now = await tiles();
+      most = Math.max(most, now.held);
+      return now;
+    };
+    await expect.poll(async () => (await watched()).level, { timeout: 30_000 }).toBe(4);
+    await expect.poll(async () => (await watched()).loading, { timeout: 30_000 }).toBe(0);
     await page.waitForTimeout(600);
     peaks.push(gpuObjects(await readCounts(page)));
     heldMost = Math.max(heldMost, (await tiles()).held);
+    // the tiles of the level before are let go TILE_KEEP_MS after the zoom, and the sphere is drawn once more when one of them was on it: that frame is the zoom's last, not one at rest, and
+    // when the finer tiles take 2 to 3.5 s to come it fell inside the count. Wait for the page to let them go (its held count drops) and for that frame, then count.
+    await expect.poll(async () => (await watched()).held, { timeout: 30_000 }).toBeLessThan(most);
+    await untilStill(page);
     // at rest with the tiles on the sphere nothing is drawn
     const rest = await bounded(page, 1500);
     expect(rest.draws, "no GL draws at rest with the tiles loaded").toBe(0);
