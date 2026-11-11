@@ -50,7 +50,8 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
   await page.locator(SPACE).evaluate((el) => el.setAttribute("star-names", "12"));
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000, message: "hoshi-stars is loaded when asked for" }).toBe(true);
   await expect.poll(async () => (await skyOf(page)).names).toBeGreaterThan(0);
-  expect((await skyOf(page)).names).toBeLessThanOrEqual(12);
+  await expect.poll(async () => (await names(page)).length, { message: "and they are on the page" }).toBeGreaterThan(0);
+  expect((await names(page)).length).toBeLessThanOrEqual(12);
   await page.locator(SPACE).evaluate((el) => el.removeAttribute("star-names"));
   await expect.poll(async () => (await skyOf(page)).names).toBe(0);
   await expect.poll(async () => (await names(page)).length).toBe(0);
@@ -58,9 +59,9 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
 
 test("the names are of stars in view, in the page's language, never overlap, and fewer where the Earth covers the sky", async ({ page }) => {
   await open(page, "&lang=ja&star-names=12");
-  await expect.poll(async () => (await skyOf(page)).names, { timeout: 30_000 }).toBeGreaterThan(0);
+  // what the reader sees is the names on the page: wait for those, not for the count the layer reports
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
   const shown = await names(page);
-  expect(shown.length).toBeGreaterThan(0);
   for (let i = 0; i < shown.length; i += 1) {
     for (let j = i + 1; j < shown.length; j += 1) {
       const a = shown[i]!;
