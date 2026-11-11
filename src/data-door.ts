@@ -23,6 +23,8 @@
  */
 export interface Licence {
   name: string;
+  /** The name in Japanese, for a Japanese credit line: a source's own terms (`"UCAC4の利用条件"`). Left out, a plain phrase the door knows ("Public domain") is translated and an identifier ("CC BY 4.0") stays. */
+  nameJa?: string;
   url: string;
   /** An SPDX identifier, when there is one. */
   spdx?: string;
@@ -258,6 +260,7 @@ export function validateSource(source: unknown, taken: Iterable<string> = []): a
   if (!object(licence)) refuse("there is no licence");
   const terms = licence as Record<string, unknown>;
   if (!text(terms["name"])) refuse("the licence has no name");
+  if (terms["nameJa"] !== undefined && !text(terms["nameJa"])) refuse("the licence's Japanese name is empty");
   if (!text(terms["url"]) || !WEB.test(terms["url"])) refuse("the licence has no link (an http or https address)");
   for (const flag of ["nonCommercial", "shareAlike"] as const) if (terms[flag] !== undefined && typeof terms[flag] !== "boolean") refuse(`the licence's ${flag} must be true or false`);
   if (!text(info["url"]) || !WEB.test(info["url"])) refuse("the source has no page (an http or https address)");
@@ -277,7 +280,7 @@ const TERMS = {
 } as const;
 
 /** Licence names that are plain phrases, not identifiers, and so are translated. An identifier such as "CC BY-NC 3.0 IGO" is a name and stays. */
-const JA_NAMES: Readonly<Record<string, string>> = { "public domain": "パブリックドメイン" };
+const JA_NAMES: Readonly<Record<string, string>> = { "public domain": "パブリックドメイン", "published for use with credit": "出典を示せば利用可" };
 
 /**
  * The credit line for what a view drew: each source's credit with its licence name, and "non-commercial" or "share-alike" whenever the source says so, so a page cannot hide the terms of the data it
@@ -302,7 +305,7 @@ export function creditLine(credits: readonly Credit[], language: "en" | "ja"): s
   const parts = ordered.map((credit) => {
     const { source } = credit;
     const line = (source.credit[language] || source.credit.en).trim();
-    const name = language === "ja" ? (JA_NAMES[source.licence.name.trim().toLowerCase()] ?? source.licence.name) : source.licence.name;
+    const name = language === "ja" ? (source.licence.nameJa?.trim() || JA_NAMES[source.licence.name.trim().toLowerCase()] || source.licence.name) : source.licence.name;
     const terms = [source.licence.nonCommercial === true ? words.nonCommercial : "", source.licence.shareAlike === true ? words.shareAlike : ""].filter((term) => term !== "");
     if (language === "ja") return `${line}（${[name, ...terms].join("、")}）`;
     return terms.length === 0 ? `${line} (${name})` : `${line} (${name}; ${terms.join(", ")})`;
