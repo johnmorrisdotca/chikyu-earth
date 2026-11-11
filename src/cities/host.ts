@@ -96,6 +96,8 @@ export function createCityHost(options: CityHostOptions): CityHost {
   const pool: HTMLElement[] = [];
   let max = readCityNames(options.attribute("city-names"));
   let drawnBefore = false;
+  /** The language the names were last laid out in: the page may change its language after the element was made, so it is read again at each draw. */
+  let usedLang: "en" | "ja" | undefined;
 
   const attach = (): void => {
     if (canvas) return;
@@ -170,7 +172,8 @@ export function createCityHost(options: CityHostOptions): CityHost {
     attach();
     const size = style.size ?? DEFAULTS.size;
     const dot = style.dotSize ?? DEFAULTS.dot;
-    shown = layoutCities(citiesFor(tiers), frame, options.language(), { max, size, dot });
+    usedLang = options.language();
+    shown = layoutCities(citiesFor(tiers), frame, usedLang, { max, size, dot });
     place(frame, dot);
   }
 
@@ -217,6 +220,13 @@ export function createCityHost(options: CityHostOptions): CityHost {
     }
   }
 
+  // the family's chooser tells the document when the page's language changes: the names are written again, though nothing else is drawn
+  const onLanguage = (): void =>
+    queueMicrotask(() => {
+      if (max !== null && last && usedLang !== undefined && usedLang !== options.language()) compute();
+    });
+  doc.addEventListener("kazoku-languagechange", onLanguage);
+
   return {
     frame(next) {
       last = next;
@@ -244,6 +254,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
       return { on: max !== null, max: max ?? 0, radius: last?.radius ?? 0, tiers: [...lists.keys()], cities: [...lists.values()].reduce((sum, list) => sum + list.length, 0), names: shown.length, renders };
     },
     dispose() {
+      doc.removeEventListener("kazoku-languagechange", onLanguage);
       canvas?.remove();
       box?.remove();
       canvas = undefined;
