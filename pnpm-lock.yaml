@@ -36,6 +36,9 @@ importers:
       '@johnmorrisdotca/hata':
         specifier: ^1.8.0
         version: 1.8.0
+      '@johnmorrisdotca/hoshi-stars':
+        specifier: ^0.30.0
+        version: 0.30.0
       '@johnmorrisdotca/kuni':
         specifier: ^1.5.0
         version: 1.5.0
@@ -403,6 +406,10 @@ packages:
   '@johnmorrisdotca/hata@1.8.0':
     resolution: {integrity: sha512-aT+aMt2hzH9qGp4WqFLagGbUzzzdJ0GGMYPwcrbhO3pUBtFX1aim0pKfyUrii59Aa22Fb+8M+bjLkFt2SkELqA==}
     engines: {node: '>=24'}
+
+  '@johnmorrisdotca/hoshi-stars@0.30.0':
+    resolution: {integrity: sha512-8N2tvfUr9wUf41rcA0+QjOVLCsSiS2tSvMixXKsWDs5+cUzVBJCyst5Qk8Nd8vDGWuVz6mOUMcTgbiaIE/FL9A==}
+    engines: {node: '>=22'}
 
   '@johnmorrisdotca/kazoku-ui@0.11.0':
     resolution: {integrity: sha512-2kB+VxkHw9oTHnjL0O2UKo0JkI9ci6KvzwKJnhxNr5Hoeg6/A3Tiaoiiwo7cShrr/VRQISRYv3QhdzLeJKN6Bw==}
@@ -1866,6 +1873,8 @@ snapshots:
   '@johnmorrisdotca/chizu@1.6.0': {}
 
   '@johnmorrisdotca/hata@1.8.0': {}
+
+  '@johnmorrisdotca/hoshi-stars@0.30.0': {}
 
   '@johnmorrisdotca/kazoku-ui@0.11.0(three@0.186.1)':
     optionalDependencies:
