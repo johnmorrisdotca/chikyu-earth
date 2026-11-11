@@ -13,6 +13,7 @@ import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type Sate
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
+import type { SkyFrame } from "../sky/host.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 export type { ThreeParts };
@@ -115,6 +116,8 @@ export interface EarthDeps {
   air?: () => "full" | "light";
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
+  /** Where the sky falls on the screen at this draw, for the names of the stars and the constellation lines laid over it: the directions seen along the picture's own axes. */
+  onSky?: (frame: SkyFrame) => void;
   /** The name written on the Earth could not be made (the three.js handed over lacks a part, or the label could not be loaded). */
   onLabelError?: (error: unknown) => void;
   /** Told after the tiles were put right for a draw: what the draw shows from each source is known now. */
@@ -348,6 +351,27 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           // the name written on the Earth: the layer is made the first time the settings ask for it, and keeps itself right
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, turned, model.bodyLabel, { invalidate: deps.invalidate, ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, radius);
+          if (deps.onSky) {
+            // the sky as the picture's own axes see it: a direction in space, turned as the satellites are into the picture's axes, falls where its sideways and upward parts say, in front when it points towards the viewer
+            spun.updateWorldMatrix(true, false);
+            const sky = new three.Vector3();
+            const scale = Math.min(size.width, size.height) / 2;
+            const cx = size.width / 2 + view.panX;
+            const cy = size.height / 2 + view.panY;
+            deps.onSky({
+              width: size.width,
+              height: size.height,
+              discs: [{ x: cx, y: cy, radius }],
+              project(rightAscension, declination, out) {
+                const r = rightAscension * RAD;
+                const d = declination * RAD;
+                sky.set(Math.cos(d) * Math.cos(r), Math.sin(d), -Math.cos(d) * Math.sin(r)).transformDirection(spun.matrixWorld);
+                out.x = cx + scale * sky.x;
+                out.y = cy - scale * sky.y;
+                return sky.z > 0;
+              },
+            });
+          }
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {

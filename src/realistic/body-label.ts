@@ -114,6 +114,23 @@ export interface BodyLabelLayer {
 let fontUrl: string | undefined;
 
 /**
+ * Loads Michroma, the family's font for a name written on a body or a sky, from where `setBodyLabelFontUrl` says (beside kazoku-ui's label by default). Once: asking again does nothing.
+ *
+ * @returns A promise that settles when the font is in.
+ *
+ * @example
+ * ```ts no-run
+ * import { loadMichroma } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * await loadMichroma();
+ * ```
+ */
+export async function loadMichroma(): Promise<void> {
+  const module = await import("@johnmorrisdotca/kazoku-ui/body-label");
+  await module.loadBodyLabelFont(fontUrl);
+}
+
+/**
  * Where Michroma, the family's font for the name, is fetched from. Left alone it is the file beside the label's own module (`fonts/Michroma-Regular.ttf` in kazoku-ui's `body-label`), which is right where the package is used as it is shipped, or through a
  * bundler that keeps assets beside the code (Vite does); a bundler or a site that moves the module copies the file and says where with this. A page that names its own font (`body-label-font`) never fetches it.
  *

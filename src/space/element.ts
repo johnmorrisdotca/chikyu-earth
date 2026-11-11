@@ -5,7 +5,10 @@ import { carryControls, type ElementControls, type ViewController } from "@johnm
 import { adoptStyles } from "../adopt.ts";
 import type { GeoPoint } from "../types.ts";
 import { airFor, readAirThickness } from "../realistic/air.ts";
-import { BODY_LABEL_ATTRIBUTES, bodyLabelText, readBodyLabel, type BodyLabelSettings } from "../realistic/body-label.ts";
+import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "../realistic/body-label.ts";
+import { createSkyHost, SKY_ATTRIBUTES, type SkyHost } from "../sky/host.ts";
+import type { LabelStyle } from "@johnmorrisdotca/hoshi-stars/sky-labels";
+
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
@@ -198,7 +201,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, "air-thickness", "air-label", "lang"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -207,6 +210,9 @@ export class ChikyuSpace extends HTMLElement {
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
   #note: HTMLElement | undefined;
+  /** The names of the stars and the constellation lines (`star-names`, `constellation-lines`), and the look of the names. */
+  #sky: SkyHost | undefined;
+  #skyStyle: Partial<LabelStyle> = {};
   #airNote: HTMLElement | undefined;
   #gate: Gate | undefined;
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
@@ -257,6 +263,14 @@ export class ChikyuSpace extends HTMLElement {
     this.#labelBox = root.getElementById("labels")!;
     this.#note = root.getElementById("meteor-note")!;
     this.#airNote = root.getElementById("air-note")!;
+    this.#sky = createSkyHost({
+      root,
+      attribute: (name) => this.getAttribute(name),
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+      onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-sky-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      loadFont: loadMichroma,
+    });
+    this.#sky.setStyle(this.#skyStyle);
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#applyBodyLabel();
     setAirNote(this.#airNote, this, this.#model.airThickness);
@@ -288,6 +302,7 @@ export class ChikyuSpace extends HTMLElement {
         this.#tiers[layer] = width;
       },
       onLabels: (places) => this.#placeLabels(places),
+      onSky: (sky) => this.#sky?.frame(sky),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onSelected: (place) => this.#placeChosen(place),
       onMoving: () => this.#gate?.request(),
@@ -325,6 +340,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#view = undefined;
     this.#taken?.release();
     this.#taken = undefined;
+    this.#sky?.dispose();
+    this.#sky = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -355,8 +372,12 @@ export class ChikyuSpace extends HTMLElement {
     }
     else if (name === "meteors-label" || name === "lang") {
       setMeteorNote(this.#note, this, this.#model.meteors.on);
-      if (name === "lang") this.#applyBodyLabel();
+      if (name === "lang") {
+        this.#applyBodyLabel();
+        this.#sky?.refresh();
+      }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
+    else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -417,6 +438,19 @@ export class ChikyuSpace extends HTMLElement {
     if (value.facing) this.setAttribute("body-label-facing", "");
     if (value.font) this.setAttribute("body-label-font", value.font);
     if (value.fallbackFont) this.setAttribute("body-label-fallback-font", value.fallbackFont);
+  }
+
+  /**
+   * The names of the brightest stars and the constellations as faint lines, laid over the sky the page draws (hoshi-stars' `sky-labels`, an optional peer loaded only when one of these is set). The plain attributes are hoshi's: `star-names` (a count of the brightest stars in view and not covered by the
+   * Earth, the Moon or the Sun; bare is 10), `star-names-magnitude` (only stars at least that bright) and `constellation-lines` (the 88 figures as lines at this strength, 0 to 1; bare is 0.16): none of them, and nothing is loaded. The figure under the pointer or touched is at full strength and shows its name. Names are in the
+   * page's language and never overlap. Nothing is redrawn at rest. `chikyu-sky-unavailable` is sent when hoshi-stars is not there. The property is the look of the names, a partial hoshi-stars `LabelStyle` (font, size, case, ring, leader and the rest).
+   */
+  get skyStyle(): Partial<LabelStyle> {
+    return { ...this.#skyStyle };
+  }
+  set skyStyle(value: Partial<LabelStyle>) {
+    this.#skyStyle = { ...value };
+    this.#sky?.setStyle(this.#skyStyle);
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -793,6 +827,8 @@ export class ChikyuSpace extends HTMLElement {
     meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
     /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
+    /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked and how many times the layer was drawn. */
+    sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -811,6 +847,7 @@ export class ChikyuSpace extends HTMLElement {
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
+      sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0 },
     };
   }
 

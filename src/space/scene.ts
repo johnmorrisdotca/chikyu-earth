@@ -12,6 +12,7 @@ import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
+import type { SkyFrame } from "../sky/host.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
@@ -319,6 +320,8 @@ export interface SpaceDeps {
   air?: () => "full" | "light";
   /** Where each body is on the screen, in CSS pixels in the box, or null when it is behind the camera. Called at each draw. */
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
+  /** Where the sky falls on the screen at this draw, and the bodies that cover it (the names of the stars and the constellation lines are laid over it). Called at each draw. */
+  onSky?: (frame: SkyFrame) => void;
   /** The name written on the Earth could not be made. */
   onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
@@ -833,6 +836,31 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
+          if (deps.onSky) {
+            const sky = new three.Vector3();
+            // stars are directions: a point far along the direction from the camera, in the scene's axes (x to the vernal equinox, y north, z completing the hand), seen through the camera
+            const reach = Math.max(10, Math.min(camera.far * 0.5, 1000));
+            const discs: { x: number; y: number; radius: number }[] = [];
+            for (const name of ["Earth", "Moon", "Sun"] as const) {
+              const at = pos[name];
+              sky.set(at[0], at[1], at[2]).project(camera);
+              if (sky.z > 1 || sky.z < -1) continue;
+              discs.push({ x: ((sky.x + 1) / 2) * size.width, y: ((1 - sky.y) / 2) * size.height, radius: Math.min(px[name], 1e5) });
+            }
+            deps.onSky({
+              width: size.width,
+              height: size.height,
+              discs,
+              project(rightAscension, declination, out) {
+                const r = rightAscension * RAD;
+                const d = declination * RAD;
+                sky.set(Math.cos(d) * Math.cos(r), Math.sin(d), -Math.cos(d) * Math.sin(r)).multiplyScalar(reach).add(camera.position).project(camera);
+                out.x = ((sky.x + 1) / 2) * size.width;
+                out.y = ((1 - sky.y) / 2) * size.height;
+                return sky.z > -1 && sky.z < 1;
+              },
+            });
+          }
           if (layer && deps.onSelected) {
             const at = model.satellites.selected ? layer.place(camera, size) : null;
             if (at || selectedShown) deps.onSelected(at);

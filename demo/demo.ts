@@ -687,6 +687,8 @@ if (flat && controls && stage) {
       // the clock runs only while Play is on; a held space view draws nothing
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("star-names")) element.setAttribute("star-names", address.get("star-names")!);
+      if (address.get("constellation-lines")) element.setAttribute("constellation-lines", address.get("constellation-lines")!);
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
@@ -762,6 +764,8 @@ if (flat && controls && stage) {
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("star-names")) element.setAttribute("star-names", address.get("star-names")!);
+      if (address.get("constellation-lines")) element.setAttribute("constellation-lines", address.get("constellation-lines")!);
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
@@ -940,6 +944,22 @@ if (flat && controls && stage) {
       }
       address.set("body-label", look === "" ? null : look);
     });
+  }
+
+  // The names of the brightest stars (`star-names=12` in the address) and the constellations as faint lines (`constellation-lines=0.16`): hoshi-stars' sky labels, laid over the sky by the realistic Earth and the space view; off by default.
+  for (const [id, attribute, on] of [["#star-names", "star-names", "12"], ["#constellation-lines", "constellation-lines", "0.16"]] as const) {
+    const button = document.querySelector<HTMLButtonElement>(id);
+    button?.addEventListener("click", () => {
+      const next = button.getAttribute("aria-pressed") !== "true";
+      button.setAttribute("aria-pressed", String(next));
+      for (const element of [real, space]) {
+        if (!element) continue;
+        if (next) element.setAttribute(attribute, on);
+        else element.removeAttribute(attribute);
+      }
+      address.set(attribute, next ? on : null);
+    });
+    if (address.get(attribute)) button?.setAttribute("aria-pressed", "true");
   }
 
   // The air is drawn 3 times its real thickness so it can be seen (the elements' default, and they say so); this button draws it as it is (`air-thickness=1` in the address).
