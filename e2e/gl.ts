@@ -67,6 +67,12 @@ export async function timed<T>(page: Page, ms: number, read: () => Promise<T>): 
     const before = await read();
     await page.clock.runFor(ms);
     const after = await read();
+    // On an owned clock the page's animation frames come from the clock, not the screen: `runFor` fires a span's frames all at once, so nothing holds the page to what the software GPU can draw,
+    // and the GPU is left behind (21.9 s at the end of the 6,000-satellite test at 60x here, 22 to 37 s after the ride test in CI). Wait for it here, with the clock still stopped, so the test that
+    // asked for the frames pays for them, not the next page to open, which waited past its 60 s for them in CI.
+    const asked = Date.now();
+    await drainGpu(page);
+    if (Date.now() - asked > 1000) console.log(`timed: the GPU took ${Date.now() - asked} ms to draw the frames of a ${ms} ms span`);
     await page.clock.resume();
     return { before, after, seconds: ms / 1000 };
   }
