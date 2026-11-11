@@ -60,7 +60,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - uses: ./.github/actions/playwright
+        with:
+          browsers: ${{ matrix.browser }}
       - name: The demo, played in ${{ matrix.name }}
         run: pnpm test:demo:one ${{ matrix.projects }}
   usage:
@@ -74,7 +76,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright
+        with:
+          browsers: chromium
       - name: Every way to use it (a script tag, Vite, webpack, React, Vue, Svelte, Angular, an iframe, TypeScript, Node), from the package as npm packs it
         run: pnpm test:usage
       - name: The realistic Earth's soak, one minute (ten minutes by hand with pnpm test:soak)

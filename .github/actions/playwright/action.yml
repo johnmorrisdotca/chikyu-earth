@@ -1,0 +1,76 @@
+# The family's one way to get Playwright's browsers onto a GitHub-hosted Linux runner (KAZOKU-UI-100). Copied unchanged into each package's
+# .github/actions/playwright/; the canonical copy is kazoku-ui's. Use it after `pnpm install`, as
+#
+#   - uses: ./.github/actions/playwright
+#     with:
+#       browsers: chromium        # or webkit, or "chromium webkit"
+#
+# Why it exists: `playwright install --with-deps` did two slow things in one step, and a slow package mirror (the runner's apt mirror served fonts at about
+# 100 kB/s on 2026-11-09 and 2026-11-10) held a job until its time limit, so no test ran and the failure read as a test failure. Here:
+#   1. the browsers are cached by Playwright's version (`~/.cache/ms-playwright`), so a run with a cache hit downloads nothing;
+#   2. the system libraries (apt) are their own step, tried twice, each try cut off after 7 minutes (what apt had already downloaded stays for the second
+#      try), and a failure says it is the runner's package mirror, not a test.
+# Free: GitHub-hosted Linux runners and the cache are free on a public repository.
+name: Playwright browsers
+description: Playwright's browsers (cached by version) and their system libraries (bounded, retried once), on a GitHub-hosted Linux runner.
+inputs:
+  browsers:
+    description: The browsers to install, separated by spaces (chromium, webkit, firefox).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Which Playwright
+      id: which
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        version="$(pnpm exec playwright --version | awk '{print $NF}')"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "key=playwright-$RUNNER_OS-$version-$(echo "$BROWSERS" | tr -s ' ' '-')" >> "$GITHUB_OUTPUT"
+    - name: The browsers, cached by Playwright's version
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ steps.which.outputs.key }}
+    - name: Download the browsers (a cache hit has them already; a download is cut off after 10 minutes, tried twice)
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        for try in 1 2; do
+          # $BROWSERS is left unquoted on purpose: it is a list of words.
+          # shellcheck disable=SC2086
+          if timeout -k 15 600 pnpm exec playwright install $BROWSERS; then exit 0; fi
+          echo "::warning::Downloading the browsers failed or took too long (try $try of 2)."
+          sleep 15
+        done
+        echo "::error title=Playwright browsers did not download::playwright install $BROWSERS failed twice. This is the download, not a test: nothing was run."
+        exit 1
+    - name: System libraries for the browsers (apt; each try is cut off after 7 minutes, two tries; a slow mirror fails here, not in a test)
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        for try in 1 2; do
+          started=$SECONDS
+          # $BROWSERS is left unquoted on purpose: it is a list of words.
+          # shellcheck disable=SC2086
+          if timeout -k 15 420 pnpm exec playwright install-deps $BROWSERS; then
+            echo "System libraries ready after try $try ($((SECONDS - started)) s)."
+            exit 0
+          fi
+          echo "::warning::Installing the system libraries for $BROWSERS failed or passed 7 minutes (try $try of 2, after $((SECONDS - started)) s): the runner's package mirror is slow or down."
+          # A try that was cut off may have left apt running, holding its lock, and dpkg half-way: stop apt, wait for the lock (at most a minute), put dpkg right.
+          sudo pkill -x apt-get || true
+          for _ in $(seq 1 30); do
+            sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || break
+            sleep 2
+          done
+          sudo dpkg --configure -a || true
+          sleep 10
+        done
+        echo "::error title=System libraries did not install::playwright install-deps $BROWSERS failed twice, each try cut off after 7 minutes. This is the runner's package mirror (apt), not a test: nothing was run. Run the job again later."
+        exit 1
