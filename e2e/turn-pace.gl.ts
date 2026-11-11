@@ -41,5 +41,6 @@ test("the line globe's 1× (the Earth's real rate) is kept in the address, and a
   await page.reload();
   await showPaces(page);
   await expect(paceButton(page, 1), "the reload opens on 1×").toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(CONTROLS)).toHaveAttribute("pace", "1");
+  // the pace buttons are what a reader sees and the address is what a link carries; the `pace` attribute stays the page's own start (1440), which the address overrides, so it is not asserted
+  await expect(page).toHaveURL(/[?&]pace=1(&|$)/);
 });

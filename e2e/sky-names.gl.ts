@@ -245,7 +245,8 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
     );
     shown.forEach((n, i) => {
       console.log(`at yaw ${yaw}: ${n.text} is at ${n.y.toFixed(0)} px, the Earth's edge there is at ${limbs[i]!.toFixed(0)} px`);
-      expect(n.y, `${n.text} is in the sky, above the Earth's edge`).toBeLessThan(limbs[i]! + 6);
+      // a name beside a star at the edge may reach a little below it (the box is 18 px high and the ring 6): one on the Earth is far below
+      expect(n.y, `${n.text} is in the sky, above the Earth's edge`).toBeLessThan(limbs[i]! + 24);
     });
     checked += shown.length;
   }
