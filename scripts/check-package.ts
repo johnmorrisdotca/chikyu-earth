@@ -48,6 +48,7 @@ console.log("satellites ok");
 const meteors = await import(new URL("../dist/meteors/index.js", import.meta.url).href);
 const geminids = meteors.activeShowers(Date.UTC(2026, 11, 14, 8))[0];
 if (meteors.METEOR_SHOWERS.length !== 37 || geminids?.shower.code !== "GEM" || !(geminids.zhr > 100) || meteors.streaksPerSecond(8) !== 2.5) throw new Error("the meteors are off");
+if (meteors.parentBodyOf("PER")?.designation !== "109P/Swift-Tuttle" || meteors.showersOfParent("1P").length !== 2 || meteors.METEOR_LINKS.length !== 37) throw new Error("the meteors' parent links are off");
 console.log("meteors ok");
 
 // the data door: sources, credits and the package's own data import with no browser and no dependency

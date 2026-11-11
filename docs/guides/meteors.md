@@ -112,11 +112,31 @@ const overhead = pointBeneath(perseids.radiant, moment);
 console.log(`Overhead at ${overhead.lat} N, ${overhead.lon.toFixed(0)} E; Tokyo: ${hourlyRateAt(meteorSky(moment), { lon: 139.7, lat: 35.7 }).toFixed(0)} an hour`);
 ```
 
-- `METEOR_SHOWERS`: the 37 showers, each with its code, IAU number, name in English and Japanese, first and last day, maximum (the day in 2026 and the Sun's longitude, which holds for any year), radiant, speed, population index, rate at the maximum (`null` where the list calls it variable) and parent body where a source names one.
+- `METEOR_SHOWERS`: the 37 showers, each with its code, IAU number, name in English and Japanese, first and last day, maximum (the day in 2026 and the Sun's longitude, which holds for any year), radiant, speed, population index, rate at the maximum (`null` where the list calls it variable) and parent body where the IAU Meteor Data Center names one.
 - `showerRate(shower, ms)` and `activeShowers(ms)`: how strong a shower is at a moment.
 - `pointBeneath(radiant, ms)` and `apexPoint(ms)`: the place a point of the sky, or the Earth's way, stands overhead.
 - `meteorSky(ms)` and `hourlyRateAt(sky, place)`: the hourly rate for an ideal watcher at a place.
 - `darkness(place, sun)`, `streaksPerSecond(rate, strength)` and `streakPath(place, radiant)`: what the layer draws from.
+
+## Parent bodies and the IAU's lists
+
+Each shower is linked to the comet or asteroid its meteors come from, by the shower's IAU code and the body's designation. The links, and the check of the table against the IAU Meteor Data Center's lists, are in the same entry point:
+
+```js
+import { METEOR_LINKS, parentBodyOf, showerSource, showersOfParent } from "@johnmorrisdotca/chikyu-earth/meteors";
+
+// The Perseids' parent body, found by the shower's IAU code, and every shower that comes from comet Halley.
+console.log(parentBodyOf("PER")?.designation, showersOfParent("1P/Halley").map((shower) => shower.name).join(", "));
+
+// Where one row's figures come from.
+console.log(showerSource(METEOR_LINKS.find((link) => link.code === "LYR")));
+```
+
+- `METEOR_LINKS`: for each shower its IAU name, whether the Data Center lists it as `established` or only on its working list, its parent body (`designation` and `kind`), the Data Center's solution its radiant and speed agree with, and whether each of the radiant and speed is the IMO table's or the Data Center's.
+- `parentBodyOf(code)` gives a shower's parent body (`null` where the Data Center names none), and `showersOfParent(designation)` finds the showers of one body by its designation, its number (`2P`) or its name (`Encke`).
+- `showerSource(link)` says in a sentence where a row's figures come from.
+- **What was checked.** Each radiant and speed was held against the Data Center's solutions of 100 meteors or more whose mean solar longitude lies within 3 degrees of the maximum, with the radiant moved by the solution's own daily motion. Both stand when they are within 2 degrees and 2 km/s of one. Three rows were off by more than the Data Center's own solutions are from each other and took its figures: the April Lyrids' speed (47 km/s, not 49), the alpha-Monocerotids' speed (62, not 65) and the eta-Eridanids' radiant (right ascension 42, declination -13). The Data Center lists no maximum date and no rate, so the dates and rates are the IMO's. Four established showers have no solution that qualifies and keep the IMO's figures.
+- **The Data Center's own words.** It gives the Draconids as the October Draconids and the Monocerotids as the December Monocerotids (`iauName`), and the IMO's Puppid-Velids (IAU 301) as the gamma-Puppids. Three of the showers (the alpha-Centaurids, the September Lyncids and the gamma-Puppids) are only on its working list. Cite it as Jenniskens and others (2020, Planetary and Space Science 182, 104821) and Jopek and Kanuchova (2017, Planetary and Space Science 143, 3-6), as its data files ask.
 
 ## Limits
 
