@@ -216,6 +216,26 @@ console.log(JSON.stringify(readBodyLabel((name) => mine[name] ?? null)));
 console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.length);
 ```
 
+## Places
+
+`places` on `<chikyu-earth-realistic>` and `<chikyu-space>` marks places on the Earth: each `{ id, lat, lon, label?, kind? }` stands out of the surface as a ring on the ground and a beam with a head, turning with the Earth and hidden on the far side, with its name beside it that never overlaps another (right, left, above, below, else the lesser place's name is left out). `kind: "here"` is the visitor's own place and stands out with a quiet pulse (none for a reader who prefers reduced motion); other places are quieter. The package never asks where anyone is and stores nothing: the page hands the list in and hears `chikyu-place-click`. [guide](docs/guides/places.md).
+
+```js
+import { orthographicProjector, putPlaces, readPlaces } from "@johnmorrisdotca/chikyu-earth/places";
+
+// The list a page hands to the Earth: each place is checked and copied, and one that cannot be drawn is left out and counted.
+const read = readPlaces([
+  { id: "here", lat: 35.68, lon: 139.69, label: "Tokyo", kind: "here" },
+  { id: "lima", lat: -12.05, lon: -77.04, label: "Lima" },
+  { id: "bad", lat: 120, lon: 0 },
+]);
+console.log(`${read.places.length} places, ${read.skipped} left out`);
+
+// Where they fall when the view is centred on Tokyo: Tokyo faces the viewer, Lima is on the far side and is not drawn.
+const view = orthographicProjector({ lon: 139.69, lat: 35.68, radius: 200, cx: 210, cy: 210 }, 420, 420);
+for (const mark of putPlaces(read.places, view)) console.log(`${mark.place.label}: ${mark.facing ? "drawn" : "far side"}`);
+```
+
 ## Outside data: the data door
 
 The package draws; you bring the data. `@johnmorrisdotca/chikyu-earth/door` takes a finer map of the Earth, or a list of satellites' orbit data, as a **source**: a small object that carries its own licence and credit, so the screen can always say whose data it shows. With no source nothing changes: the Earth is drawn from the package's own pictures and tiles (`OWN_SOURCES`, written from `NOTICE.md`, never non-commercial or share-alike). A source of yours may be either, and the credit line prints that beside the licence.
@@ -509,6 +529,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
 | `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
 | `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
+| `.../places` | The list of places a page marks on the Earth, and the sums that put each on the screen. No DOM, no dependency. |
 | `.../door` | The data door: sources of your own maps and orbit data with their licence and credit, `creditLine`, the package's own sources. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
 
@@ -532,6 +553,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
+| [Places on the Earth](docs/guides/places.md) | Mark the visitor's place and favourite places: a ring, a beam and a name that never overlaps another |
 | [Outside data, the data door](docs/guides/data-door.md) | Hand the package your own maps of the Earth or orbit data with their licence and credit, switch them off, and show whose data is on the screen |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |

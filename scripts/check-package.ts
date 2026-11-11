@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/places/index.js", "dist/places/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -55,6 +55,13 @@ const door = await import(new URL("../dist/door/index.js", import.meta.url).href
 const doorCredit = door.creditLine([door.ownCredit("chikyu-tiles", 3)], "en");
 if (door.OWN_SOURCES.length !== 2 || !doorCredit.includes("NASA Earth Observatory") || !doorCredit.includes("Public domain") || door.earthTiles("/tiles/").need({ lonMin: -180, lonMax: -170, latMin: 80, latMax: 90, layer: "day" }, 8192).join() !== "day/3/0/0") throw new Error("the data door is off");
 console.log("door ok");
+
+// the places: the list is checked and the sums run with no browser and no dependency
+const marks = await import(new URL("../dist/places/index.js", import.meta.url).href);
+const read = marks.readPlaces([{ id: "a", lat: 35.7, lon: 190, label: " Tokyo " }, { id: "b", lat: 120, lon: 0 }]);
+const mid = marks.orthographicProjector({ lon: 0, lat: 0, radius: 200, cx: 210, cy: 210 }, 420, 420);
+if (read.places.length !== 1 || read.places[0].lon !== -170 || read.places[0].label !== "Tokyo" || read.skipped !== 1 || !mid.at(0, 0, 0).facing || mid.at(180, 0, 0).facing) throw new Error("the places are off");
+console.log("places ok");
 
 const sheets = await import(new URL("../dist/sheets/index.js", import.meta.url).href);
 const room = { widthMm: 184.6, heightMm: 170 };

@@ -14,6 +14,8 @@ import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
+import { placeVector } from "../meteors/rate.ts";
+import type { PlaceProjector } from "../places/geometry.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
@@ -321,6 +323,8 @@ export interface SpaceDeps {
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
   /** The name written on the Earth could not be made. */
   onLabelError?: (error: unknown) => void;
+  /** Where a place on the Earth falls on the screen at this draw (a projector), or `null` while the Earth is not in view or is too small. Called at each draw, after the picture is placed. */
+  onPlaces?: (view: PlaceProjector | null) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
   /** Called at the end of a draw while the camera is moving from one ride to another, so the next frame is asked for (at the page's frame cap). */
@@ -833,6 +837,34 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
+          if (deps.onPlaces) {
+            const radiusPx = Math.min(px.Earth, 1e5);
+            if (rideFrom || radiusPx < 14) deps.onPlaces(null);
+            else {
+              earth.updateWorldMatrix(true, false);
+              const camAt = camera.position;
+              const point = new three.Vector3();
+              const centre = new three.Vector3();
+              earth.getWorldPosition(centre);
+              deps.onPlaces({
+                radiusPx,
+                width: size.width,
+                height: size.height,
+                at(lon, lat, up) {
+                  const v = placeVector({ lon, lat });
+                  point.set(v[0] * (1 + up), v[1] * (1 + up), v[2] * (1 + up));
+                  earth.localToWorld(point);
+                  // it faces the viewer when the Earth's surface there turns towards the camera: the outward direction and the way to the camera make an acute angle
+                  const nx = point.x - centre.x;
+                  const ny = point.y - centre.y;
+                  const nz = point.z - centre.z;
+                  const facing = nx * (camAt.x - point.x) + ny * (camAt.y - point.y) + nz * (camAt.z - point.z) > 0.02 * Math.hypot(nx, ny, nz) * Math.hypot(camAt.x - point.x, camAt.y - point.y, camAt.z - point.z);
+                  point.project(camera);
+                  return { x: ((point.x + 1) / 2) * size.width, y: ((1 - point.y) / 2) * size.height, facing: facing && point.z < 1 && point.z > -1 };
+                },
+              });
+            }
+          }
           if (layer && deps.onSelected) {
             const at = model.satellites.selected ? layer.place(camera, size) : null;
             if (at || selectedShown) deps.onSelected(at);

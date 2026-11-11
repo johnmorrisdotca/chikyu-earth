@@ -18,6 +18,9 @@ import { createDoorHost, type DoorHost } from "../door/host.ts";
 import { folderSource } from "../door/map.ts";
 import { ownCredit } from "../door/own.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
+import { createPlacesHost, PLACES_STYLE, type PlacesHost } from "../places/host.ts";
+import { orthographicProjector } from "../places/geometry.ts";
+import { readPlaces, readPlacesAttribute, type Place } from "../places/types.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
@@ -42,7 +45,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + METEOR_NOTE_STYLE + NOTES_STYLE + PLACES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -157,7 +160,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", "places", "places-turn", ...BODY_LABEL_ATTRIBUTES, "air-thickness", "air-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -193,6 +196,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
   #note: HTMLElement | undefined;
+  /** The places the page marks on the Earth (`places`), and the layer that draws them. */
+  #places: Place[] = [];
+  #placesHost: PlacesHost | undefined;
   #airNote: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
@@ -226,6 +232,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#overlay = root.getElementById("overlay")!;
     this.#note = root.getElementById("meteor-note")!;
     this.#airNote = root.getElementById("air-note")!;
+    this.#placesHost = createPlacesHost(root, { onClick: (place) => this.#placeClick(place), reducedMotion: prefersLessMotion });
+    if (this.hasAttribute("places")) this.#places = readPlacesAttribute(this.getAttribute("places")).places;
+    if (this.#places.length > 0) this.#placesHost.set(this.#places);
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
@@ -272,6 +281,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
+        this.#placesHost?.frame(orthographicProjector(pose, pose.width, pose.height));
       },
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
@@ -318,6 +328,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#view = undefined;
     this.#taken?.release();
     this.#taken = undefined;
+    this.#placesHost?.dispose();
+    this.#placesHost = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -336,6 +348,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#gate?.soon();
     }
     else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "places") this.places = readPlacesAttribute(value).places;
     else if (name === "meteors-strength") {
       this.#model.meteors.strength = readMeteorStrength(value);
       this.#gate?.soon();
@@ -428,6 +441,25 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.bodyLabel.settings = readBodyLabel((name) => this.getAttribute(name));
     this.#model.bodyLabel.text = bodyLabelText((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en");
     this.#gate?.soon();
+  }
+
+  /**
+   * The places the page marks on the Earth (the attribute `places` is the same list as JSON): each `{ id, lat, lon, label?, kind? }` stands out of the surface as a ring on the ground and a beam with a head, with its name beside it that never
+   * overlaps another name or marker (right, then left, above, below, else the lesser place's name is left out). `kind: "here"` is the visitor's own place and stands out, with a quiet pulse (none for a reader who prefers reduced motion); any other kind is `favourite`, drawn quieter.
+   * A place on the far side is not drawn. The package never asks where anybody is, and keeps nothing: the page hands the list in. A place that cannot be drawn (see `readPlaces`) is left out. Pressing a name sends `chikyu-place-click` with `detail: { place }`
+   * and, when the attribute `places-turn` is there, turns the Earth to it. Nothing is drawn at rest but the pulse, and only while the Earth is in view.
+   */
+  get places(): readonly Place[] {
+    return this.#places;
+  }
+  set places(list: readonly Place[]) {
+    this.#places = readPlaces(list).places;
+    this.#placesHost?.set(this.#places);
+  }
+
+  #placeClick(place: Place): void {
+    this.dispatchEvent(new CustomEvent("chikyu-place-click", { detail: { place }, bubbles: true, composed: true }));
+    if (this.hasAttribute("places-turn") && this.getAttribute("places-turn") !== "off") this.centre = { lon: place.lon, lat: place.lat };
   }
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -617,6 +649,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
     /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
+    /** The places: how many were handed in, how many face the viewer, the names shown, the times the layer was drawn, and whether its pulse is running. */
+    places: { places: number; facing: number; labels: number; renders: number; pulsing: boolean };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -630,6 +664,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
+      places: this.#placesHost?.stats ?? { places: this.#places.length, facing: 0, labels: 0, renders: 0, pulsing: false },
     };
   }
 

@@ -23,6 +23,7 @@ import { discRadius } from "../src/realistic/earth.ts";
 import { readMeteorStrength } from "../src/meteors/strength.ts";
 import { creditLine } from "../src/door/index.ts";
 import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
+import type { Place } from "../src/places/index.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../src/satellites/limits.ts";
 import { mountMissions } from "./missions.ts";
 
@@ -43,6 +44,13 @@ const stage = document.querySelector<HTMLElement>("#globe");
 
 if (flat && controls && stage) {
   const address = createAddressState({ defaults: { look: "line" } });
+  /** A made-up list for the demo's Sample places: the page decides what goes in it, the package only draws. */
+  const SAMPLE_PLACES: Place[] = [
+    { id: "here", lat: 35.68, lon: 139.69, label: "Tokyo", kind: "here" },
+    { id: "paris", lat: 48.86, lon: 2.35, label: "Paris", kind: "favourite" },
+    { id: "sydney", lat: -33.87, lon: 151.21, label: "Sydney", kind: "favourite" },
+    { id: "cairo", lat: 30.04, lon: 31.24, label: "Cairo", kind: "favourite" },
+  ];
   const status = document.querySelector<HTMLElement>("#status");
   const realControls = document.querySelector<HTMLElement>("#real-controls");
   const cameraControls = document.querySelector<HTMLElement>("#camera-controls");
@@ -688,6 +696,7 @@ if (flat && controls && stage) {
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
+      if (address.get("places") === "sample") element.places = SAMPLE_PLACES;
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
@@ -763,6 +772,7 @@ if (flat && controls && stage) {
       if (lights === "off") element.setAttribute("lights", "off");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
+      if (address.get("places") === "sample") element.places = SAMPLE_PLACES;
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
@@ -896,6 +906,15 @@ if (flat && controls && stage) {
   };
   toggle(clouds, "clouds");
   toggle(lights, "lights");
+  // Sample places (`places=sample` in the address): the visitor's own place, as a made-up one in Tokyo, and three favourites; the page hands the list to whichever 3D look is showing, and Press a name turns the Earth to it.
+  const placesButton = document.querySelector<HTMLButtonElement>("#places-sample");
+  placesButton?.addEventListener("click", () => {
+    const on = placesButton.getAttribute("aria-pressed") !== "true";
+    placesButton.setAttribute("aria-pressed", String(on));
+    for (const element of [real, space]) if (element) element.places = on ? SAMPLE_PLACES : [];
+    address.set("places", on ? "sample" : null);
+  });
+
   // Meteors are off unless asked for (`meteors=on` in the address); the realistic Earth and the space view draw them and say under the picture that each streak is an illustration.
   const meteors = document.querySelector<HTMLButtonElement>("#meteors");
   meteors?.addEventListener("click", () => {
@@ -1140,6 +1159,7 @@ if (flat && controls && stage) {
   if (opened["lights"] === "off") lights?.setAttribute("aria-pressed", "false");
   if (opened["meteors"] === "on") meteors?.setAttribute("aria-pressed", "true");
   if (opened["body-label"] !== undefined) markLabel(opened["body-label"]);
+  if (opened["places"] === "sample") placesButton?.setAttribute("aria-pressed", "true");
   if (opened["meteors-strength"] !== undefined) markStrength(readMeteorStrength(opened["meteors-strength"]));
   if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
