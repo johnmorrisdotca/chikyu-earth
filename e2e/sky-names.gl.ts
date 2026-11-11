@@ -68,6 +68,18 @@ test("off unless asked for: no layer, nothing loaded, then the attributes switch
   await page.locator(SPACE).evaluate((el) => el.setAttribute("star-names", "12"));
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000, message: "hoshi-stars is loaded when asked for" }).toBe(true);
   await wideSky(page);
+  // the layer is styled: the names are laid over the picture (absolutely placed) and add nothing to its height, which stays as square as the element is
+  const layout = await page.locator(SPACE).evaluate((el) => {
+    const name = el.shadowRoot!.querySelector<HTMLElement>("#sk-names .sk-name:not([hidden])")!;
+    const canvas = el.shadowRoot!.getElementById("sk-canvas")!;
+    const own = el.getBoundingClientRect();
+    return { name: getComputedStyle(name).position, canvas: getComputedStyle(canvas).position, width: own.width, height: own.height, halo: getComputedStyle(name).textShadow };
+  });
+  expect(layout.name, "a name is placed over the picture").toBe("absolute");
+  expect(layout.canvas, "and so is the lines' canvas").toBe("absolute");
+  expect(Math.abs(layout.height - layout.width), "the picture is as high as it is wide: the layer adds no height").toBeLessThan(2);
+  expect(layout.halo, "a name has its outline").not.toBe("none");
+  await wideSky(page);
   // the layer's count and the names on the page, read in one go so the view cannot move between the two
   const both = await page.locator(SPACE).evaluate((el) => ({
     counted: (Reflect.get(el, "stats") as { sky: { names: number } }).sky.names,
