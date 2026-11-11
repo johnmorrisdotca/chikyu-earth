@@ -1,0 +1,25 @@
+# The whole Earth-orbit catalogue (working satellites, inactive payloads, rocket bodies, debris), once a day, published on the demo's GitHub Pages under /catalogue/. Nothing here costs anything on a public repository.
+# What runs: Pages (pages.yml) with `catalogue: true`. It carries over the files already on the site, asks Space-Track once for every object on orbit and (after 17:00 UTC) once for SATCAT, asks CelesTrak once for the
+# list of working satellites, packs four files and manifest.json (scripts/catalogue.ts), and publishes the site with them. If Space-Track fails the last files are kept and their age is logged; a failed run is not retried.
+# Space-Track's rules: GP once an hour at most, SATCAT once a day after 17:00 UTC, fewer than 30 requests a minute and 300 an hour. This run makes two, at 17:41 UTC, an odd minute.
+# SWITCHED OFF until the repository variable CATALOGUE_PUBLISH is `yes`: the first publish waits for the redistribution section of Space-Track's documentation to be read once in a real browser and its sentence and date to be
+# written in NOTICE.md. Until then this workflow does nothing, and a run of Pages only carries over files if there are any.
+name: Catalogue
+on:
+  schedule:
+    - cron: "41 17 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: catalogue
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: vars.CATALOGUE_PUBLISH == 'yes'
+    uses: ./.github/workflows/pages.yml
+    with:
+      catalogue: true
+    secrets: inherit

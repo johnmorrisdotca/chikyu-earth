@@ -98,3 +98,7 @@ Filed as one ticket on the `modules` board. Nothing built waits for the answers.
 | **Wikipedia and Wikidata** | CC BY-SA 4.0 and CC0. | **Green** |
 
 This page is a research note, not a decision: no data from these sources is in the package.
+
+## The whole catalogue (MODULES-932, read 2026-11-11)
+
+`scripts/catalogue.ts` makes the demo site's four group files (working satellites, inactive payloads, rocket bodies, debris) and a manifest from Space-Track's GP class (every object on orbit, with the documented `decay_date/null-val/epoch/>now-10` filter) and its SATCAT, under the same blanket approval and citation as above. It is the one place the package's own repository asks Space-Track for the full catalogue: one login, one GP request, a 15-second pause, one SATCAT request only after 17:00 UTC, the first answer that is not 200 stops the asking, and a failure keeps the last files and logs their age. CelesTrak has no full-catalogue list, so it supplies one thing only: the catalogue numbers of its active list, to tell working payloads from inactive ones, because Space-Track has no field for that. The workflow (`.github/workflows/catalogue.yml`) runs once a day and is off until the repository variable `CATALOGUE_PUBLISH` is `yes`; the redistribution section is to be read once in a real browser before then (NOTICE.md). The tests use a recorded small sample (`test/recorded/catalogue-*-sample-2026-11-11.*`) and a made-up Space-Track.
