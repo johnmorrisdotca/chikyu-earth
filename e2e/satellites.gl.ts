@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { readFileSync } from "node:fs";
-import { COUNT_SCRIPT, alive, counts, drainGpu, ownClock, settle, timed } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, ownClock, settle, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -157,6 +157,8 @@ test("at real time a group on show draws once a second and runs SGP4 once a seco
 test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
   test("6,000 satellites at 60 times real time: at most 30 frames a second, one SGP4 batch a second, one extra draw call", async ({ page }) => {
+    // about 15 s of its own in CI and, in `measure`, the wait for the software GPU to draw the frames the page's own clock asked for (22 to 37 s after the ride test in CI)
+    test.setTimeout(90_000);
     await ownClock(page);
     await open(page, "", "stations,starlink");
     const before = await measure(page, 100);
@@ -257,9 +259,6 @@ test.describe("moving", () => {
     console.log(`60x, no motion preference: ${moving.frames.toFixed(1)} frames a second`);
     expect(moving.frames).toBeGreaterThan(5);
     expect(moving.frames).toBeLessThanOrEqual(31);
-    // the first view drew 30 frames a second of 6,000 satellites on the software GPU, which is behind by then: held, caught up and closed, so the second view does not wait for it (it took past 60 s on a runner, MODULES-897)
-    await setSpeed(page, 0);
-    console.log(`60x: the GPU took ${Math.round(await drainGpu(page))} ms to catch up`);
     await page.close();
 
     const context = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 1280, height: 900 } });
