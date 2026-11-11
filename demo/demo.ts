@@ -662,7 +662,7 @@ if (flat && controls && stage) {
     const [{ setThreeLoader, setBodyPainter, setSatellitePainter }, { stationModels }] = await Promise.all([import("../src/space/element.ts"), import("./station-models.ts")]);
     setThreeLoader(() => import("./three-subset.ts"));
     // the followed ISS, Tiangong and Hubble are drawn as these made-up models: a page supplies its own
-    setSatellitePainter(stationModels);
+    if (address.get("models") !== "off") setSatellitePainter(stationModels);
     // the Sun, the planets, Pluto and their moons are wakusei-planets' (an optional peer): the real ones, or plain spheres where it is not there
     if (!planetsTried) {
       planetsTried = true;

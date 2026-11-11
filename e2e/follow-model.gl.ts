@@ -83,6 +83,8 @@ test("the large satellites that have a model are listed, and the page hops betwe
 
 test("nothing is drawn at rest while a model is followed and the clock holds", async ({ page }) => {
   await open(page);
+  // the demo's view controls turn the view by themselves (Auto-turn) when motion is allowed: hold it, so only the page's clock and the model could draw
+  await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
   await expect.poll(() => modelAt(page), { timeout: 60_000 }).not.toBeNull();
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride.gliding), { timeout: 30_000 }).toBe(false);
   await page.evaluate(async () => {
