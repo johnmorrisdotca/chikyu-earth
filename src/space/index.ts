@@ -3,4 +3,4 @@
 export { AU_IN_EARTH_RADII, blend, createTrack, EARTH_RADIUS_KM, frameAt, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 export { compress, MOON_COMPRESSED, placeAround, placeMoon, placeSun, RADIUS, SUN_COMPRESSED, truePosition, type ScaleMode } from "./scale.ts";
 export { fitDistance, plainPainter, type BodyDrawing, type BodyMoon, type BodyPainter, type PaintContext } from "./scene.ts";
-export { RIDE_FOV, ridePose, type RideInput, type RideLook, type RidePose } from "./ride.ts";
+export { RIDE_FOV, rideFov, ridePose, rideTiltLimits, rideTurnDegrees, type RideInput, type RideLook, type RidePose } from "./ride.ts";

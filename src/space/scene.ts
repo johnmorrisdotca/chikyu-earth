@@ -180,6 +180,10 @@ export interface SpaceModel {
   pose: Pose;
   /** Pixels a second that riding makes things move on the screen at 1x clock speed (0 when not riding): the draw rate follows it. */
   rideMotion: number;
+  /** The heading of a riding camera in degrees, added up change by change from the controls' wrapped yaw (`rideTurnDegrees`): a drag the whole way round is a turn the whole way round, and a change of zoom swings nothing. */
+  rideTurn: number;
+  /** How far the riding camera is from the Earth's centre in Earth radii as of the last draw, or null when none rides: the range of tilt that does something follows it. */
+  rideDistance: number | null;
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   ratio(): number;
@@ -213,6 +217,8 @@ export const newSpaceModel = (): SpaceModel => ({
   heightPx: 420,
   pose: { p: [0, 0, 0], q: [0, 0, 0, 1], fov: FOV, valid: false },
   rideMotion: 0,
+  rideTurn: 0,
+  rideDistance: null,
   satellites: newSatelliteState(),
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
@@ -652,6 +658,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let rideFrom: { position: Vec3; velocity: Vec3; hidden: BodyName | null; gameSeconds: number } | null = null;
           model.rideLost = false;
           model.rideMotion = 0;
+          model.rideDistance = null;
           const ride = model.ride;
           if (ride) {
             if (typeof ride.target === "string") {
@@ -682,7 +689,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let fovNow = FOV;
           let distance = 0;
           if (rideFrom) {
-            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom });
+            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn });
+            model.rideDistance = Math.hypot(...rideFrom.position);
             camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
             camera.up.set(pose.up[0], pose.up[1], pose.up[2]);
             camera.lookAt(pose.position[0] + pose.forward[0], pose.position[1] + pose.forward[1], pose.position[2] + pose.forward[2]);
