@@ -27,7 +27,7 @@ export interface SkyHost {
   refresh(): void;
   /** The look of the names, as a partial hoshi-stars `LabelStyle` (the property `skyStyle`). */
   setStyle(style: Partial<LabelStyle>): void;
-  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number };
+  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string };
   dispose(): void;
 }
 
@@ -331,7 +331,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
     },
     get stats() {
-      return { on: wanted(), loaded: module !== undefined, names: names?.labels.length ?? 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders };
+      return { on: wanted(), loaded: module !== undefined, names: names?.labels.length ?? 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "" };
     },
     dispose() {
       doc.removeEventListener("kazoku-languagechange", onLanguage);
