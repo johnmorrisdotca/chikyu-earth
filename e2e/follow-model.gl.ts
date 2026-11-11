@@ -87,10 +87,21 @@ test("nothing is drawn at rest while a model is followed and the clock holds", a
   await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
   await expect.poll(() => modelAt(page), { timeout: 60_000 }).not.toBeNull();
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride.gliding), { timeout: 30_000 }).toBe(false);
-  await page.evaluate(async () => {
-    for (let frame = 0; frame < 10; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-  });
-  const draws = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+  // pictures still arriving (a sharper texture) draw the picture: wait until the page has gone thirty frames with no draw at all
+  const drawsNow = (): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+  await expect
+    .poll(
+      async () => {
+        const before = await drawsNow();
+        await page.evaluate(async () => {
+          for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+        });
+        return (await drawsNow()) - before;
+      },
+      { timeout: 60_000, message: "the picture is at rest" },
+    )
+    .toBe(0);
+  const draws = await drawsNow();
   await page.evaluate(async () => {
     for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
   });
