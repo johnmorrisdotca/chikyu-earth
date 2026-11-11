@@ -1,4 +1,4 @@
-// The name written on the Earth (MODULES-923): the family's attribute names mean what the family says, and the text follows the page's language.
+// The name written on the Earth: the family's attribute names mean what the family says, and the text follows the page's language.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, newBodyLabelState, readBodyLabel } from "../src/realistic/body-label.ts";

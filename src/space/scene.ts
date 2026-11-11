@@ -268,7 +268,7 @@ export interface BodyDrawing {
 }
 
 /**
- * The seam for drawing a followed satellite as a 3D model (MODULES-861): the package ships no model, the page supplies them. `has` says whether there is a model for a satellite (by NORAD number: `25544` is the ISS); `make` makes it as a drawing of radius 1
+ * The seam for drawing a followed satellite as a 3D model: the package ships no model, the page supplies them. `has` says whether there is a model for a satellite (by NORAD number: `25544` is the ISS); `make` makes it as a drawing of radius 1
  * (its middle at the origin, its long axis along +x, its top, the side that faces space, along +z, and its left along +y), at once or later (a promise); the view places it where the satellite is, points it the way it flies, sizes it to read and
  * gives it the Sun's direction (`light`, `update`). `null` from `make` is no model: the satellite stays a dot.
  *
