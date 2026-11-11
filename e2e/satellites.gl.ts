@@ -357,7 +357,14 @@ test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit,
         ctx.drawImage(img, 0, 0);
         const at = (x: number, y: number) => Array.from(ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data);
         const light = (p: number[]) => 0.2126 * p[0]! + 0.7152 * p[1]! + 0.0722 * p[2]!;
-        return (list as { x: number; y: number }[]).filter((s) => s.x < img.width - 20 && s.y < img.height - 20).map((s) => ({ core: at(s.x, s.y), coreLight: light(at(s.x, s.y)), rim: light(at(s.x + 5, s.y)), ground: light(at(s.x + 14, s.y)) }));
+        // the rim is the darkest point on four rays out of the middle, 3 to 9 pixels out; the ground is the same rays 14 pixels out, at its darkest
+        const rays = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        return (list as { x: number; y: number }[]).filter((s) => s.x < img.width - 20 && s.y < img.height - 20).map((s) => ({
+          core: at(s.x, s.y),
+          coreLight: light(at(s.x, s.y)),
+          rim: Math.min(...rays.flatMap(([dx, dy]) => [3, 4, 5, 6, 7, 8, 9].map((r) => light(at(s.x + dx! * r, s.y + dy! * r))))),
+          ground: Math.min(...rays.map(([dx, dy]) => light(at(s.x + dx! * 14, s.y + dy! * 14)))),
+        }));
       },
       [png, spots] as const,
     );
