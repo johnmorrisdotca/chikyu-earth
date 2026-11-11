@@ -133,7 +133,10 @@ if (flat && controls && stage) {
    */
   const REAL_TURN = "0.004178";
   const VISIBLE_TURN = "6";
+  /** Whether the view controls are on the line and thick globes' steps (the Earth's own rate and 1440×): there the choice of 1× is kept in the address as `turn=real`, because the family's view controls leave their own start (1) off it. */
+  let realRateSteps = true;
   const turnFor = (visible: boolean): void => {
+    realRateSteps = !visible;
     const set = (name: string, value: string): void => {
       if (controls!.getAttribute(name) !== value) controls!.setAttribute(name, value);
     };
@@ -144,9 +147,19 @@ if (flat && controls && stage) {
     } else {
       set("speed", REAL_TURN);
       set("paces", "0.5 1 2 1440");
-      set("pace", "1440");
+      // the page opens on 1440×, and a link that chose the Earth's own rate (1×) opens on that
+      set("pace", address.get("turn") === "real" ? "1" : "1440");
     }
   };
+  // 1× on the line and thick globes is the family's start for a pace, which its address leaves out; the page keeps that one choice itself (`turn=real`), so a reload or a shared link opens on it and not on the 1440× the page opens on
+  if (controls) {
+    if (address.get("turn") === "real") controls.setAttribute("pace", "1");
+    new MutationObserver(() => {
+      if (!realRateSteps) return;
+      const real = controls!.getAttribute("pace") === "1";
+      if ((address.get("turn") === "real") !== real) address.set("turn", real ? "real" : null);
+    }).observe(controls, { attributes: true, attributeFilter: ["pace"] });
+  }
 
   function leave3d(): void {
     if (!real && !space) return;
