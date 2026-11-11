@@ -1,22 +1,25 @@
 // Makes the files of the whole Earth-orbit catalogue the site hosts (demo/catalogue/): four packed groups (working satellites, inactive payloads, rocket bodies, debris) and manifest.json.
-//   node scripts/catalogue.ts fetch                          the scheduled build's job: one Space-Track login, ONE gp ask (every object on orbit), a pause, ONE satcat ask (only after 17:00 UTC), then ONE CelesTrak ask for the
-//                                                            list of working satellites; stops at the first answer that is not 200 and keeps the last files, saying their age. Needs SPACETRACK_USER and SPACETRACK_PASSWORD
+//   node scripts/catalogue.ts fetch                          the scheduled build's job: one Space-Track login, ONE gp ask (every object on orbit), a pause, ONE satcat ask (only after 17:00 UTC); stops at the first answer that is not 200
+//                                                            and keeps the last files, saying their age. Needs SPACETRACK_USER and SPACETRACK_PASSWORD. Payloads are ONE group (`payloads`) unless CATALOGUE_WORKING_LIST=celestrak,
+//                                                            which adds ONE CelesTrak ask for its list of active satellites and splits them into `working` and `inactive` (that source is not yet approved: off by default)
 //   node scripts/catalogue.ts previous <address or directory> carry the files already on the site into demo/catalogue when they are newer than the ones there; asks nobody but the site itself
 //   node scripts/catalogue.ts from-files <gp.json> <satcat.json or -> <active.csv or -> <time retrieved, UTC>   make the files from files already downloaded; fetches nothing (a test, or a first run by hand)
 //   node scripts/catalogue.ts check <dir> [--optional]       the files hold what the site needs: exits with 1 if not (`--optional` passes when there are no files at all)
 // Space-Track's terms (documentation page, read 2026-11-11): TLEs, OMMs, SATCAT and decay data are "basic SSA data", which USSPACECOM has approved for redistribution "conditioned on appropriate citation"; the files carry
 // "Data from Space-Track.org (USSPACECOM)" in their manifest. The GP class is asked once an hour at most and SATCAT once a day after 17:00 UTC; fewer than 30 requests a minute and 300 an hour. This script asks twice.
-// Space-Track has no field that says whether a payload still works, so the split into working and inactive payloads takes CelesTrak's `active` list as a list of catalogue numbers only (nothing else of it is kept).
+// Space-Track has no field that says whether a payload still works, so the split into working and inactive payloads (off unless CATALOGUE_WORKING_LIST=celestrak) takes CelesTrak's `active` list as a list of catalogue numbers only.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { MAX_PACKED, gzipBytes, packCatalogue, unpackAny, type CatalogueRecord } from "../src/catalogue/pack.ts";
 import { catalogueRecordsFromRows } from "../src/catalogue/omm.ts";
+import { cellsOf } from "../src/satellites/source.ts";
 import { readKind, type ObjectKind } from "../src/catalogue/kinds.ts";
 import { CITATION, FIELDS, loginFrom, realSend, withSession, type Login, type Send } from "./spacetrack.ts";
 
 export const SOURCE = "Space-Track.org (USSPACECOM)";
 export const USER_AGENT = "chikyu-earth-catalogue (+https://github.com/johnmorrisdotca/chikyu-earth)";
-/** The groups the site hosts, in the order a page lists them. */
+/** The groups the site hosts, in the order a page lists them: `payloads` when the working list is not used, `working` and `inactive` instead of it when it is. */
 export const GROUPS = [
+  { id: "payloads", en: "Payloads (working and inactive)", ja: "人工衛星（運用中と運用終了）" },
   { id: "working", en: "Working satellites", ja: "運用中の人工衛星" },
   { id: "inactive", en: "Inactive payloads", ja: "運用を終えた人工衛星" },
   { id: "rocket-bodies", en: "Rocket bodies", ja: "ロケット本体" },
@@ -69,19 +72,19 @@ export function satcatInfo(rows: readonly Record<string, unknown>[]): Map<number
 /** The catalogue numbers in CelesTrak's CSV (a header row with a NORAD_CAT_ID column). */
 export function workingIds(csv: string): Set<number> {
   const lines = csv.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim() !== "");
-  const column = (lines[0] ?? "").split(",").map((cell) => cell.trim()).indexOf("NORAD_CAT_ID");
+  const column = cellsOf(lines[0] ?? "").map((cell) => cell.trim()).indexOf("NORAD_CAT_ID");
   if (column < 0) throw new Error("the list has no NORAD_CAT_ID column");
   const ids = new Set<number>();
   for (const line of lines.slice(1)) {
-    const id = Number(line.split(",")[column]);
+    const id = Number(cellsOf(line)[column]);
     if (Number.isInteger(id) && id >= 0) ids.add(id);
   }
   return ids;
 }
 
-/** Which group a record belongs in. Payloads split on `working`; rocket bodies and debris have their own; unidentified objects join the debris (their kind stays `UNK` inside the file). */
-export function groupOf(kind: ObjectKind, id: number, working: ReadonlySet<number>): GroupId {
-  if (kind === "PAY") return working.has(id) ? "working" : "inactive";
+/** Which group a record belongs in. Payloads split on `working` (all of them are `payloads` when there is no list); rocket bodies and debris have their own; unidentified objects join the debris (their kind stays `UNK` inside the file). */
+export function groupOf(kind: ObjectKind, id: number, working: ReadonlySet<number> | undefined): GroupId {
+  if (kind === "PAY") return working === undefined ? "payloads" : working.has(id) ? "working" : "inactive";
   if (kind === "RB") return "rocket-bodies";
   return "debris";
 }
@@ -92,14 +95,16 @@ export interface Previous {
   retrieved: string;
   /** Every record the last files held, by catalogue number. */
   records: Map<number, CatalogueRecord>;
-  working: Set<number>;
+  /** The numbers the last files held as working, or undefined when they did not split payloads. */
+  working: Set<number> | undefined;
 }
 
 export interface Built {
   groups: Record<GroupId, CatalogueRecord[]>;
   retrieved: string;
   satcat: string | null;
-  working: { source: string; retrieved: string };
+  /** Where the working list came from, or null when payloads are not split. */
+  working: { source: string; retrieved: string } | null;
   skipped: number;
   /** Objects with no kind from the catalogue. */
   log: string[];
@@ -113,7 +118,7 @@ export interface Built {
  * @param retrieved - The time, `yyyy-mm-ddThh:mmZ`.
  * @returns The groups, and what happened.
  */
-export function buildGroups(inputs: { gp: readonly unknown[]; satcat?: readonly Record<string, unknown>[]; working: ReadonlySet<number>; workingFrom?: string; previous?: Previous }, retrieved: string): Built {
+export function buildGroups(inputs: { gp: readonly unknown[]; satcat?: readonly Record<string, unknown>[]; working?: ReadonlySet<number>; workingFrom?: string; previous?: Previous }, retrieved: string): Built {
   const log: string[] = [];
   const read = catalogueRecordsFromRows(inputs.gp);
   const best = new Map<number, CatalogueRecord>();
@@ -142,14 +147,14 @@ export function buildGroups(inputs: { gp: readonly unknown[]; satcat?: readonly 
     }
     if (extra || before) filled += 1;
   }
-  const groups: Record<GroupId, CatalogueRecord[]> = { working: [], inactive: [], "rocket-bodies": [], debris: [] };
+  const groups: Record<GroupId, CatalogueRecord[]> = { payloads: [], working: [], inactive: [], "rocket-bodies": [], debris: [] };
   for (const [id, record] of best) groups[groupOf(record.kind, id, inputs.working)].push(record);
   log.push(`${best.size} objects with public elements (${read.skipped} rows left out for a missing number); ${filled} with owner and launch details from ${info ? "SATCAT" : "the last files"}`);
   return {
     groups,
     retrieved,
     satcat: info ? retrieved : null,
-    working: { source: WORKING_SOURCE, retrieved: inputs.workingFrom ?? retrieved },
+    working: inputs.working ? { source: WORKING_SOURCE, retrieved: inputs.workingFrom ?? retrieved } : null,
     skipped: read.skipped,
     log,
   };
@@ -163,21 +168,26 @@ export interface Manifest {
   retrieved: string;
   /** When SATCAT was last read for the owner and launch details, or null. */
   satcat: string | null;
-  working: { source: string; retrieved: string };
+  /** Where the list of working satellites came from, or null when payloads are one group. */
+  working: { source: string; retrieved: string } | null;
   /** The objects in all groups: catalogued objects with public elements, not everything in orbit. */
   total: number;
   note: string;
-  groups: Record<GroupId, { file: string; count: number; bytes: number }>;
+  /** Only the groups that exist: `payloads`, or `working` and `inactive`, then `rocket-bodies` and `debris`. */
+  groups: Partial<Record<GroupId, { file: string; count: number; bytes: number }>>;
 }
 
 export const NOTE = "Catalogued objects on orbit with public elements; not everything in orbit. The elements are as old as `retrieved`.";
 
+/** The groups a build has: `working` and `inactive` when payloads are split, `payloads` when not. */
+export const groupsOf = (split: boolean): (typeof GROUPS)[number][] => GROUPS.filter((group) => (split ? group.id !== "payloads" : group.id !== "working" && group.id !== "inactive"));
+
 /** The packed, gzipped files and the manifest for a build. */
 export async function packBuilt(built: Built): Promise<{ files: Record<string, Uint8Array>; manifest: Manifest }> {
   const files: Record<string, Uint8Array> = {};
-  const groups = {} as Manifest["groups"];
+  const groups: Manifest["groups"] = {};
   let total = 0;
-  for (const group of GROUPS) {
+  for (const group of groupsOf(built.working !== null)) {
     const records = built.groups[group.id].sort((a, b) => a.set.NORAD_CAT_ID - b.set.NORAD_CAT_ID);
     if (records.length > MAX_PACKED) throw new Error(`group ${group.id} has ${records.length} records, over ${MAX_PACKED}`);
     const bytes = await gzipBytes(packCatalogue(records, { group: group.id, source: SOURCE, citation: CITATION, retrieved: built.retrieved, count: String(records.length) }));
@@ -205,13 +215,14 @@ export async function readDir(dir: string): Promise<{ manifest: Manifest; previo
     const working = new Set<number>();
     for (const group of GROUPS) {
       const one = manifest.groups[group.id];
+      if (!one) continue;
       const file = await unpackAny(new Uint8Array(readFileSync(`${dir}/${one.file}`)));
       for (const record of file.records()) {
         records.set(record.set.NORAD_CAT_ID, record);
         if (group.id === "working") working.add(record.set.NORAD_CAT_ID);
       }
     }
-    return { manifest, previous: { retrieved: manifest.retrieved, records, working } };
+    return { manifest, previous: { retrieved: manifest.retrieved, records, working: manifest.working ? working : undefined } };
   } catch {
     return undefined;
   }
@@ -226,6 +237,7 @@ export interface Answer {
 
 /**
  * Ask for what is due, politely, and make the files. One Space-Track login, one GP ask, a pause, one SATCAT ask (only at or after 17:00 UTC), and one ask of CelesTrak for the working list; any answer that is not 200 stops the asking.
+ * CelesTrak is asked only when `useWorkingList` is true (CATALOGUE_WORKING_LIST=celestrak); without it payloads are one `payloads` group and CelesTrak is never asked.
  * If the GP ask fails, nothing is made: `built` is undefined and the log says how old the last files are, so the caller keeps them. If SATCAT is not asked or fails, owner and launch details come from the last files; if CelesTrak's list
  * fails, the working payloads are the ones the last files held as working (and with no last files nothing is made). Nothing is fetched here but through `send` and `ask`, so a test hands it made-up ones.
  *
@@ -237,7 +249,7 @@ export interface Answer {
  * @param now - The time, in milliseconds since the Unix epoch.
  * @returns What was built (or not) and the log.
  */
-export async function refresh(last: { manifest: Manifest; previous: Previous } | undefined, login: Login | undefined, send: Send, ask: (url: string) => Promise<Answer>, pause: (ms: number) => Promise<void>, now: number): Promise<{ built?: Built; log: string[] }> {
+export async function refresh(last: { manifest: Manifest; previous: Previous } | undefined, login: Login | undefined, send: Send, ask: (url: string) => Promise<Answer>, pause: (ms: number) => Promise<void>, now: number, useWorkingList = false): Promise<{ built?: Built; log: string[] }> {
   const log: string[] = [];
   const keep = (why: string): { log: string[] } => {
     log.push(last ? `${why}: the last files are kept, retrieved ${last.manifest.retrieved} (${hoursOld(last.manifest.retrieved, now)} hours old)` : `${why}: there are no last files either`);
@@ -266,7 +278,8 @@ export async function refresh(last: { manifest: Manifest; previous: Previous } |
   if (!gp || gp.length === 0) return keep("Space-Track gave no elements");
   let working: Set<number> | undefined;
   let workingFrom: string | undefined;
-  if (stopped) log.push("CelesTrak not asked: an answer was not 200, so the asking stops");
+  if (!useWorkingList) log.push("payloads are one group: the working list is not used (CATALOGUE_WORKING_LIST is not celestrak), CelesTrak is not asked");
+  else if (stopped) log.push("CelesTrak not asked: an answer was not 200, so the asking stops");
   else {
     await pause(SPACING_MS);
     try {
@@ -281,13 +294,13 @@ export async function refresh(last: { manifest: Manifest; previous: Previous } |
       log.push(`CelesTrak's active list: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  if (!working && last) {
+  if (useWorkingList && !working && last?.previous.working && last.manifest.working) {
     working = last.previous.working;
     workingFrom = last.manifest.working.retrieved;
     log.push(`the working payloads are the ${working.size} the last files held as working (${hoursOld(workingFrom, now)} hours old)`);
   }
-  if (!working) return keep("there is no list of working satellites to split the payloads by");
-  const built = buildGroups({ gp, ...(satcat ? { satcat } : {}), working, ...(workingFrom ? { workingFrom } : {}), ...(last ? { previous: last.previous } : {}) }, retrieved);
+  if (useWorkingList && !working) return keep("there is no list of working satellites to split the payloads by");
+  const built = buildGroups({ gp, ...(satcat ? { satcat } : {}), ...(working ? { working } : {}), ...(workingFrom ? { workingFrom } : {}), ...(last ? { previous: last.previous } : {}) }, retrieved);
   if (!satcat && last?.manifest.satcat) built.satcat = last.manifest.satcat;
   log.push(...built.log);
   return { built, log };
@@ -308,7 +321,7 @@ export async function problems(dir: string, now = Date.now()): Promise<string[]>
   if (!Number.isFinite(age)) out.push("the manifest has no retrieval time");
   else if (age > MAX_AGE_MS) out.push("the files were retrieved more than 30 days ago");
   let total = 0;
-  for (const group of GROUPS) {
+  for (const group of groupsOf(Boolean(manifest.working))) {
     const one = manifest.groups?.[group.id];
     if (!one) {
       out.push(`group ${group.id} is not in the manifest`);
@@ -317,7 +330,7 @@ export async function problems(dir: string, now = Date.now()): Promise<string[]>
     try {
       const file = await unpackAny(new Uint8Array(readFileSync(`${dir}/${one.file}`)));
       if (file.count !== one.count) out.push(`group ${group.id} holds ${file.count} and the manifest says ${one.count}`);
-      if (file.count === 0 && group.id !== "debris") out.push(`group ${group.id} is empty`);
+      if (file.count === 0 && group.id !== "debris" && group.id !== "inactive") out.push(`group ${group.id} is empty`);
       total += file.count;
     } catch (error) {
       out.push(`group ${group.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -334,7 +347,7 @@ if (import.meta.main) {
   if (command === "fetch") {
     const last = await readDir(out);
     const askCelesTrak = (url: string): Promise<Answer> => fetch(url, { headers: { "user-agent": USER_AGENT } });
-    const done = await refresh(last, loginFrom(), realSend, askCelesTrak, wait, Date.now());
+    const done = await refresh(last, loginFrom(), realSend, askCelesTrak, wait, Date.now(), process.env["CATALOGUE_WORKING_LIST"] === "celestrak");
     for (const line of done.log) console.log(line);
     if (done.built) {
       writeAll(out, await packBuilt(done.built));
@@ -372,13 +385,12 @@ if (import.meta.main) {
       }
     }
   } else if (command === "from-files") {
-    if (!one || !two || !three || !four) throw new Error("usage: catalogue.ts from-files <gp.json> <satcat.json or -> <active.csv or -> <time retrieved, UTC, like 2026-11-11T17:41Z>");
+    if (!one || !two || !three || !four) throw new Error("usage: catalogue.ts from-files <gp.json> <satcat.json or -> <active.csv, or - for one payloads group> <time retrieved, UTC, like 2026-11-11T17:41Z>");
     const gp = JSON.parse(readFileSync(one, "utf8")) as unknown[];
     const satcat = two === "-" ? undefined : (JSON.parse(readFileSync(two, "utf8")) as Record<string, unknown>[]);
     const last = await readDir(out);
-    const working = three === "-" ? last?.previous.working : workingIds(readFileSync(three, "utf8"));
-    if (!working) throw new Error("no list of working satellites: give an active list or have last files");
-    const built = buildGroups({ gp, ...(satcat ? { satcat } : {}), working, ...(last ? { previous: last.previous } : {}) }, four);
+    const working = three === "-" ? undefined : workingIds(readFileSync(three, "utf8"));
+    const built = buildGroups({ gp, ...(satcat ? { satcat } : {}), ...(working ? { working } : {}), ...(last ? { previous: last.previous } : {}) }, four);
     writeAll(out, await packBuilt(built));
     for (const line of built.log) console.log(line);
     for (const [id, records] of Object.entries(built.groups)) console.log(`${id}: ${records.length}`);

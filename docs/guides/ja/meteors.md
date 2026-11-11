@@ -132,11 +132,11 @@ console.log(parentBodyOf("PER")?.designation, showersOfParent("1P/Halley").map((
 console.log(showerSource(METEOR_LINKS.find((link) => link.code === "LYR")));
 ```
 
-- `METEOR_LINKS`: 流星群ごとに、次の内容が入っています。IAU での名前、データセンターが「確立した流星群」(`established`) としているか作業リストにだけ載せているか、母天体 (`designation` と `kind`)、放射点と速さが一致したデータセンターの解（収録された個々の観測結果）、そして、放射点と速さがそれぞれ IMO の表の値かデータセンターの値かです。
+- `METEOR_LINKS`: 流星群ごとに、次の内容が入っています。IAU での名前、データセンターが確定流星群 (`established`) としているか、暫定リストにだけ載せている (`working`) か、母天体 (`designation` と `kind`)、放射点と速さが一致したデータセンターの解（収録された個々の観測結果）、そして、放射点と速さがそれぞれ IMO の表の値かデータセンターの値かです。
 - `parentBodyOf(code)` は流星群の母天体を返します (データセンターが挙げていなければ `null`)。`showersOfParent(designation)` は、ひとつの天体の流星群を、符号全体、番号 (`2P`)、名前 (`Encke`) のどれからでも探します。
 - `showerSource(link)` は、表の1行の数値の出どころを、英語の1文で返します。
-- **照らし合わせた内容。** 放射点と速さを、データセンターの解のうち、流星が100個以上で、平均の太陽黄経が極大から3度以内のものと比べました。放射点は、その解自身の日々の動きで極大の黄経まで動かしてあります。どれかの解と、放射点が2度以内、速さが2 km/s 以内であれば、そのままにしました。3つの行は、データセンターの解どうしのばらつきよりも大きくずれていたので、データセンターの値に直しました。4月こと座流星群の速さ (49 ではなく 47 km/s)、いっかくじゅう座α流星群の速さ (65 ではなく 62)、エリダヌス座η流星群の放射点 (赤経 42度、赤緯 -13度) です。データセンターには極大の日付も出現数 (ZHR) もないので、日付と ZHR は IMO のままです。条件に合う解がない4つの確立した流星群は、IMO の値のままです。
-- **データセンターの呼び方。** データセンターでは、表の「Draconids」が October Draconids、「Monocerotids」が December Monocerotids (`iauName`) で、IMO の Puppid-Velids (IAU 301) は gamma-Puppids です。3つの流星群 (α-Centaurids、September Lyncids、gamma-Puppids) は、作業リストにだけ載っています。データセンターのデータファイルの求めに従って、引用は Jenniskens ほか (2020、`Planetary and Space Science` 182、104821) と Jopek・Kanuchova (2017、`Planetary and Space Science` 143、3-6) としてください。
+- **照らし合わせた内容。** 放射点と速さを、データセンターの解のうち、流星が100個以上で、平均の太陽黄経が極大から3度以内のものと比べました。放射点は、その解自身の日々の動きで極大の黄経まで動かしてあります。どれかの解と、放射点が2度以内、速さが2 km/s 以内であれば、そのままにしました。3つの行は、データセンターの解どうしのばらつきよりも大きくずれていたので、データセンターの値に直しました。4月こと座流星群の速さ (49 ではなく 47 km/s)、いっかくじゅう座α流星群の速さ (65 ではなく 62)、エリダヌス座η流星群の放射点 (赤経 42度、赤緯 -13度) です。データセンターには極大の日付も出現数 (ZHR) もないので、日付と ZHR は IMO のままです。条件に合う解がない4つの確定流星群は、IMO の値のままです。
+- **データセンターの呼び方。** データセンターでは、表の「Draconids」が October Draconids、「Monocerotids」が December Monocerotids (`iauName`) で、IMO の Puppid-Velids (IAU 301) は gamma-Puppids です。3つの流星群 (α-Centaurids、September Lyncids、gamma-Puppids) は、暫定リストにだけ載っています。データセンターのデータファイルの求めに従って、引用は Jenniskens ほか (2020、`Planetary and Space Science` 182、104821) と Jopek・Kanuchova (2017、`Planetary and Space Science` 143、3-6) としてください。
 
 ## できないこと
 
