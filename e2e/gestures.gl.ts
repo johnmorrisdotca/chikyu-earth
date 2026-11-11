@@ -18,6 +18,8 @@ const LACKS: Record<string, Record<string, string>> = {
 
 for (const { look, tag } of VIEWS) {
   test(`the demo's ${look} view answers every gesture it has`, async ({ page }) => {
+    // as on the full-screen page: thirteen gestures with screenshots drawn in software GL took up to 39 s of the 60 s in CI, and a run cut off there reads as failed gestures
+    test.setTimeout(240_000);
     await page.goto(`/chikyu-earth/?look=${look}&time=${NOV2}&speed=0&center=-100,40`);
     await page.locator(`${tag}[data-state=live]`).waitFor({ timeout: 60_000 });
     const report = await checkGestures(page, tag, { lacks: LACKS[look] });
