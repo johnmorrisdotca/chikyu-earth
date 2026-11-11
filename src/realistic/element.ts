@@ -281,7 +281,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
-        this.#placesHost?.frame(orthographicProjector(pose, pose.width, pose.height));
+        if (this.#places.length > 0) this.#placesHost?.frame(orthographicProjector(pose, pose.width, pose.height));
       },
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
@@ -444,16 +444,22 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /**
    * The places the page marks on the Earth (the attribute `places` is the same list as JSON): each `{ id, lat, lon, label?, kind? }` stands out of the surface as a ring on the ground and a beam with a head, with its name beside it that never
-   * overlaps another name or marker (right, then left, above, below, else the lesser place's name is left out). `kind: "here"` is the visitor's own place and stands out, with a quiet pulse (none for a reader who prefers reduced motion); any other kind is `favourite`, drawn quieter.
+   * overlaps another name (right, then left, above, below, else the lesser place's name is left out). `kind: "here"` is the visitor's own place and stands out, with a quiet pulse (none for a reader who prefers reduced motion); any other kind is `favourite`, drawn quieter.
    * A place on the far side is not drawn. The package never asks where anybody is, and keeps nothing: the page hands the list in. A place that cannot be drawn (see `readPlaces`) is left out. Pressing a name sends `chikyu-place-click` with `detail: { place }`
-   * and, when the attribute `places-turn` is there, turns the Earth to it. Nothing is drawn at rest but the pulse, and only while the Earth is in view.
+   * and, when the attribute `places-turn` is there, turns the Earth to it (`places-turn="off"` is the same as leaving it out). `chikyu-places-change` is sent with `detail: { places }`, the whole list as the element now has it, whenever the list changes, so the page can save it. Nothing is drawn at rest: the pulse of the visitor's own place runs while the view moves and for two seconds after the place is added or changed, then stops.
    */
   get places(): readonly Place[] {
     return this.#places;
   }
   set places(list: readonly Place[]) {
+    const before = JSON.stringify(this.#places);
+    const wasEmpty = this.#places.length === 0;
     this.#places = readPlaces(list).places;
+    // with no places the picture's view is not handed on at each draw: the layer has none to trust until the next draw, which is asked for now
+    if (wasEmpty && this.#places.length > 0) this.#placesHost?.frame(null);
     this.#placesHost?.set(this.#places);
+    if (!wasEmpty || this.#places.length > 0) this.#gate?.soon();
+    if (JSON.stringify(this.#places) !== before) this.dispatchEvent(new CustomEvent("chikyu-places-change", { detail: { places: this.#places.map((one) => ({ ...one })) }, bubbles: true, composed: true }));
   }
 
   #placeClick(place: Place): void {

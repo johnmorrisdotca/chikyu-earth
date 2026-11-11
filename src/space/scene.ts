@@ -23,6 +23,8 @@ import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 type Three = ThreeParts;
 /** The most satellites ringed and named at once, over all the labelled groups. */
 const MAX_MARKED = 80;
+/** The most satellites looked at in a draw to find the ones to ring: a group of thousands is not what ringing is for, and each one looked at costs a projection. */
+const MAX_MARK_SCAN = 400;
 const RAD = Math.PI / 180;
 const FOV = 35;
 /** How much of the view's shorter side the Earth's disc fills at zoom 1 when the page does not say: 0.9, so the atmosphere's glow (8% beyond the disc) is inside the view and never cut. */
@@ -352,6 +354,8 @@ export interface SpaceDeps {
   onLabelError?: (error: unknown) => void;
   /** Where a place on the Earth falls on the screen at this draw (a projector), or `null` while the Earth is not in view or is too small. Called at each draw, after the picture is placed. */
   onPlaces?: (view: PlaceProjector | null) => void;
+  /** Whether the page has places: with none (and no ringed satellite) `onPlaces` is not called, so a picture with no places pays nothing for them. */
+  hasPlaces?: () => boolean;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
   /** Where each member of a labelled group is on the screen at this draw (the groups of `model.satellites.marked`); an empty list once when the last group is let go. */
@@ -565,6 +569,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
       let marksTold = false;
+      let placesTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number } = { key: "", drawing: null, turn: 0 };
       const dropModel = (): void => {
@@ -921,9 +926,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
-          if (deps.onPlaces) {
+          const placesWanted = (deps.hasPlaces?.() ?? true) || model.satellites.marked.size > 0;
+          if (deps.onPlaces && (placesWanted || placesTold)) {
             const radiusPx = Math.min(px.Earth, 1e5);
-            if (rideFrom || radiusPx < 14) deps.onPlaces(null);
+            placesTold = placesWanted;
+            if (!placesWanted || rideFrom || radiusPx < 14) deps.onPlaces(null);
             else {
               earth.updateWorldMatrix(true, false);
               const camAt = camera.position;
@@ -953,13 +960,16 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (deps.onSatelliteMarks) {
             if (layer && model.satellites.marked.size > 0) {
               const marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[] = [];
+              let scanned = 0;
               for (const name of model.satellites.marked) {
                 const group = model.satellites.groups.get(name);
                 if (!group) continue;
-                for (let index = 0; index < group.satellites.count && marks.length < MAX_MARKED; index += 1) {
+                for (let index = 0; index < group.satellites.count && marks.length < MAX_MARKED && scanned < MAX_MARK_SCAN; index += 1) {
+                  scanned += 1;
                   const ref = { group: name, index };
                   const at = layer.placeOf(ref, camera, size);
-                  if (at) marks.push({ ref, ...at });
+                  // one behind the Earth (or out of the box) is not ringed and does not count towards the most: the page is told when it was in view and no longer is
+                  if (at?.visible) marks.push({ ref, ...at });
                 }
               }
               marksTold = true;

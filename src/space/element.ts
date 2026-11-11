@@ -317,6 +317,7 @@ export class ChikyuSpace extends HTMLElement {
       },
       onLabels: (places) => this.#placeLabels(places),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      hasPlaces: () => this.#marked.length > 0,
       onPlaces: (view) => this.#placesHost?.frame(view),
       onSatelliteMarks: (marks) => this.#showMarks(marks),
       onSelected: (place) => this.#placeChosen(place),
@@ -472,15 +473,21 @@ export class ChikyuSpace extends HTMLElement {
 
   /**
    * The places the page marks on the Earth (the attribute `places` is the same list as JSON): see `<chikyu-earth-realistic>`. Each `{ id, lat, lon, label?, kind? }` stands out of the Earth as a ring on the ground and a beam with a head, turning with it and
-   * hidden on the far side, with its name beside it that never overlaps another name or marker. `kind: "here"` is the visitor's own place and stands out; any other kind is `favourite`, quieter. None are drawn while the Earth is under 14 pixels in
-   * radius or the view rides along a body. Pressing a name sends `chikyu-place-click`, and the attribute `places-turn` turns the view to the place.
+   * hidden on the far side, with its name beside it that never overlaps another name. `kind: "here"` is the visitor's own place and stands out; any other kind is `favourite`, quieter. None are drawn while the Earth is under 14 pixels in
+   * radius or the view rides along a body. Pressing a name sends `chikyu-place-click`, and the attribute `places-turn` turns the view to the place (`places-turn="off"` is the same as leaving it out). `chikyu-places-change` is sent with `detail: { places }`, the whole list as the element now has it, whenever the list changes, so the page can save it.
    */
   get places(): readonly Place[] {
     return this.#marked;
   }
   set places(list: readonly Place[]) {
+    const before = JSON.stringify(this.#marked);
+    const wasEmpty = this.#marked.length === 0;
     this.#marked = readPlaces(list).places;
+    // with no places (and no ringed satellites) the picture's view is not handed on at each draw: the layer has none to trust until the next draw, which is asked for now
+    if (wasEmpty && this.#marked.length > 0) this.#placesHost?.frame(null);
     this.#placesHost?.set(this.#marked);
+    if (!wasEmpty || this.#marked.length > 0) this.#gate?.request();
+    if (JSON.stringify(this.#marked) !== before) this.dispatchEvent(new CustomEvent("chikyu-places-change", { detail: { places: this.#marked.map((one) => ({ ...one })) }, bubbles: true, composed: true }));
   }
 
   #placeClick(place: Place): void {
@@ -708,7 +715,7 @@ export class ChikyuSpace extends HTMLElement {
     if (!satellitePainter) return out;
     for (const [group, state] of this.#model.satellites.groups) {
       state.satellites.sets.forEach((set, index) => {
-        if (satellitePainter!.has(set.NORAD_CAT_ID)) out.push({ ref: { group, index }, noradId: set.NORAD_CAT_ID, name: this.#satelliteName({ group, index }) });
+        if (satellitePainter!.has(set.NORAD_CAT_ID)) out.push({ ref: { group, index }, noradId: set.NORAD_CAT_ID, name: this.#satelliteName({ group, index }, this.#lang()) });
       });
     }
     return out;
@@ -716,11 +723,12 @@ export class ChikyuSpace extends HTMLElement {
 
   /**
    * Follow the next (or, with a negative `step`, the previous) of the large satellites in `largeSatellites()`, going round: the first when none is followed yet. The followed satellite stays in the middle of the picture, as a model where the page has one,
-   * with the Earth turning and sliding beneath. Returns the satellite now followed, or `null` when there is none to follow.
+   * with the Earth turning and sliding beneath. Returns the satellite now followed, or `null` when there is none to follow (a `step` that is not a finite number does nothing and answers `null`).
    *
    * @param step - How many places to hop: 1 (the default) is the next.
    */
   followNext(step = 1): { ref: SatelliteRef; noradId: number; name: string } | null {
+    if (!Number.isFinite(step)) return null;
     const list = this.largeSatellites();
     if (list.length === 0) return null;
     const ride = this.#model.ride;
@@ -801,9 +809,9 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
-   * Ring and name every satellite of a group (or stop): a ring round each and its name beside it, in the page's language (the ISS, Tiangong and Hubble by their short names, the rest as their elements name them, or as `satelliteNames` says), never over another name, a place's or a ring's.
+   * Ring and name every satellite of a group (or stop): a ring round each and its name beside it, in the page's language (the ISS, Tiangong and Hubble by their short names, the rest as their elements name them, or as `satelliteNames` says), never over another name.
    * Names and rings are drawn with the places, only for satellites that are in the picture and not behind the Earth, and nothing is drawn at rest. `chikyu-satellite-visibility` is sent with `detail: { ref, visible }` when a labelled satellite comes into view or goes out of it (not at every frame).
-   * At most 80 satellites are ringed, over all the groups. A group that is not set, or is not shown, has none.
+   * At most 80 satellites are ringed, over all the groups, looked for among the first 400 satellites in all, taken in order from the groups ringed (a group of thousands is not what this is for). A group that is not set, or is not shown, has none.
    *
    * @param group - The group's name, as given to `setSatellites`.
    * @param on - `true` to ring and name its members (the default), `false` to stop.
@@ -838,20 +846,38 @@ export class ChikyuSpace extends HTMLElement {
     return this.#model.placeSatellite?.(ref) ?? null;
   }
 
-  /** The name beside a ringed satellite: the page's own (`satelliteNames`), else the short one in the page's language, else the name in its elements. */
-  #satelliteName(ref: SatelliteRef): string {
-    const info = this.satelliteInfo(ref);
-    if (!info) return "";
-    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
-    return this.#satNames[info.noradId] ?? SHORT_NAMES[info.noradId]?.[lang] ?? info.name;
+  /** The names written beside the ringed satellites, kept until the page's names, the language or the group's elements change: no SGP4 and no search for the language at each draw. */
+  #satLabels: { lang: string; own: Record<number, string>; byGroup: WeakMap<object, Map<number, string>> } | undefined;
+  #markSeen = new Map<string, boolean>();
+  #markNow = new Map<string, boolean>();
+
+  /** The page's language, `en` or `ja`: the element's own `lang`, else the nearest above it. */
+  #lang(): "en" | "ja" {
+    return (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
   }
 
-  #markSeen = new Map<string, boolean>();
+  /** The name beside a ringed satellite: the page's own (`satelliteNames`), else the short one in the page's language, else the name in its elements. */
+  #satelliteName(ref: SatelliteRef, lang: "en" | "ja"): string {
+    const group = this.#model.satellites.groups.get(ref.group)?.satellites;
+    const set = group?.sets[ref.index];
+    if (!group || !set) return "";
+    if (!this.#satLabels || this.#satLabels.lang !== lang || this.#satLabels.own !== this.#satNames) this.#satLabels = { lang, own: this.#satNames, byGroup: new WeakMap() };
+    let held = this.#satLabels.byGroup.get(group);
+    if (!held) this.#satLabels.byGroup.set(group, (held = new Map()));
+    let name = held.get(ref.index);
+    if (name === undefined) {
+      name = this.#satNames[set.NORAD_CAT_ID] ?? SHORT_NAMES[set.NORAD_CAT_ID]?.[lang] ?? set.OBJECT_NAME;
+      held.set(ref.index, name);
+    }
+    return name;
+  }
 
   /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
   #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean }[]): void {
-    this.#placesHost?.setMarks(marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible })));
-    const now = new Map<string, boolean>();
+    const lang = this.#lang();
+    this.#placesHost?.setMarks(marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref, lang), x: m.x, y: m.y, visible: m.visible })));
+    const now = this.#markNow;
+    now.clear();
     for (const m of marks) {
       const key = `${m.ref.group}:${m.ref.index}`;
       now.set(key, m.visible);
@@ -859,10 +885,12 @@ export class ChikyuSpace extends HTMLElement {
     }
     for (const [key, was] of this.#markSeen) {
       if (!now.has(key) && was) {
-        const [group, index] = key.split(":");
-        this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: { group: group!, index: Number(index) }, visible: false }, bubbles: true, composed: true }));
+        // the group's name may hold a colon: the index is what follows the last one
+        const cut = key.lastIndexOf(":");
+        this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: { group: key.slice(0, cut), index: Number(key.slice(cut + 1)) }, visible: false }, bubbles: true, composed: true }));
       }
     }
+    this.#markNow = this.#markSeen;
     this.#markSeen = now;
   }
 
