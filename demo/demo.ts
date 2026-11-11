@@ -987,13 +987,6 @@ if (flat && controls && stage) {
     }
     address.set("city-names", on ? "24" : null);
   });
-  // the elements read the page's language from the nearest `lang`; a change of language is told to them so the names are written again
-  document.addEventListener("kazoku-languagechange", () =>
-    queueMicrotask(() => {
-      for (const element of [real, space]) element?.setAttribute("lang", say("locale").startsWith("ja") ? "ja" : "en");
-    }),
-  );
-
   // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
   // Play runs the clock from the date shown; Pause holds it there and writes the date reached to the address (`time`); Back goes to the date the reader chose. `play=on` and `speed` stay in the address.
   // A link that says nothing about the clock opens moving, from now, at DEFAULT_SPEED (MODULES-815). A link with `speed=0`, `play=off` or a date (`time`) holds; one that names a speed other than 0 runs at it.

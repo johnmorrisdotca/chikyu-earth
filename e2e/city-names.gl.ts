@@ -87,6 +87,12 @@ for (const [name, tag, look] of [
       // the language changes at once: a Japanese page back to English is written again
       await page.locator(tag).evaluate((el) => el.setAttribute("lang", "en"));
       await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo"), { message: "English again" }).toBe(true);
+      // and when the language arrives after the names were laid out, the next draw or the family's event writes them again
+      await page.evaluate(() => {
+        document.documentElement.lang = "ja";
+        document.dispatchEvent(new Event("kazoku-languagechange"));
+      });
+      await page.locator(tag).evaluate((el) => el.removeAttribute("lang"));
     });
 
     test("more tiers of cities as the Earth grows on the screen, loaded when they are needed and no sooner", async ({ page }) => {
