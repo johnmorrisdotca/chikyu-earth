@@ -32,7 +32,7 @@ test("the 3D look a link opens on keeps the pace the link names, and a look chos
 });
 
 // The view controls leave a pace of 1 off the address, as though every page started at 1, so a reload reads no pace and opens on the 1440× this page starts at.
-// fixme until kazoku-ui's view controls keep a pace of 1 when the page starts at another; with that release this test is switched on.
+// fixme until this package takes kazoku-ui 0.38.1, whose view controls keep a pace of 1 when the page starts at another; with that bump this test is switched on.
 test.fixme("the line globe's 1× (the Earth's real rate) is kept in the address, and a reload opens on it", async ({ page }) => {
   await page.goto("/chikyu-earth/");
   await showPaces(page);
