@@ -136,6 +136,9 @@ test("links from before the clock: a date holds, and a link that says nothing op
   await page.waitForTimeout(1500);
   expect(await boxMs(page), "a date holds still").toBe(start);
 
+  // the page's own clock starts at "now" when it opens and runs an hour a second, so what it shows is a moment between the time before the page was asked for and the time at the read, plus an hour for each second that passed
+  // in between: bounded by the elapsed time read here, never by a fixed few minutes (a slow machine takes seconds to open the page, and each is an hour of the clock)
+  const asked = Date.now();
   await page.goto(`${PAGE}?look=realistic&center=-100,40`);
   await page.locator(`${EARTH}[data-state=live]`).waitFor({ timeout: 90_000 });
   await expect(play(page)).toHaveAttribute("aria-pressed", "true");
@@ -144,7 +147,9 @@ test("links from before the clock: a date holds, and a link that says nothing op
   expect(moving.speed, "the element's clock runs at an hour a second").toBe(3600);
   expect(moving.attribute).toBe("3600");
   const shown = await boxMs(page);
-  expect(Math.abs(shown - Date.now()), "from now").toBeLessThan(5 * 60_000);
+  const read = Date.now();
+  expect(shown, "from now, not from a date: no earlier than when the page was asked for").toBeGreaterThanOrEqual(asked - 1000);
+  expect(shown, "and no further on than an hour for each second since").toBeLessThanOrEqual(read + 3600 * (read - asked) + 1000);
   await boxMovesOn(page, shown, 3600_000, "and the date box runs with it");
   await inAddress(page, "play").toBe("on");
   expect(param(page, "time"), "no date in the address while it runs from now").toBeNull();

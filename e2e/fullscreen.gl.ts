@@ -69,6 +69,8 @@ test("a drag anywhere on the full-screen view turns it", async ({ page }) => {
 });
 
 test("the family's gesture check is green on the full-screen page", async ({ page }) => {
+  // thirteen gestures one after another, each with screenshots drawn in software GL: a minute on a loaded runner is its normal length, so the test is given room, and a slow run is not read as failed gestures
+  test.setTimeout(240_000);
   await open(page, `time=${NOV10}&speed=0&camera=ground&center=-100,40`);
   const report = await checkGestures(page, EARTH, { lacks: { "wheel-pan": "in a full-screen view the plain wheel zooms (the immersive mode); the wheel's pan is the family's rule for a view inside a page" } });
   expect(report.filter((r) => r.result === "lacks").map((r) => r.gesture)).toEqual(["wheel-pan"]);
