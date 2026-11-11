@@ -621,7 +621,8 @@ export class ChikyuSpace extends HTMLElement {
     const limits = model.ride && model.ride.view === "from" && model.rideDistance !== null ? rideTiltLimits(model.rideDistance, model.ride.look, view.zoom) : null;
     if (limits) tilt = Math.max(limits.min, Math.min(limits.max, tilt));
     this.#model.view = { yaw: view.yaw, tilt, zoom: view.zoom };
-    if (tilt !== view.tilt) this.#hands?.controller.set({ tilt }, final, "ride");
+    // the whole view is handed back, the yaw as it is, so the controls keep what they held and the element hears nothing it did not already have
+    if (tilt !== view.tilt) this.#hands?.controller.set({ yaw: view.yaw, tilt, zoom: view.zoom }, final, "ride");
     const drawn = this.#model.drawnView;
     if (drawn && !final && view.zoom === drawn.zoom) {
       const turned = Math.max(Math.abs(view.yaw - drawn.yaw), Math.abs(view.tilt - drawn.tilt)) * RAD;
