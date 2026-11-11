@@ -18,6 +18,10 @@
 //       description: One sentence for the contents, the search results and llms.txt.
 //       ---
 //
+//     The front matter is read as YAML is, strictly (`pnpm docs:check` fails with the file and the line, as GitHub's "Error in user YAML" does):
+//     one `key: value` to a line from the left edge, and a value in "double quotes" when it holds a colon and a space or " #", or starts with one
+//     of `[ ] { } & * ! | > % @` or a backtick; no tab, no indented continuation, no key twice.
+//
 //     A guide has `##` and `###` headings (its title is the page's one `#`), names a fenced block's language, links to
 //     another guide by its file (`other.md#a-heading`), to an export by `api:name` (or `api:entry.name` where two entry
 //     points export different things under one name), to an entry point by `entry:slug` (`entry:main` for the package's
@@ -68,7 +72,7 @@ const ts = tsModule.default?.createProgram ? tsModule.default : tsModule.createP
 import { FAMILY, FAMILY_PITCH, FAMILY_SCRIPT, FAMILY_WORDS, familyFooter, familyHead, familyHeader, familyUnreviewed } from "./family-template.mjs";
 
 /** The day this file was last changed, in every repository at once. A test records the file's hash beside it. */
-export const DOCS_SITE_VERSION = "2026-11-03-guide-images";
+export const DOCS_SITE_VERSION = "2026-11-10-strict-front-matter";
 
 const OWNER = "johnmorrisdotca";
 /** The kinds of guide, in the order the contents list them (Diátaxis, with troubleshooting and upgrading of their own). */
@@ -399,26 +403,67 @@ function paramsOf(checker, call, item) {
 // ---------------------------------------------------------------------------------------------------------------------
 // 4. The guides.
 
-const parseFrontMatter = (text) => {
-  const match = /^---\n([\s\S]*?)\n---\n?/.exec(text);
-  if (!match) return { data: null, body: text };
-  const data = {};
-  for (const line of match[1].split("\n")) {
-    const pair = /^([\w-]+):\s*(.*)$/.exec(line);
-    if (pair) data[pair[1]] = pair[2].replace(/^"(.*)"$/, "$1").trim();
+const YAML_ESCAPES = { "0": "\0", a: "\x07", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v", f: "\f", r: "\r", e: "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\", N: "\x85", _: "\xa0", L: " ", P: " " };
+/** What YAML would make of one front matter value: its text, or a plain sentence saying what is wrong with it. */
+const yamlValue = (key, raw) => {
+  const value = raw.replace(/\s+$/, "");
+  if (value === "") return { text: "" };
+  const first = value[0];
+  if (first === '"') {
+    const match = /^"((?:[^"\\]|\\.)*)"(?:\s+#.*)?$/.exec(value);
+    if (!match) return { problem: `${key} starts with a double quote and does not end with one (or has text after the closing quote): close the quote, and write \\" for a quote inside it.` };
+    const bad = /\\(?![0abt\tnvfre "/\\N_LPxuU])/.exec(match[1]);
+    if (bad) return { problem: `${key} has \\${match[1][bad.index + 1] ?? ""} in double quotes, which YAML does not know: write \\\\ for one backslash.` };
+    return { text: match[1].replace(/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)/gs, (_, code) => (code.length > 1 ? String.fromCodePoint(parseInt(code.slice(1), 16)) : YAML_ESCAPES[code] ?? code)) };
   }
-  return { data, body: text.slice(match[0].length) };
+  if (first === "'") {
+    const match = /^'((?:[^']|'')*)'(?:\s+#.*)?$/.exec(value);
+    if (!match) return { problem: `${key} starts with a single quote and does not end with one (or has text after the closing quote): close the quote, and write '' for a quote inside it.` };
+    return { text: match[1].replace(/''/g, "'") };
+  }
+  if (/^[[\]{}&*!|>%@`]/.test(first) || /^[-?:](\s|$)/.test(value)) return { problem: `${key} starts with ${first}, which YAML reads as syntax, not text: put the whole value in "double quotes".` };
+  if (/\t/.test(value)) return { problem: `${key} has a tab in it: use a space, or put the value in "double quotes".` };
+  if (/:(\s|$)/.test(value)) return { problem: `${key} has a colon followed by a space (or ends in a colon) and is not in quotes, so YAML reads it as another key (GitHub shows "Error in user YAML"): put the whole value in "double quotes".` };
+  if (/\s#/.test(value)) return { problem: `${key} has " #" in it and is not in quotes, so YAML reads the rest as a comment and drops it: put the whole value in "double quotes".` };
+  return { text: value };
 };
 
-/** Every guide: [{ slug, lang, file, title, section, order, description, body }]. */
+/**
+ * A guide's front matter read the way YAML reads it, and strictly: one `key: value` to a line, a value in quotes when it holds a colon and a space, " #" or
+ * starts with a character YAML uses as syntax, no tab, no indented continuation line, no key twice. Returns { data, body, problems }, where `data` is null with
+ * no front matter and each problem is { line, text } (the line of the file, 1 for its first).
+ */
+export const parseFrontMatter = (text) => {
+  const match = /^---\n([\s\S]*?)\n---\n?/.exec(text);
+  if (!match) return { data: null, body: text, problems: [] };
+  const data = {};
+  const problems = [];
+  match[1].split("\n").forEach((rawLine, index) => {
+    const line = index + 2;
+    const text = rawLine.replace(/\r$/, "");
+    if (text.trim() === "" || text[0] === "#") return;
+    if (/^ *\t/.test(text)) return void problems.push({ line, text: "is indented with a tab, which YAML does not allow: front matter is one `key: value` to a line, from the left edge." });
+    if (text[0] === " ") return void problems.push({ line, text: "is indented, so YAML reads it as part of the line above or as a mistake: front matter is one `key: value` to a line, from the left edge; keep the whole value on the key's line, in \"double quotes\"." });
+    const pair = /^([A-Za-z][\w-]*):( +|$)(.*)$/.exec(text);
+    if (!pair) return void problems.push({ line, text: "is not `key: value` (a key, a colon, a space, the value): YAML does not read it as a pair." });
+    const [, key, , raw] = pair;
+    if (Object.hasOwn(data, key)) return void problems.push({ line, text: `has the key ${key} a second time.` });
+    const read = yamlValue(key, raw);
+    if (read.problem !== undefined) { problems.push({ line, text: read.problem }); data[key] = raw.trim(); return; }
+    data[key] = read.text;
+  });
+  return { data, body: text.slice(match[0].length), problems };
+};
+
+/** Every guide: [{ slug, lang, file, title, section, order, description, body, frontMatter, frontMatterProblems }]. */
 export function guidesOf(site) {
   const guides = [];
   for (const lang of LANGS) {
     const folder = join(site.repositoryRoot, "docs", "guides", ...(lang === "en" ? [] : [lang]));
     if (!existsSync(folder)) continue;
     for (const file of readdirSync(folder).filter((name) => name.endsWith(".md")).sort()) {
-      const { data, body } = parseFrontMatter(read(join(folder, file)));
-      guides.push({ slug: file.replace(/\.md$/, ""), lang, file: toPosix(relative(site.repositoryRoot, join(folder, file))), title: data?.title ?? "", section: data?.section ?? "", order: Number(data?.order ?? 99), description: data?.description ?? "", body, frontMatter: data !== null });
+      const { data, body, problems } = parseFrontMatter(read(join(folder, file)));
+      guides.push({ slug: file.replace(/\.md$/, ""), lang, file: toPosix(relative(site.repositoryRoot, join(folder, file))), title: data?.title ?? "", section: data?.section ?? "", order: Number(data?.order ?? 99), description: data?.description ?? "", body, frontMatter: data !== null, frontMatterProblems: problems });
     }
   }
   const rank = (guide) => [GUIDE_SECTIONS.indexOf(guide.section), guide.order, guide.slug];
@@ -642,6 +687,7 @@ export function docsProblems(root, model = modelOf(root)) {
   for (const section of GUIDE_SECTIONS) if (!sections.has(section)) problems.push(`docs/guides/ has no guide whose section is ${section}: the site has a place for one (see docs/ROLLOUT.md).`);
   for (const guide of guides) {
     if (!guide.frontMatter) { problems.push(`${guide.file} has no front matter (---, title, section, description, ---).`); continue; }
+    for (const problem of guide.frontMatterProblems) problems.push(`${guide.file}:${problem.line} front matter ${problem.text}`);
     if (!guide.title) problems.push(`${guide.file} has no title in its front matter.`);
     if (!guide.description) problems.push(`${guide.file} has no description in its front matter.`);
     if (!GUIDE_SECTIONS.includes(guide.section)) problems.push(`${guide.file} has section "${guide.section}"; it must be one of ${GUIDE_SECTIONS.join(", ")}.`);
