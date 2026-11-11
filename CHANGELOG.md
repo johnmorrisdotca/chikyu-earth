@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The data door names licences in Japanese** (KAZOKU-UI-105): `src/data-door.ts` copied again, unchanged, from kazoku-ui's template: a licence may carry `nameJa` for a Japanese credit line.
+
 ## 0.32.0 - 2026-11-11
 
 - **The Earth's name written on the globe, as the family's body label** (MODULES-923). `<chikyu-earth-realistic>` and `<chikyu-space>` take the family's plain attributes `body-label` (`painted`, `etched`, `outline` or `burned`; absent, off), `body-label-strength`, `body-label-repeat`, `body-label-latitude`, `body-label-facing`, `body-label-font` and `body-label-fallback-font`, and the property `bodyLabel` (an object with the same options, or `null`). It writes `EARTH` (`地球` on a Japanese page) on the globe with kazoku-ui's shared `body-label`, so it turns with the Earth and the surface shows through the letters; the default is the family's, Michroma, painted, half strength, once. Off unless set: nothing of it is fetched or made until `body-label` is first set, then the family's label is loaded and Michroma (64 kB) only when the page names no font of its own. No name while the Earth is under 24 pixels in radius or a ride hides it; nothing is drawn at rest. `chikyu-body-label-unavailable` is sent when the three.js handed over lacks a part the label needs (`ThreeParts` gains the optional `CanvasTexture`, `SphereGeometry`, `MeshLambertMaterial`, `SRGBColorSpace`, `NormalBlending` and `AdditiveBlending`). `stats.bodyLabel` has `on`, `text`, `made` and `showing`. New in `@johnmorrisdotca/chikyu-earth/realistic`: `readBodyLabel`, `bodyLabelText`, `BODY_LABEL_ATTRIBUTES`. New guide: A name on the Earth (English and Japanese).
