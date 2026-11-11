@@ -339,8 +339,11 @@ test("a dot over sunlit ground has a dark rim, a group can be coloured by orbit,
     const spots = (await space.evaluate((el, n) => {
       const out: { x: number; y: number }[] = [];
       for (let index = 0; index < n; index += 1) {
-        const at = (el as unknown as { placeSatellite(ref: unknown): { x: number; y: number; visible: boolean } | null }).placeSatellite({ group: "stations", index });
-        if (at?.visible) out.push({ x: at.x, y: at.y });
+        const space = el as unknown as { placeSatellite(ref: unknown): { x: number; y: number; visible: boolean } | null; satelliteInfo(ref: unknown): { ageDays: number } | undefined };
+        const at = space.placeSatellite({ group: "stations", index });
+        // a satellite whose elements are more than 14 days from the moment shown is drawn dimmer on purpose: only the ones drawn at full strength are read
+        const age = space.satelliteInfo({ group: "stations", index })?.ageDays ?? Infinity;
+        if (at?.visible && Math.abs(age) < 14) out.push({ x: at.x, y: at.y });
       }
       return out;
     }, count)).filter((s, i, all) => s.x > 20 && s.y > 20 && all.every((o, j) => j === i || Math.hypot(o.x - s.x, o.y - s.y) > 30));
