@@ -64,6 +64,37 @@ space.addEventListener("chikyu-ride-lost", () => console.log("the elements are t
 
 宇宙の表示に目印はありません。`attachMarkers` の場所は、平面の地球儀とリアルな地球儀のものです。
 
+## 衛星をモデルとして追う
+
+`space.ride(ref, { view: "follow" })` は、衛星から一定の距離を保ってそれを見つめ、その下では地球が回りながら流れていきます。モデルがあれば、衛星はもう点ではありません。**パッケージはモデルを同梱しません**。モデルはページが用意し、ページがモデルを用意した衛星を追っているときは、そのモデルが画面の真ん中に固定され、形が見分けられる大きさで、実際に飛ぶ向きに向けて、本物の太陽の向きの光で描かれます。モデルのない衛星は点のままです。
+
+```ts no-run
+import { setSatellitePainter } from "@johnmorrisdotca/chikyu-earth/space/element";
+import type { SatellitePainter } from "@johnmorrisdotca/chikyu-earth/space";
+
+const painter: SatellitePainter = {
+  has: (norad) => norad === 25544, // the ISS
+  make: async (three, norad) => {
+    const group = new three.Group(); // your model, scaled to a radius of 1 about the origin
+    return { object: group, light: (toSun) => undefined, dispose: () => undefined };
+  },
+};
+setSatellitePainter(painter);
+
+const space = document.querySelector("chikyu-space")!;
+space.ride({ group: "stations", index: 0 }, { view: "follow" });
+console.log(space.largeSatellites().map((one) => one.name), space.followNext()?.name);
+```
+
+- **モデルの軸。** モデルは、中心を原点とする半径1で、長い軸が +x (衛星の飛ぶ向き)、上 (宇宙に向いた側) が +z、左が +y です。ビューは、これを衛星の実際の飛行方向に向け (`satelliteAxes`)、中心を衛星の位置に置きます。
+- **大きさ。** 画面上の半径は、カメラがどの距離にあっても、ビューの高さの17パーセントです (`MODEL_RADIUS_SHARE`、`modelRadius`)。ただし本当の大きさより小さくはならないので、カメラが近づいたときは、本当の大きさで見えます。
+- **太陽。** `light(toSun)` には、描くたびに、衛星から太陽へ向かう単位ベクトルがシーンの軸 (x は春分点の向き、y は北) で渡されます。モデル自身の向きは `object.matrix` に入っています (ビューが設定し、`matrixAutoUpdate` は切ってあります)。光を1つ持つモデルは、この行列の列から、モデルの軸での太陽の向きを求められます。`update({ toSun, ms, radiusPx })` には、半径が何ピクセルあるかが渡されるので、より精細な画像を読み込む価値があるかどうかの判断に使えます。
+- **どの衛星か。** `has(noradId)` は、NORAD 番号 (`25544` は ISS、`48274` は天宮、`20580` はハッブル) で、モデルがあるかどうかを答えます。`make` はすぐ答えても、あとで答えても (`Promise`) かまいません。`null` はモデルなしです。追わなくなった衛星のために作ったモデルは、解放されます。
+- **一覧と切り替え。** `space.largeSatellites()` は、いま設定されている群のうち、モデルがある衛星を、ページの言語の名前つきで挙げます。`space.followNext(step = 1)` は、次の衛星 (`-1` なら前の衛星) を追って、その衛星を返します。最後の衛星の次は最初の衛星に戻ります。`stats.followModel` には、直前の描画でのモデルの中心の画面上の位置が入り、描いていないときは `null` です。
+- **止まっているとき。** モデルは絵の一部です。時計が止まりビューが動かないあいだは、何も描き直しません。次の衛星へ移るときの動きはビュー自身のもので、1秒ちょっとです (動きを減らす設定の人には、ジャンプします)。
+
+デモでは、見た目を確かめられるよう、仮のモデル (`demo/station-models.ts`。ISS、天宮、ハッブルの形に見立てた箱と円柱) を描きます。実物の写真や図ではありません。NASA 自身の ISS のモデルはパブリックドメインです。ページの作者が作ったモデルや、ページが再配布できるライセンスつきのモデルを用意するのは、ページの側です。
+
 ## カメラを数字で
 
 カメラがどこを向くかの計算は、ブラウザーの要らない純粋な関数 `ridePose` です。次は、420 km 上空で -z の向きに進み、地平線のほうに傾けたカメラの例です。
