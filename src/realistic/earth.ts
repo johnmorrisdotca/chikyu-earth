@@ -13,6 +13,7 @@ import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type Sate
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
+import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 export type { ThreeParts };
 
@@ -93,6 +94,8 @@ export interface EarthModel {
   ratio(): number;
   /** Meteors seen from space (src/meteors/layer.ts): off unless the element switches them on. */
   meteors: MeteorState;
+  /** The name written on the Earth (src/realistic/body-label.ts): off unless the element sets it. */
+  bodyLabel: BodyLabelState;
 }
 
 export interface EarthDeps {
@@ -112,6 +115,8 @@ export interface EarthDeps {
   air?: () => "full" | "light";
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
+  /** The name written on the Earth could not be made (the three.js handed over lacks a part, or the label could not be loaded). */
+  onLabelError?: (error: unknown) => void;
   /** Told after the tiles were put right for a draw: what the draw shows from each source is known now. */
   onTiled?: () => void;
   /** Told at the start of every draw, before anything is read for it. */
@@ -138,6 +143,7 @@ export const newModel = (): EarthModel => ({
   pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
   meteors: newMeteorState(),
+  bodyLabel: newBodyLabelState(),
 });
 
 /**
@@ -295,6 +301,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       // the meteors: made the first time they are switched on, and asking for their own next draw while a streak is alive or one is due
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
+      let nameOn: BodyLabelLayer | null = null;
 
       return {
         scene,
@@ -338,6 +345,9 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           textures.sync(radius * model.ratio());
           tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
           deps.onTiled?.();
+          // the name written on the Earth: the layer is made the first time the settings ask for it, and keeps itself right
+          if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, turned, model.bodyLabel, { invalidate: deps.invalidate, ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
+          nameOn?.sync(camera, radius);
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {
@@ -355,6 +365,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           model.pick = null;
           clearTimeout(meteorTimer);
           meteors?.dispose();
+          nameOn?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

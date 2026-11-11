@@ -13,6 +13,7 @@ import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scal
 import type { SatelliteRef } from "../satellites/types.ts";
 import { ridePose, type RideLook } from "./ride.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "./satellite-layer.ts";
+import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
@@ -164,6 +165,8 @@ export interface SpaceModel {
   satellites: SatelliteState;
   /** Meteors seen from space, on the Earth (src/meteors/layer.ts): off unless the element switches them on. */
   meteors: MeteorState;
+  /** The name written on the Earth (src/realistic/body-label.ts): off unless the element sets it. */
+  bodyLabel: BodyLabelState;
   /** The body or satellite the camera rides along with, or null. */
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
@@ -211,6 +214,7 @@ export const newSpaceModel = (): SpaceModel => ({
   rideMotion: 0,
   satellites: newSatelliteState(),
   meteors: newMeteorState(),
+  bodyLabel: newBodyLabelState(),
   pick: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
@@ -315,6 +319,8 @@ export interface SpaceDeps {
   air?: () => "full" | "light";
   /** Where each body is on the screen, in CSS pixels in the box, or null when it is behind the camera. Called at each draw. */
   onLabels?: (places: Record<BodyName, BodyPlace | null>) => void;
+  /** The name written on the Earth could not be made. */
+  onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
   /** Called at the end of a draw while the camera is moving from one ride to another, so the next frame is asked for (at the page's frame cap). */
@@ -522,6 +528,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let releaseTimer: ReturnType<typeof setTimeout> | undefined;
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
+      let nameOn: BodyLabelLayer | null = null;
 
       let layer: SatelliteLayer | undefined;
       const rideState = new Float64Array(6);
@@ -823,6 +830,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
             deps.onLabels(places);
           }
+          // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
+          if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
+          nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
           if (layer && deps.onSelected) {
             const at = model.satellites.selected ? layer.place(camera, size) : null;
             if (at || selectedShown) deps.onSelected(at);
@@ -851,6 +861,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (releaseTimer !== undefined) clearTimeout(releaseTimer);
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
+          nameOn?.dispose();
           layer?.dispose();
           model.pick = null;
           textures.dispose();

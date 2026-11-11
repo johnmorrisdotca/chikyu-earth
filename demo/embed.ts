@@ -20,6 +20,8 @@ import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import { globeCredit } from "./frame-credit.ts";
+import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
+setBodyLabelFontUrl("fonts/Michroma-Regular.ttf");
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);

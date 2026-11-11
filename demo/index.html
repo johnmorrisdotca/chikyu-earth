@@ -82,6 +82,13 @@
                     <button type="button" data-meteor-strength="0.5" data-say="strength_medium">Medium</button>
                     <button type="button" data-meteor-strength="1" class="on" data-say="strength_full">Full</button>
                   </div>
+                  <div class="group fam-seg" id="body-label-look" role="group" aria-label="Name on the Earth" data-say-label="bodyLabel" data-help-en="Writes the Earth's name on the globe so it turns with it and the surface shows through the letters: Painted lays pale letters over the surface, Etched lightens it, Edges draws only the edges of the letters, Burned darkens it." data-help-ja="地球の名前を地球儀の上に書き、地球といっしょに回して、文字の下から表面が透けて見えるようにします。「塗り」は表面の上に淡い文字を置き、「彫り」は表面を明るくし、「輪郭」は縁だけを描き、「焼き」は暗くします。">
+                    <button type="button" data-body-label="" class="on" data-say="bodyLabel_off">No name</button>
+                    <button type="button" data-body-label="painted" data-say="bodyLabel_painted">Painted</button>
+                    <button type="button" data-body-label="etched" data-say="bodyLabel_etched">Etched</button>
+                    <button type="button" data-body-label="outline" data-say="bodyLabel_outline">Edges</button>
+                    <button type="button" data-body-label="burned" data-say="bodyLabel_burned">Burned</button>
+                  </div>
                   <button type="button" class="fam-button" id="air-true" aria-pressed="false" data-say="airTrue">True air thickness</button>
                 </div>
                 <div class="fam-row" id="time-controls" hidden data-help-en="Choose the date and time, or go back to now. In the space view, Play runs the clock from the date shown and the date follows it; Pause holds it there; Back to the date returns to the date you chose. The speeds are multiples of real time: 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="日付と時刻を選びます。「今」にもどすこともできます。宇宙の見た目では、「再生」で表示している日時から時計が進み、日付もいっしょに進みます。「一時停止」で止まり、「もとの日付へ」で選んだ日付にもどります。速さは実際の時間の何倍かです。3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。速さを 86400 (1秒で1日) にすると、地球が回り、月が動くのが見えます。">

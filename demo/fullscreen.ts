@@ -9,6 +9,8 @@ import "@johnmorrisdotca/kazoku-ui/view-controls/define";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import type { CameraMode, ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { airNoteText } from "../src/realistic/air-note.ts";
+import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
+setBodyLabelFontUrl("fonts/Michroma-Regular.ttf");
 import { fetchGroup, GROUP_STYLE, setsOfGroup } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);

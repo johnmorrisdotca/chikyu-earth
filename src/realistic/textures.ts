@@ -22,6 +22,14 @@ export type ThreeParts = {
 } & {
   /** Only the satellites use it, so a loader that hands over a subset of three.js without it still draws everything else. */
   Points?: typeof THREE.Points;
+} & {
+  /** Only the name written on the Earth (`body-label`) uses these, so a subset of three.js without them still draws everything else. */
+  CanvasTexture?: typeof THREE.CanvasTexture;
+  SphereGeometry?: typeof THREE.SphereGeometry;
+  MeshLambertMaterial?: typeof THREE.MeshLambertMaterial;
+  SRGBColorSpace?: typeof THREE.SRGBColorSpace;
+  NormalBlending?: typeof THREE.NormalBlending;
+  AdditiveBlending?: typeof THREE.AdditiveBlending;
 };
 
 /** Milliseconds a lower texture size must be enough before the larger one is let go. */

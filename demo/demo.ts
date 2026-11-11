@@ -22,10 +22,14 @@ import type { BodyPainter } from "../src/space/index.ts";
 import { discRadius } from "../src/realistic/earth.ts";
 import { readMeteorStrength } from "../src/meteors/strength.ts";
 import { creditLine } from "../src/door/index.ts";
+import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../src/satellites/limits.ts";
 import { mountMissions } from "./missions.ts";
 
 type Look = "line" | "thick" | "realistic" | "space";
+
+// the family's font for the name written on the Earth is served beside the page (scripts/site.ts)
+setBodyLabelFontUrl("fonts/Michroma-Regular.ttf");
 
 /** A word of the page in the language it is in now (the family's chooser, set by the page), English if the chooser is not there. */
 const say = (key: string, values: Record<string, string | number> = {}): string => {
@@ -683,6 +687,7 @@ if (flat && controls && stage) {
       // the clock runs only while Play is on; a held space view draws nothing
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
@@ -757,6 +762,7 @@ if (flat && controls && stage) {
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
@@ -915,6 +921,24 @@ if (flat && controls && stage) {
         else element.setAttribute("meteors-strength", String(value));
       }
       address.set("meteors-strength", value === 1 ? null : String(value));
+    });
+  }
+
+  // The Earth's name written on the globe (`body-label` in the address: painted, etched, outline or burned; none by default): the family's label, drawn by the realistic Earth and the space view.
+  const labelButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-body-label]")];
+  const markLabel = (look: string): void => {
+    for (const b of labelButtons) b.classList.toggle("on", (b.dataset["bodyLabel"] ?? "") === look);
+  };
+  for (const b of labelButtons) {
+    b.addEventListener("click", () => {
+      const look = b.dataset["bodyLabel"] ?? "";
+      markLabel(look);
+      for (const element of [real, space]) {
+        if (!element) continue;
+        if (look === "") element.removeAttribute("body-label");
+        else element.setAttribute("body-label", look);
+      }
+      address.set("body-label", look === "" ? null : look);
     });
   }
 
@@ -1115,6 +1139,7 @@ if (flat && controls && stage) {
   if (opened["clouds"] === "off") clouds?.setAttribute("aria-pressed", "false");
   if (opened["lights"] === "off") lights?.setAttribute("aria-pressed", "false");
   if (opened["meteors"] === "on") meteors?.setAttribute("aria-pressed", "true");
+  if (opened["body-label"] !== undefined) markLabel(opened["body-label"]);
   if (opened["meteors-strength"] !== undefined) markStrength(readMeteorStrength(opened["meteors-strength"]));
   if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;

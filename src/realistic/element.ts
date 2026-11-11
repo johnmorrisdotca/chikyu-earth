@@ -17,6 +17,7 @@ import type { Credit, DataSource } from "../data-door.ts";
 import { createDoorHost, type DoorHost } from "../door/host.ts";
 import { folderSource } from "../door/map.ts";
 import { ownCredit } from "../door/own.ts";
+import { BODY_LABEL_ATTRIBUTES, bodyLabelText, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
@@ -156,7 +157,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, "air-thickness", "air-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -212,6 +213,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.camera = readCamera(this.getAttribute("camera"));
     this.#model.cloudDrift = readDrift(this.getAttribute("cloud-drift"));
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
+    this.#applyBodyLabel();
     this.#door.book.ownOnly(this.getAttribute("data") === "own");
     this.#model.speed = this.speed;
     if (!this.hasAttribute("role")) this.setAttribute("role", "img");
@@ -265,6 +267,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       invalidate: () => this.#gate?.soon(),
       onDraw: () => this.#gate?.drawn(),
       onTiled: () => this.#door.announce(),
+      onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
@@ -341,7 +344,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#model.airThickness = readAirThickness(value);
       this.#gate?.soon();
     }
-    else if (name === "meteors-label" || name === "lang") this.#meteorNote();
+    else if (name === "meteors-label" || name === "lang") {
+      this.#meteorNote();
+      if (name === "lang") this.#applyBodyLabel();
+    } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -392,6 +398,36 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
   set meteorsStrength(value: number) {
     this.setAttribute("meteors-strength", String(value));
+  }
+
+
+  /**
+   * The name written on the Earth, as the family's body label: `EARTH` (`地球` on a Japanese page) laid on the globe so it turns with it, the surface showing through the letters. Off (`null`) unless the page sets it. The plain attributes are the family's:
+   * `body-label` (`painted`, `etched`, `outline` or `burned`; absent, no label), `body-label-strength` (0 to 1, 0.5), `body-label-repeat` (`once`, `both` or `around`), `body-label-latitude` (degrees), `body-label-facing` (present: always facing the reader),
+   * `body-label-font` (a CSS font family the page has loaded; Michroma, fetched once, when left out) and `body-label-fallback-font` (for letters the font has none of, such as Japanese). The property is the same options as an object, or `null`; setting it writes the attributes.
+   * Nothing of it is fetched or made until it is first set, it is not drawn while the Earth is under 24 pixels in radius, and nothing is drawn at rest. A three.js handed over with `setThreeLoader` must include `CanvasTexture`, `SphereGeometry`, `MeshLambertMaterial`, `SRGBColorSpace`, `NormalBlending`
+   * and `AdditiveBlending`; without them `chikyu-body-label-unavailable` is sent and the name is not drawn.
+   */
+  get bodyLabel(): BodyLabelSettings | null {
+    return readBodyLabel((name) => this.getAttribute(name));
+  }
+  set bodyLabel(value: Partial<BodyLabelSettings> | null) {
+    for (const name of BODY_LABEL_ATTRIBUTES) this.removeAttribute(name);
+    if (value === null) return;
+    this.setAttribute("body-label", value.look ?? "painted");
+    if (value.strength !== undefined) this.setAttribute("body-label-strength", String(value.strength));
+    if (value.repeat !== undefined) this.setAttribute("body-label-repeat", value.repeat);
+    if (value.latitude !== undefined) this.setAttribute("body-label-latitude", String(value.latitude));
+    if (value.facing) this.setAttribute("body-label-facing", "");
+    if (value.font) this.setAttribute("body-label-font", value.font);
+    if (value.fallbackFont) this.setAttribute("body-label-fallback-font", value.fallbackFont);
+  }
+
+  /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
+  #applyBodyLabel(): void {
+    this.#model.bodyLabel.settings = readBodyLabel((name) => this.getAttribute(name));
+    this.#model.bodyLabel.text = bodyLabelText((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en");
+    this.#gate?.soon();
   }
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -579,6 +615,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     assets: { entries: number; refs: number };
     /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
     meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
+    /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
+    bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -591,6 +629,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
+      bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
     };
   }
 

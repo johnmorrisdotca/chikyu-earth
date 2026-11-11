@@ -198,6 +198,24 @@ import { activeShowers } from "@johnmorrisdotca/chikyu-earth/meteors";
 for (const { shower, zhr } of activeShowers(Date.UTC(2026, 11, 14, 8))) console.log(`${shower.name}: ${zhr.toFixed(1)} an hour`);
 ```
 
+## A name on the Earth
+
+`body-label` on `<chikyu-earth-realistic>` and `<chikyu-space>` writes the Earth's name (`EARTH`, `地球` on a Japanese page) on the globe so it turns with it and the surface shows through the letters: the family's shared label (kazoku-ui's `body-label`), in the family's plain attributes (`body-label` = `painted`, `etched`, `outline` or `burned`, then `body-label-strength`, `-repeat`, `-latitude`, `-facing`, `-font`, `-fallback-font`) and the property `bodyLabel`. The default is Michroma, painted, half strength, once, turning with the Earth. Off unless set; nothing is fetched until it is; nothing is drawn at rest: [guide](docs/guides/body-label.md).
+
+```js
+import { BODY_LABEL_ATTRIBUTES, bodyLabelText, readBodyLabel } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+// The family's plain attributes: absent, no name; present, the family's own default (painted, half strength, once, on the equator).
+const none = readBodyLabel(() => null);
+const plain = readBodyLabel((name) => (name === "body-label" ? "" : null));
+console.log(none, JSON.stringify(plain));
+
+// A page's own choices, and the name in its language.
+const mine = { "body-label": "etched", "body-label-strength": "0.8", "body-label-repeat": "both", "body-label-latitude": "55" };
+console.log(JSON.stringify(readBodyLabel((name) => mine[name] ?? null)));
+console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.length);
+```
+
 ## Outside data: the data door
 
 The package draws; you bring the data. `@johnmorrisdotca/chikyu-earth/door` takes a finer map of the Earth, or a list of satellites' orbit data, as a **source**: a small object that carries its own licence and credit, so the screen can always say whose data it shows. With no source nothing changes: the Earth is drawn from the package's own pictures and tiles (`OWN_SOURCES`, written from `NOTICE.md`, never non-commercial or share-alike). A source of yours may be either, and the credit line prints that beside the licence.
@@ -512,6 +530,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
+| [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
 | [Outside data, the data door](docs/guides/data-door.md) | Hand the package your own maps of the Earth or orbit data with their licence and credit, switch them off, and show whose data is on the screen |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |

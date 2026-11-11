@@ -32,6 +32,8 @@ await cp(at("demo/demo.css"), at("site/demo.css"));
 await writeFile(at("site/wide.css"), `${wideCss({ side: "22rem" })}\n`, "utf8");
 await cp(at("demo/family.css"), at("site/family.css"));
 await cp(at("textures"), at("site/textures"), { recursive: true });
+// the family's font for the name written on the Earth (Michroma, SIL Open Font License 1.1, with its licence), beside the page: the demo says where it is with `setBodyLabelFontUrl`
+await cp(at("node_modules/@johnmorrisdotca/kazoku-ui/dist/body-label/fonts"), at("site/fonts"), { recursive: true });
 // the Earth tile pyramid (made by `pnpm tiles`, never committed): served beside the demo when it has been built
 // without it, an empty manifest, so the demo's one request for it is answered (no 404 in the console) and the Earth keeps its own pictures
 if (existsSync(at(".cache/earth-tiles-out/manifest.json"))) await cp(at(".cache/earth-tiles-out"), at("site/tiles"), { recursive: true });
