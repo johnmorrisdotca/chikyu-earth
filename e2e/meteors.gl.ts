@@ -35,11 +35,19 @@ test.describe("with motion allowed", () => {
     expect(first.zhr).toBeGreaterThan(100);
     expect(first.perSecond).toBeGreaterThan(2.5);
     expect(first.perSecond).toBeLessThanOrEqual(9);
-    await page.waitForTimeout(4000);
+    // Streaks start at random (a Poisson process), so a count over a few seconds can land well off its mean: four seconds at the top rate of nine a second has a mean of 36 and a spread of 6.
+    // Count over ten seconds of this page's own time (read in the page, not guessed from the wait) and hold the count to what the rate says, with room for chance of five spreads.
+    const clock = (): Promise<number> => page.evaluate(() => performance.now());
+    const t0 = await clock();
+    const before = (await meteors(page)).spawned;
+    await page.waitForTimeout(10_000);
     const later = await meteors(page);
-    const started = later.spawned - first.spawned;
-    expect(started, "streaks started in four seconds").toBeGreaterThan(4);
-    expect(started).toBeLessThanOrEqual(4 * 9 + 12);
+    const seconds = ((await clock()) - t0) / 1000;
+    const started = later.spawned - before;
+    const rate = Math.min(first.perSecond, later.perSecond);
+    const top = 9 * seconds;
+    expect(started, `streaks started in ${seconds.toFixed(1)} s at ${rate.toFixed(1)} a second`).toBeGreaterThan(rate * seconds - 5 * Math.sqrt(rate * seconds));
+    expect(started, `streaks started in ${seconds.toFixed(1)} s, where nine a second is the most`).toBeLessThanOrEqual(top + 5 * Math.sqrt(top));
     expect(later.alive).toBeLessThanOrEqual(48);
     expect(await note(page)).toContain("illustration");
     await expect(page.locator("#meteors")).toHaveAttribute("aria-pressed", "true");
@@ -69,12 +77,17 @@ test.describe("with motion allowed", () => {
     await openEarth(page, "time=2026-06-21T12:00Z&center=0,23.44&speed=60&meteors=on&camera=ground");
     // the demo opens the 3D looks turning (Auto-turn, 6 degrees a second), which would carry the night side into view: hold the turn so only the clock moves
     await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    // the turn is held and the view put back where the Sun is over the middle: what is in sight is then the same whatever the machine's speed, so the rate it gives is the same too
+    await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(v: unknown, f: boolean, r: string): void }).set({ yaw: 0, tilt: 0 }, true, "test"));
+    await page.waitForTimeout(1500);
+    const before = (await meteors(page)).spawned;
     await page.waitForTimeout(4000);
     const day = await meteors(page);
     expect(day.on).toBe(true);
     // the clock runs, so a sliver of twilight creeps in at the rim: next to nothing, where the night side gives several a second
-    expect(day.spawned).toBeLessThanOrEqual(1);
     expect(day.perSecond).toBeLessThan(0.2);
+    // chance can still start one or two at that rate; the night side starts dozens in the same time
+    expect(day.spawned - before).toBeLessThanOrEqual(3);
   });
 
   test("none while the clock is held, and they start when it runs", async ({ page }) => {
