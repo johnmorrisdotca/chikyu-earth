@@ -785,8 +785,8 @@ export class ChikyuSpace extends HTMLElement {
     lookups: number;
     satellites: SatelliteStats;
     ride: { riding: boolean; lost: boolean; gliding: boolean };
-    /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, and its field of view in degrees. */
-    camera: { position: [number, number, number]; fov: number };
+    /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
+    camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, and the moons shown round a planet that is near. */
     bodies: { look: string; painted: number; moons: number };
     /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
@@ -807,7 +807,7 @@ export class ChikyuSpace extends HTMLElement {
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
-      camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], fov: this.#model.pose.fov },
+      camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
