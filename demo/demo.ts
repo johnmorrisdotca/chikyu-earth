@@ -8,7 +8,8 @@ import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/
 import "../src/element.ts";
 import type { EmbedPanelElement } from "@johnmorrisdotca/kazoku-ui/embed-panel/element";
 import { mountEmbedSection } from "./embed-section.ts";
-import { attachMarkers, type MarkerEventDetail, type Markers } from "../src/markers/index.ts";
+import { attachMarkers, nearby, type MarkerEventDetail, type Markers, type Place, type PlaceLook } from "../src/markers/index.ts";
+import { readPlaceLook } from "../src/markers/place-layer.ts";
 import { crowd, PLACES } from "./places.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
@@ -851,6 +852,8 @@ if (flat && controls && stage) {
     }
     linkPace = null;
     markGrab(next);
+    for (const box of [yourPlaces, hereNote]) if (box) box.hidden = next !== "realistic" && next !== "space";
+    showPlaces();
     if (earthStage) earthStage.dataset["look"] = next;
     address.set("look", next);
     for (const b of lookButtons) {
@@ -890,6 +893,59 @@ if (flat && controls && stage) {
       space?.setAttribute("center", centre);
     });
   });
+
+  // Your places, on the realistic and space looks: where the reader is, asked of the browser only when they press the button, rounded to about 10 km and kept in this page alone (never in the address),
+  // and the markers' look
+  const yourPlaces = document.querySelector<HTMLElement>("#your-places");
+  const hereNote = document.querySelector<HTMLElement>("#here-note");
+  const hereButton = document.querySelector<HTMLButtonElement>("#here");
+  const lookChoices = [...document.querySelectorAll<HTMLButtonElement>("[data-place-look]")];
+  let here: Place | null = null;
+  let placeLook: PlaceLook = readPlaceLook(address.get("place-look"));
+  function showPlaces(): void {
+    const list: Place[] = here ? [{ ...here, label: say("hereLabel") }] : [];
+    for (const element of [real, space]) {
+      if (!element) continue;
+      element.places = list;
+      element.placesLook = placeLook;
+    }
+    for (const b of lookChoices) {
+      b.classList.toggle("on", b.dataset["placeLook"] === placeLook);
+      b.setAttribute("aria-pressed", String(b.dataset["placeLook"] === placeLook));
+    }
+  }
+  hereButton?.addEventListener("click", () => {
+    if (here) {
+      here = null;
+      hereButton.setAttribute("aria-pressed", "false");
+      showPlaces();
+      return;
+    }
+    if (!navigator.geolocation) {
+      notice(say("hereFail"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const at = nearby({ lon: position.coords.longitude, lat: position.coords.latitude });
+        here = { id: "here", lon: at.lon, lat: at.lat, kind: "here" };
+        hereButton.setAttribute("aria-pressed", "true");
+        notice(null);
+        for (const element of [real, space]) element?.setAttribute("center", `${at.lon},${at.lat}`);
+        showPlaces();
+      },
+      () => notice(say("hereFail")),
+      { timeout: 10_000, maximumAge: 600_000 },
+    );
+  });
+  for (const button of lookChoices) {
+    button.addEventListener("click", () => {
+      placeLook = readPlaceLook(button.dataset["placeLook"] ?? null);
+      address.set("place-look", placeLook === "beam" ? null : placeLook);
+      showPlaces();
+    });
+  }
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(showPlaces));
 
   const clouds = document.querySelector<HTMLButtonElement>("#clouds");
   const lights = document.querySelector<HTMLButtonElement>("#lights");

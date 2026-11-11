@@ -5,3 +5,4 @@ export { project, projectAll, canvasRatio, type Pose } from "./project.ts";
 export { clusterPoints, type Cluster } from "./cluster.ts";
 export { placeLabels, type LabelItem, type Placement } from "./labels.ts";
 export type { GroupInfo, MarkerEventDetail, MarkerIcon, MarkerInput } from "./types.ts";
+export { cleanPlaces, layoutPlaces, MAX_PLACES, nearby, orthoView, PLACE_LOOKS, readPlaces, type Place, type PlaceKind, type PlaceLabelSpot, type PlaceLayout, type PlaceLayoutOptions, type PlaceLook, type PlaceShape, type PlaceView, type SurfacePoint } from "./places.ts";

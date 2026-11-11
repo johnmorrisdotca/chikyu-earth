@@ -224,6 +224,14 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 <chikyu-space star-names="12" constellation-lines="0.16"></chikyu-space>
 ```
 
+## You are here, and places on the Earth
+
+`places` on `<chikyu-space>` and `<chikyu-earth-realistic>` marks places on the Earth, each a beam, a pin or a ring (`places-look`) standing out of the ground, turning with the Earth and hidden on its far side: `kind: "here"` for the reader's own place (brighter, with a quiet pulse) and favourites, quieter. Names never overlap; nothing is drawn at rest. The package never asks for the reader's place and stores or sends nothing: the page asks on a press and rounds the place with `nearby` first: [guide](docs/guides/places.md).
+
+```html
+<chikyu-space places='[{"id":"me","lon":-79.4,"lat":43.7,"label":"You are here","kind":"here"}]'></chikyu-space>
+```
+
 ## Outside data: the data door
 
 The package draws; you bring the data. `@johnmorrisdotca/chikyu-earth/door` takes a finer map of the Earth, or a list of satellites' orbit data, as a **source**: a small object that carries its own licence and credit, so the screen can always say whose data it shows. With no source nothing changes: the Earth is drawn from the package's own pictures and tiles (`OWN_SOURCES`, written from `NOTICE.md`, never non-commercial or share-alike). A source of yours may be either, and the credit line prints that beside the licence.
@@ -541,6 +549,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
+| [You are here, and places on the Earth](docs/guides/places.md) | The reader's place and favourite places as markers standing out of the Earth, asked for only on a press, kept on the device |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
 | [Outside data, the data door](docs/guides/data-door.md) | Hand the package your own maps of the Earth or orbit data with their licence and credit, switch them off, and show whose data is on the screen |
 | [Zoom, pan and turn](docs/guides/zoom-and-pan.md) | The hands every view carries, each zoom range and why |

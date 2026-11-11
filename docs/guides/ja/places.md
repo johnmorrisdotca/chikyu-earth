@@ -1,0 +1,51 @@
+---
+title: "現在地と、地球の上の場所"
+section: how-to
+order: 19
+description: "読む人の今いる場所と、お気に入りの場所を、宇宙の見た目やリアルな地球に目印で出します。光の柱、ピン、輪の形で地面から立ち上がり、地球といっしょに回り、裏側に回ると隠れます。名前は重なりません。現在地をたずねるのはページで、パッケージは何も保存せず、どこにも送りません。"
+---
+
+`<chikyu-space>` と `<chikyu-earth-realistic>` は、地球の上に場所の目印を出せます。読む人が今いる場所と、その人が残しておきたい場所です。目印は地面から立ち上がる小さな形で、地球といっしょに回り、地球の裏側に回ると隠れます。ズームしても画面の上での大きさ (ピクセル) は変わりません。
+
+```html
+<chikyu-space
+  places='[{"id":"me","lon":139.69,"lat":35.69,"label":"現在地","kind":"here"},{"id":"osaka","lon":135.5,"lat":34.69,"label":"大阪"}]'
+  places-look="beam"
+  style="width: 420px"
+></chikyu-space>
+```
+
+| 属性 | プロパティ | 意味 |
+|---|---|---|
+| `places` | `places` | 場所の JSON 配列です。1つずつ `{ id, lon, lat, label, kind }` の形です。プロパティを設定すると属性に書き込まれ、空の配列にすると属性が消えます。 |
+| `places-look` | `placesLook` | `beam` (初期値): 地面から立ち上がる光の柱と、その根元の輪です。`pin`: 細い棒と丸い頭です。`ring`: 地面の輪だけです。 |
+
+- **種類。** `kind: "here"` は読む人が今いる場所で、背が高く、明るく、根元で静かに波打ちます。ほかの場所はすべて `favourite` (お気に入り) で、背が低く、細く、動きません。色は要素かページの `--chikyu-place-here` と `--chikyu-place-favourite` で変えられます。
+- **地面から立ち上がる。** 目印は、画面から見た地面に対して上向きに立ちます。地球のふちの近くでは横にかたむき、根元の輪はほとんど横から見た形になります。真上から見る場所では、点につぶれないように画面の上のほうへかたむきます。
+- **名前。** 場所の `label` は、すき間があれば目印の上に出ます。`here` が先で、あとは渡した順です。名前どうしは重ならず、宇宙の見た目では天体の名前とも重なりません。置く場所がない名前は出しませんが、目印は描きます。名前の大きさは、ページのフォントで実際に測ります。
+- **止まっているときは何もしない。** 場所の配置は、絵を描くとき (カメラが動いた、時計が進んだ、設定が変わった) だけ計算します。波打つ動きは CSS のアニメーションなので、絵を描き直すことはありません。要素が見えないあいだは止まり、動きを減らす設定の人には出ません。`stats.places` には `places`、`shown`、`labels`、`renders` があります。
+- **最大 200 か所。** それより長い配列は `MAX_PLACES` までに切ります。経度が -180 から 180、緯度が -90 から 90 の外にある場所は出しません。
+
+## 読む人の現在地
+
+パッケージがブラウザーに現在地をたずねることはありません。たずねるのはページで、読む人が求めたときだけです。
+
+```js
+import { nearby } from "@johnmorrisdotca/chikyu-earth/markers";
+
+const space = document.querySelector("chikyu-space");
+document.querySelector("#here").addEventListener("click", () => {
+  navigator.geolocation.getCurrentPosition((position) => {
+    const at = nearby({ lon: position.coords.longitude, lat: position.coords.latitude });
+    space.places = [{ id: "here", lon: at.lon, lat: at.lat, label: "現在地", kind: "here" }];
+  });
+});
+```
+
+- **ボタンを押したときにたずねる。** `getCurrentPosition` は読む人のクリックから呼びます。こうすると、ブラウザーの確認は本人が求めたあとに出ます。消す方法も用意してください (`space.places = []`)。
+- **まるめる。** `nearby(point, km)` は、場所を約 `km` キロメートルのます目 (初期値は 10) に合わせます。目印が通りの名前までわかる位置に出ることはありません。描く前や残す前にまるめてください。
+- **端末の中だけに置く。** 要素は何も保存せず、どこにも送りません。本人が共有を選ばないかぎり、現在地をページのアドレスに入れたり、サーバーに送ったりしないでください。デモは開いているページの中だけで使い、ページを閉じると消えます。
+
+## ブラウザーなしで使える部分
+
+`@johnmorrisdotca/chikyu-earth/markers` には、自分で場所を描くページやサーバー向けの計算部分があります。`readPlaces` と `cleanPlaces` (描いても安全な配列にする)、`nearby`、`orthoView` (正面から描いた絵を、中心の点、半径、枠から作る)、`layoutPlaces` (`PlaceView` から、絵の中の目印と名前の位置を出す) です。

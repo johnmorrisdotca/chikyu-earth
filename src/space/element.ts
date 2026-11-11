@@ -8,6 +8,8 @@ import { airFor, readAirThickness } from "../realistic/air.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "../realistic/body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
+import { cleanPlaces, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
+import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -174,7 +176,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${SKY_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${PLACE_STYLE}${SKY_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -201,7 +203,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -232,6 +234,9 @@ export class ChikyuSpace extends HTMLElement {
   #tiers: Record<string, number> = {};
   #hands: ElementControls | undefined;
   #ridden: Partial<Record<keyof typeof RIDE_ZOOM, string>> = {};
+  #placeLayer: PlaceLayer | undefined;
+  #placeList: Place[] = [];
+  #nameBoxes = new Map<string, { width: number; height: number }>();
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
   get controller(): ViewController | undefined {
@@ -257,7 +262,7 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
@@ -271,6 +276,10 @@ export class ChikyuSpace extends HTMLElement {
       loadFont: loadMichroma,
     });
     this.#sky.setStyle(this.#skyStyle);
+    this.#placeLayer = createPlaceLayer(root.getElementById("places")!);
+    this.#placeList = readPlaces(this.getAttribute("places"));
+    this.#placeLayer.set(this.#placeList);
+    this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#applyBodyLabel();
     setAirNote(this.#airNote, this, this.#model.airThickness);
@@ -303,6 +312,7 @@ export class ChikyuSpace extends HTMLElement {
       },
       onLabels: (places) => this.#placeLabels(places),
       onSky: (sky) => this.#sky?.frame(sky),
+      onPlaces: (view) => this.#drawPlaces(view),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onSelected: (place) => this.#placeChosen(place),
       onMoving: () => this.#gate?.request(),
@@ -342,6 +352,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#taken = undefined;
     this.#sky?.dispose();
     this.#sky = undefined;
+    this.#placeLayer?.dispose();
+    this.#placeLayer = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -378,6 +390,14 @@ export class ChikyuSpace extends HTMLElement {
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
+    else if (name === "places") {
+      this.#placeList = readPlaces(value);
+      this.#placeLayer?.set(this.#placeList);
+      this.#gate?.request();
+    } else if (name === "places-look" && this.#placeLayer) {
+      this.#placeLayer.look = readPlaceLook(value);
+      this.#gate?.request();
+    }
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -451,6 +471,52 @@ export class ChikyuSpace extends HTMLElement {
   set skyStyle(value: Partial<SkyLabelStyle>) {
     this.#skyStyle = { ...value };
     this.#sky?.setStyle(this.#skyStyle);
+  }
+
+  /**
+   * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
+   * (the default: quieter). Each stands up out of the ground, turns with the Earth, is hidden on its far side and keeps its size in pixels at any zoom. Names go at the top, `here` first, and never overlap
+   * one another or the bodies' names; one with no room is left out. The element stores nothing and sends nothing: the page hands the places over and keeps them where it likes. Setting the property writes
+   * the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight and for a reader who asked for less motion.
+   */
+  get places(): Place[] {
+    return this.#placeList.map((place) => ({ ...place }));
+  }
+  set places(value: readonly Place[]) {
+    const clean = cleanPlaces(value);
+    if (clean.length === 0) this.removeAttribute("places");
+    else this.setAttribute("places", JSON.stringify(clean));
+  }
+
+  /** How the places are drawn (the attribute `places-look`): `beam` (a light rising out of the ground with a ring at its foot, the default), `pin` (a thin stick with a round head) or `ring` (only the ring on the ground). */
+  get placesLook(): PlaceLook {
+    return this.#placeLayer?.look ?? readPlaceLook(this.getAttribute("places-look"));
+  }
+  set placesLook(value: PlaceLook) {
+    this.setAttribute("places-look", value);
+  }
+
+  /** Lays the places on the picture just drawn, clear of the bodies' names shown beside it. */
+  #drawPlaces(view: PlaceView): void {
+    const layer = this.#placeLayer;
+    if (!layer || (this.#placeList.length === 0 && layer.stats.shown === 0)) return;
+    const taken: { left: number; top: number; width: number; height: number }[] = [];
+    if (this.#model.labels && this.#places) {
+      for (const name of BODY_NAMES) {
+        const at = this.#places[name];
+        const label = this.#pool.get(name);
+        if (!at || !label || label.hidden) continue;
+        const text = label.textContent ?? "";
+        let box = this.#nameBoxes.get(text);
+        if (!box) {
+          const rect = label.getBoundingClientRect();
+          box = { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+          if (box.width > 0) this.#nameBoxes.set(text, box);
+        }
+        taken.push({ left: at.x + Math.max(4, Math.min(at.r, 40)), top: at.y - 8, ...box });
+      }
+    }
+    layer.frame(view, taken);
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -854,6 +920,8 @@ export class ChikyuSpace extends HTMLElement {
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
+    /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
+    places: { places: number; shown: number; labels: number; renders: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -873,6 +941,7 @@ export class ChikyuSpace extends HTMLElement {
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0, lang: "", stars: [] },
+      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0 }) },
     };
   }
 
