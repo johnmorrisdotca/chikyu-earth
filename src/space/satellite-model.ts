@@ -1,4 +1,4 @@
-// A satellite drawn as a 3D model (MODULES-861): the page supplies the model (the package ships none), the space view places it where the followed satellite is, points it the way it really flies, sizes it to read and lights it with the real Sun.
+// A satellite drawn as a 3D model: the page supplies the model (the package ships none), the space view places it where the followed satellite is, points it the way it really flies, sizes it to read and lights it with the real Sun.
 // This file is the maths of that, pure, so a page or a test can ask the same questions the view does.
 import type { Vec3 } from "./ephemeris.ts";
 

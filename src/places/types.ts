@@ -1,4 +1,4 @@
-// Places on the Earth (MODULES-927 and MODULES-942): the list a page hands to `<chikyu-earth-realistic>` or `<chikyu-space>` as `places`, each one drawn as a marker standing out of the surface, with its name beside it.
+// Places on the Earth: the list a page hands to `<chikyu-earth-realistic>` or `<chikyu-space>` as `places`, each one drawn as a marker standing out of the surface, with its name beside it.
 // The package never asks where anybody is and stores nothing: the page hands the list in, and is told of a click. Pure: no DOM, no three.js.
 
 /**

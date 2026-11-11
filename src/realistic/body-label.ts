@@ -1,4 +1,4 @@
-// The name written on the Earth (MODULES-923): the family's shared body label (kazoku-ui's `body-label`) laid on the Earth's globe so it turns with it, in the family's plain attribute names (`body-label`, `body-label-strength` and the rest).
+// The name written on the Earth: the family's shared body label (kazoku-ui's `body-label`) laid on the Earth's globe so it turns with it, in the family's plain attribute names (`body-label`, `body-label-strength` and the rest).
 // Off unless a page asks: nothing of it is fetched or made until `body-label` is first set, so a page that never uses it pays nothing. The look and the font are the family's: Michroma, painted, at half strength, once, turning with the body.
 import type * as THREE from "three";
 import type { BodyLabel, BodyLabelLook, BodyLabelOptions } from "@johnmorrisdotca/kazoku-ui/body-label";
@@ -130,7 +130,27 @@ export function setBodyLabelFontUrl(url: string | undefined): void {
   fontUrl = url;
 }
 
-const signatureOf = (state: BodyLabelState): string => (state.settings ? JSON.stringify([state.text, state.settings]) : "");
+/** What the label was last made or set from, kept as a copy so that each draw compares fields and allocates nothing. */
+interface Made {
+  text: string;
+  look: BodyLabelLook;
+  strength: number;
+  repeat: BodyLabelSettings["repeat"];
+  latitude: number;
+  facing: boolean;
+  font: string | undefined;
+  fallbackFont: string | undefined;
+}
+
+const same = (made: Made | null, state: BodyLabelState): boolean => {
+  const s = state.settings;
+  return made !== null && s !== null && made.text === state.text && made.look === s.look && made.strength === s.strength && made.repeat === s.repeat && made.latitude === s.latitude && made.facing === s.facing && made.font === s.font && made.fallbackFont === s.fallbackFont;
+};
+
+const copyOf = (state: BodyLabelState): Made => {
+  const s = state.settings!;
+  return { text: state.text, look: s.look, strength: s.strength, repeat: s.repeat, latitude: s.latitude, facing: s.facing, font: s.font, fallbackFont: s.fallbackFont };
+};
 
 /**
  * Makes the layer that keeps the Earth's name on its globe, inside `parent` (the group or mesh that turns with the Earth, a radius of 1). The family's body label is loaded only when the settings first ask for it, and its font (Michroma, 64 kB) only
@@ -146,7 +166,7 @@ export function createBodyLabelLayer(three: ThreeParts, parent: THREE.Object3D, 
   let label: BodyLabel | null = null;
   let loading = false;
   let failed = false;
-  let signature = "";
+  let made: Made | null = null;
   let gone = false;
   const options = (): BodyLabelOptions => {
     const s = state.settings!;
@@ -157,7 +177,7 @@ export function createBodyLabelLayer(three: ThreeParts, parent: THREE.Object3D, 
     parent.remove(label.object as unknown as THREE.Object3D);
     label.dispose();
     label = null;
-    signature = "";
+    made = null;
     state.drawn = { made: false, showing: false };
   };
   const make = (): void => {
@@ -171,13 +191,13 @@ export function createBodyLabelLayer(three: ThreeParts, parent: THREE.Object3D, 
           loading = false;
           return;
         }
-        const made = module.createBodyLabel(three as never, options());
-        parent.add(made.object as unknown as THREE.Object3D);
-        label = made;
+        const created = module.createBodyLabel(three as never, options());
+        parent.add(created.object as unknown as THREE.Object3D);
+        label = created;
         state.drawn.made = true;
-        signature = signatureOf(state);
+        made = copyOf(state);
         loading = false;
-        void made.ready.then(() => {
+        void created.ready.then(() => {
           if (!gone) deps.invalidate();
         });
         deps.invalidate();
@@ -192,16 +212,17 @@ export function createBodyLabelLayer(three: ThreeParts, parent: THREE.Object3D, 
     sync(camera, radiusPx) {
       if (gone) return;
       if (!state.settings) {
+        // switched off: the label goes, and a load that failed may be tried again when it is switched on
         remove();
+        failed = false;
         return;
       }
       if (!label) {
         if (!loading && !failed) make();
         return;
       }
-      const now = signatureOf(state);
-      if (now !== signature) {
-        signature = now;
+      if (!same(made, state)) {
+        made = copyOf(state);
         label.set(options());
         deps.invalidate();
       }
