@@ -36,6 +36,67 @@ export const RIDE_FOV = 60;
 export type RideLook = "down" | "horizon";
 
 /**
+ * The field of view, in degrees, of a riding camera at a zoom: the natural 60 divided by the zoom, held between 5 and 100.
+ *
+ * @param zoom - The shared controls' zoom.
+ * @returns The field of view in degrees.
+ *
+ * @example
+ * ```ts
+ * import { rideFov } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(rideFov(1), rideFov(6), rideFov(100));
+ * ```
+ */
+export function rideFov(zoom: number): number {
+  return Math.min(100, Math.max(5, RIDE_FOV / Math.max(0.05, zoom)));
+}
+
+/**
+ * How many degrees the camera turns for a change of the controls' yaw at a zoom. The controls wrap their yaw into -180 to 180, so a page adds up the turns itself, change by change (`wrapYaw` of the change, scaled by this at the zoom of the moment), and hands
+ * the total to `ridePose` as `turn`: a drag the whole way round is then a turn the whole way round, and the pace follows the field of view at any zoom.
+ *
+ * @param change - The change of yaw, in degrees, between two views of the controls (already brought into -180 to 180).
+ * @param zoom - The shared controls' zoom at the moment.
+ * @returns The turn, in degrees.
+ *
+ * @example
+ * ```ts
+ * import { rideTurnDegrees } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(rideTurnDegrees(180, 1), rideTurnDegrees(180, 6));
+ * ```
+ */
+export function rideTurnDegrees(change: number, zoom: number): number {
+  return change * (GRAB * rideFov(zoom)) / 180;
+}
+
+/**
+ * The range of the controls' tilt that does something in the `horizon` look: from straight down to a little above the horizon. A tilt beyond it moves nothing, so a page holds the tilt to it, and a drag back starts moving at once instead of after the
+ * excess is dragged back. It depends on the height (the horizon is further from straight down the higher the camera is) and the zoom. The `down` look has no such range.
+ *
+ * @param distance - The camera's distance from the Earth's centre, in Earth radii.
+ * @param look - The look.
+ * @param zoom - The shared controls' zoom.
+ * @returns The lowest and highest tilt, or `null` for the `down` look.
+ *
+ * @example
+ * ```ts
+ * import { rideTiltLimits } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const range = rideTiltLimits(1.066, "horizon", 1);
+ * console.log(range && `${range.min.toFixed(0)} to ${range.max.toFixed(0)}`, rideTiltLimits(1.066, "down", 1));
+ * ```
+ */
+export function rideTiltLimits(distance: number, look: RideLook, zoom: number): { min: number; max: number } | null {
+  if (look !== "horizon") return null;
+  const radius = distance <= 1 ? 90 : Math.asin(1 / distance) / RAD;
+  const start = Math.max(0, radius - 12) * RAD - Math.PI / 2;
+  const perDegree = (GRAB * rideFov(zoom)) / 60;
+  return { min: (start - (MAX_ABOVE_HORIZON * RAD)) / RAD / perDegree, max: (start + Math.PI / 2) / RAD / perDegree };
+}
+
+/**
  * What `ridePose` is asked: the camera's place and its way of travel (any length), where it looks, and the shared controls' yaw, tilt and zoom.
  *
  * @example
@@ -58,6 +119,10 @@ export interface RideInput {
   tilt: number;
   /** 1 is the natural view; more narrows the field of view. */
   zoom: number;
+  /**
+   * The heading in degrees, accumulated by the caller (see `rideTurnDegrees`): used in place of `yaw` when given, so a turn of more than half a way round is not undone by the controls wrapping their yaw, and a change of zoom does not swing it.
+   */
+  turn?: number;
 }
 
 /**
@@ -119,8 +184,8 @@ export function ridePose(input: RideInput): RidePose {
   ahead = unit(ahead);
   const earthRadiusDegrees = distance <= 1 ? 90 : Math.asin(1 / distance) / RAD;
   const base = input.look === "horizon" ? Math.max(0, earthRadiusDegrees - 12) * RAD : 0;
-  const fov = Math.min(100, Math.max(5, RIDE_FOV / Math.max(0.05, input.zoom)));
-  const turn = input.yaw * (GRAB * fov / 180) * RAD;
+  const fov = rideFov(input.zoom);
+  const turn = (input.turn ?? input.yaw * (GRAB * fov / 180)) * RAD;
   const lift = input.tilt * (GRAB * fov / 60) * RAD;
   if (input.look === "horizon") {
     // looking round on the spot: a drag sideways turns the camera about the local vertical, all the way round, and a drag up or down tips it up or down in the vertical plane it faces, from straight down to a little above the horizon,

@@ -136,3 +136,49 @@ test("with no way of travel it still has a sensible up: north, or east at a pole
   near(len(polar.up), 1, 1e-9, "a unit vector over the pole");
   near(dot(polar.up, polar.forward), 0, 1e-9, "and square to forward");
 });
+
+import { rideFov, rideTiltLimits, rideTurnDegrees } from "../src/space/ride.ts";
+
+test("the turn is added up from the controls' wrapped yaw, so a whole turn round is a whole turn and a change of zoom swings nothing", () => {
+  // the controls wrap yaw into -180..180: a drag round adds 150 at a time, and the page adds the turns up
+  let total = 0;
+  let yaw = 0;
+  for (let step = 0; step < 10; step += 1) {
+    const next = ((yaw + 150 + 180) % 360) - 180;
+    const change = ((next - yaw + 540) % 360) - 180;
+    total += rideTurnDegrees(change, 1);
+    yaw = next;
+  }
+  near(total, 10 * 150 * 1.5 * (RIDE_FOV / 180), 1e-9, "the total is not wrapped");
+  assert.ok(total > 360, "more than a whole turn");
+  const before = ridePose({ ...horizonIss, turn: total });
+  const zoomed = ridePose({ ...horizonIss, turn: total, zoom: 4 });
+  // the heading is the same at both zooms
+  const heading = (forward: number[]): number[] => forward.map((n, i) => n - dot(forward, [1, 0, 0]) * [1, 0, 0][i]!);
+  const h1 = heading(before.forward);
+  const h2 = heading(zoomed.forward);
+  near(dot(h1, h2) / (len(h1) * len(h2)), 1, 1e-9, "a change of zoom does not turn the camera");
+  near(rideFov(4), RIDE_FOV / 4, 1e-9, "and narrows the view");
+  near(rideTurnDegrees(180, 6), rideTurnDegrees(180, 1) / 6, 1e-9, "a turn of the controls is smaller at a higher zoom");
+});
+
+test("a given turn is used in place of the yaw", () => {
+  const byTurn = ridePose({ ...horizonIss, turn: 90, yaw: 123 });
+  const byYaw = ridePose({ ...horizonIss, yaw: yawFor(90) });
+  for (let i = 0; i < 3; i += 1) near(byTurn.forward[i]!, byYaw.forward[i]!, 1e-9, "forward");
+});
+
+test("the tilt that does something is from straight down to a little above the horizon, and a tilt past it is not needed", () => {
+  const range = rideTiltLimits(1.066, "horizon", 1)!;
+  assert.ok(range.min < 0 && range.max > 0);
+  near(range.min, -34.9, 0.3, "up to 20 degrees above the horizon, in tilt");
+  near(range.max, 38.5, 0.3, "and as far down as straight down");
+  const top = ridePose({ ...horizonIss, tilt: range.min });
+  const bottom = ridePose({ ...horizonIss, tilt: range.max });
+  near(upness(iss.position, top.forward), Math.sin((20 * Math.PI) / 180), 1e-6, "the range's top is the highest the camera goes");
+  near(upness(iss.position, bottom.forward), -1, 1e-6, "and its bottom is straight down");
+  near(upness(iss.position, ridePose({ ...horizonIss, tilt: range.min - 30 }).forward), upness(iss.position, top.forward), 1e-9, "a tilt past the top changes nothing");
+  assert.equal(rideTiltLimits(1.066, "down", 1), null, "the down look has no range");
+  const narrow = rideTiltLimits(1.066, "horizon", 6)!;
+  assert.ok(narrow.max > range.max * 3, "at a high zoom the same tilt moves less, so the range is wider");
+});

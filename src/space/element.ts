@@ -1,7 +1,7 @@
 // <chikyu-space>: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through kazoku-ui's shared renderer. Optional:
 // the line globe and the Earth from space need neither this nor astronomy-engine. It draws only when something changes, at most 30 times a second.
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
-import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
+import { carryControls, wrapYaw, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "../adopt.ts";
 import type { GeoPoint } from "../types.ts";
 import { airFor, readAirThickness } from "../realistic/air.ts";
@@ -18,7 +18,7 @@ import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
-import type { RideLook } from "./ride.ts";
+import { rideTiltLimits, rideTurnDegrees, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SpaceModel } from "./scene.ts";
 
@@ -579,7 +579,15 @@ export class ChikyuSpace extends HTMLElement {
   setView(view: { yaw: number; tilt: number; zoom: number }, final = true): void {
     const now = this.#model.view;
     if (view.yaw === now.yaw && view.tilt === now.tilt && view.zoom === now.zoom) return;
-    this.#model.view = { yaw: view.yaw, tilt: view.tilt, zoom: view.zoom };
+    const model = this.#model;
+    // a riding camera that looks round adds up its turn change by change: the controls wrap their yaw into -180..180, so the yaw alone cannot say how far round the camera has gone, and a change of zoom must not swing it
+    if (view.yaw !== now.yaw) model.rideTurn += rideTurnDegrees(wrapYaw(view.yaw - now.yaw), view.zoom);
+    // and the tilt is held to what does something in the look: past it a drag would have to come back before anything moved
+    let tilt = view.tilt;
+    const limits = model.ride && model.ride.view === "from" && model.rideDistance !== null ? rideTiltLimits(model.rideDistance, model.ride.look, view.zoom) : null;
+    if (limits) tilt = Math.max(limits.min, Math.min(limits.max, tilt));
+    this.#model.view = { yaw: view.yaw, tilt, zoom: view.zoom };
+    if (tilt !== view.tilt) this.#hands?.controller.set({ tilt }, final, "ride");
     const drawn = this.#model.drawnView;
     if (drawn && !final && view.zoom === drawn.zoom) {
       const turned = Math.max(Math.abs(view.yaw - drawn.yaw), Math.abs(view.tilt - drawn.tilt)) * RAD;
@@ -614,11 +622,13 @@ export class ChikyuSpace extends HTMLElement {
     const wasRiding = model.ride !== null;
     if (target === null) {
       model.ride = null;
+      model.rideTurn = 0;
       model.focus = this.#focusBeforeRide;
     } else {
       if (typeof target === "string" && !BODY_NAMES.includes(target)) return;
       if (typeof target !== "string" && !model.satellites.groups.get(target.group)) return;
       if (!wasRiding) this.#focusBeforeRide = model.focus;
+      model.rideTurn = 0;
       const view = typeof target === "string" && target === "Earth" ? "follow" : (options.view ?? "from");
       model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: options.look ?? "down", distanceKm: Math.max(100, options.distanceKm ?? 3000) };
       if (typeof target === "string" && view === "follow") model.focus = target;
