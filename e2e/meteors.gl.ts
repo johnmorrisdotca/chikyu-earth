@@ -62,14 +62,15 @@ test.describe("with motion allowed", () => {
     await page.locator("#meteors").click();
     await expect.poll(async () => (await meteors(page)).spawned, { timeout: 15_000 }).toBeGreaterThan(2);
     expect(await note(page)).not.toBeNull();
-    expect(new URL(page.url()).searchParams.get("meteors")).toBe("on");
+    // the address is written a moment after a choice (kazoku-ui's address state waits 250 ms): waited for, not read once
+    await expect.poll(() => new URL(page.url()).searchParams.get("meteors"), { timeout: 5000 }).toBe("on");
     await page.locator("#meteors").click();
     await expect.poll(async () => (await meteors(page)).alive).toBe(0);
     const stopped = (await meteors(page)).spawned;
     await page.waitForTimeout(2000);
     expect((await meteors(page)).spawned).toBe(stopped);
     expect(await note(page)).toBeNull();
-    expect(new URL(page.url()).searchParams.get("meteors")).toBeNull();
+    await expect.poll(() => new URL(page.url()).searchParams.get("meteors"), { timeout: 5000 }).toBeNull();
   });
 
   test("next to none on the day side: with the Sun over the middle of the view almost nothing in sight is dark", async ({ page }) => {
