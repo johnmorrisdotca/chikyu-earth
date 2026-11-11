@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.33.0 - 2026-11-11
+
 - **The data door names licences in Japanese** (KAZOKU-UI-105): `src/data-door.ts` copied again, unchanged, from kazoku-ui's template: a licence may carry `nameJa` for a Japanese credit line.
 
 - **CI's browser jobs run in the Playwright image and need no apt mirror** (KAZOKU-UI-100). The runner's apt mirror stopped answering on 2026-11-11 from about 13:50 UTC, and every browser job failed in its setup before a test ran. The demo and usage jobs (`ci.yml`) now run in `mcr.microsoft.com/playwright:v1.64.0-noble`, the lockfile's Playwright version, which has the browsers and their system libraries. `.github/actions/playwright` (the family's, kazoku-ui's copy is canonical) checks the libraries with `ldd` first and runs apt only when one is missing, skips the browser cache in the image, works without `sudo`, and warns when a workflow's image and the lockfile name different Playwright versions. The Pages deploy stays on the runner: its `python3 -m venv` has no `ensurepip` in the image.
