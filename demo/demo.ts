@@ -20,6 +20,7 @@ import { catalogueEntry, findInCatalogue, SATELLITE_GROUPS, type SatelliteGroupI
 import type { RideTarget } from "../src/space/element.ts";
 import type { BodyPainter } from "../src/space/index.ts";
 import { discRadius } from "../src/realistic/earth.ts";
+import { readMeteorStrength } from "../src/meteors/strength.ts";
 import { DEFAULT_DIM_AFTER_DAYS } from "../src/satellites/limits.ts";
 import { mountMissions } from "./missions.ts";
 
@@ -681,6 +682,7 @@ if (flat && controls && stage) {
       // the clock runs only while Play is on; a held space view draws nothing
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
@@ -754,6 +756,7 @@ if (flat && controls && stage) {
       if (clouds === "off") element.setAttribute("clouds", "off");
       if (lights === "off") element.setAttribute("lights", "off");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       element.setAttribute("camera", cameraMode);
@@ -884,6 +887,24 @@ if (flat && controls && stage) {
     if (space) space.meteors = on;
     address.set("meteors", on ? "on" : null);
   });
+
+  // How strongly they are drawn (`meteors-strength` in the address, 0 to 1; the elements' own default, 1, is the whole look and writes nothing).
+  const strengthButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-meteor-strength]")];
+  const markStrength = (value: number): void => {
+    for (const b of strengthButtons) b.classList.toggle("on", Number(b.dataset["meteorStrength"]) === value);
+  };
+  for (const b of strengthButtons) {
+    b.addEventListener("click", () => {
+      const value = Number(b.dataset["meteorStrength"]);
+      markStrength(value);
+      for (const element of [real, space]) {
+        if (!element) continue;
+        if (value === 1) element.removeAttribute("meteors-strength");
+        else element.setAttribute("meteors-strength", String(value));
+      }
+      address.set("meteors-strength", value === 1 ? null : String(value));
+    });
+  }
 
   // The air is drawn 3 times its real thickness so it can be seen (the elements' default, and they say so); this button draws it as it is (`air-thickness=1` in the address).
   const airTrue = document.querySelector<HTMLButtonElement>("#air-true");
@@ -1082,6 +1103,7 @@ if (flat && controls && stage) {
   if (opened["clouds"] === "off") clouds?.setAttribute("aria-pressed", "false");
   if (opened["lights"] === "off") lights?.setAttribute("aria-pressed", "false");
   if (opened["meteors"] === "on") meteors?.setAttribute("aria-pressed", "true");
+  if (opened["meteors-strength"] !== undefined) markStrength(readMeteorStrength(opened["meteors-strength"]));
   if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());

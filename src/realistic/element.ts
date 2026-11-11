@@ -11,6 +11,7 @@ import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, new
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
+import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
@@ -131,6 +132,7 @@ export const readTime = (value: string | null): number | "now" => {
  * where they fall, their height and the showers' dates are real (`@johnmorrisdotca/chikyu-earth/meteors`). They run while the clock runs, at any speed, and not
  * at all while it is held, out of sight, in a hidden tab, or for a reader who prefers reduced motion until the page sets a `speed` (a Play). `chikyu-meteors`
  * is sent when the strongest active shower changes, with `detail: { shower, zhr }` (`shower` is `null` when none is active).
+ * `meteors-strength` (0 to 1, the property `meteorsStrength`; 1 when the page says nothing) makes them subtler: fewer streaks and fainter ones, none at 0, and nothing that is real changes.
  *
  * @example
  * ```ts no-run
@@ -150,7 +152,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive", "meteors", "meteors-label", "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", "air-thickness", "air-label", "lang"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -209,6 +211,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#airNote = root.getElementById("air-note")!;
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
+    this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
     this.#model.meteors.running = () => this.speed !== 0 && document.visibilityState !== "hidden" && (this.#played || !prefersLessMotion());
     this.#model.meteors.onShower = (shower, zhr) => this.dispatchEvent(new CustomEvent("chikyu-meteors", { detail: { shower, zhr } }));
     this.#meteorNote();
@@ -312,6 +315,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#gate?.soon();
     }
     else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "meteors-strength") {
+      this.#model.meteors.strength = readMeteorStrength(value);
+      this.#gate?.soon();
+    }
     else if (name === "air-thickness") {
       this.#model.airThickness = readAirThickness(value);
       this.#gate?.soon();
@@ -355,6 +362,18 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.meteors.on = value;
     this.#meteorNote();
     this.#gate?.soon();
+  }
+
+  /**
+   * How strongly the meteors are drawn, from 0 to 1 (the attribute `meteors-strength`; 1, the full look, when the page says nothing): it scales how bright each streak is and how many are drawn, so 0.3 is
+   * fewer and fainter and 0 draws none. It changes nothing that is real: the rates, the showers and `chikyu-meteors` are the same at every strength, and the line under the picture still says the streaks are an illustration.
+   * A number outside the range is brought to its nearest end; setting the property writes the attribute.
+   */
+  get meteorsStrength(): number {
+    return this.#model.meteors.strength;
+  }
+  set meteorsStrength(value: number) {
+    this.setAttribute("meteors-strength", String(value));
   }
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -491,7 +510,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     canvas: { width: number; height: number; pixels: number };
     assets: { entries: number; refs: number };
     /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
-    meteors: { on: boolean; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
+    meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -503,7 +522,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       contexts: stats?.contexts ?? 0,
       canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
-      meteors: { on: this.#model.meteors.on, ...this.#model.meteors.drawn },
+      meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
     };
   }
 

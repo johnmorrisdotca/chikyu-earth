@@ -162,6 +162,12 @@ await step("node-meteors", () => {
   if (!/^Overhead at 58 N, -?\d+ E; Tokyo: \d+ an hour$/.test(out.at(-1) ?? "")) throw new Error(`unexpected output: ${out.join("|")}`);
 });
 
+await step("node-meteor-strength", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "meteor-strength.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  const want = ["1 0.3 1 1", "strength 1: 2.5 a second", "strength 0.3: 0.75 a second", "strength 0: 0 a second"];
+  if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
+});
+
 await step("node-passes", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "passes.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (!/^ISS \(ZARYA\): highest \d+ degrees in the [NESW]+, (visible|daylight|shadow|faint)$/.test(out)) throw new Error(`unexpected output: ${out}`);
@@ -437,6 +443,7 @@ const FILES: Record<string, string[]> = {
   "node/server.mjs": ["docs/guides/typescript-and-node.md", "docs/guides/ja/typescript-and-node.md"],
   "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/meteors.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
+  "node/meteor-strength.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "satellites/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/passes.mjs": ["docs/guides/passes.md", "docs/guides/ja/passes.md"],

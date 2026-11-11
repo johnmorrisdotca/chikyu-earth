@@ -5,7 +5,7 @@ order: 14
 description: Switch on meteors over the realistic Earth, short streaks where meteors burn on the dark side, more of them under an active shower, and use the shower table and the rate functions by themselves. What is real and what is illustration.
 ---
 
-From space a meteor is a brief streak in the thin air above the dark side of the Earth. `<chikyu-earth-realistic>` and `<chikyu-space>` can draw them: one attribute switches them on, and a small entry point holds the year's meteor showers and the sums behind the picture, for a page that wants only the numbers.
+From space a meteor is a brief streak in the thin air above the dark side of the Earth. `<chikyu-earth-realistic>` and `<chikyu-space>` can draw them: one attribute switches them on (and another makes them subtler), and a small entry point holds the year's meteor showers and the sums behind the picture, for a page that wants only the numbers.
 
 ## Switch them on
 
@@ -33,6 +33,31 @@ That is the Geminids' maximum over North America at night, with the clock runnin
 - **Reduced motion.** For a reader who has asked their device for less motion there are no streaks until the page sets a `speed` after the element is in the page: a Play button, for example.
 - **Nothing at rest.** No streak is started and nothing is drawn while the element is out of sight or the tab is hidden. All the streaks are one draw, at most 48 alive at once, and the picture is drawn at most 30 times a second.
 
+## How strong they look
+
+`meteors-strength` is a number from 0 to 1, and it chooses how subtle the streaks are. It scales two things together: how bright each streak is, and how many are drawn. Without it the strength is 1, the full look they have always had, so a page that says nothing is unchanged.
+
+```html
+<chikyu-earth-realistic meteors meteors-strength="0.3" center="-100,30" time="2026-12-14T08:00Z" speed="60" style="width: 420px"></chikyu-earth-realistic>
+```
+
+- **0.3** is subtle: about a third as many streaks, each a third as bright. **0.5** is half. **1** is the full look.
+- **0 draws none.** The element is still on: the line under the picture is still there, the sky is still worked out and `chikyu-meteors` is still sent.
+- **Only the drawing changes.** The hourly rates, the showers and their `zhr`, which the event and `stats.meteors` report, are the real figures at every strength. `stats.meteors.perSecond` is the number of streaks a second being drawn, so it falls with the strength, and `stats.meteors.strength` is the strength in use.
+- **The line stays.** The streaks are an illustration at every strength, and the line under the picture says so.
+- **In a script** the property is a number: `earth.meteorsStrength = 0.3`. It writes the attribute. A number below 0 is taken as 0 and one above 1 as 1; a value that is not a number is taken as 1. The same attribute and property are on `<chikyu-space>`.
+- `readMeteorStrength(attribute)` and `streaksPerSecond(rate, strength)` in `@johnmorrisdotca/chikyu-earth/meteors` are the same sums, for a page that wants them by themselves:
+
+```js
+import { METEOR_STRENGTH_DEFAULT, readMeteorStrength, streaksPerSecond } from "@johnmorrisdotca/chikyu-earth/meteors";
+
+// What a page's `meteors-strength` means: 1 when it says nothing, a number from 0 to 1 as written, and the nearest end outside.
+console.log(METEOR_STRENGTH_DEFAULT, readMeteorStrength("0.3"), readMeteorStrength("7"), readMeteorStrength("soft"));
+
+// Streaks drawn a second over a dark view on a night with no shower (8 meteors an hour): 2.5 at the full look, fewer at a low strength, none at 0.
+for (const strength of [1, 0.3, 0]) console.log(`strength ${strength}: ${streaksPerSecond(8, strength)} a second`);
+```
+
 ## What is real, and what is illustration
 
 Real, worked out for the moment shown:
@@ -46,7 +71,7 @@ Real, worked out for the moment shown:
 Illustration:
 
 - **Every single streak.** Its place and its moment are drawn at random. Nobody can say where the next meteor will fall.
-- **The count.** A streak stands for a great many meteors. A view whose whole face is dark gets 2.5 streaks a second on a night with no shower, more under a shower (the rate to the power 0.6) and never more than 9.
+- **The count.** A streak stands for a great many meteors. A view whose whole face is dark gets 2.5 streaks a second on a night with no shower, more under a shower (the rate to the power 0.6) and never more than 9, all of it times the strength (`meteors-strength`, 1 unless set).
 - **The length.** A streak too short to see is lengthened, up to 14 times, to about 34 pixels. One that comes straight at the eye stays a flash.
 - **The background rate.** 8 meteors an hour is an assumed round figure, and the lean towards the morning side is a simple stand-in for the real daily swing.
 - **Each shower's curve.** The list gives the rate at the maximum and the first and last day; the rate between is the simplest curve through them.
@@ -67,7 +92,7 @@ earth.addEventListener("chikyu-meteors", (event) => {
   console.log(shower ? `${shower.name}: about ${zhr.toFixed(0)} an hour under a dark sky with the radiant overhead` : "No shower tonight");
 });
 earth.meteors = true;
-console.log(earth.stats.meteors); // { on, alive, spawned, perSecond, shower, zhr }
+console.log(earth.stats.meteors); // { on, alive, spawned, perSecond, shower, zhr, strength }
 ```
 
 ## The table and the sums, by themselves
@@ -91,7 +116,7 @@ console.log(`Overhead at ${overhead.lat} N, ${overhead.lon.toFixed(0)} E; Tokyo:
 - `showerRate(shower, ms)` and `activeShowers(ms)`: how strong a shower is at a moment.
 - `pointBeneath(radiant, ms)` and `apexPoint(ms)`: the place a point of the sky, or the Earth's way, stands overhead.
 - `meteorSky(ms)` and `hourlyRateAt(sky, place)`: the hourly rate for an ideal watcher at a place.
-- `darkness(place, sun)`, `streaksPerSecond(rate)` and `streakPath(place, radiant)`: what the layer draws from.
+- `darkness(place, sun)`, `streaksPerSecond(rate, strength)` and `streakPath(place, radiant)`: what the layer draws from.
 
 ## Limits
 

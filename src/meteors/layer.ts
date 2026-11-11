@@ -8,6 +8,7 @@ import type * as THREE from "three";
 import type { ThreeParts } from "../realistic/textures.ts";
 import type { MeteorShower } from "../data/meteor-showers.ts";
 import { METEOR_HEIGHT_KM, SPORADIC_HOURLY_RATE, darkness, hourlyRateAt, meteorSky, type MeteorSky } from "./rate.ts";
+import { METEOR_STRENGTH_DEFAULT } from "./strength.ts";
 
 type Three = ThreeParts;
 type Vec3 = [number, number, number];
@@ -58,11 +59,13 @@ export interface MeteorState {
   running: () => boolean;
   /** Told when the strongest active shower changes, with `null` when none is active. */
   onShower?: (shower: MeteorShower | null, zhr: number) => void;
+  /** How strongly the streaks are drawn, 0 to 1 (`meteors-strength`): it scales how many start and how bright they are, and nothing that is real. 0 draws none. */
+  strength: number;
   random: () => number;
   drawn: { alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
 }
 
-export const newMeteorState = (): MeteorState => ({ on: false, running: () => false, random: Math.random, drawn: { alive: 0, spawned: 0, perSecond: 0, shower: null, zhr: 0 } });
+export const newMeteorState = (): MeteorState => ({ on: false, running: () => false, strength: METEOR_STRENGTH_DEFAULT, random: Math.random, drawn: { alive: 0, spawned: 0, perSecond: 0, shower: null, zhr: 0 } });
 
 /** What the layer needs at each step. The vectors are in the Earth's own axes (see `placeVector`). */
 export interface MeteorStep {
@@ -90,20 +93,22 @@ export interface MeteorLayer {
  * How many streaks a second are drawn for a mean hourly rate over the dark part of the view: 2.5 a second where the whole view is dark on a
  * night with no shower, more with a shower but squeezed (the 0.6th power) and never over nine, none where nothing in view is dark.
  * A streak stands for a great many meteors: the count follows the real rate, it does not equal it.
+ * `strength` (0 to 1, the page's `meteors-strength`) then scales the count: half the streaks at 0.5, none at 0.
  *
  * @param meanHourlyRate - The mean over the view of each place's hourly rate times how dark it is there (`hourlyRateAt`, `darkness`).
+ * @param strength - How strongly the streaks are drawn, from 0 to 1 (1 when left out); a number outside the range is brought to its nearest end.
  * @returns Streaks a second.
  *
  * @example
  * ```ts
  * import { streaksPerSecond } from "@johnmorrisdotca/chikyu-earth/meteors";
  *
- * console.log(streaksPerSecond(8), streaksPerSecond(0), streaksPerSecond(100000)); // 2.5 0 9
+ * console.log(streaksPerSecond(8), streaksPerSecond(0), streaksPerSecond(100000), streaksPerSecond(8, 0.5)); // 2.5 0 9 1.25
  * ```
  */
-export function streaksPerSecond(meanHourlyRate: number): number {
-  if (!(meanHourlyRate > 0)) return 0;
-  return Math.min(METEORS_PER_SECOND_MAX, BASE_PER_SECOND * Math.pow(meanHourlyRate / SPORADIC_HOURLY_RATE, 0.6));
+export function streaksPerSecond(meanHourlyRate: number, strength = METEOR_STRENGTH_DEFAULT): number {
+  if (!(meanHourlyRate > 0) || !(strength > 0)) return 0;
+  return Math.min(METEORS_PER_SECOND_MAX, BASE_PER_SECOND * Math.pow(meanHourlyRate / SPORADIC_HOURLY_RATE, 0.6)) * Math.min(1, strength);
 }
 
 const VERT = /* glsl */ `
@@ -111,6 +116,7 @@ uniform float now;
 uniform float vw;
 uniform float vh;
 uniform float thick;
+uniform float strength;
 attribute vec3 aStart;
 attribute vec3 aEnd;
 attribute vec2 aTime;
@@ -136,7 +142,7 @@ void main() {
   at.xy += push / halfSize * at.w;
   // a streak is there from its start to a short afterglow, and nowhere before or after
   float alive = step(0.0, age) * (1.0 - smoothstep(1.0, 1.35, age));
-  vFade = alive * aGlow * smoothstep(0.0, 0.12, age);
+  vFade = alive * aGlow * strength * smoothstep(0.0, 0.12, age);
   vAlong = aCorner.x;
   vSide = aCorner.y;
   gl_Position = alive > 0.0 ? at : vec4(2.0, 2.0, 2.0, 1.0);
@@ -225,7 +231,7 @@ export function createMeteorLayer(three: Three, parent: THREE.Object3D, state: M
   geometry.setAttribute("aCorner", new three.BufferAttribute(cornerOf, 2));
   geometry.setAttribute("aGlow", glowAttr);
   geometry.setIndex(index);
-  const uniforms = { now: { value: 0 }, vw: { value: 1 }, vh: { value: 1 }, thick: { value: 1.8 }, tint: { value: new three.Vector3(1, 0.96, 0.86) } };
+  const uniforms = { now: { value: 0 }, vw: { value: 1 }, vh: { value: 1 }, thick: { value: 1.8 }, strength: { value: 1 }, tint: { value: new three.Vector3(1, 0.96, 0.86) } };
   const material = new three.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms, transparent: true, depthWrite: false, side: three.DoubleSide });
   const mesh = new three.Mesh(geometry, material);
   mesh.frustumCulled = false;
@@ -238,6 +244,8 @@ export function createMeteorLayer(three: Three, parent: THREE.Object3D, state: M
   const over = new Float64Array(METEOR_SLOTS);
   let sky: MeteorSky | null = null;
   let skyAt = -Infinity;
+  /** The strength the sky was last surveyed at: a new one makes the survey again, so the count follows it at once. */
+  let surveyedAt = METEOR_STRENGTH_DEFAULT;
   let peak = 0;
   let perSecond = 0;
   let nextAt = 0;
@@ -264,7 +272,8 @@ export function createMeteorLayer(three: Three, parent: THREE.Object3D, state: M
       sum += weight;
       if (weight > peak) peak = weight;
     }
-    perSecond = streaksPerSecond(sum / SAMPLES);
+    surveyedAt = state.strength;
+    perSecond = streaksPerSecond(sum / SAMPLES, surveyedAt);
     const top = sky.showers[0];
     state.drawn.perSecond = perSecond;
     state.drawn.shower = top?.shower.code ?? null;
@@ -349,7 +358,17 @@ export function createMeteorLayer(three: Three, parent: THREE.Object3D, state: M
         mesh.visible = false;
         return Infinity;
       }
-      if (!sky || Math.abs(input.time - sky.ms) > SKY_GAME_MS || input.now - skyAt > SKY_WALL_MS) survey(input);
+      if (!sky || Math.abs(input.time - sky.ms) > SKY_GAME_MS || input.now - skyAt > SKY_WALL_MS || state.strength !== surveyedAt) survey(input);
+      uniforms.strength.value = Math.min(1, Math.max(0, state.strength));
+      if (!(state.strength > 0)) {
+        // strength 0: the sky is still surveyed (the shower is still told) but no streak starts, and nothing more is asked for
+        over.fill(0);
+        nextAt = 0;
+        last = input.now;
+        state.drawn.alive = 0;
+        mesh.visible = false;
+        return Infinity;
+      }
       if (perSecond > 0) {
         // after a rest the clock starts again from now, so a pause is not made up for with a burst
         if (input.now - last > 1000 || nextAt === 0) nextAt = input.now + (-Math.log(1 - state.random()) / perSecond) * 1000;

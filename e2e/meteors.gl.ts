@@ -8,6 +8,7 @@ test.describe.configure({ mode: "serial" });
 
 interface MeteorStats {
   on: boolean;
+  strength: number;
   alive: number;
   spawned: number;
   perSecond: number;
@@ -99,6 +100,79 @@ test.describe("with motion allowed", () => {
     await expect.poll(async () => (await meteors(page)).spawned, { timeout: 15_000 }).toBeGreaterThan(2);
   });
 
+  test("meteors-strength: 1 when the page says nothing, a number from 0 to 1 whatever is written, and the property writes the attribute", async ({ page }) => {
+    await openEarth(page, `${GEMINIDS}&speed=60&meteors=on`);
+    expect((await meteors(page)).strength).toBe(1);
+    const read = (): Promise<{ property: number; strength: number }> =>
+      page.locator(EARTH).evaluate((el) => ({ property: Reflect.get(el, "meteorsStrength") as number, strength: (Reflect.get(el, "stats") as { meteors: { strength: number } }).meteors.strength }));
+    for (const [written, expected] of [["0.3", 0.3], ["7", 1], ["-1", 0], ["soft", 1], ["0", 0]] as const) {
+      await page.locator(EARTH).evaluate((el, value) => el.setAttribute("meteors-strength", value), written);
+      expect(await read(), `meteors-strength="${written}"`).toEqual({ property: expected, strength: expected });
+    }
+    await page.locator(EARTH).evaluate((el) => Reflect.set(el, "meteorsStrength", 0.45));
+    expect(await page.locator(EARTH).evaluate((el) => el.getAttribute("meteors-strength"))).toBe("0.45");
+    await page.locator(EARTH).evaluate((el) => el.removeAttribute("meteors-strength"));
+    expect((await read()).property).toBe(1);
+  });
+
+  test("a low meteors-strength draws fewer streaks a second, but still some, and the real shower is the same", async ({ page }) => {
+    await openEarth(page, `${GEMINIDS}&speed=60&meteors=on`);
+    await expect.poll(async () => (await meteors(page)).spawned, { timeout: 15_000 }).toBeGreaterThan(5);
+    const full = await meteors(page);
+    expect(full.perSecond).toBeGreaterThan(2.5);
+    await page.locator(EARTH).evaluate((el) => el.setAttribute("meteors-strength", "0.3"));
+    // the layer surveys the sky again as soon as the strength changes, and reports the rate it now draws
+    await expect.poll(async () => (await meteors(page)).perSecond, { timeout: 15_000 }).toBeLessThan(full.perSecond * 0.6);
+    const low = await meteors(page);
+    expect(low.strength).toBe(0.3);
+    expect(low.perSecond).toBeGreaterThan(0);
+    // what is real does not move: the same shower and the same hourly rate
+    expect(low.shower).toBe(full.shower);
+    expect(low.zhr).toBeCloseTo(full.zhr, 0);
+    // fewer, not none
+    const at = low.spawned;
+    await expect.poll(async () => (await meteors(page)).spawned, { timeout: 20_000 }).toBeGreaterThan(at + 1);
+    // the picture still says the streaks are an illustration
+    expect(await note(page)).toContain("illustration");
+  });
+
+  test("meteors-strength=0 draws none, keeps the note and the shower, and a strength above 0 brings them back", async ({ page }) => {
+    await openEarth(page, `${GEMINIDS}&speed=60&meteors=on&meteors-strength=0`);
+    // the sky is surveyed and the shower found, with no streak started
+    await expect.poll(async () => (await meteors(page)).shower, { timeout: 15_000 }).toBe("GEM");
+    expect(await meteors(page)).toMatchObject({ on: true, strength: 0, alive: 0, spawned: 0, perSecond: 0 });
+    expect(await note(page)).toContain("illustration");
+    // the clock is running and the night side is in view: nothing but the strength is holding them back
+    await page.locator(EARTH).evaluate((el) => el.setAttribute("meteors-strength", "0.5"));
+    await expect.poll(async () => (await meteors(page)).spawned, { timeout: 15_000 }).toBeGreaterThan(2);
+    // and to 0 again: every streak goes at once and no more start
+    await page.locator(EARTH).evaluate((el) => el.setAttribute("meteors-strength", "0"));
+    await expect.poll(async () => (await meteors(page)).alive).toBe(0);
+    const held = (await meteors(page)).spawned;
+    await expect.poll(async () => (await meteors(page)).perSecond).toBe(0);
+    expect((await meteors(page)).spawned).toBe(held);
+  });
+
+  test("the demo's strength buttons set meteors-strength on the element and in the address, and Full puts the default back", async ({ page }) => {
+    await openEarth(page, `${GEMINIDS}&speed=60&meteors=on`);
+    await expect(page.locator('#meteor-strength [data-meteor-strength="1"]')).toHaveClass(/\bon\b/);
+    await page.locator('#meteor-strength [data-meteor-strength="0.3"]').click();
+    await expect.poll(async () => (await meteors(page)).strength).toBe(0.3);
+    // the address follows the click on its own schedule: wait for it to say so
+    await expect.poll(() => new URL(page.url()).searchParams.get("meteors-strength")).toBe("0.3");
+    await expect(page.locator('#meteor-strength [data-meteor-strength="0.3"]')).toHaveClass(/\bon\b/);
+    await page.locator('#meteor-strength [data-meteor-strength="1"]').click();
+    await expect.poll(async () => (await meteors(page)).strength).toBe(1);
+    await expect.poll(() => new URL(page.url()).searchParams.get("meteors-strength")).toBeNull();
+    expect(await page.locator(EARTH).evaluate((el) => el.hasAttribute("meteors-strength"))).toBe(false);
+  });
+
+  test("a link with meteors-strength opens at that strength, with its button marked", async ({ page }) => {
+    await openEarth(page, `${GEMINIDS}&speed=60&meteors=on&meteors-strength=0.5`);
+    expect((await meteors(page)).strength).toBe(0.5);
+    await expect(page.locator('#meteor-strength [data-meteor-strength="0.5"]')).toHaveClass(/\bon\b/);
+  });
+
   test("the note follows the page's language, and meteors-label=off takes it away", async ({ page }) => {
     await openEarth(page, `${GEMINIDS}&speed=60&meteors=on&lang=ja`);
     await expect.poll(() => note(page)).toContain("流星");
@@ -169,5 +243,23 @@ test.describe("in the space view", () => {
     const held = (await spaceMeteors(page)).spawned;
     await page.waitForTimeout(2000);
     expect((await spaceMeteors(page)).spawned).toBe(held);
+  });
+
+  test("the space view takes meteors-strength too: fewer streaks at a low one, none at 0", async ({ page }) => {
+    await openSpace(page, `${GEMINIDS}&speed=60&meteors=on`);
+    await expect.poll(async () => (await spaceMeteors(page)).spawned, { timeout: 20_000 }).toBeGreaterThan(5);
+    const full = await spaceMeteors(page);
+    expect(full.strength).toBe(1);
+    await page.locator(SPACE).evaluate((el) => el.setAttribute("meteors-strength", "0.3"));
+    await expect.poll(async () => (await spaceMeteors(page)).perSecond, { timeout: 15_000 }).toBeLessThan(full.perSecond * 0.6);
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "meteorsStrength"))).toBe(0.3);
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "meteorsStrength", 0));
+    await expect.poll(async () => (await spaceMeteors(page)).alive).toBe(0);
+    expect(await spaceMeteors(page)).toMatchObject({ strength: 0, perSecond: 0 });
+    expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.getElementById("meteor-note")!.hidden)).toBe(false);
+    const held = (await spaceMeteors(page)).spawned;
+    // back to the full look: they start again
+    await page.locator(SPACE).evaluate((el) => el.removeAttribute("meteors-strength"));
+    await expect.poll(async () => (await spaceMeteors(page)).spawned, { timeout: 20_000 }).toBeGreaterThan(held + 2);
   });
 });

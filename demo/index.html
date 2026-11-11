@@ -77,6 +77,11 @@
                     <button type="button" data-light="boost" data-say="light_boost">Night boost</button>
                   </div>
                   <button type="button" class="fam-button" id="meteors" aria-pressed="false" data-say="meteors">Meteors</button>
+                  <div class="group fam-seg" id="meteor-strength" role="group" aria-label="Meteor strength" data-say-label="meteorStrength" data-help-en="How strongly the meteors are drawn: Subtle shows few, faint streaks, Medium about half, Full is the whole look. Only the drawing changes; the rates and showers behind it are the same." data-help-ja="流星をどのくらい強く描くかです。「控えめ」は少なくて淡い筋、「中間」は半分ほど、「最大」はいつもの見た目です。変わるのは描き方だけで、元になる出現数や流星群は同じです。">
+                    <button type="button" data-meteor-strength="0.3" data-say="strength_subtle">Subtle</button>
+                    <button type="button" data-meteor-strength="0.5" data-say="strength_medium">Medium</button>
+                    <button type="button" data-meteor-strength="1" class="on" data-say="strength_full">Full</button>
+                  </div>
                   <button type="button" class="fam-button" id="air-true" aria-pressed="false" data-say="airTrue">True air thickness</button>
                 </div>
                 <div class="fam-row" id="time-controls" hidden data-help-en="Choose the date and time, or go back to now. In the space view, Play runs the clock from the date shown and the date follows it; Pause holds it there; Back to the date returns to the date you chose. The speeds are multiples of real time: 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="日付と時刻を選びます。「今」にもどすこともできます。宇宙の見た目では、「再生」で表示している日時から時計が進み、日付もいっしょに進みます。「一時停止」で止まり、「もとの日付へ」で選んだ日付にもどります。速さは実際の時間の何倍かです。3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。速さを 86400 (1秒で1日) にすると、地球が回り、月が動くのが見えます。">

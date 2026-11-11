@@ -10,6 +10,7 @@ import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import type { LightMode } from "../realistic/earth.ts";
 import { NOTES_STYLE, setAirNote } from "../realistic/air-note.ts";
+import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
@@ -196,7 +197,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "air-thickness", "air-label", "lang"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", "air-thickness", "air-label", "lang"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -259,6 +260,7 @@ export class ChikyuSpace extends HTMLElement {
     setAirNote(this.#airNote, this, this.#model.airThickness);
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
+    this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
     this.#model.meteors.running = () => this.#speed !== 0 && document.visibilityState !== "hidden" && (this.#played || !prefersLessMotion());
     this.#model.meteors.onShower = (shower, zhr) => this.dispatchEvent(new CustomEvent("chikyu-meteors", { detail: { shower, zhr } }));
     setMeteorNote(this.#note, this, this.#model.meteors.on);
@@ -340,6 +342,10 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "earth-x") this.earthX = readNumber(value, 0.5, -2, 3);
     else if (name === "earth-y") this.earthY = readNumber(value, 0.5, -2, 3);
     else if (name === "meteors") this.meteors = this.#meteorsAsked();
+    else if (name === "meteors-strength") {
+      this.#model.meteors.strength = readMeteorStrength(value);
+      this.#gate?.request();
+    }
     else if (name === "air-thickness") {
       this.#model.airThickness = readAirThickness(value);
       this.#gate?.request();
@@ -370,6 +376,18 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.meteors.on = value;
     setMeteorNote(this.#note, this, value);
     this.#gate?.request();
+  }
+
+  /**
+   * How strongly the meteors are drawn, from 0 to 1 (the attribute `meteors-strength`; 1, the full look, when the page says nothing): it scales how bright each streak is and how many are drawn, so 0.3 is
+   * fewer and fainter and 0 draws none. It changes nothing that is real: the rates, the showers and `chikyu-meteors` are the same at every strength, and the line under the picture still says the streaks are an illustration.
+   * A number outside the range is brought to its nearest end; setting the property writes the attribute.
+   */
+  get meteorsStrength(): number {
+    return this.#model.meteors.strength;
+  }
+  set meteorsStrength(value: number) {
+    this.setAttribute("meteors-strength", String(value));
   }
 
   /**
@@ -736,7 +754,7 @@ export class ChikyuSpace extends HTMLElement {
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, and the moons shown round a planet that is near. */
     bodies: { look: string; painted: number; moons: number };
     /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
-    meteors: { on: boolean; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
+    meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -753,7 +771,7 @@ export class ChikyuSpace extends HTMLElement {
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
-      meteors: { on: this.#model.meteors.on, ...this.#model.meteors.drawn },
+      meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
     };
   }
 

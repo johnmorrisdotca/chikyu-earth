@@ -5,6 +5,7 @@ import {
   METEOR_HEIGHT_KM,
   METEOR_SHOWERS,
   METEORS_PER_SECOND_MAX,
+  METEOR_STRENGTH_DEFAULT,
   SPORADIC_HOURLY_RATE,
   activeShowers,
   apexPoint,
@@ -13,12 +14,15 @@ import {
   meteorSky,
   placeVector,
   pointBeneath,
+  readMeteorStrength,
   showerRate,
   solarLongitude,
   streakPath,
   streaksPerSecond,
 } from "../src/meteors/index.ts";
+import { createMeteorLayer, newMeteorState } from "../src/meteors/layer.ts";
 import { subsolarPoint, unitVector } from "../src/realistic/sun.ts";
+import type { ThreeParts } from "../src/realistic/textures.ts";
 
 const shower = (code: string) => METEOR_SHOWERS.find((entry) => entry.code === code)!;
 
@@ -164,4 +168,124 @@ test("a streak comes down the line from its radiant, inside the heights where me
   const stretched = streakPath(place, place, 4);
   assert.equal(stretched.km, down.km);
   assert.ok(Math.abs(height(stretched.start) - 185) < 1e-6);
+});
+
+test("the strength a page asks for: 1 when it says nothing or nonsense, a number from 0 to 1 as written, and the nearest end outside", () => {
+  assert.equal(METEOR_STRENGTH_DEFAULT, 1);
+  assert.equal(readMeteorStrength(null), 1);
+  assert.equal(readMeteorStrength(""), 1);
+  assert.equal(readMeteorStrength("  "), 1);
+  assert.equal(readMeteorStrength("soft"), 1);
+  assert.equal(readMeteorStrength("NaN"), 1);
+  assert.equal(readMeteorStrength("0"), 0);
+  assert.equal(readMeteorStrength("0.3"), 0.3);
+  assert.equal(readMeteorStrength("1"), 1);
+  assert.equal(readMeteorStrength("7"), 1);
+  assert.equal(readMeteorStrength("-2"), 0);
+});
+
+test("strength scales the streaks a second and nothing else: the same at 1 as before, half at 0.5, none at 0, and never over nine", () => {
+  for (const rate of [SPORADIC_HOURLY_RATE, 40, 1e6]) {
+    assert.equal(streaksPerSecond(rate, 1), streaksPerSecond(rate));
+    assert.ok(Math.abs(streaksPerSecond(rate, 0.5) - streaksPerSecond(rate) / 2) < 1e-12);
+    assert.equal(streaksPerSecond(rate, 0), 0);
+    assert.ok(streaksPerSecond(rate, 0.25) < streaksPerSecond(rate, 0.5));
+    assert.equal(streaksPerSecond(rate, 3), streaksPerSecond(rate));
+    assert.equal(streaksPerSecond(rate, -1), 0);
+  }
+  assert.equal(streaksPerSecond(0, 0.5), 0);
+  assert.ok(streaksPerSecond(1e6, 1) <= METEORS_PER_SECOND_MAX);
+});
+
+/** Just enough of three.js for the layer to be made and stepped in Node: the shader's uniforms are kept where a test can read them. */
+const fakeThree = (): { three: ThreeParts; made: { uniforms: Record<string, { value: unknown }>; mesh: { visible: boolean } } } => {
+  const made = { uniforms: {} as Record<string, { value: unknown }>, mesh: { visible: true } };
+  class Geometry {
+    setAttribute(): void {}
+    setIndex(): void {}
+    dispose(): void {}
+  }
+  class Attribute {
+    needsUpdate = false;
+  }
+  class Material {
+    constructor(options: { uniforms: Record<string, { value: unknown }> }) {
+      made.uniforms = options.uniforms;
+    }
+    dispose(): void {}
+  }
+  class Mesh {
+    frustumCulled = true;
+    renderOrder = 0;
+    constructor() {
+      made.mesh = this as unknown as { visible: boolean };
+    }
+    visible = true;
+  }
+  const three = { BufferGeometry: Geometry, BufferAttribute: Attribute, ShaderMaterial: Material, Mesh, Vector3: class {}, DoubleSide: 2 };
+  return { three: three as unknown as ThreeParts, made };
+};
+
+test("the layer at a strength: the full look at 1, fewer and fainter at 0.4, and none at 0, with the shower still found", () => {
+  // the Geminids' maximum over North America at night, with the view facing the dark side
+  const time = Date.UTC(2026, 11, 14, 8);
+  const facing = unitVector({ lon: -100, lat: 30 });
+  const sun = unitVector(subsolarPoint(time));
+  const run = (strength: number): { perSecond: number; spawned: number; shower: string | null; uniform: unknown; visible: boolean } => {
+    const { three, made } = fakeThree();
+    const state = newMeteorState();
+    state.on = true;
+    state.running = () => true;
+    state.strength = strength;
+    let seed = 7;
+    state.random = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const layer = createMeteorLayer(three, { add() {}, remove() {} } as never, state);
+    let now = 1000;
+    // twenty seconds, a frame every 33 ms
+    for (let i = 0; i < 600; i += 1) {
+      layer.step({ now, time, facing, sun, radius: 200, width: 400, height: 400 });
+      now += 33;
+    }
+    const out = { perSecond: state.drawn.perSecond, spawned: state.drawn.spawned, shower: state.drawn.shower, uniform: made.uniforms["strength"]?.value, visible: made.mesh.visible };
+    layer.dispose();
+    return out;
+  };
+  const full = run(1);
+  const low = run(0.4);
+  const none = run(0);
+  assert.equal(full.shower, "GEM");
+  assert.ok(full.spawned > 20 && full.perSecond > 2.5, `${full.spawned} streaks at ${full.perSecond} a second`);
+  assert.equal(full.uniform, 1);
+  assert.ok(low.spawned < full.spawned * 0.7 && low.spawned > 0, `${low.spawned} against ${full.spawned}`);
+  // each survey samples the view at random, so the rates agree only to the sampling: 0.4 of it, give or take a quarter
+  assert.ok(low.perSecond > full.perSecond * 0.3 && low.perSecond < full.perSecond * 0.5, `${low.perSecond} against ${full.perSecond}`);
+  assert.equal(low.uniform, 0.4);
+  // none at 0: nothing starts, nothing is shown, no draw is asked for, and the shower is still found (what is real does not move)
+  assert.equal(none.spawned, 0);
+  assert.equal(none.perSecond, 0);
+  assert.equal(none.visible, false);
+  assert.equal(none.shower, "GEM");
+  assert.equal(none.uniform, 0);
+});
+
+test("the layer asks for no further draw at strength 0, and takes the new strength at once when it changes", () => {
+  const time = Date.UTC(2026, 11, 14, 8);
+  const facing = unitVector({ lon: -100, lat: 30 });
+  const sun = unitVector(subsolarPoint(time));
+  const { three } = fakeThree();
+  const state = newMeteorState();
+  state.on = true;
+  state.running = () => true;
+  state.strength = 0;
+  const layer = createMeteorLayer(three, { add() {}, remove() {} } as never, state);
+  assert.equal(layer.step({ now: 1000, time, facing, sun, radius: 200, width: 400, height: 400 }), Infinity);
+  assert.equal(state.drawn.perSecond, 0);
+  state.strength = 1;
+  const wait = layer.step({ now: 1033, time, facing, sun, radius: 200, width: 400, height: 400 });
+  assert.ok(Number.isFinite(wait));
+  assert.ok(state.drawn.perSecond > 0);
+  layer.dispose();
 });

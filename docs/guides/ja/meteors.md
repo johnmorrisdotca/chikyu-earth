@@ -33,6 +33,31 @@ description: リアルな地球の上に流星を出します。流星が光る�
 - **動きを減らす設定。** この設定の人には、ページに要素が置かれたあと、ページが `speed` を設定するまで (たとえば「再生」ボタンを押すまで)、流星を出しません。
 - **止まっているときは何もしません。** 要素が画面の外にあるときや、見えていないタブのときは、流星を始めず、何も描きません。光の筋はすべて1回の描画でまとめて描き、同時に出るのは48本まで、描画は1秒に30回までです。
 
+## 流星の強さ
+
+`meteors-strength` は 0 から 1 までの数で、光の筋をどのくらい控えめにするかを決めます。ひとつひとつの光の筋の明るさと、描く本数の両方が、この数に比例して変わります。指定しなければ 1、つまりこれまでと同じ見た目なので、何も指定していないページは変わりません。
+
+```html
+<chikyu-earth-realistic meteors meteors-strength="0.3" center="-100,30" time="2026-12-14T08:00Z" speed="60" style="width: 420px"></chikyu-earth-realistic>
+```
+
+- **0.3** は控えめです。本数はおよそ3分の1、明るさも3分の1になります。**0.5** は半分、**1** はいつもの見た目です。
+- **0 にすると、光の筋は出ません。** 要素そのものは有効のままです。絵の下の行も出たままで、空の計算も続き、`chikyu-meteors` も送られます。
+- **変わるのは描き方だけです。** 1時間あたりの出現数、流星群、その `zhr` は、どの強さでも実際の値のままで、イベントや `stats.meteors` で読めます。`stats.meteors.perSecond` は、いま1秒に描いている光の筋の本数なので、強さに合わせて減ります。`stats.meteors.strength` は、使っている強さです。
+- **絵の下の行は残ります。** どの強さでも、光の筋はイメージだということを、絵の下の行が伝えます。
+- **スクリプトからも指定できます。** プロパティに数を入れます: `earth.meteorsStrength = 0.3`。属性に書き込まれます。0 より小さい数は 0、1 より大きい数は 1 として扱い、数でない値は 1 として扱います。`<chikyu-space>` にも同じ属性とプロパティがあります。
+- **計算だけを使うこともできます。** `@johnmorrisdotca/chikyu-earth/meteors` の `readMeteorStrength(attribute)` と `streaksPerSecond(rate, strength)` は、要素が使うのと同じ計算です。
+
+```js
+import { METEOR_STRENGTH_DEFAULT, readMeteorStrength, streaksPerSecond } from "@johnmorrisdotca/chikyu-earth/meteors";
+
+// What a page's `meteors-strength` means: 1 when it says nothing, a number from 0 to 1 as written, and the nearest end outside.
+console.log(METEOR_STRENGTH_DEFAULT, readMeteorStrength("0.3"), readMeteorStrength("7"), readMeteorStrength("soft"));
+
+// Streaks drawn a second over a dark view on a night with no shower (8 meteors an hour): 2.5 at the full look, fewer at a low strength, none at 0.
+for (const strength of [1, 0.3, 0]) console.log(`strength ${strength}: ${streaksPerSecond(8, strength)} a second`);
+```
+
 ## 実際の値と、イメージ
 
 表示している時刻について計算した、実際の値:
@@ -46,7 +71,7 @@ description: リアルな地球の上に流星を出します。流星が光る�
 イメージ:
 
 - **ひとつひとつの光の筋。** 場所と時刻は乱数で決めています。次の流星がどこに現れるかは、だれにもわかりません。
-- **数。** ひとつの光の筋は、たくさんの流星を表しています。見えている半球がすべて夜のとき、流星群のない夜は1秒に2.5本、流星群の活動中はそれより多く (出現数の0.6乗に比例)、最大でも1秒に9本です。
+- **数。** ひとつの光の筋は、たくさんの流星を表しています。見えている半球がすべて夜のとき、流星群のない夜は1秒に2.5本、流星群の活動中はそれより多く (出現数の0.6乗に比例)、最大でも1秒に9本です。これらすべてに、強さ (`meteors-strength`、指定しなければ 1) をかけます。
 - **長さ。** 短すぎて見えない光の筋は、最大14倍まで、約34ピクセルになるように伸ばしています。まっすぐこちらへ向かってくる流星は、点のままです。
 - **散在流星の数。** 1時間に8個という値は、切りのよい仮の数です。地球の進む向きの側に多いという補正も、1日の中での実際の変化を簡単に表したものです。
 - **流星群ごとの増え方と減り方。** 一覧にあるのは、極大のときの ZHR と、活動の最初の日と最後の日です。そのあいだの値は、それらを通るいちばん単純な曲線で表しています。
@@ -67,7 +92,7 @@ earth.addEventListener("chikyu-meteors", (event) => {
   console.log(shower ? `${shower.nameJa}: 放射点が真上にある暗い空で、1時間に約${zhr.toFixed(0)}個` : "今夜は活動中の流星群がありません");
 });
 earth.meteors = true;
-console.log(earth.stats.meteors); // { on, alive, spawned, perSecond, shower, zhr }
+console.log(earth.stats.meteors); // { on, alive, spawned, perSecond, shower, zhr, strength }
 ```
 
 ## 表と計算だけを使う
@@ -91,7 +116,7 @@ console.log(`Overhead at ${overhead.lat} N, ${overhead.lon.toFixed(0)} E; Tokyo:
 - `showerRate(shower, ms)` と `activeShowers(ms)`: ある時刻での流星群の活発さ。
 - `pointBeneath(radiant, ms)` と `apexPoint(ms)`: 空の1点 (放射点など) や、地球の進む向きの点が、真上に来る場所。
 - `meteorSky(ms)` と `hourlyRateAt(sky, place)`: ある場所で、理想的な条件の人が1時間に数える出現数。
-- `darkness(place, sun)`、`streaksPerSecond(rate)`、`streakPath(place, radiant)`: 流星の描画が使う値。
+- `darkness(place, sun)`、`streaksPerSecond(rate, strength)`、`streakPath(place, radiant)`: 流星の描画が使う値。
 
 ## できないこと
 
