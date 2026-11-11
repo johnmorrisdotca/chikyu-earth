@@ -30,7 +30,7 @@ description: "読む人の今いる場所と、お気に入りの場所を、宇
 
 パッケージがブラウザーに現在地をたずねることはありません。たずねるのはページで、読む人が求めたときだけです。
 
-```js
+```js no-run
 import { nearby } from "@johnmorrisdotca/chikyu-earth/markers";
 
 const space = document.querySelector("chikyu-space");
@@ -50,7 +50,7 @@ document.querySelector("#here").addEventListener("click", () => {
 
 `kind: "here"` がない場所は、すべてお気に入りです。パッケージは自分の一覧も、選ぶための画面も持っていません。読む人の一覧はページが作り (ページ独自の検索や、kuni の都市から)、好きな所に残し、変わるたびに一覧ごと渡します。
 
-```js
+```js no-run
 const saved = [{ id: "tokyo", lon: 139.69, lat: 35.69, label: "東京" }, { id: "cairo", lon: 31.24, lat: 30.04, label: "カイロ" }];
 space.places = [...(here ? [here] : []), ...saved];
 ```
