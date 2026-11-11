@@ -222,7 +222,7 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
           .filter((b) => !b.hidden)
           .map((b) => {
             const box = b.getBoundingClientRect();
-            return { text: b.textContent ?? "", x: (box.left + box.right) / 2 - own.left, y: (box.top + box.bottom) / 2 - own.top, top: box.top - own.top, bottom: box.bottom - own.top, tall: box.height };
+            return { text: b.textContent ?? "", x: (box.left + box.right) / 2 - own.left, y: (box.top + box.bottom) / 2 - own.top, left: box.left - own.left, right: box.right - own.left, top: box.top - own.top, bottom: box.bottom - own.top, tall: box.height };
           }),
       };
     });
@@ -272,8 +272,9 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
     );
     shown.forEach((n, i) => {
       console.log(`at yaw ${yaw}: ${n.text} is at ${n.y.toFixed(0)} px, the Earth's edge there is at ${limbs[i]!.toFixed(0)} px`);
-      // the label may cross the Earth's edge by at most its own text height: its top is above the edge
-      expect(n.top, `${n.text}'s box reaches no further than its own height over the Earth's edge`).toBeLessThanOrEqual(limbs[i]! + 1);
+      // the label may cross the Earth's edge by at most its own text height: some of its top edge (its left end, middle or right end) is not on the Earth
+      const topPoints = [n.left, (n.left + n.right) / 2, n.right].map((x) => onEarth(seen.camera, seen.width, seen.height, x, n.top));
+      expect(topPoints.includes(false), `${n.text}'s box is not wholly on the Earth: its top edge is ${topPoints.map((on) => (on ? "on" : "off")).join(", ")}`).toBe(true);
     });
     checked += shown.length;
   }

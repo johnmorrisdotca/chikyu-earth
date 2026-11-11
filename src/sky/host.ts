@@ -241,6 +241,19 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         continue;
       }
       const rect = name.getBoundingClientRect();
+      // a name whose whole top edge is over a body (the Earth, the Moon, the Sun) lies on it: hoshi-stars tests the star's point only, so a name set below a star at the Earth's edge can be left entirely on the Earth, and is left out
+      const own = covered ? (root.host as HTMLElement).getBoundingClientRect() : undefined;
+      if (covered && own) {
+        const top = rect.top - own.top;
+        const left = rect.left - own.left;
+        const right = rect.right - own.left;
+        if (covered(left, top) && covered((left + right) / 2, top) && covered(right, top)) {
+          name.hidden = true;
+          designations[i]!.hidden = true;
+          culled.push(true);
+          continue;
+        }
+      }
       const over = kept.some((one) => rect.left < one.r && rect.right > one.l && rect.top < one.b && rect.bottom > one.t);
       if (over) {
         name.hidden = true;

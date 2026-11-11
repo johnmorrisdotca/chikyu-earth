@@ -154,3 +154,28 @@ test("without hoshi-stars the layer says so once, draws nothing, leaves nothing 
   assert.equal(host.stats.renders, 0, "nothing was drawn");
   host.dispose();
 });
+
+test("a name lying wholly on a body is left out: hoshi-stars tests the star's point only, and the box set beside it can fall on the Earth", async () => {
+  // the Earth is everything below 150 px; a name whose whole top edge is below that is on it
+  const onEarth: SkyFrame = { ...frame, covered: (_x, y) => y > 150 };
+  measure = (_node, index) => ({ left: index * 300, top: 180, right: index * 300 + 120, bottom: 198 });
+  made = 0;
+  const lying = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+  lying.frame(onEarth);
+  for (let waited = 0; waited < 5000 && !lying.stats.loaded; waited += 20) await wait(20);
+  await wait(200);
+  assert.equal(lying.stats.names, 0, "names wholly on the Earth are left out");
+  assert.deepEqual(lying.stats.stars, [], "and so are their stars' points");
+  // the same names with their tops above the Earth's edge stay
+  measure = (_node, index) => ({ left: index * 300, top: 100, right: index * 300 + 120, bottom: 118 });
+  made = 0;
+  const clear = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+  clear.frame(onEarth);
+  await until(clear);
+  assert.ok(clear.stats.names > 3, "names whose tops are above the Earth's edge stay (the stars on the Earth are not named at all)");
+  assert.equal(clear.stats.stars.length, clear.stats.names, "each shown name has its star's point");
+  assert.ok(clear.stats.stars.every((star) => star.y <= 150), "and none of those points is on the Earth");
+  measure = undefined;
+  lying.dispose();
+  clear.dispose();
+});
