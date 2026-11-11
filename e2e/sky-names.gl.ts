@@ -171,6 +171,21 @@ test("the demo's Star names and Constellations buttons set the attributes and th
   await expect.poll(async () => (await skyOf(page)).on).toBe(false);
 });
 
+/** Whether a point of the picture shows the Earth, from the camera alone: the ray through it is within the Earth's angular radius (the sine of which is one over the camera's distance from its centre, in Earth radii) of the way straight down. */
+function onEarth(camera: { position: number[]; quaternion: number[]; fov: number }, width: number, height: number, x: number, y: number): boolean {
+  const reach = Math.tan((camera.fov * Math.PI) / 360);
+  const local = [((x / width) * 2 - 1) * reach * (width / height), (1 - (y / height) * 2) * reach, -1];
+  const [qx, qy, qz, qw] = camera.quaternion as [number, number, number, number];
+  const tx = 2 * (qy * local[2]! - qz * local[1]!);
+  const ty = 2 * (qz * local[0]! - qx * local[2]!);
+  const tz = 2 * (qx * local[1]! - qy * local[0]!);
+  const ray = [local[0]! + qw * tx + (qy * tz - qz * ty), local[1]! + qw * ty + (qz * tx - qx * tz), local[2]! + qw * tz + (qx * ty - qy * tx)];
+  const away = Math.hypot(...(camera.position as [number, number, number]));
+  const down = camera.position.map((n) => -n / away);
+  const cosine = (ray[0]! * down[0]! + ray[1]! * down[1]! + ray[2]! * down[2]!) / Math.hypot(ray[0]!, ray[1]!, ray[2]!);
+  return Math.acos(Math.max(-1, Math.min(1, cosine))) < Math.asin(Math.min(1, 1 / away));
+}
+
 test("riding along the ISS, with the Earth 70 degrees across, no star is named on the Earth: the cover is the ray's, not a circle on the screen", async ({ page }) => {
   await routeElements(page);
   await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=-100,40&sats=stations&ride=iss&rlook=horizon&light=lit&star-names=40`);
@@ -179,6 +194,7 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
   await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
   // turn round the sky, a step at a time as a drag gives it, until some of it is in the picture above the Earth's edge
   let checked = 0;
+  let stars = 0;
   for (const yaw of [0, 100, 200, 300, 400, 500]) {
     await page.locator("kazoku-view-controls").evaluate((el, v) => (el as unknown as { controller: { set(view: unknown, final: boolean, why: string): void } }).controller.set({ yaw: ((v + 180) % 360) - 180, tilt: 0, zoom: 1 }, true, "test"), yaw);
     await expect
@@ -193,16 +209,27 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
         { timeout: 60_000, message: "the view is at rest" },
       )
       .toBe(0);
-    // the names' places in the picture, from its own top left (read in one go, so a scroll of the page between the readings cannot change them)
-    const shown = await page.locator(SPACE).evaluate((el) => {
+    // what the layer says and what is on the page, read in one go (so a scroll or a draw between the readings cannot change them), from the picture's own top left: the named stars' own points, the labels' boxes, the camera
+    const seen = await page.locator(SPACE).evaluate((el) => {
       const own = el.getBoundingClientRect();
-      return [...el.shadowRoot!.querySelectorAll<HTMLElement>("#sk-names .sk-name")]
-        .filter((b) => !b.hidden)
-        .map((b) => {
-          const box = b.getBoundingClientRect();
-          return { text: b.textContent ?? "", x: (box.left + box.right) / 2 - own.left, y: (box.top + box.bottom) / 2 - own.top };
-        });
+      const stats = Reflect.get(el, "stats") as { sky: { stars: { text: string; x: number; y: number }[] }; camera: { position: number[]; quaternion: number[]; fov: number } };
+      return {
+        width: own.width,
+        height: own.height,
+        camera: stats.camera,
+        stars: stats.sky.stars,
+        shown: [...el.shadowRoot!.querySelectorAll<HTMLElement>("#sk-names .sk-name")]
+          .filter((b) => !b.hidden)
+          .map((b) => {
+            const box = b.getBoundingClientRect();
+            return { text: b.textContent ?? "", x: (box.left + box.right) / 2 - own.left, y: (box.top + box.bottom) / 2 - own.top, top: box.top - own.top, bottom: box.bottom - own.top, tall: box.height };
+          }),
+      };
     });
+    const shown = seen.shown;
+    // a star is on the Earth when the ray through its point on the screen is within the Earth's angular radius of the way straight down: worked out here from the camera, apart from the layer's own cover
+    for (const star of seen.stars) expect(onEarth(seen.camera, seen.width, seen.height, star.x, star.y), `${star.text}'s own point (${star.x.toFixed(0)}, ${star.y.toFixed(0)}) is not on the Earth`).toBe(false);
+    stars += seen.stars.length;
     if (shown.length === 0) continue;
     // the Earth's edge down each column a name is in, found with the names and rings hidden: the brightest step down the column
     await page.locator(SPACE).evaluate((el) => {
@@ -214,7 +241,7 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
       el.shadowRoot!.getElementById("sk-names")!.style.visibility = "";
       el.shadowRoot!.getElementById("sk-canvas")!.style.visibility = "";
     });
-    const width = await page.locator(SPACE).evaluate((el) => el.getBoundingClientRect().width);
+    const width = seen.width;
     const limbs = await page.evaluate(
       async ({ data, columns }) => {
         const image = new Image();
@@ -245,10 +272,11 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
     );
     shown.forEach((n, i) => {
       console.log(`at yaw ${yaw}: ${n.text} is at ${n.y.toFixed(0)} px, the Earth's edge there is at ${limbs[i]!.toFixed(0)} px`);
-      // a name beside a star at the edge may reach a little below it (the box is 18 px high and the ring 6): one on the Earth is far below
-      expect(n.y, `${n.text} is in the sky, above the Earth's edge`).toBeLessThan(limbs[i]! + 24);
+      // the label may cross the Earth's edge by at most its own text height: its top is above the edge
+      expect(n.top, `${n.text}'s box reaches no further than its own height over the Earth's edge`).toBeLessThanOrEqual(limbs[i]! + 1);
     });
     checked += shown.length;
   }
   expect(checked, "some stars were named in the sky above the Earth").toBeGreaterThan(0);
+  expect(stars, "and each of them had its own point checked").toBeGreaterThan(0);
 });

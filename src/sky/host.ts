@@ -19,7 +19,7 @@ export interface SkyHost {
   refresh(): void;
   /** The look of the names, as a partial hoshi-stars `LabelStyle` (the property `skyStyle`). */
   setStyle(style: Partial<SkyLabelStyle>): void;
-  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string };
+  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
   dispose(): void;
 }
 
@@ -323,6 +323,14 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     drawLines();
   }
 
+  /** The stars that are named at the last frame: each one's own point on the screen (the label's anchor) and its name, from the picture's top left, without the names the browser's measure left out. */
+  const starPoints = (): { text: string; x: number; y: number }[] => {
+    const out: { text: string; x: number; y: number }[] = [];
+    if (!names) return out;
+    for (const [index, label] of names.labels.entries()) if (!culled[index]) out.push({ text: label.text, x: label.x, y: label.y });
+    return out;
+  };
+
   // the family's chooser tells the document when the page's language changes: the names are written again, though nothing else is drawn
   const onLanguage = (): void =>
     queueMicrotask(() => {
@@ -380,7 +388,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
     },
     get stats() {
-      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "" };
+      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "", stars: starPoints() };
     },
     dispose() {
       doc.removeEventListener("kazoku-languagechange", onLanguage);
