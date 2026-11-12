@@ -284,6 +284,46 @@ test("the borders: nothing drawn at rest with them on, and switching the look ov
   expect(Math.max(...settled.slice(1)), "no more GPU objects after four rounds than after the first").toBeLessThanOrEqual(settled[0]! + 8);
 });
 
+test("the grid and the country names: nothing drawn at rest with them on, and switching the look over and over with them on gives back what it took", async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, "realistic", "&grid=on&country-names=on");
+  const statsIn = (tag: string) =>
+    page.locator(tag).evaluate((el) => {
+      const stats = Reflect.get(el, "stats") as { grid: { shown: boolean; builds: number }; countryNames: { names: number; renders: number } };
+      return { grid: stats.grid.shown, builds: stats.grid.builds, names: stats.countryNames.names, renders: stats.countryNames.renders };
+    });
+  const ready = async (tag: string): Promise<void> => {
+    await expect.poll(async () => (await statsIn(tag)).grid, { timeout: 30_000, message: "the grid is drawn" }).toBe(true);
+    await expect.poll(async () => (await statsIn(tag)).names, { timeout: 30_000, message: "the countries are named" }).toBeGreaterThan(0);
+  };
+  await ready("chikyu-earth-realistic");
+  await untilStill(page);
+  const before = await statsIn("chikyu-earth-realistic");
+  const rest = await bounded(page, 2000);
+  expect(rest.draws, "no GL draws at rest with the grid and the names on").toBe(0);
+  expect(rest.frames).toBe(0);
+  expect((await statsIn("chikyu-earth-realistic")).renders, "nor are the names laid out again").toBe(before.renders);
+  const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
+  const settled: number[] = [];
+  for (let round = 0; round < 4; round += 1) {
+    await look("Space");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await ready("chikyu-space");
+    await untilStill(page);
+    expect((await bounded(page, 1500, "space")).draws, "nor in the space view").toBe(0);
+    await look("Realistic");
+    await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
+    await ready("chikyu-earth-realistic");
+    await untilStill(page);
+    await page.waitForTimeout(DOWNGRADE_AFTER_MS + 500);
+    const counted = await readCounts(page);
+    settled.push(gpuObjects(counted));
+    expect(counted.contexts).toBe(1);
+  }
+  console.log(`live GPU objects with the grid and the names on, after each round: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after four rounds than after the first").toBeLessThanOrEqual(settled[0]! + 8);
+});
+
 test("the planets: the Sun, planets, Pluto and moons painted, the looks switched and the moons shown, nothing grows and nothing is drawn at rest", async ({ page }) => {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T14:00Z&speed=0&bodies=painted&center=10,20`);
