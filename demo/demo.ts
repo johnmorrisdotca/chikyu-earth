@@ -502,13 +502,22 @@ if (flat && controls && stage) {
   let rideKey = address.get("ride");
   let rideView: "from" | "follow" | "above" = address.get("rview") === "follow" ? "follow" : address.get("rview") === "above" ? "above" : "from";
   let rideLook: "down" | "horizon" = address.get("rlook") === "horizon" ? "horizon" : "down";
+  const FACES = ["ahead", "behind", "left", "right", "down", "up"] as const;
+  let rideFace: (typeof FACES)[number] | null = FACES.includes(address.get("face") as (typeof FACES)[number]) ? (address.get("face") as (typeof FACES)[number]) : null;
   const rideButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride]")];
   const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-view]")];
   const lookButtonsRide = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-look]")];
+  const faceButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-face]")];
   const markRide = (): void => {
     for (const b of rideButtons) b.classList.toggle("on", b.dataset["ride"] === (rideKey?.startsWith("group:") ? "group" : (rideKey ?? "none")));
     for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
     for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
+    const facing = space?.facing ?? null;
+    for (const b of faceButtons) {
+      const on = b.dataset["rideFace"] === facing;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
   };
   const setRideZoom = (keepTurn = false): void => {
     Reflect.get(controls!, "controller").set(keepTurn ? { zoom: 1 } : { zoom: 1, yaw: 0, tilt: 0 }, true, "ride");
@@ -535,7 +544,8 @@ if (flat && controls && stage) {
     if (!keepZoom && space) setRideZoom();
     markRide();
     speakRide();
-    for (const key of ["ride", "rview", "rlook"]) address.set(key, null);
+    rideFace = null;
+    for (const key of ["ride", "rview", "rlook", "face"]) address.set(key, null);
   }
   async function startRide(key: string, keepTurn = false): Promise<void> {
     if (!space) return;
@@ -582,12 +592,14 @@ if (flat && controls && stage) {
       space.selectSatellite(null);
       if (satInfo) satInfo.hidden = true;
     } else if (typeof target !== "string") showSatellite(null);
-    space.ride(target, { view: rideView, look: rideLook });
+    space.ride(target, { view: rideView, look: rideLook, ...(rideFace ? { face: rideFace } : {}) });
     setRideZoom(keepTurn);
     speakRide();
+    markRide();
     address.set("ride", key);
     address.set("rview", rideView === "from" ? null : rideView);
     address.set("rlook", rideLook === "horizon" ? "horizon" : null);
+    address.set("face", rideFace);
   }
   // riding along is for watching it go by: a ride starts the clock (Play), and the date box moves with it
   for (const button of rideButtons) {
@@ -610,7 +622,17 @@ if (flat && controls && stage) {
       else markRide();
     });
   }
-
+  for (const button of faceButtons) {
+    button.addEventListener("click", () => {
+      const face = button.dataset["rideFace"];
+      if (!space || !FACES.includes(face as (typeof FACES)[number])) return;
+      rideFace = face as (typeof FACES)[number];
+      if (!rideKey) void startRide("iss");
+      else if (space.facing !== rideFace) space.face(rideFace);
+      address.set("face", rideFace);
+      markRide();
+    });
+  }
   let lightMode = ["lit", "boost"].includes(address.get("light") ?? "") ? (address.get("light") as string) : "sun";
   const lightButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-light]")];
   const markLight = (): void => {
@@ -736,6 +758,11 @@ if (flat && controls && stage) {
       stage!.append(element);
       barFor(element);
       space = element;
+      element.addEventListener("chikyu-ride-face", () => {
+        rideFace = space?.facing ?? null;
+        address.set("face", space?.facing ?? null);
+        markRide();
+      });
       markClock();
       speakSpace();
       Reflect.get(controls!, "controller").set({ zoom: 1 }, true, "look");

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Face a way again while riding** (MODULES-1105). `face("ahead" | "behind" | "left" | "right" | "down" | "up")` turns the camera there in half a second (at once when the reader asked for less motion) and keeps the zoom. Ahead is along the way it goes, behind is the opposite, left and right are across that way, down is straight at the Earth and up is straight away from it. In the above view, down looks straight down at the satellite. `facing` is that way until the view is turned or tipped, and `chikyu-ride-face` is sent when it changes. Keys, while the element is focused: W, S, A, D, R and F. The arrow keys stay with the view controls. The demo has a Face row and the address keeps `face`.
+
 ## 0.35.0 - 2026-11-12
 
 - **The figures follow a sky culture** (MODULES-1125). `constellation-culture` is `iau` (the 88, the default), `western`, `japanese` (the 88 by their Japanese names, then the traditional figures such as Subaru, the Pleiades) or `chinese`; the lines, the hovered and picked figure and its name follow it, and the events carry `id`, `kind` and `culture`. The value is exactly what the page sets (a Japanese page keeps the IAU's figures unless it says `japanese`); an unknown value is `iau` with one warning. Each culture's data is a dynamic import of its own, fetched only when asked for. hoshi-stars' `createFigureLines` takes no culture yet, so the lines of a culture are laid out here from `figures(culture)`.

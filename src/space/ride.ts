@@ -36,6 +36,56 @@ export const RIDE_FOV = 60;
 export type RideLook = "down" | "horizon";
 
 /**
+ * A way to face while riding, as from the windows of a plane or a boat: `ahead` along the way it goes, `behind` the opposite, `left` and `right` across that way as seen facing ahead, `down` straight at the Earth and `up` straight away from it.
+ *
+ * @example
+ * ```ts
+ * import { RIDE_FACES, type RideFace } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const face: RideFace = "ahead";
+ * console.log(RIDE_FACES.includes(face));
+ * ```
+ */
+export type RideFace = "ahead" | "behind" | "left" | "right" | "down" | "up";
+
+/**
+ * Every facing, in the order of a row of buttons.
+ *
+ * @example
+ * ```ts
+ * import { RIDE_FACES } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(RIDE_FACES.join(" "));
+ * ```
+ */
+export const RIDE_FACES: readonly RideFace[] = ["ahead", "behind", "left", "right", "down", "up"];
+
+/** How far each facing turns from the way it goes, in degrees, to the left, in the view from the body. */
+const FACE_TURN: Record<RideFace, number> = { ahead: 0, behind: 180, left: 90, right: -90, down: 0, up: 0 };
+
+/**
+ * Yaw and tilt, in radians, that put a camera looking at a satellite on a facing. `down` is straight above it, looking down at it and the Earth. `ahead` looks along the way it goes.
+ *
+ * @param face - The facing.
+ * @returns The yaw and tilt to give `aboveAxes`.
+ *
+ * @example
+ * ```ts
+ * import { faceOffset } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(faceOffset("down").tilt, faceOffset("ahead").tilt > 1);
+ * ```
+ */
+export function faceOffset(face: RideFace): { yaw: number; tilt: number } {
+  if (face === "up") return { yaw: 0, tilt: Math.PI };
+  if (face === "ahead") return { yaw: 0, tilt: Math.PI / 2 };
+  if (face === "behind") return { yaw: 0, tilt: -Math.PI / 2 };
+  if (face === "left") return { yaw: Math.PI / 2, tilt: Math.PI / 2 };
+  if (face === "right") return { yaw: -Math.PI / 2, tilt: Math.PI / 2 };
+  return { yaw: 0, tilt: 0 };
+}
+
+/**
  * The field of view, in degrees, of a riding camera at a zoom: the natural 60 divided by the zoom, held between 5 and 100.
  *
  * @param zoom - The shared controls' zoom.
@@ -123,6 +173,8 @@ export interface RideInput {
    * The heading in degrees, accumulated by the caller (see `rideTurnDegrees`): used in place of `yaw` when given, so a turn of more than half a way round is not undone by the controls wrapping their yaw, and a change of zoom does not swing it.
    */
   turn?: number;
+  /** In the `horizon` look, the facing the yaw and tilt look round from. `ahead` when not given. */
+  face?: RideFace;
 }
 
 /**
@@ -183,16 +235,19 @@ export function ridePose(input: RideInput): RidePose {
   }
   ahead = unit(ahead);
   const earthRadiusDegrees = distance <= 1 ? 90 : Math.asin(1 / distance) / RAD;
+  const faced = input.look === "horizon" && input.face ? FACE_TURN[input.face] : 0;
   const base = input.look === "horizon" ? Math.max(0, earthRadiusDegrees - 12) * RAD : 0;
   const fov = rideFov(input.zoom);
-  const turn = (input.turn ?? input.yaw * (GRAB * fov / 180)) * RAD;
+  const turn = ((input.turn ?? input.yaw * (GRAB * fov / 180)) + faced) * RAD;
   const lift = input.tilt * (GRAB * fov / 60) * RAD;
+  const rest = input.face === "down" ? -Math.PI / 2 : input.face === "up" ? Math.PI / 2 : base - Math.PI / 2;
+  const cap = Math.max(MAX_ABOVE_HORIZON * RAD, rest);
   if (input.look === "horizon") {
     // looking round on the spot: a drag sideways turns the camera about the local vertical, all the way round, and a drag up or down tips it up or down in the vertical plane it faces, from straight down to a little above the horizon,
-    // so the horizon stays level and nothing rolls
+    // so the horizon stays level and nothing rolls. A facing (`up`, `down`, `ahead`, ...) is where that drag starts.
     const zenith = scale(nadir, -1);
     const heading = add(scale(ahead, Math.cos(turn)), scale(cross(zenith, ahead), Math.sin(turn)));
-    const elevation = Math.max(-Math.PI / 2, Math.min(MAX_ABOVE_HORIZON * RAD, base - Math.PI / 2 - lift));
+    const elevation = Math.max(-Math.PI / 2, Math.min(cap, rest - lift));
     const forward = add(scale(heading, Math.cos(elevation)), scale(zenith, Math.sin(elevation)));
     const up = add(scale(heading, -Math.sin(elevation)), scale(zenith, Math.cos(elevation)));
     return { position: [input.position[0], input.position[1], input.position[2]], forward, up, fov, earthRadiusDegrees };
