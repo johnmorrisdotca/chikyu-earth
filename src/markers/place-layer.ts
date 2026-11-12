@@ -56,6 +56,8 @@ export interface PlaceLayer {
   /** Lay the places on the picture just drawn; `null` hides them (the Earth is not in the picture). `taken` is boxes other names use; `marks` are satellites to ring and name, after the places' names and never over them. */
   frame(view: PlaceView | null, taken?: readonly { left: number; top: number; width: number; height: number }[], marks?: readonly SatelliteMark[]): void;
   readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
+  /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
+  readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
   dispose(): void;
 }
 
@@ -84,6 +86,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const names: HTMLElement[] = [];
   const sizes = new Map<string, { width: number; height: number }>();
   const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0 };
+  let boxes: { left: number; top: number; width: number; height: number }[] = [];
   const rings: HTMLElement[] = [];
   let measure: HTMLElement | null = null;
 
@@ -172,6 +175,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         stats.rings = 0;
         stats.satelliteNames = 0;
         if (places.length > 0) stats.renders += 1;
+        boxes = [];
         return;
       }
       stats.renders += 1;
@@ -243,12 +247,18 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         name.style.transform = `translate(${Math.round(spot.left)}px,${Math.round(spot.top)}px)`;
       }
       hideFrom(names, layout.labels.length + placed.length);
+      boxes = used.slice(taken.length);
+      for (const spot of placed) boxes.push({ left: spot.left, top: spot.top, width: items[spot.item]!.w, height: items[spot.item]!.h });
+      for (const shape of layout.shapes) boxes.push({ left: shape.tipX - 5, top: shape.tipY - 5, width: 10, height: 10 });
       stats.shown = order.length;
       stats.labels = layout.labels.length;
       stats.rings = seen.length;
       stats.satelliteNames = placed.length;
     },
     stats,
+    get boxes() {
+      return boxes;
+    },
     dispose() {
       watcher?.disconnect();
       fonts?.removeEventListener?.("loadingdone", refit);

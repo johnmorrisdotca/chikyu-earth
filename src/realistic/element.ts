@@ -26,6 +26,10 @@ import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost,
 import { project } from "../markers/project.ts";
 import { BORDER_ATTRIBUTES, readBorders, type BorderSets } from "../borders/lines.ts";
 import type { BorderData, BorderStats } from "../borders/layer.ts";
+import { GRID_ATTRIBUTES, readGrid } from "../grid/lines.ts";
+import type { GridStats } from "../grid/layer.ts";
+import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/geometry.ts";
+import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
@@ -51,7 +55,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -151,6 +155,10 @@ export const readTime = (value: string | null): number | "now" => {
  * `borders` draws the borders on the land as thin lines that turn with the Earth: `countries` (chizu's, at any size), `regions` (provinces, states and the like, from the page's `borderData.regions`,
  * once the Earth is large enough to tell them apart), or both with a bare attribute. The shapes are loaded only when a set is switched on; `chikyu-borders-unavailable` is sent when they cannot be.
  *
+ * `grid` draws the meridians and parallels on the Earth (every 30 degrees while it is small on the screen, every 15 once it is large), with the equator, the tropics, the polar circles and the prime
+ * meridian picked out, light on the day side and dim on the night side. `country-names` names the countries at the middle of the part of each in view, in the page's language, never over another
+ * name, as many as fit (40 at most, or the number given); the outlines are loaded only when it is set, and `chikyu-country-names-unavailable` is sent when they cannot be.
+ *
  * @example
  * ```ts no-run
  * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
@@ -169,7 +177,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -202,6 +210,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The names of cities on the Earth (`city-names`), and the look of the names. */
   #cities: CityHost | undefined;
   #citiesStyle: CityNamesStyle = {};
+  /** The names of the countries on the Earth (`country-names`), and the look of the names. */
+  #countries: CountryHost | undefined;
+  #countriesStyle: CountryNamesStyle = {};
   #listeners = new Set<(pose: OverlayPose) => void>();
   #placeLayer: PlaceLayer | undefined;
   #placeList: Place[] = [];
@@ -263,10 +274,20 @@ export class ChikyuEarthRealistic extends HTMLElement {
       attribute: (name) => this.getAttribute(name),
       language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-city-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      onLayout: () => this.#countryFrame(),
     });
     this.#cities.setStyle(this.#citiesStyle);
     Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
     this.#model.borders.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-borders-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
+    this.#model.grid.on = readGrid(this.getAttribute("grid"));
+    this.#model.grid.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-grid-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
+    this.#countries = createCountryHost({
+      root,
+      attribute: (name) => this.getAttribute(name),
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+      onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-country-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+    });
+    this.#countries.setStyle(this.#countriesStyle);
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
@@ -313,7 +334,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
-        for (const listener of this.#listeners) listener(this.#pose);
+        this.#posing = true;
+        try {
+          for (const listener of this.#listeners) listener(this.#pose);
+        } finally {
+          this.#posing = false;
+        }
         if (this.#placeLayer && (this.#placeList.length > 0 || this.#placeLayer.stats.shown > 0)) this.#placeLayer.frame(orthoView(pose));
         this.#cityFrame();
       },
@@ -367,6 +393,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#placeLayer = undefined;
     this.#cities?.dispose();
     this.#cities = undefined;
+    this.#countries?.dispose();
+    this.#countries = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -399,6 +427,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#applyBodyLabel();
         this.#sky?.refresh();
         this.#cities?.refresh();
+        this.#countries?.refresh();
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
@@ -414,7 +443,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "borders") {
       Object.assign(this.#model.borders, readBorders(value));
       this.#gate?.soon();
-    }
+    } else if (name === "grid") {
+      this.#model.grid.on = readGrid(value);
+      this.#gate?.soon();
+    } else if ((COUNTRY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#countries?.refresh();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -536,6 +568,27 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#cities?.setStyle(this.#citiesStyle);
   }
 
+  /** Whether the meridians and parallels are drawn (the attribute `grid`). Setting it writes the attribute, or takes it away. */
+  get grid(): boolean {
+    return readGrid(this.getAttribute("grid"));
+  }
+  set grid(value: boolean) {
+    if (value) this.setAttribute("grid", "");
+    else this.removeAttribute("grid");
+  }
+
+  /**
+   * The look of the names of countries (`country-names`): font, weight, colour, the outline round the text, and the smallest and largest text size. Any of them may be left out; the Earth's size, the
+   * language and the data are not set here.
+   */
+  get countryNamesStyle(): CountryNamesStyle {
+    return { ...this.#countriesStyle };
+  }
+  set countryNamesStyle(value: CountryNamesStyle) {
+    this.#countriesStyle = { ...value };
+    this.#countries?.setStyle(this.#countriesStyle);
+  }
+
   /**
    * Which borders are drawn (the attribute `borders`): the countries' at any size, and the regions' (provinces, states, prefectures) once the Earth is large enough on the screen to tell them apart.
    * Setting it writes the attribute: both sets as `borders="countries regions"`, one as its own word, none takes the attribute away.
@@ -561,21 +614,35 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#gate?.soon();
   }
 
-  /** Tells the names of cities where the Earth is in the picture just drawn: the orthographic view the markers share. */
+  /** Tells the names of cities, then of countries, where the Earth is in the picture just drawn (the orthographic view the markers share); the countries' names keep clear of the places' and the cities'. */
   #cityFrame(): void {
     const pose = this.#pose;
     if (!this.#cities || !pose) return;
-    this.#cities.frame({
+    const frame = {
       width: pose.width,
       height: pose.height,
       radius: pose.radius,
-      project: (lon, lat, out) => {
+      disc: { x: pose.cx, y: pose.cy, radius: pose.radius },
+      project: (lon: number, lat: number, out: { x: number; y: number }) => {
         const at = project(lon, lat, pose);
         out.x = at.x;
         out.y = at.y;
         return at.z;
       },
-    });
+    };
+    this.#cities.frame(frame);
+    this.#nameFrame = frame;
+    this.#countryFrame();
+  }
+
+  /** The frame the names were last laid out on. */
+  #nameFrame: CountryFrame | null = null;
+
+  /** Lays the countries' names out on the last frame, clear of the places' and the cities' names as they are now. */
+  #countryFrame(): void {
+    const countries = this.#countries;
+    if (!countries || !this.#nameFrame) return;
+    countries.frame(this.#nameFrame, countries.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...[...this.#claims.values()].flat()] : []);
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -661,8 +728,19 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#listeners.add(listener);
         return () => this.#listeners.delete(listener);
       },
+      claim: (owner, boxes) => {
+        if (boxes.length === 0) this.#claims.delete(owner);
+        else this.#claims.set(owner, boxes);
+        // laid out again only when the overlay changed between draws: at a draw the names are laid out after it anyway
+        if (!this.#posing) this.#countryFrame();
+      },
     };
   }
+
+  /** The boxes overlays on the element (markers) take, by overlay. */
+  #claims = new Map<object, readonly { left: number; top: number; width: number; height: number }[]>();
+  /** True while the overlays are told of a draw. */
+  #posing = false;
 
   /** Where the view starts: longitude and latitude; the shared controls' yaw and tilt turn it from there. */
   get centre(): GeoPoint {
@@ -780,6 +858,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
     /** The borders: the segments of each set, whether each was drawn at the last draw, the countries whose regions have arrived, how many times a set's lines were made, and whether a set could not be loaded. */
     borders: BorderStats;
+    /** The grid: whether it was drawn at the last draw, whether every 15 degrees (else 30), its segments then, how many times its lines were made, and whether it could not be made. */
+    grid: GridStats;
+    /** The names of countries: whether `country-names` is set and the most it asks for, the countries loaded, the names shown at the last draw, how many times they were laid out, and whether the outlines could not be loaded. */
+    countryNames: CountryNamesStats;
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -797,6 +879,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
+      grid: { ...this.#model.grid.stats },
+      countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
     };
   }
 

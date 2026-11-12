@@ -15,12 +15,13 @@ import { ridePose, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
-import type { CityFrame } from "../cities/geometry.ts";
+import type { CountryFrame } from "../country-names/geometry.ts";
 import { MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
+import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
 type Three = ThreeParts;
@@ -177,6 +178,8 @@ export interface SpaceModel {
   bodyLabel: BodyLabelState;
   /** The borders of the countries and of their regions, on the Earth (src/borders/layer.ts): off unless the element switches them on. */
   borders: BorderState;
+  /** The meridians and parallels on the Earth (src/grid/layer.ts): off unless the element switches them on. */
+  grid: GridState;
   /** The body or satellite the camera rides along with, or null. */
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
@@ -236,6 +239,7 @@ export const newSpaceModel = (): SpaceModel => ({
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
   borders: newBorderState(),
+  grid: newGridState(),
   pick: null,
   placeSatellite: null,
   followModel: null,
@@ -364,8 +368,8 @@ export interface SpaceDeps {
   onSky?: (frame: SkyFrame) => void;
   /** Where points of the Earth's surface fall on the screen at this draw, for the places drawn on it. Called at each draw. */
   onPlaces?: (view: PlaceView) => void;
-  /** Where the Earth is on the screen and how to find a place on it, for the names of cities. Called at each draw, with `null` while no Earth is shown. */
-  onCities?: (frame: CityFrame | null) => void;
+  /** Where the Earth is on the screen (its disc) and how to find a place on it, for the names of cities and countries. Called at each draw, with `null` while no Earth is shown. */
+  onCities?: (frame: CountryFrame | null) => void;
   /** The name written on the Earth could not be made. */
   onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
@@ -581,6 +585,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
+      let gridLayer: GridLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number } = { key: "", drawing: null, turn: 0 };
@@ -1038,10 +1043,13 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               const ground = new three.Vector3();
               const eye = camera.position;
               const turned = earth.quaternion;
+              ground.set(0, 0, 0).project(camera);
+              const disc = { x: ((ground.x + 1) / 2) * size.width, y: ((1 - ground.y) / 2) * size.height, radius: Math.min(px.Earth, 1e5) };
               deps.onCities({
                 width: size.width,
                 height: size.height,
                 radius: Math.min(px.Earth, 1e5),
+                ...(ground.z > -1 && ground.z < 1 ? { disc } : {}),
                 project(lon, lat, out) {
                   const phi = lat * RAD;
                   const lambda = lon * RAD;
@@ -1091,6 +1099,16 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const far = Math.hypot(fx, camera.position.y, fz) || 1;
             borders.sync({ points: [{ lon: Math.atan2(fx, fz) / RAD, lat: Math.asin(Math.max(-1, Math.min(1, camera.position.y / far))) / RAD }], angle: Math.acos(Math.min(1, 1 / far)) / RAD, radius: Math.min(px.Earth, 1e5) });
           }
+          // the grid, on the Earth: made the first time it is switched on, over the ground and under the clouds
+          if (model.grid.on && !gridLayer && !model.grid.stats.failed) {
+            try {
+              gridLayer = createGridLayer(three, earth, model.grid, sunEarth, 2.5);
+            } catch (error) {
+              model.grid.stats.failed = true;
+              model.grid.onError?.(error);
+            }
+          }
+          gridLayer?.sync(Math.min(px.Earth, 1e5));
           if (model.rideLost) deps.onRideLost?.();
           if (model.transition) deps.onMoving?.();
           return false;
@@ -1104,6 +1122,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           meteors?.dispose();
           nameOn?.dispose();
           borders?.dispose();
+          gridLayer?.dispose();
           modelSlot.turn += 1;
           dropModel();
           layer?.dispose();
