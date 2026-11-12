@@ -255,7 +255,7 @@
     "@johnmorrisdotca/hata": "^1.8.0",
     "@johnmorrisdotca/hoshi-stars": "^0.30.0",
     "@johnmorrisdotca/kuni": "^1.6.1",
-    "@johnmorrisdotca/wakusei-planets": "^0.38.0",
+    "@johnmorrisdotca/wakusei-planets": "^0.39.0",
     "@playwright/test": "1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/d3-geo": "^3.1.0",
