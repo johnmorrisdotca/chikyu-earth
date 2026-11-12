@@ -203,6 +203,8 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  *
  * It carries kazoku-ui's controls itself: a drag turns the view, two fingers pinch, Ctrl and the wheel zoom (a plain wheel at Fit scrolls the page) and the arrow keys, + and - work once it is focused. The zoom runs from a millionth of Fit (the whole solar system) to 2.5 times, and from 0.5 to 6 times while riding from a body. `controls="none"` turns the hands off; `zoom-min` and `zoom-max` change the range. A `<kazoku-view-controls for="...">` on the element takes the hands over, and the page applies its events with `setView`.
  *
+ * With a body painter that carries a `credit` (`setBodyPainter`), the credit of its pictures is written under the picture while it draws the bodies; `bodies-credit="off"` takes the line away.
+ *
  * While time runs (`speed` is not 0) it sends `chikyu-timechange` with `detail: { time, running: true }`, `time` being the moment shown in milliseconds since 1970, at most four times a second however fast the picture is
  * drawn (and, with the clock at real time, as often as it steps: once a minute, or once a second with satellites or a ride on show), only while the tab is shown, and once with `running: false` when the clock holds
  * (`speed` set to 0): a page writes the date into its date box from it. It is not sent for a `time` the page sets itself. `chikyu-time` is the older event of every step the clock takes (up to thirty a second):
@@ -223,7 +225,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "bodies-credit"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -242,6 +244,7 @@ export class ChikyuSpace extends HTMLElement {
   /** The ringed satellites of the last draw (`labelSatellites`), laid out with the places. */
   #marks: SatelliteMark[] = [];
   #airNote: HTMLElement | undefined;
+  #bodiesNote: HTMLElement | undefined;
   #gate: Gate | undefined;
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
   #stage: HTMLElement | undefined;
@@ -288,12 +291,13 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="bodies-note" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#note = root.getElementById("meteor-note")!;
     this.#airNote = root.getElementById("air-note")!;
+    this.#bodiesNote = root.getElementById("bodies-note")!;
     this.#sky = createSkyHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -316,6 +320,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#applyBodyLabel();
     setAirNote(this.#airNote, this, this.#model.airThickness);
+    this.#showBodiesCredit();
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
@@ -439,7 +444,20 @@ export class ChikyuSpace extends HTMLElement {
     }
     else if ((CITY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#cities?.refresh();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
+    if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
   }
+
+  /** The body painter's credit under the picture, in the element's or the page's language: shown while the painter draws the bodies (not `plain`), unless `bodies-credit` is `off`. */
+  #showBodiesCredit(): void {
+    const note = this.#bodiesNote;
+    if (!note) return;
+    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+    const credit = painter?.credit?.[lang] ?? "";
+    note.textContent = credit;
+    note.lang = lang;
+    note.hidden = credit === "" || this.bodies === "plain" || this.getAttribute("bodies-credit") === "off";
+  }
+
 
   #meteorsAsked(): boolean {
     return this.hasAttribute("meteors") && this.getAttribute("meteors") !== "off";
@@ -694,6 +712,7 @@ export class ChikyuSpace extends HTMLElement {
   }
   set bodies(value: string) {
     this.#model.bodies = value;
+    this.#showBodiesCredit();
     this.#gate?.request();
   }
 
@@ -1058,8 +1077,8 @@ export class ChikyuSpace extends HTMLElement {
     ride: { riding: boolean; lost: boolean; gliding: boolean };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
     camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
-    /** What the body painter has made at the last draw: the Sun and planets with a drawing, and the moons shown round a planet that is near. */
-    bodies: { look: string; painted: number; moons: number };
+    /** What the body painter has made at the last draw: the Sun and planets with a drawing, the moons shown round a planet that is near and the moons held (shown, or gone from the view for less than four seconds), whether the Moon is the painter's (`moon`), and the bodies with finer map tiles on them (`tiles`). */
+    bodies: { look: string; painted: number; moons: number; held: number; moon: boolean; tiles: number };
     /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
     meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
     /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
@@ -1087,7 +1106,7 @@ export class ChikyuSpace extends HTMLElement {
       satellites: this.#satelliteStats(),
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
-      bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
+      bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons, held: this.#model.painted.held, moon: this.#model.painted.moon, tiles: this.#model.painted.tiles },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0, lang: "", stars: [] },

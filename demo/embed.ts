@@ -20,6 +20,7 @@ import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
 import { globeCredit } from "./frame-credit.ts";
+import { planetPainter } from "./planet-painter.ts";
 import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
 setBodyLabelFontUrl("fonts/Michroma-Regular.ttf");
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
@@ -117,12 +118,8 @@ if (look === "space") {
   setThreeLoader(() => import("./three-subset.ts"));
   // the real Sun, planets, Pluto and moons come from wakusei-planets (an optional peer); without it they are plain spheres
   if (query.get("bodies") !== "plain") {
-    try {
-      const { createPainter } = await import("@johnmorrisdotca/wakusei-planets/painter");
-      setBodyPainter(createPainter({ textureBase: "planets/" }) as unknown as import("../src/space/index.ts").BodyPainter);
-    } catch {
-      // plain spheres
-    }
+    const planets = await planetPainter();
+    if (planets) setBodyPainter(planets);
   }
   const element = document.createElement("chikyu-space") as ChikyuSpace;
   centreOn(element);

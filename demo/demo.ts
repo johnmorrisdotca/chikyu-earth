@@ -19,7 +19,7 @@ import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 import { catalogueEntry, findInCatalogue, SATELLITE_GROUPS, type SatelliteGroupInfo } from "../src/satellites/catalogue.ts";
 import type { RideTarget } from "../src/space/element.ts";
-import type { BodyPainter } from "../src/space/index.ts";
+import { planetPainter } from "./planet-painter.ts";
 import { discRadius } from "../src/realistic/earth.ts";
 import { readMeteorStrength } from "../src/meteors/strength.ts";
 import { creditLine } from "../src/door/index.ts";
@@ -671,13 +671,9 @@ if (flat && controls && stage) {
     // the Sun, the planets, Pluto and their moons are wakusei-planets' (an optional peer): the real ones, or plain spheres where it is not there
     if (!planetsTried) {
       planetsTried = true;
-      try {
-        const { createPainter } = await import("@johnmorrisdotca/wakusei-planets/painter");
-        setBodyPainter(createPainter({ textureBase: "planets/" }) as unknown as BodyPainter);
-        planetsHere = true;
-      } catch {
-        planetsHere = false;
-      }
+      const planets = await planetPainter();
+      if (planets) setBodyPainter(planets);
+      planetsHere = planets !== null;
     }
     if (!space) {
       leave3d();
