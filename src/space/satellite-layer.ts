@@ -90,8 +90,7 @@ interface Drawn {
   streakPositions: Float32Array;
   streakColours: Float32Array;
   streakAttribute: THREE.BufferAttribute;
-  pinWall: number;
-  /** The game time the group was last pinned at. */
+  /** The game time of the last slice pinned, or NaN until the first, so a jump from a held clock pins every satellite. */
   pinTime: number;
 }
 
@@ -271,7 +270,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
             streak.visible = false;
             scene.add(streak);
           }
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0 };
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinTime: Number.NaN };
           drawn.set(name, entry);
         }
         const style = `${group.color}|${group.size}|${ratio()}|${dotScale}|${state.orbitTint ? 1 : 0}`;
@@ -303,12 +302,11 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           continue;
         }
         if (tooFast) {
-          // pinned again about once a second, and at once when the time jumped (a date typed in, a scrub), so a place is never turned across days
-          if (entry.pinWall === 0 || started - entry.pinWall >= 1000 || Math.abs(time - entry.pinTime) > 1500 * Math.abs(speed)) {
-            group.satellites.pin(time);
-            entry.pinWall = started;
-            entry.pinTime = time;
-          }
+          // about 1/30 of the group each frame, so the whole group is still refreshed about once a second and no frame does all of the SGP4.
+          // a jump in time (a date typed in, a scrub) pins every satellite at once, so a place is never turned across days
+          const jumped = Number.isFinite(entry.pinTime) && Math.abs(time - entry.pinTime) > 1500 * Math.abs(speed);
+          group.satellites.pin(time, jumped);
+          entry.pinTime = time;
           const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions);
           entry.attribute.needsUpdate = true;
           if (entry.streak) {
@@ -324,7 +322,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           if (entry.streak) segments += n;
         } else {
           if (entry.streak) entry.streak.visible = false;
-          entry.pinWall = 0;
+          entry.pinTime = Number.NaN;
           group.satellites.setStep(step);
           group.satellites.at(time, entry.positions);
           entry.attribute.needsUpdate = true;

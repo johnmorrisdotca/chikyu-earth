@@ -915,7 +915,7 @@ export class ChikyuSpace extends HTMLElement {
   /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds. Giving the name of a group
    * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations).
-   * The groups are placed by SGP4 about once a second and interpolated between. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit instead of being hidden.
+   * The groups are placed by SGP4 about once a second and interpolated between. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit instead of being hidden: about a thirtieth of the group is sampled each frame and turned from its own sample.
    *
    * @param group - The group's name, for `showSatellites`, `selectSatellite` and the events.
    * @param satellites - The group, or `null` to remove it.

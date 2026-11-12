@@ -1,5 +1,6 @@
 // SGP4 for a group of satellites, kept cheap: the whole group is run at two moments a step apart and every position in between is an interpolation, so the cost is one batch a step
-// (about once a second), never one a frame. satellite.js (MIT) does the SGP4 itself; this file never touches the screen and imports on a server.
+// (about once a second), never one a frame. Above that step, `pin` samples about a thirtieth of the group each call and `arc` turns each satellite from its own sample.
+// satellite.js (MIT) does the SGP4 itself; this file never touches the screen and imports on a server.
 import { json2satrec, sgp4 } from "satellite.js";
 import { CLASS_COLOURS } from "../catalogue/kinds.ts";
 import { classOfElements } from "../catalogue/orbit.ts";
@@ -145,7 +146,12 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const timing = { lastBatchMs: 0, maxBatchMs: 0 };
   const pinned = new Float32Array(n * 3);
   const pinOk = new Uint8Array(n);
-  let pinMs = Number.NaN;
+  /** The game time each satellite was last pinned at. NaN until its first pin, so a slice can be newer than its neighbour. */
+  const pinAt = new Float64Array(n);
+  pinAt.fill(Number.NaN);
+  let pinCursor = 0;
+  /** A full pin is spread over this many calls, about one a frame, so the group is refreshed about once a second at 30 frames a second. */
+  const PIN_FRAMES = 30;
 
   /** Turn `x,y,z` about the unit axis `nx,ny,nz` by `ang` radians, into `out` at `at` (no allocation: it runs for every satellite on every frame). */
   const turn = (x: number, y: number, z: number, nx: number, ny: number, nz: number, ang: number, out: Float32Array, at: number): void => {
@@ -161,27 +167,29 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const isEccentric = new Uint8Array(n);
   for (const i of eccentric) isEccentric[i] = 1;
 
-  /** SGP4 for the whole group at one moment, into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
+  /** SGP4 for one satellite at one moment, into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
+  const propagate = (i: number, ms: number, buffer: Float32Array, ok: Uint8Array): void => {
+    const epoch = epochs[i]!;
+    if (Math.abs(ms - epoch) > maxAgeMs) {
+      ok[i] = 0;
+      return;
+    }
+    propagations += 1;
+    const result = sgp4(recs[i]!, (ms - epoch) / 60_000) as Sample;
+    const p = result && result.position;
+    if (!p || !Number.isFinite(p.x)) {
+      ok[i] = 0;
+      return;
+    }
+    ok[i] = 1;
+    buffer[i * 3] = p.x / EARTH_RADIUS_KM;
+    buffer[i * 3 + 1] = p.z / EARTH_RADIUS_KM;
+    buffer[i * 3 + 2] = -p.y / EARTH_RADIUS_KM;
+  };
+  /** SGP4 for the whole group at one moment. */
   const sample = (buffer: Float32Array, ok: Uint8Array, ms: number): void => {
     const started = performance.now();
-    for (let i = 0; i < n; i += 1) {
-      const epoch = epochs[i]!;
-      if (Math.abs(ms - epoch) > maxAgeMs) {
-        ok[i] = 0;
-        continue;
-      }
-      propagations += 1;
-      const result = sgp4(recs[i]!, (ms - epoch) / 60_000) as Sample;
-      const p = result && result.position;
-      if (!p || !Number.isFinite(p.x)) {
-        ok[i] = 0;
-        continue;
-      }
-      ok[i] = 1;
-      buffer[i * 3] = p.x / EARTH_RADIUS_KM;
-      buffer[i * 3 + 1] = p.z / EARTH_RADIUS_KM;
-      buffer[i * 3 + 2] = -p.y / EARTH_RADIUS_KM;
-    }
+    for (let i = 0; i < n; i += 1) propagate(i, ms, buffer, ok);
     timing.lastBatchMs = performance.now() - started;
     if (timing.lastBatchMs > timing.maxBatchMs) timing.maxBatchMs = timing.lastBatchMs;
   };
@@ -220,17 +228,27 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     get placed() {
       return placed;
     },
-    pin(ms) {
+    pin(ms, all = false) {
       if (n === 0) return;
-      sample(pinned, pinOk, ms);
-      pinMs = ms;
+      if (all) {
+        sample(pinned, pinOk, ms);
+        for (let i = 0; i < n; i += 1) pinAt[i] = pinOk[i] === 1 ? ms : Number.NaN;
+        pinCursor = 0;
+        return;
+      }
+      const started = performance.now();
+      const take = Math.max(1, Math.ceil(n / PIN_FRAMES));
+      for (let k = 0; k < take; k += 1) {
+        const i = (pinCursor + k) % n;
+        propagate(i, ms, pinned, pinOk);
+        pinAt[i] = pinOk[i] === 1 ? ms : Number.NaN;
+      }
+      pinCursor = (pinCursor + take) % n;
+      timing.lastBatchMs = performance.now() - started;
+      if (timing.lastBatchMs > timing.maxBatchMs) timing.maxBatchMs = timing.lastBatchMs;
     },
     arc(ms, spanMs, positions, segments) {
       if (n === 0) return 0;
-      if (!Number.isFinite(pinMs)) {
-        sample(pinned, pinOk, ms);
-        pinMs = ms;
-      }
       const span = spanMs;
       let count = 0;
       for (let i = 0; i < n; i += 1) {
@@ -267,7 +285,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
           count += 1;
           continue;
         }
-        if (pinOk[i] !== 1) {
+        if (pinOk[i] !== 1 || !Number.isFinite(pinAt[i])) {
           positions.fill(0, k, k + 3);
           segments.fill(0, w, w + 6);
           shown[i] = 0;
@@ -277,7 +295,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         const ny = normal[k + 1]!;
         const nz = normal[k + 2]!;
         const sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
-        const along = rate[i]! * (ms - pinMs);
+        const along = rate[i]! * (ms - pinAt[i]!);
         turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along, positions, k);
         turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along - sweep, segments, w);
         segments[w + 3] = positions[k]!;

@@ -165,11 +165,13 @@ test("above the interpolation limit each satellite is a streak along its orbit, 
   const positions = new Float32Array(group.count * 3);
   const segments = new Float32Array(group.count * 6);
   const before = group.propagations;
+  group.pin(ms, true);
+  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
+  assert.equal(group.propagations - before, group.count, "one SGP4 call each to pin the place");
   const drawn = group.arc(ms, 120_000, positions, segments);
   assert.equal(drawn, group.count, "every station is drawn, not hidden");
   assert.equal(drawn, group.placed);
-  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
-  assert.equal(group.propagations - before, group.count + eccentric * 2, "one SGP4 call each to pin the place, and two more for each eccentric orbit, which SGP4 places itself");
+  assert.equal(group.propagations - before, group.count + eccentric * 2, "and two more for each eccentric orbit, which SGP4 places itself");
   const pinned = group.propagations;
   group.arc(ms + 1000, 120_000, positions, segments);
   assert.equal(group.propagations - pinned, eccentric * 2, "the next frame turns the pinned place and calls SGP4 only for the eccentric ones");
@@ -192,13 +194,45 @@ test("a fast clock with the whole recorded catalogue draws one streak each and d
   const positions = new Float32Array(group.count * 3);
   const segments = new Float32Array(group.count * 6);
   const span = 3_600 * (1000 / 30);
-  group.pin(ms);
+  group.pin(ms, true);
   const once = group.propagations;
   let drawn = 0;
   for (let frame = 0; frame < 30; frame += 1) drawn = group.arc(ms + frame * span, span, positions, segments);
   assert.equal(drawn, group.count, "every satellite in the recorded catalogue is a streak");
   const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
   assert.equal(group.propagations - once, eccentric * 2 * 30, "only the eccentric ones call SGP4 on a frame, two calls each: the rest turn the pinned place");
+});
+
+test("pin places about a thirtieth of the group each call, and arc turns each satellite from its own pin", () => {
+  const group = createSatellites(starlink);
+  const ms = Date.parse("2026-11-02T18:00:00Z");
+  const slice = Math.ceil(group.count / 30);
+  const before = group.propagations;
+  group.pin(ms);
+  assert.equal(group.propagations - before, slice, "one call is one slice, not the whole group");
+  for (let i = 1; i < 30; i += 1) group.pin(ms + i);
+  assert.ok(group.propagations - before >= group.count, "thirty calls have placed every satellite");
+  assert.ok(group.propagations - before < group.count + slice, "thirty calls do not place the group twice");
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const pair = createSatellites([
+    { ...base, NORAD_CAT_ID: 1, ECCENTRICITY: 0.001 },
+    { ...base, NORAD_CAT_ID: 2, ECCENTRICITY: 0.001, MEAN_ANOMALY: 40 },
+    { ...base, NORAD_CAT_ID: 3, ECCENTRICITY: 0.001, MEAN_ANOMALY: 80 },
+  ]);
+  const positions = new Float32Array(pair.count * 3);
+  const segments = new Float32Array(pair.count * 6);
+  pair.pin(ms);
+  assert.equal(pair.arc(ms + 5_000, 1_000, positions, segments), 1, "a satellite with no pin yet is left out");
+  pair.pin(ms + 5_000);
+  pair.pin(ms + 5_000);
+  assert.equal(pair.arc(ms + 5_000, 1_000, positions, segments), 3);
+  const here = new Float64Array(6);
+  const km = 6371;
+  for (let i = 0; i < pair.count; i += 1) {
+    assert.ok(pair.exact(i, ms + 5_000, here));
+    const off = Math.hypot(positions[i * 3]! - here[0]!, positions[i * 3 + 1]! - here[1]!, positions[i * 3 + 2]! - here[2]!) * km;
+    assert.ok(off < 80, `satellite ${i} is ${off.toFixed(0)} km from its own pin, turned to now`);
+  }
 });
 
 test("a streak ends where SGP4 puts the satellite and starts where it was one frame earlier, forwards, backwards and for a retrograde orbit", () => {
@@ -213,7 +247,7 @@ test("a streak ends where SGP4 puts the satellite and starts where it was one fr
   const segments = new Float32Array(group.count * 6);
   for (const span of [120_000, -120_000]) {
     for (const age of [0, 600_000]) {
-      group.pin(ms);
+      group.pin(ms, true);
       group.arc(ms + age, span, positions, segments);
       for (let i = 0; i < group.count; i += 1) {
         assert.ok(group.exact(i, ms + age, here) && group.exact(i, ms + age - span, there));
