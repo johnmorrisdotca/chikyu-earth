@@ -23,6 +23,18 @@ interface Stats {
   camera: { position: [number, number, number]; fov: number };
 }
 const statsOf = (page: Page): Promise<Stats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as Stats);
+/**
+ * Do `act` and wait until the element has drawn since, and no glide is under way: the camera it then reports is where the change put it. Not a wait of so many milliseconds: a busy machine
+ * (the CI image) had not drawn the true scale 800 ms after the press, and the Moon's distance read the compressed 9.94 (MODULES-1178).
+ */
+async function settledAfter(page: Page, act: () => Promise<void>): Promise<Stats> {
+  const before = await statsOf(page);
+  await act();
+  // a frame queued before the press could be drawn after `before` was read: the camera must also have moved, so the draw counted is one the change made
+  const moved = (now: Stats): boolean => Math.hypot(now.camera.position[0] - before.camera.position[0], now.camera.position[1] - before.camera.position[1], now.camera.position[2] - before.camera.position[2]) > 1e-6;
+  await expect.poll(async () => { const now = await statsOf(page); return now.draws > before.draws && !now.ride.gliding && moved(now); }, { timeout: 30_000, message: "a draw after the change, the camera moved, and no glide under way" }).toBe(true);
+  return statsOf(page);
+}
 
 async function open(page: Page, query = ""): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
@@ -109,13 +121,11 @@ test("riding the ISS puts the camera where the ISS is, 420 km up, and at 60x it 
 
 test("riding the Moon puts the camera at the Moon: 10 Earth radii away in the compressed scale, 60 in the true one", async ({ page }) => {
   await open(page);
-  await rideButton(page, "Moon").click();
-  await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
-  await settle(page, 500);
-  expect(Math.hypot(...(await statsOf(page)).camera.position)).toBeCloseTo(10, 0);
-  await page.getByRole("button", { name: "True scale" }).click();
-  await settle(page, 800);
-  const away = Math.hypot(...(await statsOf(page)).camera.position);
+  const atMoon = await settledAfter(page, () => rideButton(page, "Moon").click());
+  expect(Math.hypot(...atMoon.camera.position)).toBeCloseTo(10, 0);
+  // dispatched, as the ride buttons are: a real click scrolls the page to the button, and a globe scrolled out of sight is (rightly) not drawn, so its camera stays where it was
+  const trueScale = await settledAfter(page, () => page.getByRole("button", { name: "True scale" }).dispatchEvent("click"));
+  const away = Math.hypot(...trueScale.camera.position);
   expect(away).toBeGreaterThan(55);
   expect(away).toBeLessThan(66);
 });

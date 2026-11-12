@@ -51,10 +51,21 @@ export async function ownClock(page: Page): Promise<void> {
  */
 const FREEZE_AHEAD_MS = 3000;
 
-/** Stop an owned clock where it is (a moment ahead of the page's time, `FREEZE_AHEAD_MS`, chosen from the page's own clock); time then moves only by `page.clock.runFor`, until `page.clock.resume()`. */
+/**
+ * Stop an owned clock where it is (a moment ahead of the page's time, `FREEZE_AHEAD_MS`, chosen from the page's own clock); time then moves only by `page.clock.runFor`, until `page.clock.resume()`. */
 export async function freezeClock(page: Page): Promise<void> {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(new Date(now + FREEZE_AHEAD_MS));
+  // Reading the page's time and asking for the pause are two calls, and a running clock moves between them: on a machine busy enough (the CI image, software drawing) more than the margin
+  // has gone by, and `pauseAt` is asked for a time already behind it (MODULES-1178). That answer is about this race, not the page: read the time again and ask with a wider margin.
+  for (const ahead of [FREEZE_AHEAD_MS, FREEZE_AHEAD_MS * 4, FREEZE_AHEAD_MS * 16]) {
+    const now = await page.evaluate(() => Date.now());
+    try {
+      await page.clock.pauseAt(new Date(now + ahead));
+      return;
+    } catch (error) {
+      if (!String(error).includes("Cannot fast-forward to the past")) throw error;
+    }
+  }
+  throw new Error(`freezeClock: the page's clock kept running past ${FREEZE_AHEAD_MS * 16} ms ahead of each reading`);
 }
 
 /**
