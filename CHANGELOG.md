@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **kazoku-ui 0.41.0, a dependency of this package** (`^0.38.1` to `^0.41.0`, for MacBook browser runs in CI's own Playwright image): a page that installs chikyu-earth now gets kazoku-ui 0.41. What it changes for this package's elements: in Safari a trackpad pinch over a view zooms the view and no longer the whole page (kazoku-ui 0.40.2); `<kazoku-view-controls>` writes a pace, direction or axis read from the address back to its attributes (0.40.0, 0.40.1), which matters only to a page that reads them. The elements' own attributes, events and defaults are unchanged.
+
 ## 0.34.1 - 2026-11-11
 
 - **The sky is behind the Earth: constellation lines no longer cross it** (MODULES-1103). The lines were drawn over the Earth's disc (in a ride, across the whole globe). Each line is now cut exactly at the Earth's edge, the air's rim included, in the picture's own camera, in the space view and in a ride at any height, on the day side and the night side. A star whose point, ring or name box touches the Earth, the Moon or the Sun has its name and ring left out (a name only partly on the Earth was shown before), and the figure under the pointer is not lit over the Earth.
