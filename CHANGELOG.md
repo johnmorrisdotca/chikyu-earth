@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A satellite's owner country as an ISO code** (MODULES-1112), for a page that puts a flag on a satellite card. `satelliteInfo` and the click event's `info` have `ownerCountry`, an ISO 3166-1 alpha-2 code (`CN`, `US`, `PK`), when the elements carry an owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country. An organisation (`ESA`, `ISS`, `ITSO`, `SES`, `GLOB`, `EUME`, `NATO`, `AB` and the like), several countries, an unknown owner, or a code the list does not give to one country (`CIS`, the former Soviet registration) has none, and the field is left off. New in `@johnmorrisdotca/chikyu-earth/satellites` and `/catalogue`: `ownerCountry(code)` and `OWNER_COUNTRIES`, every code of the catalogue's owner list, each row checked. Data only: no flag, no new dependency.
+
 ## 0.35.0 - 2026-11-12
 
 - **The figures follow a sky culture** (MODULES-1125). `constellation-culture` is `iau` (the 88, the default), `western`, `japanese` (the 88 by their Japanese names, then the traditional figures such as Subaru, the Pleiades) or `chinese`; the lines, the hovered and picked figure and its name follow it, and the events carry `id`, `kind` and `culture`. The value is exactly what the page sets (a Japanese page keeps the IAU's figures unless it says `japanese`); an unknown value is `iau` with one warning. Each culture's data is a dynamic import of its own, fetched only when asked for. hoshi-stars' `createFigureLines` takes no culture yet, so the lines of a culture are laid out here from `figures(culture)`.

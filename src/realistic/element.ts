@@ -864,7 +864,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     return chosen ? { ...chosen } : null;
   }
 
-  /** Facts about one satellite at the moment shown (name, number, element age, height, speed, period); undefined if it cannot be placed then. */
+  /** Facts about one satellite at the moment shown (name, number, element age, height, speed, period, and `ownerCountry` when the owner is one country); undefined if it cannot be placed then. */
   satelliteInfo(ref: SatelliteRef): SatelliteInfo | undefined {
     return this.#model.satellites.groups.get(ref.group)?.satellites.info(ref.index, this.#model.time);
   }
