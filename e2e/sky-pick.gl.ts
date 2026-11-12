@@ -116,6 +116,16 @@ test("a press, a tap and Enter pick a named star or a figure, and rest draws not
   const figure = (await picks(page)).at(-1)!;
   expect(figure.kind).toBe("constellation");
   expect(figure.abbreviation!.length).toBeGreaterThan(0);
+  expect(figure.pointerType, "a click is the mouse").toBe("mouse");
+  // the same point with a finger
+  await page.locator(SPACE).evaluate((el, point) => {
+    const own = el.getBoundingClientRect();
+    const common = { bubbles: true, composed: true, clientX: own.left + point.x, clientY: own.top + point.y, pointerId: 9, pointerType: "touch", button: 0 };
+    el.dispatchEvent(new PointerEvent("pointerdown", { ...common, buttons: 1 }));
+    el.dispatchEvent(new PointerEvent("pointerup", { ...common, buttons: 0 }));
+  }, line!);
+  await expect.poll(async () => (await picks(page)).length).toBeGreaterThan(beforeFigure + 1);
+  expect((await picks(page)).at(-1), "a tap is touch").toMatchObject({ kind: "constellation", pointerType: "touch" });
 
   await page.locator(SPACE).evaluate((el) => (el.shadowRoot!.querySelector("button.sk-hit:not([hidden])") as HTMLElement).focus());
   await page.keyboard.press("Enter");
@@ -123,6 +133,7 @@ test("a press, a tap and Enter pick a named star or a figure, and rest draws not
   const keyed = (await picks(page)).at(-1)!;
   expect(keyed.kind).toBe("constellation");
   expect(keyed.abbreviation!.length).toBeGreaterThan(0);
+  expect(keyed.pointerType, "Enter is the keyboard").toBe("keyboard");
   const hitLabel = await page.locator(SPACE).evaluate((el) => {
     const hit = el.shadowRoot!.querySelector<HTMLElement>("button.sk-hit:not([hidden])")!;
     return { label: hit.getAttribute("aria-label") ?? "", live: el.shadowRoot!.getElementById("sk-live")?.textContent ?? "" };
@@ -140,7 +151,8 @@ test("a press, a tap and Enter pick a named star or a figure, and rest draws not
   await expect.poll(async () => (await picks(page)).length, { message: "C sends chikyu-sky-pick" }).toBe(beforeKeys + 1);
   const forward = (await picks(page)).at(-1)!;
   expect(forward.kind).toBe("constellation");
-  expect(Object.keys(forward).sort()).toEqual(["abbreviation", "kind"]);
+  expect(Object.keys(forward).sort()).toEqual(["abbreviation", "kind", "pointerType"]);
+  expect(forward.pointerType, "a key is the keyboard").toBe("keyboard");
   await page.keyboard.press("c");
   await expect.poll(async () => (await picks(page)).length).toBe(beforeKeys + 2);
   expect((await picks(page)).at(-1)!.abbreviation, "C again is the next figure").not.toBe(forward.abbreviation);

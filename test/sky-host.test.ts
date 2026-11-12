@@ -285,7 +285,7 @@ test("C and Shift+C pick the next and the previous figure and send chikyu-sky-pi
   measure = undefined;
   made = 0;
   const handlers = new Map<string, ((event: unknown) => void)[]>();
-  const sent: { type: string; detail: { kind?: string; abbreviation?: string } | null }[] = [];
+  const sent: { type: string; detail: { kind?: string; abbreviation?: string; pointerType?: string } | null }[] = [];
   const stage = {
     ownerDocument: doc,
     append() {},
@@ -302,17 +302,19 @@ test("C and Shift+C pick the next and the previous figure and send chikyu-sky-pi
   const press = (key: string, shiftKey = false): void => {
     for (const fn of handlers.get("keydown") ?? []) fn({ key, shiftKey, altKey: false, ctrlKey: false, metaKey: false });
   };
-  const picks = (): { kind?: string; abbreviation?: string }[] => sent.filter((one) => one.type === "chikyu-sky-pick").map((one) => one.detail!);
+  const picks = (): { kind?: string; abbreviation?: string; pointerType?: string }[] => sent.filter((one) => one.type === "chikyu-sky-pick").map((one) => one.detail!);
   press("c");
   assert.equal(picks().length, 1, "C sends chikyu-sky-pick");
   assert.equal(picks()[0]!.kind, "constellation");
-  assert.deepEqual(Object.keys(picks()[0]!).sort(), ["abbreviation", "kind"], "the figure's detail is {kind, abbreviation}");
+  assert.deepEqual(Object.keys(picks()[0]!).sort(), ["abbreviation", "kind", "pointerType"], "the figure's detail is {kind, abbreviation, pointerType}");
+  assert.equal(picks()[0]!.pointerType, "keyboard", "a key is the keyboard");
   assert.equal(host.picked, picks()[0]!.abbreviation, "it is the figure that was picked");
   const first = picks()[0]!.abbreviation;
   press("c");
   assert.notEqual(picks()[1]!.abbreviation, first, "C again picks the next");
   press("C", true);
   assert.equal(picks()[2]!.abbreviation, first, "Shift+C goes back");
+  assert.equal(picks()[2]!.pointerType, "keyboard");
   assert.equal(sent.filter((one) => one.type === "chikyu-constellation-pick").length, 3, "the figure pick event is sent as before");
   press("x");
   assert.equal(picks().length, 3, "another key sends nothing");

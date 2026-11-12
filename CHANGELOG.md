@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **A press on a named star or a constellation figure tells the page** (MODULES-1179). `chikyu-sky-pick` is sent on `<chikyu-space>` and `<chikyu-earth-realistic>` when a reader presses or taps one. A star's detail is `{ kind: "star", hr, name, designation, x, y, pointerType }` (`name` as drawn, `x` and `y` CSS pixels inside the element, `pointerType` `mouse`, `pen`, `touch` or `keyboard`). A figure's detail is `{ kind: "constellation", abbreviation }`. Each named star and each figure in view is a button, so a keyboard reaches it and Enter picks it, and the pick is announced; the keys `C` and `Shift`+`C` (the next and the previous figure) send it too, with a figure's detail. Nothing is drawn at rest.
+- **A press on a named star or a constellation figure tells the page** (MODULES-1179). `chikyu-sky-pick` is sent on `<chikyu-space>` and `<chikyu-earth-realistic>` when a reader presses or taps one. A star's detail is `{ kind: "star", hr, name, designation, x, y, pointerType }` (`name` as drawn, `x` and `y` CSS pixels inside the element, `pointerType` `mouse`, `pen`, `touch` or `keyboard`). A figure's detail is `{ kind: "constellation", abbreviation, pointerType }`. Each named star and each figure in view is a button, so a keyboard reaches it and Enter picks it, and the pick is announced; the keys `C` and `Shift`+`C` (the next and the previous figure) send it too (`pointerType` `keyboard`). Nothing is drawn at rest.
 
 ## 0.37.0 - 2026-11-12
 
