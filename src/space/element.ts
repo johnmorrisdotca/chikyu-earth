@@ -262,6 +262,10 @@ export class ChikyuSpace extends HTMLElement {
   #countries: CountryHost | undefined;
   #countriesStyle: CountryNamesStyle = {};
   #satNames: Record<number, string> = {};
+  /** A ringed satellite's name, by `group:index`, for `#satLabelLang`. The name does not depend on the moment, so a frame reads it and does not propagate the orbit again. */
+  #satLabelCache = new Map<string, string>();
+  /** `en` or `ja` once that language has been read for the cached names; empty until the first read. */
+  #satLabelLang = "";
   /** The ringed satellites of the last draw (`labelSatellites`), laid out with the places. */
   #marks: SatelliteMark[] = [];
   #airNote: HTMLElement | undefined;
@@ -1034,6 +1038,7 @@ export class ChikyuSpace extends HTMLElement {
   largeSatellites(): { ref: SatelliteRef; noradId: number; name: string }[] {
     const out: { ref: SatelliteRef; noradId: number; name: string }[] = [];
     if (!satellitePainter) return out;
+    this.#prepareSatLabelLang();
     for (const [group, state] of this.#model.satellites.groups) {
       state.satellites.sets.forEach((set, index) => {
         if (satellitePainter!.has(set.NORAD_CAT_ID)) out.push({ ref: { group, index }, noradId: set.NORAD_CAT_ID, name: this.#satelliteName({ group, index }) });
@@ -1095,6 +1100,8 @@ export class ChikyuSpace extends HTMLElement {
         visible: was?.visible ?? true,
       });
     }
+    // a group's index may now be a different satellite, so a cached name for that ref is no longer its name
+    this.#satLabelCache.clear();
     this.#last = performance.now();
     this.#schedule();
     this.#gate?.request();
@@ -1155,6 +1162,7 @@ export class ChikyuSpace extends HTMLElement {
   }
   set satelliteNames(value: Record<number, string>) {
     this.#satNames = { ...value };
+    this.#satLabelCache.clear();
     this.#gate?.request();
   }
 
@@ -1166,18 +1174,38 @@ export class ChikyuSpace extends HTMLElement {
     return this.#model.placeSatellite?.(ref) ?? null;
   }
 
-  /** The name beside a ringed satellite: the page's own (`satelliteNames`), else the short one in the page's language, else the name in its elements. */
+  /** The page's language for a satellite name: Japanese when the nearest `lang` starts with `ja`, otherwise English. Read once per pass, not once per satellite. */
+  #readSatLabelLang(): "en" | "ja" {
+    return (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+  }
+
+  /** Remember the page's language and drop cached names when it changes. One `closest("[lang]")` for the pass. */
+  #prepareSatLabelLang(): void {
+    const lang = this.#readSatLabelLang();
+    if (lang !== this.#satLabelLang) {
+      this.#satLabelCache.clear();
+      this.#satLabelLang = lang;
+    }
+  }
+
+  /** The name beside a ringed satellite: the page's own (`satelliteNames`), else the short one in the page's language, else the name in its elements. Cached per ref and language: the name is constant, and reading it does not propagate the orbit again. */
   #satelliteName(ref: SatelliteRef): string {
+    const key = `${ref.group}:${ref.index}`;
+    const cached = this.#satLabelCache.get(key);
+    if (cached !== undefined) return cached;
     const info = this.satelliteInfo(ref);
     if (!info) return "";
-    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
-    return this.#satNames[info.noradId] ?? SHORT_NAMES[info.noradId]?.[lang] ?? info.name;
+    const lang = this.#satLabelLang === "ja" ? "ja" : "en";
+    const name = this.#satNames[info.noradId] ?? SHORT_NAMES[info.noradId]?.[lang] ?? info.name;
+    this.#satLabelCache.set(key, name);
+    return name;
   }
 
   #markSeen = new Map<string, boolean>();
 
   /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
   #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean }[]): void {
+    if (marks.length > 0) this.#prepareSatLabelLang();
     this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible }));
     const now = new Map<string, boolean>();
     for (const m of marks) {
