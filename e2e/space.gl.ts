@@ -1,5 +1,7 @@
 // The space view in a real browser: the right things in the right places, and the same performance budget as the Earth from space.
 import { expect, test, type Page } from "@playwright/test";
+import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
+import { MOON_KEEP_MS } from "../src/space/scene.ts";
 import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -210,6 +212,22 @@ test.describe("the controls' Auto-turn", () => {
       if (!controls.state.turning) controls.play();
     });
     await settle(page, 800);
+    // the view opening sets off draws that wait on timers of their own (the larger Earth pictures let go after DOWNGRADE_AFTER_MS, a moon out of sight kept MOON_KEEP_MS) and refinements that arrive late: wait the timers out, then count only once nothing has been drawn for two seconds running, so none can fall in the window (the allowance of one draw in it is unchanged)
+    await page.waitForTimeout(Math.max(DOWNGRADE_AFTER_MS, MOON_KEEP_MS) + 500);
+    let seen = (await statsOf(page)).draws;
+    let quiet = 0;
+    await expect
+      .poll(
+        async () => {
+          await page.waitForTimeout(1000);
+          const now = (await statsOf(page)).draws;
+          quiet = now === seen ? quiet + 1 : 0;
+          seen = now;
+          return quiet;
+        },
+        { timeout: 60_000, message: "the picture is at rest before the count" },
+      )
+      .toBeGreaterThanOrEqual(2);
     const before = await statsOf(page);
     const c0 = await counts(page);
     await page.waitForTimeout(8000);
