@@ -299,7 +299,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       if (!lines || !drawStrokes) return;
       const figure = figureAt(here.x, here.y);
       setPick(figure, true);
-      if (figure) emitFigure(figure);
+      if (figure) emitFigure(figure, event.pointerType || "mouse");
     });
     host.addEventListener("keydown", (event) => {
       if (!lines || !drawStrokes || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -394,8 +394,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     sayPick(star.name);
   }
   /** A constellation figure that was pressed or tapped. */
-  function emitFigure(abbreviation: string): void {
-    emit("chikyu-sky-pick", { kind: "constellation", abbreviation });
+  function emitFigure(abbreviation: string, pointerType: string): void {
+    emit("chikyu-sky-pick", { kind: "constellation", abbreviation, pointerType });
   }
   /** The named star under a point: its name box first, else the nearest star point within reach. Culled names are not there. */
   function starAt(x: number, y: number): { hr: number; name: string; designation: string; x: number; y: number } | null {
@@ -435,7 +435,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     const next = inView[(at < 0 ? (step > 0 ? 0 : inView.length - 1) : (at + step + inView.length) % inView.length)]!;
     setPick(next.abbreviation, true);
     // the key picks as Enter on a figure's button does, so the page hears every pick of the reader's the same way
-    emitFigure(next.abbreviation);
+    emitFigure(next.abbreviation, "keyboard");
   }
 
   const takenAbbr: (string | null)[] = [];
@@ -785,7 +785,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         const abbreviation = hitAbbr.get(hit);
         if (!abbreviation || hit.hidden) return;
         setPick(abbreviation, true);
-        emitFigure(abbreviation);
+        emitFigure(abbreviation, "keyboard");
       });
       box.append(hit);
       hits.push(hit);
