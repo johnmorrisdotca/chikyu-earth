@@ -310,15 +310,16 @@ test("the sky's labels never rise above a page's own content: the element is a s
     ({ x, y, w, h }) => {
       const block = document.createElement("div");
       block.id = "page-text";
-      block.textContent = "PAGE TEXT";
       block.style.cssText = `position:fixed;z-index:100;left:${x}px;top:${y}px;width:${w}px;height:${h}px;background:rgb(255,0,255)`;
       document.body.append(block);
     },
     { x: own.x + box!.l - 6, y: own.y + box!.t - 6, w: box!.r - box!.l + 12, h: box!.b - box!.t + 12 },
   );
-  const centre = { x: own.x + (box!.l + box!.r) / 2, y: own.y + (box!.t + box!.b) / 2 };
-  const [colour] = await coloursAt(page, [centre]);
-  expect(colour, "the page's block is what is seen where the name is").toBe("255,0,255");
+  // the block has no text of its own (a glyph of it, antialiased, would darken a pixel and be read as something over it): every point over the name's box is the block's colour, and none is the label's
+  const points: { x: number; y: number }[] = [];
+  for (const fx of [0.1, 0.5, 0.9]) for (const fy of [0.2, 0.5, 0.8]) points.push({ x: own.x + box!.l + (box!.r - box!.l) * fx, y: own.y + box!.t + (box!.b - box!.t) * fy });
+  const colours = await coloursAt(page, points);
+  expect(colours, "the page's block is what is seen where the name is").toEqual(colours.map(() => "255,0,255"));
 });
 
 for (const [look, tag] of [["line", "chikyu-earth"], ["realistic", "chikyu-earth-realistic"], ["space", "chikyu-space"]] as const) {
