@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A build without the sky cultures** (MODULES-1185). `@johnmorrisdotca/chikyu-earth/space/no-cultures` and `@johnmorrisdotca/chikyu-earth/realistic/no-cultures` are `<chikyu-space>` and `<chikyu-earth-realistic>` with no sky culture but the IAU's: nothing under `hoshi-stars/cultures` is imported, so a site's bundler no longer needs a stub for it, and `constellation-culture` is `iau` whatever a page sets (one warning). The default entries are unchanged: they bring in `western`, `japanese` and `chinese`, a dynamic import each. How: the elements' code moved to `element-base.ts` in each folder; `space/element` and `realistic/element` are now that code plus `sky/cultures.ts`, which sets the table the sky layer reads (`setCultureLoaders`). A test reads each entry's imports and finds no `hoshi-stars/cultures` in the two new ones and all three in the default ones, and the usage test bundles the new entries with every such import refused.
+
 ## 0.37.0 - 2026-11-12
 
 - **A satellite's owner country as an ISO code** (MODULES-1112), for a page that puts a flag on a satellite card. `satelliteInfo` and the click event's `info` have `ownerCountry`, an ISO 3166-1 alpha-2 code (`CN`, `US`, `PK`), when the elements carry an owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country. An organisation (`ESA`, `ISS`, `ITSO`, `SES`, `GLOB`, `EUME`, `NATO`, `AB` and the like), several countries, an unknown owner, or a code the list does not give to one country (`CIS`, the former Soviet registration) has none, and the field is left off. New in `@johnmorrisdotca/chikyu-earth/satellites` and `/catalogue`: `ownerCountry(code)` and `OWNER_COUNTRIES`, every code of the catalogue's owner list, each row checked. Data only: no flag, no new dependency.

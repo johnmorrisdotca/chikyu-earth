@@ -29,6 +29,13 @@ description: "宇宙の見た目やリアルな地球の後ろの空に、いち
 - **ホバー。** マウスが図形の上 (線の上、または図形の内側) に止まると、その図形の線が光り、名前が (約150ミリ秒で、動きを減らす設定のときはすぐに) フェードインします。名前は、図形のうち絵の上にある部分の中心に置かれ、絵の内側に収まり、地球を避け、星の名前とも重なりません。ポインターが離れるとフェードアウトします。ホバーしている図形が変わると `chikyu-constellation-hover` が送られ、`detail` は `{ abbreviation, id, name, english, japanese, kind, culture }` です (`abbreviation` は IAU の略号で `Ori` など、`culture` は `constellation-culture` が別の文化を指さない限り `iau`)。ポインターが離れると `detail` は `null` です。当たり判定はポインターが動いたときだけ、1フレームに1回以下で行い、ホバーしている図形が変わったときだけ、このレイヤーを描き直します。
 - **選択。** 図形 (その線または内側) をクリックするか指でタップすると選ばれ、別の図形を選ぶか解除するまで、線の光と名前はそのままです (何もない空や地球のクリック・タップ、`Escape`、プロパティへの `null` の設定で解除されます)。要素にフォーカスがあるとき、`C` で見えている図形を左から順に次へ、`Shift`+`C` で前へ選びます。ページを見ている人が選ぶたびに `chikyu-constellation-pick` が同じ `detail` で送られ、解除されると `detail` は `null` です。プロパティ `constellation` は選ばれた図形の略号を返し、`el.constellation = "Ori"` のように設定するとイベントなしで選べるので、ページはその星座のカードを出せます。
 - **読み上げ。** 選択 (クリック、タップ、`C`) は、要素の中にある、画面には見えない `polite` のライブリージョンを通して、ページの言語の図形名でスクリーンリーダーに読み上げられます (`Orion selected`、`オリオン座を選択`)。ホバーでは、読み上げが多くなりすぎるので何も伝えません。図形のカードをページが出す場合、そのカードの読み上げはページの仕事です。
+- **文化を入れないビルド。** 既定のエントリは、`western`、`japanese`、`chinese` をそれぞれ動的インポートで読み込むので、どのページもそれを設定しなくても、バンドラはこの3つ (中国の星空は大きなものです) をサイトのビルドに入れます。1つも要らないサイトは、代わりに `@johnmorrisdotca/chikyu-earth/space/no-cultures` と `@johnmorrisdotca/chikyu-earth/realistic/no-cultures` から要素を読み込みます。要素も属性も IAU の星座も同じですが、`hoshi-stars/cultures` の下は何もインポートされないので、バンドラの設定で差し替える必要はありません。このとき `constellation-culture` は、ページが何を設定しても `iau` で、コンソールに `iau` だけを挙げた警告が1回出ます。既定のエントリは変わりません。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/no-cultures";
+import "@johnmorrisdotca/chikyu-earth/realistic/no-cultures";
+```
+
 - **星座文化。** 各文化の図形は、属性が求めたときにだけ、その文化専用の動的インポートで読み込まれるので、`chinese` を設定しないページがそれをダウンロードすることはありません。文化の図形が届くまでは何も描かず、代わりに IAU の図形を描くこともありません。文化の図形は `id` で識別され (星座は IAU の略号で `Ori`、それ以外は短い単語で `subaru`、`hokkyokusei` など)、これがイベントの `abbreviation` で、プロパティ `constellation` が受け取る値です。イベントの `detail` には `abbreviation`、`id`、`name`、`english`、`japanese`、`kind` (`constellation`、`asterism`、`mansion`) と `culture` があります。日本語のページでは、伝統的な図形は仮名の読み (すばる) で名前が出ます。属性を変えると、選ばれていた図形は解除されます。
 - **止まっているときは何もしません。** 名前と線は、絵を描くとき (カメラが動いたとき、大きさが変わったとき、設定が変わったとき) だけ計算します。`stats.sky` に `on`、`loaded`、`names`、`figures`、`picked` (ホバー中の図形、なければ選択中の図形)、`pick`、`hover`、`constellations` (`constellation-names` が書いた名前の数)、`renders` があります。
 - **空の位置。** `<chikyu-space>` には自分の星がありません。名前は、ページが自分で描いた空の星の位置に、絵のカメラを使って置きます。そのため、ページが星をビューの後ろにファミリーの軸 (x は春分点の向き、y は北) で描いていれば、名前はその星の上に重なります。`<chikyu-earth-realistic>` はカメラが地球をまっすぐ見ているので、空は絵自身の軸に沿って見える方向を、枠いっぱいに映したものになります。
