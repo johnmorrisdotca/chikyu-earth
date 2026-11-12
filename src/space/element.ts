@@ -18,6 +18,7 @@ import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import type { LightMode } from "../realistic/earth.ts";
 import { NOTES_STYLE, setAirNote } from "../realistic/air-note.ts";
+import { IMMERSIVE_STYLE, immersiveWheel } from "../realistic/immersive.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
@@ -196,12 +197,12 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${PLACE_STYLE}${SKY_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${PLACE_STYLE}${SKY_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
  *
- * It carries kazoku-ui's controls itself: a drag turns the view, two fingers pinch, Ctrl and the wheel zoom (a plain wheel at Fit scrolls the page) and the arrow keys, + and - work once it is focused. The zoom runs from a millionth of Fit (the whole solar system) to 2.5 times, and from 0.5 to 6 times while riding from a body. `controls="none"` turns the hands off; `zoom-min` and `zoom-max` change the range. A `<kazoku-view-controls for="...">` on the element takes the hands over, and the page applies its events with `setView`.
+ * It carries kazoku-ui's controls itself: a drag turns the view, two fingers pinch, Ctrl and the wheel zoom (a plain wheel at Fit scrolls the page) and the arrow keys, + and - work once it is focused. The zoom runs from a millionth of Fit (the whole solar system) to 2.5 times, and from 0.5 to 6 times while riding from a body. `controls="none"` turns the hands off; `zoom-min` and `zoom-max` change the range. A `<kazoku-view-controls for="...">` on the element takes the hands over, and the page applies its events with `setView`. `immersive` is the full-screen mode: any shape of box, a plain wheel zooms and a drag anywhere turns.
  *
  * With a body painter that carries a `credit` (`setBodyPainter`), the credit of its pictures is written under the picture while it draws the bodies; `bodies-credit="off"` takes the line away.
  *
@@ -373,6 +374,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#last = performance.now();
     this.#schedule();
     this.addEventListener("pointerdown", this.#down);
+    // before the shared hands (which hear it after this): a plain wheel in an immersive view zooms
+    this.addEventListener("wheel", this.#wheel, { capture: true, passive: false });
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#labelBox.addEventListener("click", this.#labelClick);
     this.#labelBox.addEventListener("focusin", this.#labelFocus);
@@ -383,6 +386,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#hands = undefined;
     this.#zoomRange(false);
     this.removeEventListener("pointerdown", this.#down);
+    this.removeEventListener("wheel", this.#wheel, { capture: true });
     window.removeEventListener("pointerup", this.#up, true);
     clearTimeout(this.#timer);
     this.#timer = undefined;
@@ -447,6 +451,8 @@ export class ChikyuSpace extends HTMLElement {
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
   }
 
+  #wheel = (event: WheelEvent): void => immersiveWheel(this, event);
+
   /** The body painter's credit under the picture, in the element's or the page's language: shown while the painter draws the bodies (not `plain`), unless `bodies-credit` is `off`. */
   #showBodiesCredit(): void {
     const note = this.#bodiesNote;
@@ -458,6 +464,16 @@ export class ChikyuSpace extends HTMLElement {
     note.hidden = credit === "" || this.bodies === "plain" || this.getAttribute("bodies-credit") === "off";
   }
 
+  /**
+   * True for the full-screen mode (the `immersive` attribute): the element fills its box in any shape (the Earth fits the shorter side with its glow inside it, `earth-size`), a plain wheel zooms instead of scrolling
+   * the page, a drag anywhere on it turns the view, and a touch drag turns it instead of scrolling. A notch of the wheel is about 1.2 times; out far enough the Moon, the Sun and the planets come into view.
+   */
+  get immersive(): boolean {
+    return this.hasAttribute("immersive");
+  }
+  set immersive(value: boolean) {
+    this.toggleAttribute("immersive", value);
+  }
 
   #meteorsAsked(): boolean {
     return this.hasAttribute("meteors") && this.getAttribute("meteors") !== "off";
