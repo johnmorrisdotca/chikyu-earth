@@ -313,5 +313,37 @@ for (const where of ["space", "realistic"] as const) {
       await setPlaces(target, []);
       await expect.poll(async () => (await manyOf(target)).sprites).toBe(0);
     });
+
+    test("place-groups and placeGroups turn the gathering off and on, each the other's mirror", async ({ page }) => {
+      test.setTimeout(120_000);
+      let target: Locator;
+      if (where === "space") target = await openSpace(page, `time=2026-11-02T03:00Z&center=${TOKYO.lon},${TOKYO.lat}`);
+      else {
+        await openEarth(page, `time=${NOON}&center=${TOKYO.lon},${TOKYO.lat}&hide=Cities,Stadiums`);
+        target = page.locator(EARTH);
+      }
+      const grouping = (): Promise<{ attribute: string | null; property: boolean }> =>
+        target.evaluate((el) => ({ attribute: el.getAttribute("place-groups"), property: Reflect.get(el, "placeGroups") as boolean }));
+      await setPlaces(target, crowdOf(1000));
+      await expect.poll(async () => (await manyOf(target)).groups).toBeGreaterThan(0);
+      expect(await grouping(), "gathering is on by default, with no attribute").toEqual({ attribute: null, property: true });
+      const gathered = (await manyOf(target)).sprites;
+
+      // the attribute turns it off, and the property reads it
+      await target.evaluate((el) => el.setAttribute("place-groups", "off"));
+      await expect.poll(async () => (await manyOf(target)).groups).toBe(0);
+      expect(await grouping()).toEqual({ attribute: "off", property: false });
+      expect((await manyOf(target)).sprites, "every place keeps its own ring").toBeGreaterThan(gathered);
+
+      // the property turns it back on, and writes the attribute
+      await target.evaluate((el) => void Reflect.set(el, "placeGroups", true));
+      await expect.poll(async () => (await manyOf(target)).groups).toBeGreaterThan(0);
+      expect(await grouping()).toEqual({ attribute: null, property: true });
+
+      // and off again by the property
+      await target.evaluate((el) => void Reflect.set(el, "placeGroups", false));
+      await expect.poll(async () => (await manyOf(target)).groups).toBe(0);
+      expect(await grouping()).toEqual({ attribute: "off", property: false });
+    });
   });
 }

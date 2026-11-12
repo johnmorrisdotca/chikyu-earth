@@ -202,6 +202,7 @@ test("chikyu-places-unavailable is told once, and only when a place is left out"
   assert.ok(detail);
   assert.equal(detail.reason.includes(String(PLACE_DOTS)), true);
   assert.equal(detail.reason.includes("600") && PLACE_DOTS === 600, true);
+  assert.equal(detail.omitted, 4, "the event's detail says how many had no room");
   assert.equal(placesLostNotice(state, 4), null, "a later frame says nothing");
 });
 

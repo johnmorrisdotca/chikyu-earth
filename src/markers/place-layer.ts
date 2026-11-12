@@ -77,11 +77,14 @@ export const PLACE_MARKS = 32;
  */
 export const PLACE_DOTS = 600;
 
-/** The page is told once, and only when places in sight had no room in the fallback circles. Missing `Points` alone is not a loss: the circles still draw, up to {@link PLACE_DOTS}. Returns null when nothing new was lost. */
-export function placesLostNotice(state: { told: boolean }, omitted: number): { reason: string } | null {
+/**
+ * The page is told once, and only when places in sight had no room in the fallback circles. Missing `Points` alone is not a loss: the circles still draw, up to {@link PLACE_DOTS}. Returns null when nothing new was lost; otherwise
+ * the detail of `chikyu-places-unavailable`: `reason` says why and `omitted` how many places in sight had no room.
+ */
+export function placesLostNotice(state: { told: boolean }, omitted: number): { reason: string; omitted: number } | null {
   if (state.told || !(omitted > 0)) return null;
   state.told = true;
-  return { reason: `the three.js parts handed over lack Points: the places' rings are drawn as small circles in the page, at most ${PLACE_DOTS}, and stats.places.omitted counts the rest` };
+  return { reason: `the three.js parts handed over lack Points: the places' rings are drawn as small circles in the page, at most ${PLACE_DOTS}, and ${omitted} places in sight had no room (stats.places.omitted counts them)`, omitted };
 }
 /** The most names a group's count gets. */
 const GROUP_NAMES = 24;

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Place dots cost less, and a missing ring is told only when a place is left out** (MODULES-1165). The fallback circles (when the three.js parts have no `Points`) no longer ask for a compositor layer each, skip a move that did not change, and are projected once a frame. They fade at the Earth's edge and are dimmer at night, as the rings in the picture are. `stats.places.sprites` counts only the rings in the one draw call (0 in the fallback); `stats.places.dots` counts the circles drawn in the page instead. `chikyu-places-unavailable` is sent once, and only when places in sight had no room (`omitted`), not merely because `Points` is missing. The reason names `PLACE_DOTS`.
+- **Place dots cost less, and a missing ring is told only when a place is left out** (MODULES-1165). The fallback circles (when the three.js parts have no `Points`) no longer ask for a compositor layer each, skip a move that did not change, and are projected once a frame. They fade at the Earth's edge and are dimmer at night, as the rings in the picture are. `stats.places.sprites` counts only the rings in the one draw call (0 in the fallback); `stats.places.dots` counts the circles drawn in the page instead. `chikyu-places-unavailable` is sent once, and only when places in sight had no room (`omitted`), not merely because `Points` is missing; its `detail.reason` names `PLACE_DOTS` and `detail.omitted` says how many places had no room. A browser test checks that `place-groups` and `placeGroups` turn the gathering off and on as each other's mirror, in both views.
 
 ## 0.37.0 - 2026-11-12
 
