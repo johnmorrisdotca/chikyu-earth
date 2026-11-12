@@ -141,7 +141,7 @@ export interface EarthDeps {
   /** Told once, when the rings of the places that are not markers of their own were first wanted: whether the picture can draw them (false when the three.js parts handed over lack `Points`). */
   onPlaceRings?: (drawn: boolean) => void;
   /** The painted satellite trail, when the element has one. Read at every draw; nothing is uploaded while `step` returns false. */
-  paint?: { data: Uint8Array; width: number; height: number; step(ms: number): boolean; span(): number; on(): boolean };
+  paint?: { data(): Uint8Array; width: number; height: number; step(ms: number): boolean; span(): number; on(): boolean };
 }
 
 export const newModel = (): EarthModel => ({
@@ -274,7 +274,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         fragmentShader: SURFACE_FRAG,
         uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, cloudMap: uniform.clouds, sunDir, sunLocal, cloudShift, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 1 } },
       });
-      const paint = createPaintTexture(three, deps.paint?.data ?? new Uint8Array(4), deps.paint?.width ?? 1, deps.paint?.height ?? 1);
+      const paint = createPaintTexture(three, { data: () => deps.paint?.data() ?? new Uint8Array(4), width: deps.paint?.width ?? 1, height: deps.paint?.height ?? 1 });
       Object.assign(surface.uniforms, paint.uniforms);
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
@@ -432,7 +432,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           }
           gridLayer?.sync(radius);
           if (deps.paint) {
-            if (deps.paint.step(model.time)) paint.upload();
+            const changed = deps.paint.step(model.time);
+            paint.sync(deps.paint.on(), changed);
             paint.uniforms.paintNow.value = paintMinute(model.time);
             paint.uniforms.paintSpan.value = deps.paint.span();
             paint.uniforms.paintOn.value = deps.paint.on() ? 1 : 0;

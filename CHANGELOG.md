@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The painted trail follows the orbit at any clock, and costs nothing until it is used** (MODULES-1188). A month laid down at once, or a fast clock, took samples too far apart and drew chords across the map: samples are now at most a third of a trip apart. A clock run backwards laid down nothing for the older end, so the trail shrank: it now fills it in. A coverage swath over the date line was cut at the edge of the map: it now wraps. Switching to a satellite that paints nothing left the old picture on the globe: the cleared picture is sent. The trail's two megabytes and its picture on the graphics card were made in every view, painting or not: they are made when the first satellite is painted, and `clearPaint()` gives them back.
+
 ## 0.38.0 - 2026-11-12
 
 - **Paint a satellite's path on the Earth** (MODULES-1167). `paint` on `<chikyu-space>` and `<chikyu-earth-realistic>` is `{ id, length, swath }`. `id` is a NORAD catalogue number or `group:index`. `length` is `1d` (the default), `1w` or `1m` of simulated time. `swath` is `track` (the point under the satellite, the default) or `coverage` (the ground where the satellite is at least 10° above the horizon, from its height). `clearPaint()` takes the trail off. Changing the satellite clears it. The trail is one equirectangular texture on the globe. It is stamped only while simulated time moves, one upload a frame, and nothing at rest or while painting is off. A part older than `length` fades out. The date line and the poles are split so the line does not cross the map. The demo's satellite card has Paint, Clear, and 1 day, 1 week, 1 month.

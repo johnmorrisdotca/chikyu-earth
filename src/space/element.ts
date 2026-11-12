@@ -37,7 +37,7 @@ import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
-import { createPaintState, paintedGround, type PaintSpec } from "../paint/buffer.ts";
+import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
 
 export { BODY_NAMES, type BodyName, type CameraMode, type RideTarget };
 
@@ -419,10 +419,10 @@ export class ChikyuSpace extends HTMLElement {
       onPlaceRings: (drawn) => this.#ringsDrawn(drawn),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       paint: {
-        data: this.#paint.data,
+        data: () => this.#paint.data,
         width: this.#paint.width,
         height: this.#paint.height,
-        step: (ms) => this.#paint.step(ms, (at) => paintedGround(this.#model.satellites.groups, this.#paint.id, at)),
+        step: (ms) => this.#paint.step(ms, (at) => paintedGround(this.#model.satellites.groups, this.#paint.id, at), paintedPeriod(this.#model.satellites.groups, this.#paint.id)),
         span: () => this.#paint.spanMinutes,
         on: () => this.#paint.on,
       },
