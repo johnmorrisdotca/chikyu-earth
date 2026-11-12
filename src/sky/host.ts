@@ -2,6 +2,7 @@
 // (`frame`); it draws the names and lines on a canvas and a few labels over the picture, never redraws at rest, and lights the figure under the pointer. Stars are directions, so only the camera's turn matters, never its distance.
 import type { CoverMask, FigureLines, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
+import { pathOutside, touches } from "./cover.ts";
 import type { SkyFrame } from "./frame.ts";
 import type { SkyLabelStyle } from "./style.ts";
 
@@ -98,7 +99,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     host.addEventListener("pointermove", (event) => {
       if (!lines || event.pointerType === "touch") return;
       const at = place(event);
-      if (lines.point(at.x, at.y)) drawLines();
+      // the lines on the Earth are not drawn, so none is lit there
+      if ((covered?.(at.x, at.y) ? lines.point() : lines.point(at.x, at.y))) drawLines();
     });
     host.addEventListener("pointerleave", (event) => {
       if (!lines || event.pointerType === "touch") return;
@@ -107,7 +109,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     host.addEventListener("pointerdown", (event) => {
       if (!lines || event.pointerType !== "touch") return;
       const at = place(event);
-      if (lines.point(at.x, at.y)) drawLines();
+      if ((covered?.(at.x, at.y) ? lines.point() : lines.point(at.x, at.y))) drawLines();
     });
   };
 
@@ -141,10 +143,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         if (opacity <= 0) continue;
         context.globalAlpha = opacity;
         context.beginPath();
-        for (let i = figure.start; i < figure.end; i += 1) {
-          context.moveTo(lines.segments[i * 4]!, lines.segments[i * 4 + 1]!);
-          context.lineTo(lines.segments[i * 4 + 2]!, lines.segments[i * 4 + 3]!);
-        }
+        for (let i = figure.start; i < figure.end; i += 1) pathOutside(context, lines.segments[i * 4]!, lines.segments[i * 4 + 1]!, lines.segments[i * 4 + 2]!, lines.segments[i * 4 + 3]!, covered, 0.75);
         context.stroke();
       }
       context.globalAlpha = 1;
@@ -173,7 +172,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     // the picked figure's name
     if (figureName) {
       const name = lines?.name;
-      if (name) {
+      if (name && !covered?.(name.x, name.y)) {
         figureName.hidden = false;
         if (figureName.textContent !== name.text) figureName.textContent = name.text;
         figureName.style.transform = `translate(${Math.round(name.x)}px,${Math.round(name.y)}px) translate(-50%,-100%)`;
@@ -241,18 +240,16 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         continue;
       }
       const rect = name.getBoundingClientRect();
-      // a name whose whole top edge is over a body (the Earth, the Moon, the Sun) lies on it: hoshi-stars tests the star's point only, so a name set below a star at the Earth's edge can be left entirely on the Earth, and is left out
+      // no part of a name or of its ring is drawn over a body (the Earth, the Moon, the Sun): the sky is behind them. hoshi-stars tests the star's own point only, so a name set beside a star at the Earth's edge can run onto it, and the label (name, ring and all) is left out
       const own = covered ? (root.host as HTMLElement).getBoundingClientRect() : undefined;
-      if (covered && own) {
-        const top = rect.top - own.top;
-        const left = rect.left - own.left;
-        const right = rect.right - own.left;
-        if (covered(left, top) && covered((left + right) / 2, top) && covered(right, top)) {
-          name.hidden = true;
-          designations[i]!.hidden = true;
-          culled.push(true);
-          continue;
-        }
+      // the catalogue letter set under the name is part of the label
+      const under = designations[i]!.hidden || typeof designations[i]!.getBoundingClientRect !== "function" ? undefined : designations[i]!.getBoundingClientRect();
+      const bottom = under ? Math.max(rect.bottom, under.bottom) : rect.bottom;
+      if (covered && own && touches(covered, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top, names!.labels[i]!)) {
+        name.hidden = true;
+        designations[i]!.hidden = true;
+        culled.push(true);
+        continue;
       }
       const over = kept.some((one) => rect.left < one.r && rect.right > one.l && rect.top < one.b && rect.bottom > one.t);
       if (over) {

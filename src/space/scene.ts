@@ -1003,7 +1003,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
             // a body covers the sky where the ray through a pixel passes within the body's angular radius of its centre: exact for any field of view, where a circle on the screen is right only on the axis
             const ray = new three.Vector3();
-            const bodies = (["Earth", "Moon", "Sun"] as const).map((name) => coverBody(pos[name], [camera.position.x, camera.position.y, camera.position.z], radiusOf(name)));
+            const bodies = (["Earth", "Moon", "Sun"] as const).map((name) => coverBody(pos[name], [camera.position.x, camera.position.y, camera.position.z], name === "Earth" ? radiusOf(name) * airTop(model.airThickness) : radiusOf(name)));
             deps.onSky({
               width: size.width,
               height: size.height,

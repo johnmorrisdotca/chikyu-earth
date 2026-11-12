@@ -361,7 +361,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             deps.onSky({
               width: size.width,
               height: size.height,
-              discs: [{ x: cx, y: cy, radius }],
+              discs: [{ x: cx, y: cy, radius: radius * airTop(model.airThickness) }],
               project(rightAscension, declination, out) {
                 const r = rightAscension * RAD;
                 const d = declination * RAD;
