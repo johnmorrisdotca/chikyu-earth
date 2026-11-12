@@ -159,8 +159,8 @@ for (const look of LOOKS) {
 }
 
 test("changing the look over and over gives back what it took: GPU objects stay flat in the one context, and the line look lets the context go", async ({ page }) => {
-  // six rounds, each waiting for the space view's 4 s keeps before it counts: about 12 s a round
-  test.setTimeout(150_000);
+  // six rounds, each waiting twice for the space view to be at rest (where it opens, and where it is sent): about 25 s a round
+  test.setTimeout(240_000);
   await page.addInitScript(COUNT_SCRIPT);
   // a moment near the satellites' elements, so every orbit is drawn and counted
   await page.goto(`/chikyu-earth/?time=2026-11-02T18:00Z&center=10,20`);
@@ -178,6 +178,10 @@ test("changing the look over and over gives back what it took: GPU objects stay 
       if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
     }
     await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
+    // The view opens where the address left the last ride (the ISS or the Moon) and draws there. Let it be at rest there before it is sent on, as a reader would see it: a view that
+    // opened at the ISS has drawn the Earth from its larger pictures, and keeps what three.js made for that (8 objects) while it lives. Sent on before its first frame, it never drew the
+    // Earth large and held 8 fewer (106 against 114), so a round's count depended on whether the page or the click came first.
+    await atRest(page);
     // the camera on the ISS and off it again, as a reader would
     await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: round % 2 === 0 ? "ISS" : "Moon", exact: true }).dispatchEvent("click");
     // the satellites are drawn at least once (their buffers are made by the first draw), and what the last place needed is let go, before the objects are counted
