@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A press on a named star or a constellation figure tells the page** (MODULES-1179). `chikyu-sky-pick` is sent on `<chikyu-space>` and `<chikyu-earth-realistic>` when a reader presses or taps one. A star's detail is `{ kind: "star", hr, name, designation, x, y, pointerType }` (`name` as drawn, `x` and `y` CSS pixels inside the element, `pointerType` `mouse`, `pen`, `touch` or `keyboard`). A figure's detail is `{ kind: "constellation", abbreviation }`. Each named star and each figure in view is a button, so a keyboard reaches it and Enter picks it, and the pick is announced. Nothing is drawn at rest.
+
 ## 0.37.0 - 2026-11-12
 
 - **A satellite's owner country as an ISO code** (MODULES-1112), for a page that puts a flag on a satellite card. `satelliteInfo` and the click event's `info` have `ownerCountry`, an ISO 3166-1 alpha-2 code (`CN`, `US`, `PK`), when the elements carry an owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country. An organisation (`ESA`, `ISS`, `ITSO`, `SES`, `GLOB`, `EUME`, `NATO`, `AB` and the like), several countries, an unknown owner, or a code the list does not give to one country (`CIS`, the former Soviet registration) has none, and the field is left off. New in `@johnmorrisdotca/chikyu-earth/satellites` and `/catalogue`: `ownerCountry(code)` and `OWNER_COUNTRIES`, every code of the catalogue's owner list, each row checked. Data only: no flag, no new dependency.

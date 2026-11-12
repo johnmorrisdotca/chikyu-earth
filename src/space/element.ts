@@ -238,6 +238,11 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * const space = document.createElement("chikyu-space") as ChikyuSpace;
  * space.setAttribute("time", "2026-11-02T12:00Z");
  * space.setAttribute("speed", "86400");
+ * space.setAttribute("star-names", "12");
+ * space.addEventListener("chikyu-sky-pick", (event) => {
+ *   const pick = (event as CustomEvent<{ kind: string; name?: string; abbreviation?: string }>).detail;
+ *   console.log(pick.kind, pick.name ?? pick.abbreviation);
+ * });
  * space.addEventListener("chikyu-timechange", (event) => {
  *   const { time, running } = (event as CustomEvent<{ time: number; running: boolean }>).detail;
  *   console.log(new Date(time).toISOString(), running ? "running" : "held");
@@ -625,6 +630,7 @@ export class ChikyuSpace extends HTMLElement {
   /**
    * The constellation that is picked, by its IAU abbreviation (`Ori`), or `null`. A reader picks one by a click or a tap on its lines or inside its figure (and with the key `C`, or `Shift`+`C` for the previous, while the element has the focus); a click on empty sky, or `Escape`, lets it go. The picked figure's lines are lit and its name is
    * shown at the middle of the part of it in view, until another is picked or it is let go. A page sets the property to pick one itself, which sends no event. `chikyu-constellation-pick` is sent at each pick of the reader's, with `detail` `{ abbreviation, id, name, english, japanese, kind, culture }` (`culture` is `iau` unless `constellation-culture` names another), and `null` when it is let go; `chikyu-constellation-hover` is sent the same way as a mouse rests on a figure and leaves it.
+   * A press or a tap on a named star, or on a figure, also sends `chikyu-sky-pick`: a star is `{ kind: "star", hr, name, designation, x, y, pointerType }` (`name` as drawn, `x` and `y` CSS pixels inside the element) and a figure is `{ kind: "constellation", abbreviation }`. Each named star and each figure in view is a button, so a keyboard reaches it and Enter picks it, and the pick is read out. Nothing is drawn at rest.
    * Needs `constellation-lines` set. `constellation-culture` (`iau` by default, `western`, `japanese` or `chinese`; each is fetched only when asked for, and the value is exactly what the page sets) makes the figures, the pick and the names those of that sky culture. The attribute `constellation-names` (off by default) writes the name of every figure in view at the middle of the part of it that is on the picture, quieter than the star names and clear of them, of the Earth, the Moon, the Sun, the places and satellites named, and of the places kept clear (`keepClear`).
    */
   get constellation(): string | null {

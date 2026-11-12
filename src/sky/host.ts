@@ -15,7 +15,8 @@ export const SKY_STYLE =
   "#sk-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#sk-names{position:absolute;inset:0;overflow:hidden;pointer-events:none}" +
   ".sk-name,.sk-figure,.sk-constellation,.sk-designation{position:absolute;left:0;top:0;margin:0;white-space:nowrap;pointer-events:none;font-family:var(--hoshi-label-font,Michroma,system-ui,sans-serif);font-size:calc(var(--hoshi-label-size,11) * 1px);font-weight:var(--hoshi-label-weight,400);color:var(--hoshi-label-colour,#e9f1ff);letter-spacing:calc(var(--hoshi-label-letter-spacing,.14) * 1em);font-variant:var(--hoshi-label-case-variant,small-caps);text-transform:var(--hoshi-label-case-transform,none);text-shadow:0 0 calc(var(--hoshi-label-halo-width,3) * 1px) var(--hoshi-label-halo,#0a1230)}" +
   ".sk-designation{font-family:var(--hoshi-label-designation-font,ui-monospace,monospace);font-size:calc(var(--hoshi-label-designation-size,9) * 1px);color:var(--hoshi-label-designation-colour,#b8c6e0);letter-spacing:0;font-variant:normal;text-transform:none}" +
-  ".sk-figure{color:var(--hoshi-label-colour,#e9f1ff);opacity:0;transition:opacity .15s ease-out}.sk-constellation{font-size:calc(var(--hoshi-label-size,11) * .9px);color:var(--hoshi-label-constellation-colour,#9db0d3);letter-spacing:.22em;opacity:.85}@media (prefers-reduced-motion:reduce){.sk-figure{transition:none}}.sk-ruler{visibility:hidden}.sk-live{position:absolute;left:0;top:0;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}[hidden]{display:none}";
+  ".sk-figure{color:var(--hoshi-label-colour,#e9f1ff);opacity:0;transition:opacity .15s ease-out}.sk-constellation{font-size:calc(var(--hoshi-label-size,11) * .9px);color:var(--hoshi-label-constellation-colour,#9db0d3);letter-spacing:.22em;opacity:.85}@media (prefers-reduced-motion:reduce){.sk-figure{transition:none}}.sk-ruler{visibility:hidden}.sk-live{position:absolute;left:0;top:0;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}" +
+  "button.sk-name,button.sk-hit{background:transparent;border:0;padding:0;cursor:pointer;pointer-events:auto}button.sk-hit{width:28px;height:28px}button.sk-name:focus-visible,button.sk-hit:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}[hidden]{display:none}";
 
 export interface SkyHost {
   /** Tells where the sky falls in the picture just drawn, or `null` when there is no picture. */
@@ -103,6 +104,11 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let figureName: HTMLElement | undefined;
   /** The figure the pointer rests on, and the one a click or tap picked (IAU abbreviations): the lines of either are lit and the name of one is shown. */
   let hoverAbbr: string | null = null;
+  /** What a press on a named star tells the page, kept with the button that shows the name. */
+  const starOf = new Map<HTMLElement, { hr: number; name: string; designation: string; x: number; y: number }>();
+  /** A focusable point on each figure in view, and the abbreviation it picks. */
+  const hits: HTMLElement[] = [];
+  const hitAbbr = new Map<HTMLElement, string>();
   let pickAbbr: string | null = null;
   /** The abbreviation the name now shown (the figure name's span) is of, and the timer that hides it after it has faded. */
   let shownAbbr: string | null = null;
@@ -227,10 +233,10 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     canvas.setAttribute("aria-hidden", "true");
     box = doc.createElement("div");
     box.id = "sk-names";
-    box.setAttribute("aria-hidden", "true");
     figureName = doc.createElement("span");
     figureName.className = "sk-figure";
     figureName.hidden = true;
+    figureName.setAttribute("aria-hidden", "true");
     box.append(figureName);
     ruler = doc.createElement("span");
     ruler.className = "sk-ruler";
@@ -281,11 +287,19 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     host.addEventListener("pointerup", (event) => {
       const start = down;
       down = undefined;
-      if (!start || start.id !== event.pointerId || !lines || !drawStrokes) return;
+      if (!start || start.id !== event.pointerId) return;
       const here = place(event);
       // a press that did not move, and was not held: a click or a tap, not the start of a turn
       if (Math.hypot(here.x - start.x, here.y - start.y) > 6 || event.timeStamp - start.at > 600) return;
-      setPick(figureAt(here.x, here.y), true);
+      const star = starAt(here.x, here.y);
+      if (star) {
+        emitStar(star, event.pointerType || "mouse");
+        return;
+      }
+      if (!lines || !drawStrokes) return;
+      const figure = figureAt(here.x, here.y);
+      setPick(figure, true);
+      if (figure) emitFigure(figure);
     });
     host.addEventListener("keydown", (event) => {
       if (!lines || !drawStrokes || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -366,9 +380,51 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     if (send) {
       emit("chikyu-constellation-pick", abbreviation === null ? null : detailOf(abbreviation));
       // a pick is read out, with the figure's name in the page's language; a hover is not (it would be too much to hear)
-      if (live) live.textContent = abbreviation === null ? "" : options.language() === "ja" ? `${figureText(abbreviation)}を選択` : `${figureText(abbreviation)} selected`;
+      sayPick(abbreviation === null ? "" : figureText(abbreviation));
     }
     drawLines();
+  }
+  /** Read a pick out, with its name in the page's language. An empty text clears it. */
+  function sayPick(text: string): void {
+    if (live) live.textContent = text === "" ? "" : options.language() === "ja" ? `${text}を選択` : `${text} selected`;
+  }
+  /** A named star that was pressed or tapped. `name` is the name as drawn. */
+  function emitStar(star: { hr: number; name: string; designation: string; x: number; y: number }, pointerType: string): void {
+    emit("chikyu-sky-pick", { kind: "star", hr: star.hr, name: star.name, designation: star.designation, x: star.x, y: star.y, pointerType });
+    sayPick(star.name);
+  }
+  /** A constellation figure that was pressed or tapped. */
+  function emitFigure(abbreviation: string): void {
+    emit("chikyu-sky-pick", { kind: "constellation", abbreviation });
+  }
+  /** The named star under a point: its name box first, else the nearest star point within reach. Culled names are not there. */
+  function starAt(x: number, y: number): { hr: number; name: string; designation: string; x: number; y: number } | null {
+    const named = names;
+    const sky = module;
+    if (!named || !sky) return null;
+    const drawn = (label: (typeof named.labels)[number]): { hr: number; name: string; designation: string; x: number; y: number } => ({
+      hr: label.hr,
+      name: sky.labelText(label.text, named.style),
+      designation: label.designation,
+      x: label.x,
+      y: label.y,
+    });
+    for (const [index, label] of named.labels.entries()) {
+      if (culled[index]) continue;
+      if (x >= label.x0 && x <= label.x1 && y >= label.y0 && y <= label.y1) return drawn(label);
+    }
+    let best: { hr: number; name: string; designation: string; x: number; y: number } | null = null;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (const [index, label] of named.labels.entries()) {
+      if (culled[index]) continue;
+      const reach = Math.max(label.ring, 14);
+      const d = (x - label.x) ** 2 + (y - label.y) ** 2;
+      if (d <= reach * reach && d < bestD) {
+        bestD = d;
+        best = drawn(label);
+      }
+    }
+    return best;
   }
   /** Picks the next (or the previous) figure in view, from the left: the keyboard's way to pick. */
   function cycle(step: number): void {
@@ -515,6 +571,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         while (figurePool.length <= shownFigures) {
           const span = doc.createElement("span");
           span.className = "sk-constellation";
+          span.setAttribute("aria-hidden", "true");
           box!.append(span);
           figurePool.push(span);
         }
@@ -590,10 +647,19 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     }
     const shown = names.labels.length;
     while (pool.length < Math.min(NAME_POOL, shown)) {
-      const name = doc.createElement("span");
+      const name = doc.createElement("button");
       name.className = "sk-name";
+      name.setAttribute("type", "button");
+      name.addEventListener("click", (event) => {
+        // a pointer already sent the pick from the press; Enter and Space are a click with no pointer (detail 0)
+        if ((event as MouseEvent).detail !== 0) return;
+        const star = starOf.get(name);
+        if (!star || name.hidden) return;
+        emitStar(star, "keyboard");
+      });
       const designation = doc.createElement("span");
       designation.className = "sk-designation";
+      designation.setAttribute("aria-hidden", "true");
       box.append(name, designation);
       pool.push(name);
       designations.push(designation);
@@ -607,10 +673,13 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
           name.hidden = true;
           designation.hidden = true;
         }
+        starOf.delete(name);
         continue;
       }
       const text = module!.labelText(label.text, names.style);
       if (name.textContent !== text) name.textContent = text;
+      name.setAttribute("aria-label", text);
+      starOf.set(name, { hr: label.hr, name: text, designation: label.designation, x: label.x, y: label.y });
       name.hidden = false;
       const shift = label.anchor === "end" ? "-100%" : label.anchor === "middle" ? "-50%" : "0";
       name.style.transform = `translate(${Math.round(label.textX)}px,${Math.round(label.textY)}px) translate(${shift},-100%)`;
@@ -686,6 +755,53 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     shownAbbr = null;
     for (const el of figurePool) el.hidden = true;
     shownFigures = 0;
+    for (const hit of hits) hit.hidden = true;
+  }
+  /**
+   * One focusable point on each figure that is in view, at the middle of the part of it on the picture. Enter picks it. Nothing is drawn: the buttons are the way a keyboard reaches a figure, and they are moved only when the picture is laid out.
+   */
+  function placeFigureHits(frame: SkyFrame): void {
+    if (!box || !lines) {
+      for (const hit of hits) hit.hidden = true;
+      return;
+    }
+    const placed: { abbreviation: string; x: number; y: number }[] = [];
+    const at = { x: 0, y: 0 };
+    const blocked = keep.length > 0 ? blockedAt : covered;
+    for (const figure of lines.figures) {
+      if (figure.end <= figure.start) continue;
+      if (!visibleCentre(lines.segments, figure.start, figure.end, frame.width, frame.height, blocked, at)) continue;
+      placed.push({ abbreviation: figure.abbreviation, x: at.x, y: at.y });
+    }
+    placed.sort((a, b) => a.x - b.x);
+    while (hits.length < placed.length) {
+      const hit = doc.createElement("button");
+      hit.className = "sk-hit";
+      hit.setAttribute("type", "button");
+      hit.addEventListener("click", (event) => {
+        if ((event as MouseEvent).detail !== 0) return;
+        const abbreviation = hitAbbr.get(hit);
+        if (!abbreviation || hit.hidden) return;
+        setPick(abbreviation, true);
+        emitFigure(abbreviation);
+      });
+      box.append(hit);
+      hits.push(hit);
+    }
+    for (let i = 0; i < hits.length; i += 1) {
+      const hit = hits[i]!;
+      const figure = placed[i];
+      if (!figure) {
+        hit.hidden = true;
+        hitAbbr.delete(hit);
+        continue;
+      }
+      const text = figureText(figure.abbreviation);
+      hit.setAttribute("aria-label", text);
+      hit.hidden = false;
+      hit.style.transform = `translate(${Math.round(figure.x)}px,${Math.round(figure.y)}px) translate(-50%,-50%)`;
+      hitAbbr.set(hit, figure.abbreviation);
+    }
   }
   /** The settings no longer ask for the lines: a figure that was picked is let go, and the page is told. */
   function letGo(): void {
@@ -854,6 +970,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     placeNames();
     placeConstellationNames(frame);
     drawLines();
+    placeFigureHits(frame);
   }
 
   /** The stars that are named at the last frame: each one's own point on the screen (the label's anchor) and its name, from the picture's top left, without the names the browser's measure left out. */
