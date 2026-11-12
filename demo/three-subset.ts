@@ -19,6 +19,7 @@ export {
   LinearMipmapLinearFilter,
   LineBasicMaterial,
   LineLoop,
+  LineSegments,
   Mesh,
   MeshLambertMaterial,
   NoColorSpace,
