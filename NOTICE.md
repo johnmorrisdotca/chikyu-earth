@@ -8,7 +8,8 @@ The country boundaries are **Natural Earth** (https://www.naturalearthdata.com),
 admin-0 countries, which Natural Earth places in the **public domain**
 (https://www.naturalearthdata.com/about/terms-of-use/). They reach this package through **chizu**
 (https://github.com/johnmorrisdotca/chizu, MIT, by John Morris), whose `world-geo` entry
-(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime.
+(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime. The demo's passes page draws its small world map
+from a simplified copy of the same outlines (each ring thinned in the browser to within half a map unit, about half the points): a derived drawing of the same public-domain data.
 
 ## Country names and codes
 

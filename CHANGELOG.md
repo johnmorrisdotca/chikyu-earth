@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The passes page's world map has half the points** (MODULES-807). Its 720 by 360 map drew all 10,000 points of the country outlines, more than it can show, and in Chromium drawing on a software GPU the map held up the page's frames after it opened. Each ring is now thinned in the browser to within half a map unit of the original (Douglas-Peucker, less than a pixel at the size the map is shown), and the path is written to one decimal: about 5,300 points and 58 KB, from 10,371 and 112 KB. Measured on the Mac in Chromium with SwiftShader and GPU rasterization (three opens each, the longest time with no frame after the page opened): desk 1.4, 2.2 and 0.36 s with the full outline, 0.29 s each with the thinned one, 0.16 to 0.19 s with no map at all; phone 0.43 s once with the full outline, under 0.07 s otherwise. NOTICE.md says the map is a derived drawing of Natural Earth's outlines.
+
 ## 0.34.1 - 2026-11-11
 
 - **The sky is behind the Earth: constellation lines no longer cross it** (MODULES-1103). The lines were drawn over the Earth's disc (in a ride, across the whole globe). Each line is now cut exactly at the Earth's edge, the air's rim included, in the picture's own camera, in the space view and in a ride at any height, on the day side and the night side. A star whose point, ring or name box touches the Earth, the Moon or the Sun has its name and ring left out (a name only partly on the Earth was shown before), and the figure under the pointer is not lit over the Earth.

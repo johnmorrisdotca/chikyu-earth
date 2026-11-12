@@ -8,7 +8,7 @@ import "@johnmorrisdotca/kazoku-ui/wide-layout/define";
 import { createAddressState } from "@johnmorrisdotca/kazoku-ui/address-state";
 import { countries, countryName } from "@johnmorrisdotca/kuni";
 import { facts } from "@johnmorrisdotca/kuni/facts";
-import { geoEquirectangular, geoPath } from "d3-geo";
+import { geoEquirectangular, geoPath, geoTransform } from "d3-geo";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import type { EmbedPanelElement } from "@johnmorrisdotca/kazoku-ui/embed-panel/element";
 import type { EmbedKind } from "@johnmorrisdotca/kazoku-ui/embed-panel";
@@ -82,7 +82,52 @@ const setPlace = (lat: number, lon: number, name: string, zone = ""): void => {
 const MAP_W = 720;
 const MAP_H = 360;
 const mapProjection = geoEquirectangular().fitSize([MAP_W, MAP_H], { type: "Sphere" });
-const mapPath = geoPath(mapProjection);
+// The outlines' 10,000 points are more than a map this size can show, and a software GPU took seconds to fill them: each ring is thinned in map units (Douglas-Peucker) to within half a unit
+// of the original, less than a pixel at the size the map is drawn, which leaves about half the points.
+const THIN = 0.5;
+const thinned = (ring: [number, number][]): [number, number][] => {
+  const keep = new Uint8Array(ring.length);
+  keep[0] = keep[ring.length - 1] = 1;
+  const spans: [number, number][] = [[0, ring.length - 1]];
+  while (spans.length) {
+    const [a, b] = spans.pop()!;
+    const [ax, ay] = ring[a]!;
+    const [bx, by] = ring[b]!;
+    const length = Math.hypot(bx - ax, by - ay);
+    let far = 0;
+    let at = -1;
+    for (let i = a + 1; i < b; i += 1) {
+      const [px, py] = ring[i]!;
+      const off = length ? Math.abs((by - ay) * px - (bx - ax) * py + bx * ay - by * ax) / length : Math.hypot(px - ax, py - ay);
+      if (off > far) {
+        far = off;
+        at = i;
+      }
+    }
+    if (far > THIN) {
+      keep[at] = 1;
+      spans.push([a, at], [at, b]);
+    }
+  }
+  return ring.filter((_, i) => keep[i]);
+};
+let ring: [number, number][] = [];
+const thin = geoTransform({
+  lineStart() {
+    ring = [];
+  },
+  point(x, y) {
+    ring.push([x, y]);
+  },
+  lineEnd() {
+    const kept = thinned(ring);
+    if (kept.length < 3) return;
+    this.stream.lineStart();
+    for (const [x, y] of kept) this.stream.point(x, y);
+    this.stream.lineEnd();
+  },
+});
+const mapPath = geoPath({ stream: (out) => mapProjection.stream(thin.stream(out)) }).digits(1);
 const mapLand = mapPath({ type: "FeatureCollection", features: COUNTRIES.features } as never) ?? "";
 const map = $("#map");
 map.innerHTML =
