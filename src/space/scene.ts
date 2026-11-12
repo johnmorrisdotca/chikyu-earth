@@ -78,6 +78,13 @@ const MOON_MIN_PLANET_PX = 4;
 const MOON_MIN_PX = 2.2;
 /** A moon that has been out of sight this long is let go (its pictures too). */
 export const MOON_KEEP_MS = 4000;
+/**
+ * A body of the Sun, the Moon and the planets is made by the painter (and so gets its mapped picture) only when it is in the view and at least this many CSS pixels across its radius; a smaller one, or one out of the view, is a plain sphere of the right colour (the Moon, the view's own Moon).
+ * It is let go (its pictures with it) once it has been smaller than `BODY_LET_GO_PX`, or out of the view, for `BODY_KEEP_MS`.
+ */
+export const BODY_MAKE_PX = 6;
+export const BODY_LET_GO_PX = 3;
+export const BODY_KEEP_MS = MOON_KEEP_MS;
 
 const PLAIN_COLOR = (name: string): string => (name === "Sun" ? "#ffb347" : (COLORS as Record<string, string>)[name] ?? "#9a948b");
 /**
@@ -173,7 +180,7 @@ export interface SpaceModel {
   /** Filled at each draw. */
   drawn: { frame: Frame; distance: number; radiusPx: number } | null;
   /** What the painter has made now: the Sun and planets with a drawing, the moons shown and the moons held (shown, or gone from the view for less than `MOON_KEEP_MS`), whether the Moon is the painter's, and the bodies with finer map tiles on them (set at each draw). */
-  painted: { bodies: number; moons: number; held: number; moon: boolean; tiles: number };
+  painted: { bodies: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number };
   /** How many times astronomy-engine has been asked for a frame. */
   lookups: number;
   /** Game seconds a second (the clock's speed). */
@@ -235,7 +242,7 @@ export const newSpaceModel = (): SpaceModel => ({
   bodies: "",
   light: "sun",
   drawn: null,
-  painted: { bodies: 0, moons: 0, held: 0, moon: false, tiles: 0 },
+  painted: { bodies: 0, moons: 0, held: 0, moon: false, tiles: 0, mapped: 0 },
   lookups: 0,
   speed: 1,
   ride: null,
@@ -587,8 +594,22 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         look: string | null;
         token: number;
         plain: boolean;
+        /** True while the body is out of the view or too small for its map: it is then a plain sphere (or none, the Moon), and the painter is not asked for it. */
+        small: boolean;
+        /** When it was last in the view and big enough. */
+        bigAt: number;
+        /** Whether the drawing in the slot is the painter's (not a plain sphere): the pictures the painter holds. */
+        mapped: boolean;
       }
-      const newSlot = (name: string): Slot => ({ name, drawing: undefined, look: null, token: 0, plain: false });
+      const newSlot = (name: string): Slot => ({ name, drawing: undefined, look: null, token: 0, plain: false, small: true, bigAt: 0, mapped: false });
+      /** How many drawings the painter's pictures are on now: told to the element, which writes the painter's credit only while there are any. */
+      const tally = (): void => {
+        let mapped = sunSlot.mapped ? 1 : 0;
+        if (moonSlot.mapped) mapped += 1;
+        for (const p of planets.values()) if (p.slot.mapped) mapped += 1;
+        for (const held of moonSlots.values()) if (held.slot.mapped) mapped += 1;
+        model.painted.mapped = mapped;
+      };
       const lookNow = (): string => model.bodies || painter.looks?.[0] || "";
       const empty = (slot: Slot): void => {
         slot.token += 1;
@@ -596,20 +617,25 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         scene.remove(slot.drawing.object);
         slot.drawing.dispose();
         slot.drawing = undefined;
+        slot.mapped = false;
       };
       const fill = (slot: Slot, isMoon = false): void => {
         const look = lookNow();
-        if (slot.look === look) return;
+        const key = slot.small && !isMoon ? `small|${look}` : look;
+        if (slot.look === key) return;
         empty(slot);
-        slot.look = look;
+        slot.look = key;
         const token = slot.token;
+        const viaPainter = !(slot.plain || look === "plain" || (slot.small && !isMoon));
         const arrive = (made: BodyDrawing): void => {
           if (ended || slot.token !== token) {
             made.dispose();
             return;
           }
           slot.drawing = made;
+          slot.mapped = viaPainter;
           scene.add(made.object);
+          tally();
           deps.onBodies?.();
           deps.invalidate();
         };
@@ -623,7 +649,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
         };
         try {
-          const made = (slot.plain || look === "plain" ? plainPainter : painter).make(three, slot.name, { look, invalidate: () => (deps.onBodies?.(), deps.invalidate()), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
+          const made = (viaPainter ? painter : plainPainter).make(three, slot.name, { look, invalidate: () => (deps.onBodies?.(), deps.invalidate()), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
           if (typeof (made as Promise<BodyDrawing>).then === "function") (made as Promise<BodyDrawing>).then(arrive, fail);
           else arrive(made as BodyDrawing);
         } catch (error) {
@@ -646,6 +672,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       }
       const moonSlots = new Map<string, { slot: Slot; seen: number }>();
       let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+      /** Asks for one more draw when a body that has shrunk or gone from the view is due to be let go (a view at rest draws nothing, so it would be kept for ever). */
+      let bodyTimer: ReturnType<typeof setTimeout> | undefined;
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
@@ -739,10 +767,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const name of PLANETS) pos[name] = placeAround(mode, sunPos, helioOf(frame.planets[name]));
           const radiusOf = (name: BodyName): number => (name === "Earth" ? 1 : RADIUS[name]![mode]);
 
-          if (deps.painter && lookNow() !== "plain") fill(moonSlot, true);
+          if (deps.painter && lookNow() !== "plain" && !moonSlot.small) fill(moonSlot, true);
           else if (moonSlot.look !== null) {
             empty(moonSlot);
             moonSlot.look = null;
+            tally();
+            deps.onBodies?.();
           }
           const paintedMoon = moonSlot.drawing;
           if (paintedMoon) {
@@ -943,6 +973,37 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const name of BODY_NAMES) px[name] = radiusPxOf(name);
           model.drawn = { frame, distance, radiusPx: px.Earth };
           layer?.resize(px.Earth);
+          // which bodies get their mapped pictures: those in the view and big enough to show a map. The others are plain spheres (the Moon, the view's own) and the painter is not asked for them, so it loads and holds nothing for a body too small to see.
+          // The choice is made here, from this draw's sizes, and acted on at the next (a body that changes asks for it); a body that has shrunk or gone is let go after `BODY_KEEP_MS`, so one that comes and goes is not made again and again.
+          {
+            const at = performance.now();
+            let changed = false;
+            let soonest = Number.POSITIVE_INFINITY;
+            const judge = (name: BodyName, slot: Slot): void => {
+              projected.set(pos[name][0], pos[name][1], pos[name][2]).project(camera);
+              const reach = Math.min(px[name], 1e5);
+              const inView = reach >= 1e5 || (projected.z > -1 && projected.z < 1 && Math.abs(projected.x) * (size.width / 2) <= size.width / 2 + reach && Math.abs(projected.y) * (size.height / 2) <= size.height / 2 + reach);
+              if (slot.small) {
+                if (inView && px[name] >= BODY_MAKE_PX) {
+                  slot.small = false;
+                  slot.bigAt = at;
+                  changed = true;
+                }
+              } else if (inView && px[name] >= BODY_LET_GO_PX) slot.bigAt = at;
+              else if (at - slot.bigAt > BODY_KEEP_MS) {
+                slot.small = true;
+                changed = true;
+              } else soonest = Math.min(soonest, slot.bigAt + BODY_KEEP_MS - at);
+            };
+            if (deps.painter && lookNow() !== "plain") {
+              judge("Sun", sunSlot);
+              judge("Moon", moonSlot);
+              for (const name of PLANETS) judge(name, planets.get(name)!.slot);
+            }
+            if (bodyTimer !== undefined) clearTimeout(bodyTimer);
+            bodyTimer = soonest < Number.POSITIVE_INFINITY ? setTimeout(() => deps.invalidate(), soonest + 50) : undefined;
+            if (changed) deps.invalidate();
+          }
           // the finer map tiles: the camera as the Earth's own axes have it, so a camera a few kilometres up asks for the tiles under it at the level its height needs
           {
             // the Earth is turned about the y axis and sits at the origin, so its own axes are the world's turned back by that angle
@@ -975,7 +1036,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const held of moonSlots.values()) if (held.slot.drawing?.object.visible) paintedMoons += 1;
           let tiled = 0;
           for (const drawing of [sunSlot.drawing, moonSlot.drawing, ...[...planets.values()].map((p) => p.slot.drawing), ...[...moonSlots.values()].map((held) => held.slot.drawing)]) if (drawing?.tiles?.shown != null) tiled += 1;
-          model.painted = { bodies: paintedBodies, moons: paintedMoons, held: 0, moon: paintedMoon !== undefined, tiles: tiled };
+          model.painted = { bodies: paintedBodies, moons: paintedMoons, held: 0, moon: paintedMoon !== undefined, tiles: tiled, mapped: model.painted.mapped };
           // the followed satellite as a model, when the page has one for it: made once, placed where the satellite is, pointed the way it flies, sized to read and lit by the Sun
           const satellitePainter = deps.satellitePainter?.();
           const group = followed ? model.satellites.groups.get(followed.ref.group) : undefined;
@@ -1269,6 +1330,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         },
         dispose() {
           if (releaseTimer !== undefined) clearTimeout(releaseTimer);
+          if (bodyTimer !== undefined) clearTimeout(bodyTimer);
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
