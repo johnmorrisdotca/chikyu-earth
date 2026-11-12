@@ -182,6 +182,12 @@ const info = group.info(0, Date.UTC(2026, 10, 2, 12));
 console.log(`${info.name}: ${Math.round(info.altitudeKm)} km up, ${info.speedKmS.toFixed(2)} km/s`);
 ```
 
+## Paint where it has been
+
+`element.paint = { id, length, swath }` leaves a trail on the globe for one satellite, on `<chikyu-space>` and `<chikyu-earth-realistic>`. `id` is its NORAD catalogue number, or `group:index` of a group set with `setSatellites`. `length` is `1d` (the default), `1w` or `1m`: how much simulated time the trail keeps. `swath` is `track` (the point on the ground under the satellite, the default) or `coverage` (the ground where the satellite is at least 10° above the horizon, from its height). `clearPaint()` takes it off. Choosing another satellite clears it too.
+
+The trail is one picture laid on the Earth. A frame adds only the ground the satellite has crossed since the frame before, so a clock at an hour a second still draws a continuous line, and a clock running backwards draws backwards. Nothing is uploaded while time is still, or while painting is off. A part of the trail older than `length` fades out. The line is split at the date line and at a pole, so it does not streak across the map.
+
 ## The budget
 
 The same rules as the rest of the space view, each tested at 6,000 satellites:

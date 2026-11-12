@@ -55,6 +55,7 @@ if (flat && controls && stage) {
   const scaleNote = document.querySelector<HTMLElement>("#scale-note");
   const satControls = document.querySelector<HTMLElement>("#sat-controls");
   const satInfo = document.querySelector<HTMLElement>("#sat-info");
+  const paintRow = document.querySelector<HTMLElement>("#paint-controls");
   const satNote = document.querySelector<HTMLElement>("#sat-note");
   const rideControls = document.querySelector<HTMLElement>("#ride-controls");
   const rideInfo = document.querySelector<HTMLElement>("#ride-info");
@@ -308,7 +309,24 @@ if (flat && controls && stage) {
       satInfo.textContent = info ? describeSatellite(info) : "";
     }
     address.set("sat", info ? String(info.noradId) : null);
+    if (paintRow) paintRow.hidden = !info;
   };
+  let paintLength: "1d" | "1w" | "1m" = "1d";
+  const applyPaint = (): void => {
+    const host = satHost();
+    const info = chosen && host ? host.satelliteInfo(chosen) : undefined;
+    if (!host || !info) return;
+    host.paint = { id: String(info.noradId), length: paintLength };
+  };
+  document.querySelector("#paint")?.addEventListener("click", applyPaint);
+  document.querySelector("#paint-clear")?.addEventListener("click", () => satHost()?.clearPaint());
+  for (const button of document.querySelectorAll<HTMLButtonElement>("#paint-length button")) {
+    button.addEventListener("click", () => {
+      paintLength = (button.dataset["length"] as "1d" | "1w" | "1m") || "1d";
+      for (const other of document.querySelectorAll<HTMLButtonElement>("#paint-length button")) other.setAttribute("aria-pressed", String(other === button));
+      if (satHost()?.paint) applyPaint();
+    });
+  }
   const ago = (ms: number): string => {
     const hours = Math.max(1, Math.round((Date.now() - ms) / 3_600_000));
     const format = new Intl.RelativeTimeFormat(say("locale"), { numeric: "auto" });

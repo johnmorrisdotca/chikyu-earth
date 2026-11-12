@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Paint a satellite's path on the Earth** (MODULES-1167). `paint` on `<chikyu-space>` and `<chikyu-earth-realistic>` is `{ id, length, swath }`. `id` is a NORAD catalogue number or `group:index`. `length` is `1d` (the default), `1w` or `1m` of simulated time. `swath` is `track` (the point under the satellite, the default) or `coverage` (the ground where the satellite is at least 10° above the horizon, from its height). `clearPaint()` takes the trail off. Changing the satellite clears it. The trail is one equirectangular texture on the globe. It is stamped only while simulated time moves, one upload a frame, and nothing at rest or while painting is off. A part older than `length` fades out. The date line and the poles are split so the line does not cross the map. The demo's satellite card has Paint, Clear, and 1 day, 1 week, 1 month.
+
 ## 0.37.0 - 2026-11-12
 
 - **A satellite's owner country as an ISO code** (MODULES-1112), for a page that puts a flag on a satellite card. `satelliteInfo` and the click event's `info` have `ownerCountry`, an ISO 3166-1 alpha-2 code (`CN`, `US`, `PK`), when the elements carry an owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country. An organisation (`ESA`, `ISS`, `ITSO`, `SES`, `GLOB`, `EUME`, `NATO`, `AB` and the like), several countries, an unknown owner, or a code the list does not give to one country (`CIS`, the former Soviet registration) has none, and the field is left off. New in `@johnmorrisdotca/chikyu-earth/satellites` and `/catalogue`: `ownerCountry(code)` and `OWNER_COUNTRIES`, every code of the catalogue's owner list, each row checked. Data only: no flag, no new dependency.

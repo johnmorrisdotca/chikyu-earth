@@ -13,6 +13,8 @@ import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type Sate
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
+import { paintMinute } from "../paint/buffer.ts";
+import { createPaintTexture } from "../paint/texture.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
 import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
@@ -134,6 +136,8 @@ export interface EarthDeps {
   onDraw?: () => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
+  /** The painted satellite trail, when the element has one. Read at every draw; nothing is uploaded while `step` returns false. */
+  paint?: { data: Uint8Array; width: number; height: number; step(ms: number): boolean; span(): number; on(): boolean };
   /** The rings the places' layer wants drawn in one draw call, read right after `onPose`. */
   placeSprites?: () => PlaceSpriteData | null;
   /** Told once, when the rings of the places that are not markers of their own were first wanted: whether the picture can draw them (false when the three.js parts handed over lack `Points`). */
@@ -270,6 +274,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         fragmentShader: SURFACE_FRAG,
         uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, cloudMap: uniform.clouds, sunDir, sunLocal, cloudShift, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 1 } },
       });
+      const paint = createPaintTexture(three, deps.paint?.data ?? new Uint8Array(4), deps.paint?.width ?? 1, deps.paint?.height ?? 1);
+      Object.assign(surface.uniforms, paint.uniforms);
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: CLOUD_FRAG,
@@ -292,7 +298,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       const tiles: TileSet = createTileSet(
         three,
         turned,
-        { sunDir, lights: surface.uniforms["lights"] as { value: number }, boost: surface.uniforms["boost"] as { value: number }, ortho: surface.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night, extra: { cloudMap: uniform.clouds, sunLocal, cloudShift } },
+        { sunDir, lights: surface.uniforms["lights"] as { value: number }, boost: surface.uniforms["boost"] as { value: number }, ortho: surface.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night, extra: { cloudMap: uniform.clouds, sunLocal, cloudShift, ...paint.uniforms } },
         { assets: deps.assets, sources: () => deps.sources?.() ?? {}, cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
       );
       model.tiles = tiles;
@@ -391,6 +397,12 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             });
           }
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
+          if (deps.paint) {
+            if (deps.paint.step(model.time)) paint.upload();
+            paint.uniforms.paintNow.value = paintMinute(model.time);
+            paint.uniforms.paintSpan.value = deps.paint.span();
+            paint.uniforms.paintOn.value = deps.paint.on() ? 1 : 0;
+          }
           // the borders: made the first time a set is switched on, above the clouds and under the air
           if ((model.borders.countries || model.borders.regions) && !borders && !model.borders.stats.failed) {
             try {
@@ -452,6 +464,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           tiles.dispose();
           textures.dispose();
           grid.dispose();
+          paint.dispose();
           surface.dispose();
           cloudMaterial.dispose();
           atmosphere.dispose();
