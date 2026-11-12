@@ -1,8 +1,10 @@
 // The names of the brightest stars and the constellations as faint lines, over the sky an element's page draws (hoshi-stars' `sky-labels`, loaded only when an attribute asks for it). The element tells this where the camera looks and what covers the sky at each draw
 // (`frame`); it draws the names and lines on a canvas and a few labels over the picture, never redraws at rest, and lights the figure under the pointer. Stars are directions, so only the camera's turn matters, never its distance.
-import type { CoverMask, FigureLines, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
+import type { Culture } from "@johnmorrisdotca/hoshi-stars/culture";
+import type { CoverMask, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
 import { boxCovered, pathOutside, touches } from "./cover.ts";
+import { createCultureLines, type CultureFigureLines, type Lines } from "./culture-lines.ts";
 import { hullAreaAround, nearestSegment, placeBox, visibleCentre } from "./figure-pick.ts";
 import { inKeep, keepBox, touchesKeep, type KeepBox, type SkyKeepClear } from "./keep-clear.ts";
 import type { SkyFrame } from "./frame.ts";
@@ -28,7 +30,7 @@ export interface SkyHost {
   pick(abbreviation: string | null): void;
   /** The picked constellation's IAU abbreviation, or `null`. */
   readonly picked: string | null;
-  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
+  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
   dispose(): void;
 }
 
@@ -49,12 +51,31 @@ export interface SkyHostOptions {
   constellations?: () => Promise<typeof import("@johnmorrisdotca/hoshi-stars/constellations")>;
 }
 
+/** What a page is told of a figure, and what its name is written from. */
+interface FigureInfo {
+  abbreviation: string;
+  name: string;
+  english: string;
+  japanese: string;
+  kind: string;
+  names?: Readonly<Partial<Record<string, string>>>;
+  reading?: string;
+}
+/**
+ * The sky cultures besides the IAU's, each loaded by a dynamic import of its own, only when a page asks for it: a page that never sets `chinese` never downloads it. (The imports are written out, one for each, so that a bundler makes a file of each.)
+ */
+const CULTURES: Readonly<Record<string, () => Promise<Culture>>> = {
+  western: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/western")).western,
+  japanese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/japanese")).japanese,
+  chinese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/chinese")).chinese,
+};
+const warnedCultures = new Set<string>();
 const NAME_POOL = 40;
 /** What other layers of the element draw as labels over the sky (bodies, satellites, places, cities): a constellation's name keeps off them. */
 const OTHER_LABELS = ".sp-label,.sp-sat,.cm-label,.pl-name:not(.pl-measure),.cn-name";
 
 /** The attributes this layer reads. */
-export const SKY_ATTRIBUTES = ["star-names", "star-names-magnitude", "constellation-lines", "constellation-names", "keep-clear"] as const;
+export const SKY_ATTRIBUTES = ["star-names", "star-names-magnitude", "constellation-lines", "constellation-names", "constellation-culture", "keep-clear"] as const;
 
 /**
  * Makes the layer of one element, inside its shadow root. Nothing of hoshi-stars is loaded, and nothing is added to the root, until one of the three attributes is there.
@@ -69,7 +90,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let loading = false;
   let failed = false;
   let names: StarNames | undefined;
-  let lines: FigureLines | undefined;
+  let lines: Lines | undefined;
   let last: SkyFrame | null = null;
   let renders = 0;
   let style: Partial<SkyLabelStyle> = {};
@@ -87,7 +108,13 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   /** The names of the constellations: the spans of the optional layer (`constellation-names`), and what is known of each figure from hoshi-stars. */
   const figurePool: HTMLElement[] = [];
   let shownFigures = 0;
-  let constellationInfo: Map<string, { abbreviation: string; name: string; english: string; japanese: string }> | undefined;
+  /** What is known of each figure of the IAU's 88 (from hoshi-stars' `constellations`), and of each culture that has been loaded; `culture` is the culture the lines are of now. */
+  let iauInfo: Map<string, FigureInfo> | undefined;
+  const cultureData = new Map<string, { figures: CultureFigureLines[]; info: Map<string, FigureInfo> }>();
+  const cultureLoading = new Set<string>();
+  const cultureFailed = new Set<string>();
+  let culture = "iau";
+  const activeInfo = (): Map<string, FigureInfo> | undefined => (culture === "iau" ? iauInfo : cultureData.get(culture)?.info);
   /** Whether the lines are drawn (the attribute `constellation-lines`): the names alone use the figures but draw none. */
   let drawStrokes = false;
   /** A pick asked for before hoshi-stars was in. */
@@ -236,14 +263,23 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   };
 
   /** What the page can be told of a constellation: its names from hoshi-stars, with the culture. */
-  const detailOf = (abbreviation: string): { abbreviation: string; name: string; english: string; japanese: string; culture: string } => ({ ...(constellationInfo?.get(abbreviation) ?? { abbreviation, name: abbreviation, english: abbreviation, japanese: abbreviation }), culture: "iau" });
+  const detailOf = (abbreviation: string): { abbreviation: string; id: string; name: string; english: string; japanese: string; kind: string; culture: string } => {
+    const info = activeInfo()?.get(abbreviation);
+    return { abbreviation, id: abbreviation, name: info?.name ?? abbreviation, english: info?.english ?? abbreviation, japanese: info?.japanese ?? abbreviation, kind: info?.kind ?? "constellation", culture };
+  };
   const emit = (type: string, detail: unknown): void => {
     (root.host as HTMLElement).dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   };
-  /** The text of a constellation's name in the page's language, in the case the style asks for. */
+  /** The text of a figure's name in the page's language, in the case the style asks for: for the IAU's 88 the Latin or Japanese name; for a culture's own figures its name in the page's language (a Japanese asterism by its reading in kana: すばる). */
   const figureText = (abbreviation: string): string => {
-    const info = constellationInfo?.get(abbreviation);
-    const text = info ? (options.language() === "ja" ? info.japanese : info.name) : abbreviation;
+    const info = activeInfo()?.get(abbreviation);
+    const ja = options.language() === "ja";
+    let text = abbreviation;
+    if (info && culture === "iau") text = ja ? info.japanese : info.name;
+    else if (info) {
+      const names = info.names ?? {};
+      text = ja ? (info.kind === "asterism" && info.reading ? info.reading : (names["ja"] ?? info.name)) : info.kind === "constellation" ? (names["la"] ?? info.name) : (names["en"] ?? info.name);
+    }
     return module && lines ? module.labelText(text, lines.style) : text;
   };
   /** The figure under a point of the picture: one with a line within reach of it, else the smallest one it is inside of (a pointer in a figure picks it, not only on its lines). `null` where a body covers the point, or none is there. */
@@ -572,6 +608,48 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     box.style.setProperty("--hoshi-label-case-variant", (style.case ?? "small-caps") === "small-caps" ? "small-caps" : "normal");
   };
 
+  /** The sky culture the page asks for, exactly as it sets it: `iau` where it sets none. A value that is not a culture is `iau`, with one warning in the console. */
+  const readCulture = (): string => {
+    const raw = options.attribute("constellation-culture");
+    const id = raw === null || raw.trim() === "" ? "iau" : raw.trim().toLowerCase();
+    if (id === "iau") return id;
+    if (Object.hasOwn(CULTURES, id) && !cultureFailed.has(id)) return id;
+    if (!warnedCultures.has(id)) {
+      warnedCultures.add(id);
+      console.warn(`chikyu-earth: constellation-culture="${id}" is not a sky culture here (iau, ${Object.keys(CULTURES).join(", ")}): the IAU's constellations are used.`);
+    }
+    return "iau";
+  };
+  const requestCulture = (id: string): void => {
+    if (cultureLoading.has(id)) return;
+    cultureLoading.add(id);
+    void Promise.all([CULTURES[id]!(), import("@johnmorrisdotca/hoshi-stars/lines")])
+      .then(([loaded, library]) => {
+        const info = new Map<string, FigureInfo>();
+        const figures: CultureFigureLines[] = [];
+        for (const figure of library.figures(loaded)) {
+          const a = figure.asterism;
+          figures.push({ id: a.id, segments: figure.segments });
+          info.set(a.id, { abbreviation: a.id, name: a.name, english: a.names.en ?? a.name, japanese: a.names.ja ?? a.readings.ja ?? a.name, kind: a.kind, names: a.names, ...(a.readings.ja ? { reading: a.readings.ja } : {}) });
+        }
+        cultureData.set(id, { figures, info });
+        cultureLoading.delete(id);
+        if (module) {
+          configure();
+          compute();
+        }
+      })
+      .catch((error: unknown) => {
+        cultureLoading.delete(id);
+        cultureFailed.add(id);
+        options.onError(error);
+        if (module) {
+          configure();
+          compute();
+        }
+      });
+  };
+
   const configure = (): void => {
     if (!module) return;
     const count = options.attribute("star-names");
@@ -587,10 +665,25 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       if (!names) names = module.createStarNames({ ...settings, lang, style });
       else names.set({ ...settings, lang, style });
     } else names = undefined;
-    if (strength !== undefined) {
-      if (!lines) lines = module.createFigureLines({ strength, lang, style });
+    const wantedCulture = readCulture();
+    if (strength === undefined) lines = undefined;
+    else if (wantedCulture !== "iau" && !cultureData.has(wantedCulture)) {
+      // the culture's figures are brought in when asked for; until they are here none are drawn, never the IAU's in their place
+      requestCulture(wantedCulture);
+      if (lines) {
+        lines = undefined;
+        letGo();
+      }
+    } else {
+      if (lines && culture !== wantedCulture) {
+        lines = undefined;
+        letGo();
+      }
+      culture = wantedCulture;
+      const loaded = module;
+      if (!lines) lines = wantedCulture === "iau" ? loaded.createFigureLines({ strength, lang, style }) : createCultureLines(cultureData.get(wantedCulture)!.figures, strength, (partial) => loaded.labelStyle(partial), style);
       else lines.set({ strength, lang, style });
-    } else lines = undefined;
+    }
     if (!lines || !drawStrokes) letGo();
     vars();
   };
@@ -606,9 +699,9 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         // the constellations' names (hoshi-stars' own): for the layer of names and for what a pick tells the page
         try {
           const all = await (options.constellations ?? (() => import("@johnmorrisdotca/hoshi-stars/constellations")))();
-          constellationInfo = new Map(all.constellations().map((c) => [c.abbreviation, { abbreviation: c.abbreviation, name: c.name, english: c.english, japanese: c.japanese }]));
+          iauInfo = new Map(all.constellations().map((c) => [c.abbreviation, { abbreviation: c.abbreviation, name: c.name, english: c.english, japanese: c.japanese, kind: "constellation" }]));
         } catch {
-          constellationInfo = undefined;
+          iauInfo = undefined;
         }
         configure();
         loading = false;
@@ -737,7 +830,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
     },
     get stats() {
-      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: hoverAbbr ?? pickAbbr, pick: pickAbbr, hover: hoverAbbr, constellations: shownFigures, renders, lang: usedLang ?? "", stars: starPoints() };
+      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: hoverAbbr ?? pickAbbr, pick: pickAbbr, hover: hoverAbbr, constellations: shownFigures, culture, renders, lang: usedLang ?? "", stars: starPoints() };
     },
     dispose() {
       clearTimeout(fadeTimer);

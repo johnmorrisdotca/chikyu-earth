@@ -496,8 +496,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /**
    * The constellation that is picked, by its IAU abbreviation (`Ori`), or `null`. A reader picks one by a click or a tap on its lines or inside its figure (and with the key `C`, or `Shift`+`C` for the previous, while the element has the focus); a click on empty sky, or `Escape`, lets it go. The picked figure's lines are lit and its name is
-   * shown at the middle of the part of it in view, until another is picked or it is let go. A page sets the property to pick one itself, which sends no event. `chikyu-constellation-pick` is sent at each pick of the reader's, with `detail` `{ abbreviation, name, english, japanese, culture }` (the culture is `iau`), and `null` when it is let go; `chikyu-constellation-hover` is sent the same way as a mouse rests on a figure and leaves it.
-   * Needs `constellation-lines` set. The attribute `constellation-names` (off by default) writes the name of every figure in view at the middle of the part of it that is on the picture, quieter than the star names and clear of them, of the Earth, the Moon, the Sun, the places and satellites named, and of the places kept clear (`keepClear`).
+   * shown at the middle of the part of it in view, until another is picked or it is let go. A page sets the property to pick one itself, which sends no event. `chikyu-constellation-pick` is sent at each pick of the reader's, with `detail` `{ abbreviation, id, name, english, japanese, kind, culture }` (`culture` is `iau` unless `constellation-culture` names another), and `null` when it is let go; `chikyu-constellation-hover` is sent the same way as a mouse rests on a figure and leaves it.
+   * Needs `constellation-lines` set. `constellation-culture` (`iau` by default, `western`, `japanese` or `chinese`; each is fetched only when asked for, and the value is exactly what the page sets) makes the figures, the pick and the names those of that sky culture. The attribute `constellation-names` (off by default) writes the name of every figure in view at the middle of the part of it that is on the picture, quieter than the star names and clear of them, of the Earth, the Moon, the Sun, the places and satellites named, and of the places kept clear (`keepClear`).
    */
   get constellation(): string | null {
     return this.#sky?.picked ?? null;
@@ -765,7 +765,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
     bodyLabel: { on: boolean; text: string; made: boolean; showing: boolean };
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
-    sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
+    sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
     places: { places: number; shown: number; labels: number; renders: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
@@ -783,7 +783,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       assets: { entries: stats?.assets.entries ?? 0, refs: stats?.assets.refs ?? 0 },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
-      sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, renders: 0, lang: "", stars: [] },
+      sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
     };
