@@ -157,6 +157,47 @@ test("a satellite whose elements are more than 14 days from the moment shown is 
   assert.equal(group.placed, 0);
 });
 
+test("above the interpolation limit each satellite is a streak along its orbit, one SGP4 sample, and the class colours differ", () => {
+  const group = createSatellites(stations);
+  const index = group.sets.findIndex((set) => set.NORAD_CAT_ID === 25544);
+  const ms = Date.parse("2026-11-02T18:00:00Z");
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  const before = group.propagations;
+  const drawn = group.arc(ms, 120_000, positions, segments);
+  assert.equal(drawn, group.count, "every station is drawn, not hidden");
+  assert.equal(drawn, group.placed);
+  assert.equal(group.propagations - before, group.count, "one SGP4 call each, to pin the place");
+  const pinned = group.propagations;
+  group.arc(ms + 1000, 120_000, positions, segments);
+  assert.equal(group.propagations, pinned, "the next frame turns the pinned place and does not call SGP4");
+  const set = group.sets[index]!;
+  const sweep = Math.min(Math.PI, (set.MEAN_MOTION * 2 * Math.PI * 120_000) / 86_400_000);
+  const radius = Math.hypot(positions[index * 3]!, positions[index * 3 + 1]!, positions[index * 3 + 2]!);
+  const chord = 2 * radius * Math.sin(sweep / 2);
+  const s = index * 6;
+  const length = Math.hypot(segments[s + 3]! - segments[s]!, segments[s + 4]! - segments[s + 1]!, segments[s + 5]! - segments[s + 2]!);
+  assert.ok(Math.abs(length - chord) / chord < 0.2, `streak ${length.toFixed(4)} against ${chord.toFixed(4)} Earth radii`);
+  const geo = createSatellites([{ ...set, NORAD_CAT_ID: 1, MEAN_MOTION: 1.0027, ECCENTRICITY: 0.0001, INCLINATION: 0.05 }]);
+  assert.ok(Math.hypot(group.classColour[index * 3]! - geo.classColour[0]!, group.classColour[index * 3 + 1]! - geo.classColour[1]!, group.classColour[index * 3 + 2]! - geo.classColour[2]!) > 0.2, "a low orbit and a geostationary orbit are not the same colour");
+  assert.equal(group.newestEpochMs > 0, true);
+});
+
+test("a fast clock with the whole recorded catalogue draws one streak each and does not sample SGP4 per frame", () => {
+  const sets = [...stations, ...starlink];
+  const group = createSatellites(sets);
+  const ms = Date.parse("2026-11-02T18:00:00Z");
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  const span = 3_600 * (1000 / 30);
+  group.pin(ms);
+  const once = group.propagations;
+  let drawn = 0;
+  for (let frame = 0; frame < 30; frame += 1) drawn = group.arc(ms + frame * span, span, positions, segments);
+  assert.equal(drawn, group.count, "every satellite in the recorded catalogue is a streak");
+  assert.equal(group.propagations, once, "thirty frames did not call SGP4 again");
+});
+
 test("an old element set mixed with fresh ones is the only one dimmed", () => {
   const fresh = madeUp("gps", 2, "2026-11-03T00:00:00");
   const old = madeUp("gps", 1, "2026-10-10T00:00:00", 800_000);

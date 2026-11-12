@@ -1,6 +1,8 @@
 // SGP4 for a group of satellites, kept cheap: the whole group is run at two moments a step apart and every position in between is an interpolation, so the cost is one batch a step
 // (about once a second), never one a frame. satellite.js (MIT) does the SGP4 itself; this file never touches the screen and imports on a server.
 import { json2satrec, sgp4 } from "satellite.js";
+import { CLASS_COLOURS } from "../catalogue/kinds.ts";
+import { classOfElements } from "../catalogue/orbit.ts";
 import { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS } from "./limits.ts";
 import type { ElementSet, RefusedElementSet, SatelliteInfo, Satellites } from "./types.ts";
 
@@ -98,6 +100,28 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   }
 
   const n = recs.length;
+  const normal = new Float32Array(n * 3);
+  const rate = new Float64Array(n);
+  const classColour = new Float32Array(n * 3);
+  let newestEpochMs = 0;
+  for (let i = 0; i < n; i += 1) {
+    const set = usable[i]!;
+    const epoch = epochs[i]!;
+    if (epoch > newestEpochMs) newestEpochMs = epoch;
+    const iRad = (set.INCLINATION * Math.PI) / 180;
+    const oRad = (set.RA_OF_ASC_NODE * Math.PI) / 180;
+    const si = Math.sin(iRad);
+    const ci = Math.cos(iRad);
+    normal[i * 3] = Math.sin(oRad) * si;
+    normal[i * 3 + 1] = ci;
+    normal[i * 3 + 2] = Math.cos(oRad) * si;
+    rate[i] = (set.MEAN_MOTION * 2 * Math.PI) / DAY_MS;
+    const kind = classOfElements(set.MEAN_MOTION, set.ECCENTRICITY) ?? "other";
+    const hex = Number.parseInt(CLASS_COLOURS[kind].slice(1), 16);
+    classColour[i * 3] = ((hex >> 16) & 255) / 255;
+    classColour[i * 3 + 1] = ((hex >> 8) & 255) / 255;
+    classColour[i * 3 + 2] = (hex & 255) / 255;
+  }
   let a = new Float32Array(n * 3);
   let b = new Float32Array(n * 3);
   let okA = new Uint8Array(n);
@@ -112,6 +136,21 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   let propagations = 0;
   let placed = 0;
   const timing = { lastBatchMs: 0, maxBatchMs: 0 };
+  const pinned = new Float32Array(n * 3);
+  const pinOk = new Uint8Array(n);
+  let pinMs = Number.NaN;
+
+  /** Turn `x,y,z` about the unit axis `nx,ny,nz` by `ang` radians. */
+  const turn = (x: number, y: number, z: number, nx: number, ny: number, nz: number, ang: number): [number, number, number] => {
+    const c = Math.cos(ang);
+    const s = Math.sin(ang);
+    const dot = nx * x + ny * y + nz * z;
+    const cx = ny * z - nz * y;
+    const cy = nz * x - nx * z;
+    const cz = nx * y - ny * x;
+    const k = 1 - c;
+    return [x * c + cx * s + nx * dot * k, y * c + cy * s + ny * dot * k, z * c + cz * s + nz * dot * k];
+  };
 
   /** SGP4 for the whole group at one moment, into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
   const sample = (buffer: Float32Array, ok: Uint8Array, ms: number): void => {
@@ -167,8 +206,66 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       return propagations;
     },
     timing,
+    newestEpochMs,
+    classColour,
     get placed() {
       return placed;
+    },
+    pin(ms) {
+      if (n === 0) return;
+      sample(pinned, pinOk, ms);
+      pinMs = ms;
+    },
+    arc(ms, spanMs, positions, segments) {
+      if (n === 0) return 0;
+      if (!Number.isFinite(pinMs)) {
+        sample(pinned, pinOk, ms);
+        pinMs = ms;
+      }
+      const span = spanMs;
+      let count = 0;
+      for (let i = 0; i < n; i += 1) {
+        const k = i * 3;
+        const dim = Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
+        if (dim !== dimmed[i]) {
+          dimmed[i] = dim;
+          dimVersion += 1;
+        }
+        if (pinOk[i] !== 1) {
+          positions[k] = 0;
+          positions[k + 1] = 0;
+          positions[k + 2] = 0;
+          segments[k * 2] = 0;
+          segments[k * 2 + 1] = 0;
+          segments[k * 2 + 2] = 0;
+          segments[k * 2 + 3] = 0;
+          segments[k * 2 + 4] = 0;
+          segments[k * 2 + 5] = 0;
+          shown[i] = 0;
+          continue;
+        }
+        const nx = normal[k]!;
+        const ny = normal[k + 1]!;
+        const nz = normal[k + 2]!;
+        const sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
+        const along = rate[i]! * (ms - pinMs);
+        const now = turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along);
+        const then = turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along - sweep);
+        positions[k] = now[0];
+        positions[k + 1] = now[1];
+        positions[k + 2] = now[2];
+        const s = k * 2;
+        segments[s] = then[0];
+        segments[s + 1] = then[1];
+        segments[s + 2] = then[2];
+        segments[s + 3] = now[0];
+        segments[s + 4] = now[1];
+        segments[s + 5] = now[2];
+        shown[i] = 1;
+        count += 1;
+      }
+      placed = count;
+      return count;
     },
     setStep(ms) {
       const next = Math.min(MAX_STEP_MS, Math.max(MIN_STEP_MS, Math.round(ms)));

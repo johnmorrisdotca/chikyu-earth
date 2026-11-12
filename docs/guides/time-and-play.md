@@ -54,7 +54,7 @@ earth.addEventListener("chikyu-timechange", (event) => {
 
 ## Play, Pause and Back
 
-The demo's Time row is the family's replay bar (kazoku-ui's `<kazoku-replay-bar>`) next to the date field, with the speeds `1 3600 86400 -3600`, read as multiples of real time:
+Above 60 times real time the satellites stay on the picture as short streaks along their orbits (see [Satellites on the globe](satellites.md)); they are not hidden. The demo's Time row is the family's replay bar (kazoku-ui's `<kazoku-replay-bar>`) next to the date field, with the speeds `1 3600 86400 -3600`, read as multiples of real time:
 
 - **Play** runs the clock from the date shown, and the date box follows it. A date that was "now" becomes that moment, so the clock does not jump to a later now.
 - **Pause** holds the clock there and writes the date reached into the address (`time`). A held view draws nothing.
