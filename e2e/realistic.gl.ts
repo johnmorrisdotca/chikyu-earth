@@ -122,9 +122,9 @@ test("the textures grow with the zoom, stay under their cap, and are freed after
   await openEarth(page);
   const start = await statsOf(page);
   expect(start.tiers).toEqual({ day: 1024, night: 1024, clouds: 1024, water: 1024 });
-  // three keeps four empty textures of its own; ours are one a layer (four) and the paint trail's one, which the surface program always reads.
+  // three keeps four empty textures of its own; ours are one a layer (four); the paint trail's picture is made only when a satellite is painted.
   const base = alive(await counts(page), "Texture");
-  expect(base).toBeLessThanOrEqual(9);
+  expect(base).toBeLessThanOrEqual(8);
 
   await setView(page, 3);
   await expect.poll(async () => (await statsOf(page)).tiers.day).toBe(2048);
