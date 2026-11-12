@@ -136,6 +136,8 @@ export interface EarthDeps {
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
   /** The rings the places' layer wants drawn in one draw call, read right after `onPose`. */
   placeSprites?: () => PlaceSpriteData | null;
+  /** Told once, when the rings of the places that are not markers of their own were first wanted: whether the picture can draw them (false when the three.js parts handed over lack `Points`). */
+  onPlaceRings?: (drawn: boolean) => void;
 }
 
 export const newModel = (): EarthModel => ({
@@ -319,6 +321,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
       let placeSprites: PlaceSprites | null = null;
+      let placeSpritesTried = false;
       let gridLayer: GridLayer | null = null;
 
       return {
@@ -408,7 +411,12 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             borders.sync({ points: points.length > 0 ? points : [look], angle: Math.asin(Math.min(1, (1.4 * Math.hypot(size.width, size.height)) / 8 / radius)) / RAD, radius });
           }
           const spriteData = deps.placeSprites?.() ?? null;
-          if (spriteData && !placeSprites) placeSprites = createPlaceSprites(three, turned, sunDir);
+          if (spriteData && !placeSprites && !placeSpritesTried) {
+            placeSprites = createPlaceSprites(three, turned, sunDir);
+            placeSpritesTried = true;
+            // told once: without `Points` the page's layer draws these rings itself
+            deps.onPlaceRings?.(placeSprites !== null);
+          }
           placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           // the grid: made the first time it is switched on, over the ground and under the clouds
           if (model.grid.on && !gridLayer && !model.grid.stats.failed) {

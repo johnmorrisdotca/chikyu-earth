@@ -521,3 +521,18 @@ export function groupPlaces(places: readonly Place[], cell: number): PlaceGroup[
   }
   return out;
 }
+
+/**
+ * Whether places that crowd are gathered into one ring with their count (the attribute `place-groups`): on unless the value is `off`.
+ *
+ * @param value - The attribute's value, or null when it is not set.
+ * @returns False for `off`, true for anything else.
+ *
+ * @example
+ * ```ts
+ * import { readPlaceGroups } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(readPlaceGroups(null), readPlaceGroups("off")); // true false
+ * ```
+ */
+export const readPlaceGroups = (value: string | null): boolean => (value ?? "").trim().toLowerCase() !== "off";

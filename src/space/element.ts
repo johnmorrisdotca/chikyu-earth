@@ -9,7 +9,7 @@ import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import type { SkyKeepClear } from "../sky/keep-clear.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
-import { cleanPlaces, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
+import { cleanPlaces, readPlaceGroups, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
 import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
 import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "../realistic/sun.ts";
@@ -242,7 +242,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "bodies-credit"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "bodies-credit"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -338,6 +338,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#placeList = readPlaces(this.getAttribute("places"));
     this.#placeLayer.set(this.#placeList);
     this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
+    this.#placeLayer.grouping = readPlaceGroups(this.getAttribute("place-groups"));
     this.#cities = createCityHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -398,6 +399,7 @@ export class ChikyuSpace extends HTMLElement {
       onSelected: (place) => this.#placeChosen(place),
       onMoving: () => this.#gate?.request(),
       onRideLost: () => this.#rideLost(),
+      onPlaceRings: (drawn) => this.#ringsDrawn(drawn),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       ...(painter ? { painter } : {}),
       satellitePainter: () => satellitePainter,
@@ -487,6 +489,9 @@ export class ChikyuSpace extends HTMLElement {
       this.#gate?.request();
     } else if (name === "places-look" && this.#placeLayer) {
       this.#placeLayer.look = readPlaceLook(value);
+      this.#gate?.request();
+    } else if (name === "place-groups" && this.#placeLayer) {
+      this.#placeLayer.grouping = readPlaceGroups(value);
       this.#gate?.request();
     }
     else if ((CITY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#cities?.refresh();
@@ -661,6 +666,25 @@ export class ChikyuSpace extends HTMLElement {
     };
     glideView(set, from, to, options.smooth !== false && !prefersLessMotion() && this.#view?.live === true, () => glide === this.#placeGlide && this.isConnected);
     return { ...place };
+  }
+
+  /**
+   * Whether places that crowd are gathered into one ring with their count (the attribute `place-groups`): on by default, `off` leaves every place its own ring. Setting the property writes the attribute.
+   */
+  get placeGroups(): boolean {
+    return this.#placeLayer?.grouping ?? readPlaceGroups(this.getAttribute("place-groups"));
+  }
+  set placeGroups(value: boolean) {
+    if (value) this.removeAttribute("place-groups");
+    else this.setAttribute("place-groups", "off");
+  }
+
+  /** The picture said whether it can draw the rings of the places that are not markers of their own. Without `Points` the places' layer draws them itself and the page is told once, so no place is lost without a word. */
+  #ringsDrawn(drawn: boolean): void {
+    if (!this.#placeLayer || this.#placeLayer.ringsInPicture === drawn) return;
+    this.#placeLayer.ringsInPicture = drawn;
+    if (!drawn) this.dispatchEvent(new CustomEvent("chikyu-places-unavailable", { detail: { reason: "the three.js parts handed over lack Points: the places' rings are drawn as small circles in the page, at most 600, and stats.places.omitted counts the rest" } }));
+    this.#gate?.request();
   }
 
   /** How the places are drawn (the attribute `places-look`): `beam` (a light rising out of the ground with a ring at its foot, the default), `pin` (a thin stick with a round head) or `ring` (only the ring on the ground). */
@@ -1304,7 +1328,7 @@ export class ChikyuSpace extends HTMLElement {
      * The places: how many were handed over, how many are in sight at the last draw (`shown`, those gathered into groups included), how many stand up as markers of their own (`marks`) and are named (`labels`),
      * how many rings the one draw call draws (`sprites`) and how many of those are groups (`groups`), the satellites ringed and named, and how many times they were laid out.
      */
-    places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number };
+    places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; omitted: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
     /** The borders: the segments of each set, whether each was drawn at the last draw, the countries whose regions have arrived, how many times a set's lines were made, and whether a set could not be loaded. */
@@ -1333,7 +1357,7 @@ export class ChikyuSpace extends HTMLElement {
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },
       followModel: this.#model.followModel,
-      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0 }) },
+      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, omitted: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
       grid: { ...this.#model.grid.stats },

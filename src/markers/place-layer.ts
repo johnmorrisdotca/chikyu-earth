@@ -38,6 +38,8 @@ export const PLACE_STYLE =
   ".pl-name[data-kind=satellite]{--c:#cfeaff;color:#cfeaff;font-weight:500;background:rgba(4,10,20,.5);border-color:transparent}" +
   ".pl-sat{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border:1.2px solid #cfeaff;border-radius:50%;opacity:.85;will-change:transform}" +
   ".pl-sat[hidden]{display:none}" +
+  ".pl-dot{position:absolute;left:0;top:0;box-sizing:border-box;border:1.5px solid var(--c);border-radius:50%;opacity:.9;will-change:transform}" +
+  ".pl-dot[hidden]{display:none}" +
   ".pl-name.pl-measure{visibility:hidden}";
 
 /** A satellite ringed and named in the picture just drawn: its name, where it is and whether it can be seen (in the box and not behind the Earth). */
@@ -63,6 +65,17 @@ const SATELLITE_RING = 8;
  * ```
  */
 export const PLACE_MARKS = 32;
+/**
+ * The most rings the layer draws itself, as small circles in the page, when the picture cannot draw them (the three.js parts handed over lack `Points`). Places in sight beyond it are counted in `stats.omitted`, not dropped quietly.
+ *
+ * @example
+ * ```ts
+ * import { PLACE_DOTS } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(PLACE_DOTS); // 600
+ * ```
+ */
+export const PLACE_DOTS = 600;
 /** The most names a group's count gets. */
 const GROUP_NAMES = 24;
 const EDGE = 0.02;
@@ -84,7 +97,16 @@ export interface PlaceLayer {
   frame(view: PlaceView | null, taken?: readonly Box[], marks?: readonly SatelliteMark[], sun?: GeoPoint | null): void;
   /** The rings the picture draws for the places that are not markers of their own, as of the last `frame`; null while there are none. */
   readonly sprites: PlaceSpriteData | null;
-  readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number };
+  /**
+   * Whether places that crowd are gathered into one ring with their count (the attribute `place-groups`; true by default). False leaves every place its own ring.
+   */
+  grouping: boolean;
+  /**
+   * Whether the picture draws the rings that are not markers of their own (true by default). False when the three.js parts lack `Points`: the layer then draws those rings itself as small circles in the page, up to {@link PLACE_DOTS},
+   * and `stats.omitted` counts the places in sight it had no room for.
+   */
+  ringsInPicture: boolean;
+  readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; omitted: number };
   /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
   readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
   dispose(): void;
@@ -115,7 +137,11 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const marks: Mark[] = [];
   const names: HTMLElement[] = [];
   const sizes = new Map<string, { width: number; height: number }>();
-  const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0 };
+  const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, omitted: 0 };
+  let grouping = true;
+  let ringsInPicture = true;
+  // the small circles that stand in for the picture's rings when it cannot draw them: the element, and what it was last written with
+  const dots: { root: HTMLElement; r: number; color: string; fill: number }[] = [];
   let boxes: { left: number; top: number; width: number; height: number }[] = [];
   const rings: HTMLElement[] = [];
   const measures: HTMLElement[] = [];
@@ -214,6 +240,35 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     name.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
   };
 
+  // a small circle standing in for a ring the picture cannot draw: `fill` is how much of it is solid (a group of several)
+  const showDot = (i: number, x: number, y: number, r: number, fill: number, color: string): void => {
+    let dot = dots[i];
+    if (!dot) {
+      const root = doc.createElement("i");
+      root.className = "pl-dot";
+      box.append(root);
+      dot = { root, r: -1, color: "", fill: -1 };
+      dots[i] = dot;
+    }
+    if (dot.r !== r) {
+      dot.r = r;
+      dot.root.style.width = `${2 * r}px`;
+      dot.root.style.height = `${2 * r}px`;
+      dot.root.style.marginLeft = `${-r}px`;
+      dot.root.style.marginTop = `${-r}px`;
+    }
+    if (dot.color !== color) {
+      dot.color = color;
+      dot.root.style.setProperty("--c", color);
+    }
+    if (dot.fill !== fill) {
+      dot.fill = fill;
+      dot.root.style.background = fill > 0 ? `color-mix(in srgb, ${color} ${Math.round(fill * 100)}%, transparent)` : "none";
+    }
+    if (dot.root.hidden) dot.root.hidden = false;
+    dot.root.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+  };
+
   /** Gather the places again for a new list or a new cell, and write the rings' places and colours. */
   const regroup = (cell: number): void => {
     groupedFor = places;
@@ -249,6 +304,8 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     hideFrom(marks.map((m) => m.root), 0);
     hideFrom(names, 0);
     hideFrom(rings, 0);
+    if (dots.length > 0) hideFrom(dots.map((d) => d.root), 0);
+    stats.omitted = 0;
     stats.shown = 0;
     stats.labels = 0;
     stats.rings = 0;
@@ -279,6 +336,20 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       look = value;
       box.dataset["look"] = value;
     },
+    get grouping() {
+      return grouping;
+    },
+    set grouping(value) {
+      if (value === grouping) return;
+      grouping = value;
+      groupedFor = null;
+    },
+    get ringsInPicture() {
+      return ringsInPicture;
+    },
+    set ringsInPicture(value) {
+      ringsInPicture = value;
+    },
     get sprites() {
       return sprites;
     },
@@ -290,7 +361,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         return;
       }
       stats.renders += 1;
-      const cell = groupCell(view.radius ?? 0);
+      const cell = grouping ? groupCell(view.radius ?? 0) : 0;
       if (groupedFor !== places || groupedCell !== cell) regroup(cell);
       // which groups are in sight, and the places that get markers of their own: `here` first, then in the order given
       const inSight: number[] = [];
@@ -349,6 +420,8 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       // the rings in the one draw call: every place in sight that has no marker of its own, and every group, larger as it holds more
       let drawnSprites = 0;
       let drawnGroups = 0;
+      let drawnDots = 0;
+      let omitted = 0;
       if (sprites) {
         const shapes = sprites.shapes;
         const before = shapes.slice(0, groups.length * 2);
@@ -364,11 +437,19 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
           const ring = n > 1 ? Math.min(14, 6 + 2.2 * Math.log2(n)) : RING[first.kind === "here" ? "here" : "favourite"];
           shapes[g * 2] = ring;
           shapes[g * 2 + 1] = n > 1 ? 0.3 : 0;
-          drawnSprites += 1;
+          if (!ringsInPicture || n > 1) view.at(group.lon, group.lat, point);
+          if (ringsInPicture) drawnSprites += 1;
+          else if (drawnDots < PLACE_DOTS) {
+            showDot(drawnDots, point.x, point.y, ring, n > 1 ? 0.3 : 0, sprites.colors[g]!);
+            drawnDots += 1;
+            drawnSprites += 1;
+          } else {
+            omitted += n;
+            continue;
+          }
           if (n > 1) {
             drawnGroups += 1;
             if (counts.length < GROUP_NAMES * 2) {
-              view.at(group.lon, group.lat, point);
               const found = size({ label: String(n), kind: "group" });
               if (found) {
                 counts.push({ x: point.x, y: point.y, r: ring, w: found.width, h: found.height, priority: n });
@@ -389,6 +470,8 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
           used += 1;
         }
       }
+      if (dots.length > 0) hideFrom(dots.map((d) => d.root), drawnDots);
+      stats.omitted = omitted;
       // the ringed satellites: a ring round each that can be seen, and its name where it is free of the places' names and the boxes taken
       const seen = satellites.filter((mark) => mark.visible);
       for (const [i, mark] of seen.entries()) {

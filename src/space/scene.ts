@@ -401,6 +401,8 @@ export interface SpaceDeps {
   onPlaces?: (view: PlaceView) => void;
   /** The rings the places' layer wants drawn in one draw call, read right after `onPlaces`. */
   placeSprites?: () => PlaceSpriteData | null;
+  /** Told once, when the rings of the places that are not markers of their own were first wanted: whether the picture can draw them (false when the three.js parts handed over lack `Points`). */
+  onPlaceRings?: (drawn: boolean) => void;
   /** Where the Earth is on the screen (its disc) and how to find a place on it, for the names of cities and countries. Called at each draw, with `null` while no Earth is shown. */
   onCities?: (frame: CountryFrame | null) => void;
   /** The name written on the Earth could not be made. */
@@ -621,6 +623,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
       let placeSprites: PlaceSprites | null = null;
+      let placeSpritesTried = false;
       let gridLayer: GridLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
@@ -1074,7 +1077,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             });
           }
           const spriteData = deps.placeSprites?.() ?? null;
-          if (spriteData && !placeSprites) placeSprites = createPlaceSprites(three, earth, sunEarth);
+          if (spriteData && !placeSprites && !placeSpritesTried) {
+            placeSprites = createPlaceSprites(three, earth, sunEarth);
+            placeSpritesTried = true;
+            // told once: without `Points` the page's layer draws these rings itself
+            deps.onPlaceRings?.(placeSprites !== null);
+          }
           placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
