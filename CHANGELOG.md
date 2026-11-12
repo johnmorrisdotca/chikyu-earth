@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.34.1 - 2026-11-11
+
 - **The sky is behind the Earth: constellation lines no longer cross it** (MODULES-1103). The lines were drawn over the Earth's disc (in a ride, across the whole globe). Each line is now cut exactly at the Earth's edge, the air's rim included, in the picture's own camera, in the space view and in a ride at any height, on the day side and the night side. A star whose point, ring or name box touches the Earth, the Moon or the Sun has its name and ring left out (a name only partly on the Earth was shown before), and the figure under the pointer is not lit over the Earth.
 - **The element is its own stacking context** (MODULES-1104). `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` are each their own stacking context (`isolation: isolate`), so nothing inside the element (the sky's labels, its lines, its markers) takes part in the page's own stacking: it paints as one piece, where the element sits in the page.
 
