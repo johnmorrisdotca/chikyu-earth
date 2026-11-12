@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **CI no longer repeats itself on main** (a CI change, no version bump). A release ran the whole of `ci.yml` on the release branch and again, on the identical commit, when the fast-forward reached main. A push to main now first asks GitHub whether a successful run of `ci.yml` already exists for the commit; if one does, the check, package, demo and usage jobs are skipped and the run is green (the commit-message check still runs). A failed, cancelled or unfinished run does not count, and every other event (a pull request, a branch, a run by hand) runs everything. A run by hand takes `simulate_main_push` to try the lookup on a branch, and `lookup_sha` to ask about another commit without running anything. The release workflow's own check for a green run of the commit is unchanged.
+
 ## 0.38.0 - 2026-11-12
 
 - **Paint a satellite's path on the Earth** (MODULES-1167). `paint` on `<chikyu-space>` and `<chikyu-earth-realistic>` is `{ id, length, swath }`. `id` is a NORAD catalogue number or `group:index`. `length` is `1d` (the default), `1w` or `1m` of simulated time. `swath` is `track` (the point under the satellite, the default) or `coverage` (the ground where the satellite is at least 10° above the horizon, from its height). `clearPaint()` takes the trail off. Changing the satellite clears it. The trail is one equirectangular texture on the globe. It is stamped only while simulated time moves, one upload a frame, and nothing at rest or while painting is off. A part older than `length` fades out. The date line and the poles are split so the line does not cross the map. The demo's satellite card has Paint, Clear, and 1 day, 1 week, 1 month.
