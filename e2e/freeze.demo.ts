@@ -101,7 +101,8 @@ for (const look of LOOKS) {
         const turning = await bounded(page, 3000, look);
         expect(turning.callbacks).toBeGreaterThan(5);
         expect(turning.frames, "frames drawn").toBeLessThanOrEqual(turning.callbacks + 3);
-        expect(turning.draws, "GL draw calls for each frame drawn").toBeLessThanOrEqual(Math.max(1, turning.frames) * 40);
+        // above the ISS the demo draws its stand-in model (a row of modules, the truss and the panels: about twenty parts, a draw call each) beside the rest of the scene
+        expect(turning.draws, "GL draw calls for each frame drawn").toBeLessThanOrEqual(Math.max(1, turning.frames) * (look === "above" ? 70 : 40));
         expect(turning.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(turning.callbacks + 3);
         expect(turning.outstanding, "one request waiting at a time").toBeLessThanOrEqual(3);
       });
