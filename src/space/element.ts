@@ -293,6 +293,10 @@ export class ChikyuSpace extends HTMLElement {
   /** Counts the turns to a place, so a new one stops the one before. */
   #placeGlide = 0;
   #nameBoxes = new Map<string, { width: number; height: number }>();
+  /** A font that arrives after the names were measured: the boxes are read again on the next layout. The satellites' marks are not touched, or the page would be told again about each one already in view. */
+  #onFonts = (): void => {
+    this.#nameBoxes.clear();
+  };
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
   get controller(): ViewController | undefined {
@@ -300,6 +304,7 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   connectedCallback(): void {
+    document.fonts?.addEventListener?.("loadingdone", this.#onFonts);
     this.#model.centre = readCentre(this.getAttribute("center")) ?? this.#model.centre;
     this.#mode = readTime(this.getAttribute("time"));
     this.#model.time = this.#mode === "now" ? Date.now() : this.#mode;
@@ -424,6 +429,10 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    document.fonts?.removeEventListener?.("loadingdone", this.#onFonts);
+    this.#marks = [];
+    this.#markSeen.clear();
+    this.#nameBoxes.clear();
     this.#hands?.unbind();
     this.#hands = undefined;
     this.#zoomRange(false);

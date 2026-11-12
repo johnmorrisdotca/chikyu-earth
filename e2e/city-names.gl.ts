@@ -129,6 +129,69 @@ for (const [name, tag, look] of [
       expect(await page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws), "and neither is the picture").toBe(draws);
     });
 
+    test("removing the element while a city tier is loading leaves one canvas when it comes back", async ({ page }) => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let waiting = 0;
+      await page.route(/cities/i, async (route) => {
+        waiting += 1;
+        await held;
+        await route.continue();
+      });
+      await page.goto(`/chikyu-earth/?look=${look}&${HELD}&city-names=24`);
+      await page.locator(`${tag}[data-state=live]`).waitFor({ timeout: 60_000 });
+      await expect.poll(() => waiting, { timeout: 20_000, message: "a city tier was asked for" }).toBeGreaterThan(0);
+      await page.locator(tag).evaluate((el) => {
+        el.addEventListener("chikyu-city-names-unavailable", () => {
+          el.dataset.cityLate = "1";
+        });
+        const parent = el.parentElement!;
+        const next = el.nextSibling;
+        el.remove();
+        parent.insertBefore(el, next);
+      });
+      release();
+      await expect.poll(async () => (await statsOf(page, tag)).names, { timeout: 30_000, message: "names come back after the element is put back" }).toBeGreaterThan(0);
+      const counts = await page.locator(tag).evaluate((el) => ({
+        canvas: el.shadowRoot!.querySelectorAll("#cn-canvas").length,
+        names: el.shadowRoot!.querySelectorAll("#cn-names").length,
+        late: el.dataset.cityLate ?? "",
+      }));
+      expect(counts.canvas, "one canvas").toBe(1);
+      expect(counts.names, "one names box").toBe(1);
+      expect(counts.late, "a load that finished after removal does not report an error").toBe("");
+    });
+
+    test("the city font is read when the style changes, not on every frame", async ({ page }) => {
+      await go(page, "&city-names=24");
+      await expect.poll(async () => (await statsOf(page, tag)).names, { timeout: 30_000 }).toBeGreaterThan(0);
+      await page.locator(tag).evaluate((el) => {
+        let reads = 0;
+        const proto = CSSStyleDeclaration.prototype;
+        const original = proto.getPropertyValue;
+        proto.getPropertyValue = function (this: CSSStyleDeclaration, name: string): string {
+          if (name === "--chikyu-city-font" || name === "--chikyu-city-weight") reads += 1;
+          return original.call(this, name);
+        };
+        (el as HTMLElement & { __fontReads?: () => number }).__fontReads = () => reads;
+      });
+      await page.locator(tag).evaluate((el) => el.setAttribute("speed", "60"));
+      const before = await page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+      await expect.poll(async () => page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws), { timeout: 10_000 }).toBeGreaterThan(before + 4);
+      const during = await page.locator(tag).evaluate((el) => (el as HTMLElement & { __fontReads?: () => number }).__fontReads?.() ?? -1);
+      expect(during, "frames do not read the font again").toBe(0);
+      await page.evaluate(() => document.fonts?.dispatchEvent(new Event("loadingdone")));
+      await expect.poll(async () => page.locator(tag).evaluate((el) => (el as HTMLElement & { __fontReads?: () => number }).__fontReads?.() ?? 0)).toBeGreaterThan(0);
+      const once = await page.locator(tag).evaluate((el) => (el as HTMLElement & { __fontReads?: () => number }).__fontReads?.() ?? 0);
+      const drawn = await page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+      await expect.poll(async () => page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws)).toBeGreaterThan(drawn + 3);
+      const after = await page.locator(tag).evaluate((el) => (el as HTMLElement & { __fontReads?: () => number }).__fontReads?.() ?? 0);
+      expect(after, "the read on the font event is not repeated every frame").toBe(once);
+      await page.locator(tag).evaluate((el) => el.setAttribute("speed", "0"));
+    });
+
     test("the property restyles the names", async ({ page }) => {
       await go(page, "&city-names=20");
       await expect.poll(async () => (await shown(page, tag)).length, { timeout: 30_000 }).toBeGreaterThan(0);

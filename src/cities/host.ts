@@ -100,11 +100,13 @@ export function createCityHost(options: CityHostOptions): CityHost {
   const pool: HTMLElement[] = [];
   let max = readCityNames(options.attribute("city-names"));
   let drawnBefore = false;
+  /** Set in `dispose`: a tier that arrives later, or a font or language event already queued, must not attach again. */
+  let gone = false;
   /** The language the names were last laid out in: the page may change its language after the element was made, so it is read again at each draw. */
   let usedLang: "en" | "ja" | undefined;
 
   const attach = (): void => {
-    if (canvas) return;
+    if (gone || canvas) return;
     canvas = doc.createElement("canvas");
     canvas.id = "cn-canvas";
     canvas.setAttribute("aria-hidden", "true");
@@ -138,16 +140,24 @@ export function createCityHost(options: CityHostOptions): CityHost {
     set("--chikyu-city-halo-width", style.haloWidth);
   }
 
-  /** The width of a name in the font it is drawn in: a canvas set to the layer's own font, size and weight (the page's `--chikyu-city-*` properties, or the style set), so a fallback font with wider letters is measured as it is. */
+  /** The width of a name in the font it is drawn in: a canvas set to the layer's own font, size and weight (the page's `--chikyu-city-*` properties, or the style set), so a fallback font with wider letters is measured as it is. The font string is read again only when the style, the size or the language changes, not on every draw. */
   let ruler: CanvasRenderingContext2D | null | undefined;
+  let fontKey = "";
+  let fontValue = "";
   const measurer = (size: number): ((text: string) => number) | undefined => {
     if (ruler === undefined) ruler = doc.createElement("canvas").getContext?.("2d") ?? null;
     const context = ruler;
     if (!context || typeof context.measureText !== "function") return undefined;
-    const host = root.host ? getComputedStyle(root.host) : undefined;
-    const family = style.font ?? (host?.getPropertyValue("--chikyu-city-font").trim() || "system-ui, -apple-system, 'Segoe UI', sans-serif");
-    const weight = style.weight ?? (host?.getPropertyValue("--chikyu-city-weight").trim() || 500);
-    context.font = `${weight} ${size}px ${family}`;
+    const lang = options.language();
+    const key = `${style.font ?? ""}\0${style.weight ?? ""}\0${size}\0${lang}`;
+    if (key !== fontKey) {
+      fontKey = key;
+      const host = root.host ? getComputedStyle(root.host) : undefined;
+      const family = style.font ?? (host?.getPropertyValue("--chikyu-city-font").trim() || "system-ui, -apple-system, 'Segoe UI', sans-serif");
+      const weight = style.weight ?? (host?.getPropertyValue("--chikyu-city-weight").trim() || 500);
+      fontValue = `${weight} ${size}px ${family}`;
+    }
+    context.font = fontValue;
     return (text) => context.measureText(text).width;
   };
 
@@ -169,16 +179,21 @@ export function createCityHost(options: CityHostOptions): CityHost {
       asked.add(tier);
       void load(tier)
         .then((cities) => {
+          if (gone) return;
           lists.set(tier, cities);
           version += 1;
           compute();
           options.onLayout?.();
         })
-        .catch((error: unknown) => options.onError(error));
+        .catch((error: unknown) => {
+          if (gone) return;
+          options.onError(error);
+        });
     }
   };
 
   function compute(): void {
+    if (gone) return;
     const frame = last;
     if (max === null || !frame) return;
     const tiers = cityTiersFor(frame.radius);
@@ -241,6 +256,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
   // the family's chooser tells the document when the page's language changes: the names are written again, though nothing else is drawn
   const onLanguage = (): void =>
     queueMicrotask(() => {
+      if (gone) return;
       if (max !== null && last && usedLang !== undefined && usedLang !== options.language()) {
         compute();
         options.onLayout?.();
@@ -249,7 +265,8 @@ export function createCityHost(options: CityHostOptions): CityHost {
   doc.addEventListener("kazoku-languagechange", onLanguage);
   // a font arrives: the names are measured in the font they are drawn in, so they are laid out again
   const onFonts = (): void => {
-    if (max !== null && last) {
+    fontKey = "";
+    if (!gone && max !== null && last) {
       compute();
       options.onLayout?.();
     }
@@ -258,6 +275,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
 
   return {
     frame(next) {
+      if (gone) return;
       last = next;
       if (max === null) return;
       if (!next) {
@@ -267,6 +285,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
       compute();
     },
     refresh() {
+      if (gone) return;
       max = readCityNames(options.attribute("city-names"));
       if (max === null) {
         clear();
@@ -275,6 +294,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
       compute();
     },
     setStyle(next) {
+      if (gone) return;
       style = { ...next };
       vars();
       compute();
@@ -290,6 +310,9 @@ export function createCityHost(options: CityHostOptions): CityHost {
       return { on: max !== null, max: max ?? 0, radius: last?.radius ?? 0, tiers: [...lists.keys()], cities: [...lists.values()].reduce((sum, list) => sum + list.length, 0), names: shown.length, renders };
     },
     dispose() {
+      gone = true;
+      last = null;
+      max = null;
       doc.removeEventListener("kazoku-languagechange", onLanguage);
       doc.fonts?.removeEventListener?.("loadingdone", onFonts);
       canvas?.remove();
