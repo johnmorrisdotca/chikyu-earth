@@ -242,7 +242,7 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 
 ## You are here, and places on the Earth
 
-`places` on `<chikyu-space>` and `<chikyu-earth-realistic>` marks places on the Earth, each a beam, a pin or a ring (`places-look`) standing out of the ground, turning with the Earth and hidden on its far side: `kind: "here"` for the reader's own place (brighter, with a quiet pulse) and favourites, quieter. Names never overlap; nothing is drawn at rest. The package never asks for the reader's place and stores or sends nothing: the page asks on a press and rounds the place with `nearby` first: [guide](docs/guides/places.md).
+`places` on `<chikyu-space>` and `<chikyu-earth-realistic>` marks places on the Earth, each a beam, a pin or a ring (`places-look`) standing out of the ground, turning with the Earth, hidden on its far side and dimmer at night: `kind: "here"` for the reader's own place (brighter, with a quiet pulse) and favourites, quieter, each with an optional `color`. Up to 5,000: the first 32 in sight stand up with their names, the rest are rings in one draw call, crowds are gathered with their count, and `goToPlace(id)` turns the view to one. Names never overlap; nothing is drawn at rest. The package never asks for the reader's place and stores or sends nothing: the page asks on a press and rounds the place with `nearby` first: [guide](docs/guides/places.md).
 
 ```html
 <chikyu-space places='[{"id":"me","lon":-79.4,"lat":43.7,"label":"You are here","kind":"here"}]'></chikyu-space>

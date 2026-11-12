@@ -23,6 +23,8 @@ import type { SkyKeepClear } from "../sky/keep-clear.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, orthoView, readPlaces, type Place, type PlaceLook } from "../markers/places.ts";
 import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
+import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
+import { subsolarPoint } from "./sun.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
 import { project } from "../markers/project.ts";
 import { BORDER_ATTRIBUTES, readBorders, type BorderSets } from "../borders/lines.ts";
@@ -206,6 +208,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #listeners = new Set<(pose: OverlayPose) => void>();
   #placeLayer: PlaceLayer | undefined;
   #placeList: Place[] = [];
+  /** Counts the turns to a place, so a new one stops the one before. */
+  #placeGlide = 0;
   #hands: ElementControls | undefined;
   #reach: string | null = null;
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
@@ -313,11 +317,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
       onTiled: () => this.#door.announce(),
       onSky: (sky) => this.#sky?.frame(sky),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      placeSprites: () => this.#placeLayer?.sprites ?? null,
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
         this.#pose = { ...pose, transform: "" };
         for (const listener of this.#listeners) listener(this.#pose);
-        if (this.#placeLayer && (this.#placeList.length > 0 || this.#placeLayer.stats.shown > 0)) this.#placeLayer.frame(orthoView(pose));
+        if (this.#placeLayer && (this.#placeList.length > 0 || this.#placeLayer.stats.shown > 0)) this.#placeLayer.frame(orthoView(pose), [], [], this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
         this.#cityFrame();
       },
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
@@ -531,10 +536,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
-   * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
-   * (the default: quieter). Each stands up out of the ground, turns with the Earth, is hidden on its far side and keeps its size in pixels at any zoom. Names go at the top, `here` first, and never overlap
-   * one another; one with no room is left out. The element stores nothing and sends nothing: the page hands the places over and keeps them where it likes. Setting the property writes the attribute; at most
-   * `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight and for a reader who asked for less motion.
+   * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind, color }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
+   * (the default: quieter), and `color` an optional CSS colour of its own. The first `PLACE_MARKS` in sight (`here` first, then in the order given) stand up out of the ground with their names; every other place
+   * is a ring on the ground, all of them one draw call, and places that crowd are gathered into one ring with their count. They turn with the Earth, are hidden on its far side, are dimmer on its night side
+   * and keep their size in pixels at any zoom. Names never overlap one another; one with no room is left out. The element stores nothing and sends nothing: the page hands the places over and keeps them where
+   * it likes. Setting the property writes the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight and for a reader who asked
+   * for less motion.
    */
   get places(): Place[] {
     return this.#placeList.map((place) => ({ ...place }));
@@ -546,6 +553,32 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /** How the places are drawn (the attribute `places-look`): `beam` (a light rising out of the ground with a ring at its foot, the default), `pin` (a thin stick with a round head) or `ring` (only the ring on the ground). */
+  /**
+   * Turn the Earth so a place of `places` is in the middle, at a pace a reader can follow (at once with `smooth: false`, for a reader who asked for less motion, or before the picture is live); the zoom
+   * and pan stay. The place is named by its `id`, or by its label in any case. The tilt is held to 90 degrees either way, so a place more than 90 degrees of latitude from `center` comes as near the middle
+   * as that allows.
+   *
+   * @param text - The place's id or label.
+   * @param options - `smooth` (true by default).
+   * @returns The place, once the turn has started; `undefined` when there is no such place.
+   */
+  async goToPlace(text: string, options: { smooth?: boolean } = {}): Promise<Place | undefined> {
+    const place = findPlace(this.#placeList, text);
+    if (!place) return undefined;
+    const view = this.#model.view;
+    const from = { yaw: view.yaw, tilt: view.tilt };
+    const to = aimAt(cameraCentre(this.#model), place, from);
+    const bar = this.hasAttribute("data-kazoku-bar") && this.id ? (this.getRootNode() as Document | ShadowRoot).querySelector?.(`kazoku-view-controls[for="${CSS.escape(this.id)}"]`) : null;
+    const controls = (bar ? (Reflect.get(bar, "controller") as ViewController | undefined) : undefined) ?? this.#hands?.controller;
+    const glide = (this.#placeGlide += 1);
+    const set = (yaw: number, tilt: number, final: boolean): void => {
+      if (controls) controls.set({ yaw, tilt }, final, "place");
+      else this.setView({ ...this.#model.view, yaw, tilt }, final);
+    };
+    glideView(set, from, to, options.smooth !== false && !prefersLessMotion() && this.#view?.live === true, () => glide === this.#placeGlide && this.isConnected);
+    return { ...place };
+  }
+
   get placesLook(): PlaceLook {
     return this.#placeLayer?.look ?? readPlaceLook(this.getAttribute("places-look"));
   }
@@ -803,7 +836,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
-    places: { places: number; shown: number; labels: number; renders: number };
+    places: { places: number; shown: number; labels: number; renders: number; marks: number; groups: number; sprites: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
     /** The borders: the segments of each set, whether each was drawn at the last draw, the countries whose regions have arrived, how many times a set's lines were made, and whether a set could not be loaded. */
@@ -822,7 +855,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },
-      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0 }) },
+      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, marks: 0, groups: 0, sprites: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
     };

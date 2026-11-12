@@ -15,6 +15,7 @@ import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
+import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
 import { pointOnEarth } from "./tiles.ts";
@@ -130,6 +131,8 @@ export interface EarthDeps {
   onDraw?: () => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
+  /** The rings the places' layer wants drawn in one draw call, read right after `onPose`. */
+  placeSprites?: () => PlaceSpriteData | null;
 }
 
 export const newModel = (): EarthModel => ({
@@ -311,6 +314,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
+      let placeSprites: PlaceSprites | null = null;
 
       return {
         scene,
@@ -398,6 +402,9 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             }
             borders.sync({ points: points.length > 0 ? points : [look], angle: Math.asin(Math.min(1, (1.4 * Math.hypot(size.width, size.height)) / 8 / radius)) / RAD, radius });
           }
+          const spriteData = deps.placeSprites?.() ?? null;
+          if (spriteData && !placeSprites) placeSprites = createPlaceSprites(three, turned, sunDir);
+          placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {
             const wait = meteors.step({ now: performance.now(), time: model.time, facing: unitVector({ lon: look.lon, lat: look.lat }), sun: [sx, sy, sz], radius, width: size.width, height: size.height });
@@ -416,6 +423,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           meteors?.dispose();
           nameOn?.dispose();
           borders?.dispose();
+          placeSprites?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

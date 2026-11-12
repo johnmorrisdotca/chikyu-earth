@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanPlaces, layoutPlaces, MAX_PLACES, nearby, orthoView, placeLabels, readPlaces, type Place } from "../src/markers/index.ts";
+import { cleanPlaces, groupCell, groupPlaces, layoutPlaces, MAX_PLACES, nearby, orthoView, placeLabels, readPlaces, type Place } from "../src/markers/index.ts";
+import { aimAt, findPlace, glideView } from "../src/markers/go-to-place.ts";
 
 const view = (lon: number, lat: number) => orthoView({ lon, lat, radius: 200, cx: 210, cy: 210, width: 420, height: 420 });
 const size = () => ({ width: 60, height: 18 });
@@ -96,4 +97,71 @@ test("placeLabels keeps clear of boxes already taken", () => {
   const items = [{ x: 100, y: 100, r: 4, w: 40, h: 16, priority: 0 }];
   assert.equal(placeLabels(items, 300, 300, 5).length, 1);
   assert.equal(placeLabels(items, 300, 300, 5, 64, [{ left: 40, top: 40, width: 140, height: 140 }]).length, 0);
+});
+
+test("a place keeps a colour of its own only when it is a plain CSS colour", () => {
+  const places = cleanPlaces([
+    { lon: 0, lat: 0, color: "#e8475f" },
+    { lon: 0, lat: 0, color: "rgb(10, 20, 30)" },
+    { lon: 0, lat: 0, color: "teal" },
+    { lon: 0, lat: 0, color: "red;background:url(x)" },
+    { lon: 0, lat: 0, color: "var(--x)" },
+    { lon: 0, lat: 0, color: 7 },
+  ]);
+  assert.deepEqual(places.map((place) => place.color), ["#e8475f", "rgb(10, 20, 30)", "teal", undefined, undefined, undefined]);
+  assert.equal(MAX_PLACES, 5000);
+});
+
+test("a place on the night side says so, the twilight is between, and with no Sun every place is in daylight", () => {
+  const sun = { lon: 0, lat: 0 };
+  const places: Place[] = [
+    { id: "noon", lon: 0, lat: 0 },
+    { id: "dusk", lon: 89, lat: 0 },
+    { id: "night", lon: 120, lat: 0 },
+  ];
+  const night = (lon: number) => layoutPlaces(places, view(lon, 0), "beam", { sun }).shapes.map((shape) => [places[shape.index]!.id, shape.night]);
+  assert.deepEqual(night(0)[0], ["noon", 0]);
+  const dusk = night(80).find(([id]) => id === "dusk")![1] as number;
+  assert.ok(dusk > 0 && dusk < 1, `twilight ${dusk}`);
+  assert.deepEqual(night(120).find(([id]) => id === "night"), ["night", 1]);
+  assert.ok(layoutPlaces(places, view(120, 0), "beam").shapes.every((shape) => shape.night === 0));
+});
+
+test("crowded places are gathered by cells fixed to the ground, here never is, and the cell follows the Earth's size on the screen", () => {
+  assert.equal(groupCell(200), 8);
+  assert.equal(groupCell(0), 0);
+  assert.equal(groupCell(1_000_000), 0, "so close that nothing needs gathering");
+  assert.ok(groupCell(2000) < groupCell(200));
+  const places: Place[] = [
+    { id: "a", lon: 139.69, lat: 35.69 },
+    { id: "here", lon: 139.7, lat: 35.68, kind: "here" },
+    { id: "b", lon: 139.75, lat: 35.66 },
+    { id: "c", lon: -0.13, lat: 51.51 },
+  ];
+  const groups = groupPlaces(places, 8);
+  assert.deepEqual(groups.map((group) => group.members), [[0, 2], [1], [3]]);
+  assert.ok(Math.abs(groups[0]!.lon - 139.72) < 0.01 && Math.abs(groups[0]!.lat - 35.675) < 0.01, "a group is drawn at the middle of its places");
+  assert.deepEqual(groupPlaces(places, 0).map((group) => group.members), [[0], [1], [2], [3]]);
+  // a crowd of thousands, and every place is in exactly one group
+  const crowd: Place[] = Array.from({ length: 5000 }, (_, i) => ({ id: String(i), lon: ((i * 137.508) % 360) - 180, lat: ((i * 61.8) % 170) - 85 }));
+  const gathered = groupPlaces(crowd, groupCell(200));
+  assert.ok(gathered.length < 1000, `${gathered.length} groups`);
+  assert.equal(gathered.reduce((n, group) => n + group.members.length, 0), 5000);
+});
+
+test("going to a place: by id or by name, the shorter way round, the tilt held to 90", () => {
+  const places: Place[] = [
+    { id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo" },
+    { id: "lima", lon: -77.04, lat: -12.05, label: "Lima" },
+  ];
+  assert.equal(findPlace(places, "lima")?.label, "Lima");
+  assert.equal(findPlace(places, "TOKYO")?.id, "tokyo");
+  assert.equal(findPlace(places, "Nowhere"), undefined);
+  const aim = aimAt({ lon: 10, lat: 20 }, places[0]!, { yaw: 0, tilt: 0 });
+  assert.ok(Math.abs(aim.yaw - (10 - 139.69)) < 1e-9 && Math.abs(aim.tilt - (20 - 35.69)) < 1e-9);
+  assert.equal(aimAt({ lon: 170, lat: 0 }, { lon: -170, lat: 0 }, { yaw: 0, tilt: 0 }).yaw, -20, "across the date line, not the long way");
+  assert.equal(aimAt({ lon: 0, lat: 60 }, { lon: 0, lat: -60 }, { yaw: 0, tilt: 0 }).tilt, 90);
+  let done: [number, number, boolean] | null = null;
+  glideView((yaw, tilt, final) => (done = [yaw, tilt, final]), { yaw: 0, tilt: 0 }, { yaw: 30, tilt: -10 }, false, () => true);
+  assert.deepEqual(done, [30, -10, true]);
 });

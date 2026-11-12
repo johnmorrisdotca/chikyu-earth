@@ -1,4 +1,4 @@
-// Places on the Earth, "you are here" and favourites, drawn as markers standing out of the surface: what a place is, reading the `places` attribute, and where each
+// Places on the Earth, "you are here" and favourites, drawn as markers standing out of the surface: what a place is, reading the `places` attribute, how crowded places are gathered, and where each
 // marker and its name fall on the screen. Pure: `<chikyu-space>` and `<chikyu-earth-realistic>` draw what this works out, and only when their picture is drawn.
 import type { GeoPoint } from "../types.ts";
 import { placeLabels } from "./labels.ts";
@@ -41,6 +41,8 @@ export interface Place {
   label?: string;
   /** `here` or `favourite` (the default). */
   kind?: PlaceKind;
+  /** A CSS colour for this place alone (`#e8475f`, `rgb(...)`, `hsl(...)` or a colour's name); left out, the kind's colour. */
+  color?: string;
 }
 
 /**
@@ -75,10 +77,10 @@ export const PLACE_LOOKS: readonly PlaceLook[] = ["beam", "pin", "ring"];
  * ```ts
  * import { MAX_PLACES } from "@johnmorrisdotca/chikyu-earth/markers";
  *
- * console.log(MAX_PLACES);
+ * console.log(MAX_PLACES); // 5000
  * ```
  */
-export const MAX_PLACES = 200;
+export const MAX_PLACES = 5000;
 
 /**
  * A point of the Earth's surface as one picture shows it: where it falls (CSS pixels in the box), which way is straight up from the ground there on the screen (`upX`, `upY`: a direction whose
@@ -116,6 +118,8 @@ export interface PlaceView {
   width: number;
   height: number;
   at(lon: number, lat: number, out: SurfacePoint): boolean;
+  /** The Earth's radius in the picture, in CSS pixels: how close places may be before they are gathered into a group. Left out, none are gathered. */
+  radius?: number;
 }
 
 /**
@@ -147,6 +151,8 @@ export interface PlaceShape {
   /** The ring's radius in CSS pixels. */
   ring: number;
   opacity: number;
+  /** How far into the night the place is: 0 by day, 1 in full night, between in the twilight. Always 0 when no Sun is given. */
+  night: number;
 }
 
 /**
@@ -197,9 +203,16 @@ export interface PlaceLayoutOptions {
   size?: (place: Place, index: number) => { width: number; height: number } | null;
   taken?: readonly { left: number; top: number; width: number; height: number }[];
   maxLabels?: number;
+  /** Where the Sun is overhead, for each shape's `night`; left out (or null), every place is in daylight. */
+  sun?: GeoPoint | null;
 }
 
 const RAD = Math.PI / 180;
+const toUnit = (lon: number, lat: number): [number, number, number] => [Math.cos(lat * RAD) * Math.sin(lon * RAD), Math.sin(lat * RAD), Math.cos(lat * RAD) * Math.cos(lon * RAD)];
+const dotUnit = (lon: number, lat: number, v: readonly [number, number, number]): number => {
+  const u = toUnit(lon, lat);
+  return u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+};
 /** A place this close to the Earth's edge (the cosine of its angle from the reader) is left out; up to FADE beyond it, it fades in. */
 const EDGE = 0.02;
 const FADE = 0.12;
@@ -207,10 +220,24 @@ const MARGIN = 60;
 const SIZES: Record<PlaceKind, { length: number; ring: number }> = { here: { length: 46, ring: 9 }, favourite: { length: 28, ring: 6 } };
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+/** A colour a page may give a place: a hex colour, `rgb()`/`hsl()` with numbers only, or a colour's name. Anything else is left out, so no other CSS gets in. */
+const COLOR = /^(?:#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|(?:rgb|hsl)a?\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,24})$/i;
+
+/**
+ * How far into the night a point is, from the cosine of its angle from the point the Sun is overhead: 0 in daylight, 1 once the Sun is 7 degrees below the horizon, eased between.
+ *
+ * @param cosine - The cosine of the angle between the point and the sub-solar point.
+ * @returns 0 to 1.
+ */
+const nightOf = (cosine: number): number => {
+  const k = Math.max(0, Math.min(1, (0.05 - cosine) / 0.17));
+  return k * k * (3 - 2 * k);
+};
 
 /**
  * The places of a list a page handed over, made safe to draw: each needs a longitude from -180 to 180 and a latitude from -90 to 90; one without an `id` is given its place in the list, a
- * label is cut to 80 letters, a kind that is not `here` is `favourite`. Anything else is left out, and at most {@link MAX_PLACES} are kept.
+ * label is cut to 80 letters, a kind that is not `here` is `favourite`, and a colour is kept only when it is a hex colour, `rgb()` or `hsl()` with numbers, or a colour's name. Anything else is left out,
+ * and at most {@link MAX_PLACES} are kept.
  *
  * @param list - What the page gave: an array of places, or anything.
  * @returns The places to draw.
@@ -219,7 +246,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
  * ```ts
  * import { cleanPlaces } from "@johnmorrisdotca/chikyu-earth/markers";
  *
- * console.log(cleanPlaces([{ lon: 2.35, lat: 48.86, label: "Paris" }, { lon: 500, lat: 0 }]));
+ * console.log(cleanPlaces([{ lon: 2.35, lat: 48.86, label: "Paris", color: "#e8475f" }, { lon: 500, lat: 0 }]));
  * ```
  */
 export function cleanPlaces(list: unknown): Place[] {
@@ -233,6 +260,7 @@ export function cleanPlaces(list: unknown): Place[] {
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon) > 180 || Math.abs(lat) > 90) continue;
     const place: Place = { id: typeof item["id"] === "string" && item["id"] ? item["id"] : String(i), lon, lat, kind: item["kind"] === "here" ? "here" : "favourite" };
     if (typeof item["label"] === "string" && item["label"].trim()) place.label = item["label"].trim().slice(0, 80);
+    if (typeof item["color"] === "string" && COLOR.test(item["color"].trim())) place.color = item["color"].trim();
     out.push(place);
   }
   return out;
@@ -305,6 +333,7 @@ export function orthoView(pose: Pose & { width: number; height: number }): Place
   return {
     width: pose.width,
     height: pose.height,
+    radius: pose.radius,
     at(lon, lat, out) {
       const p = project(lon, lat, pose);
       out.x = p.x;
@@ -320,12 +349,13 @@ export function orthoView(pose: Pose & { width: number; height: number }): Place
 /**
  * Where each place's marker and name go in one picture. A place on the far side of the Earth, or off the picture, is left out; one near the Earth's edge fades. The stick stands up from the ground as the picture
  * sees it, leaning towards the top of the screen where the reader looks straight down on it, so it never shrinks to a dot; the ring at its foot is flattened as the ground is. A `here` place is taller and wider
- * than a favourite. Names go at the top of the stick, `here` first and then in the order given, never over one another or over a box in `taken`; a name with no free place is left out.
+ * than a favourite. Names go at the top of the stick, `here` first and then in the order given, never over one another or over a box in `taken`; a name with no free place is left out. With `sun`, each shape says
+ * how far into the night its place is, so it can be drawn dimmer there.
  *
  * @param places - The places, as {@link cleanPlaces} makes them.
  * @param view - The picture.
  * @param look - `beam`, `pin` or `ring`.
- * @param options - The size of each name, boxes already used and the most names (16).
+ * @param options - The size of each name, boxes already used, the most names (16) and where the Sun is overhead.
  * @returns The markers to draw and where the names go.
  *
  * @example
@@ -342,6 +372,7 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
   const shapes: PlaceShape[] = [];
   const items: { x: number; y: number; r: number; w: number; h: number; priority: number }[] = [];
   const named: number[] = [];
+  const sun = options.sun ? toUnit(options.sun.lon, options.sun.lat) : null;
   for (const [index, place] of places.entries()) {
     if (!view.at(place.lon, place.lat, point) || point.facing <= EDGE) continue;
     if (point.x < -MARGIN || point.y < -MARGIN || point.x > view.width + MARGIN || point.y > view.height + MARGIN) continue;
@@ -371,6 +402,7 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
       squash: Math.max(0.08, Math.min(1, point.facing)),
       ring: size.ring,
       opacity: Math.min(1, (point.facing - EDGE) / FADE),
+      night: sun ? nightOf(dotUnit(place.lon, place.lat, sun)) : 0,
     };
     shapes.push(shape);
     const box = place.label ? options.size?.(place, index) : null;
@@ -381,4 +413,111 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
   }
   const placed = placeLabels(items, view.width, view.height, options.maxLabels ?? 16, 64, options.taken ?? []);
   return { shapes, labels: placed.map((p) => ({ index: named[p.item]!, left: p.left, top: p.top })) };
+}
+
+/**
+ * Places gathered together on the ground: where the group is drawn (the middle of its places, or the place itself when it is alone) and which places of the list are in it.
+ *
+ * @example
+ * ```ts
+ * import { groupPlaces, type PlaceGroup } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const groups: PlaceGroup[] = groupPlaces([{ id: "a", lon: 0, lat: 0 }], 8);
+ * console.log(groups[0]?.members);
+ * ```
+ */
+export interface PlaceGroup {
+  lon: number;
+  lat: number;
+  /** Indices of its places in the list given, in the list's order. */
+  members: number[];
+}
+
+/**
+ * About how many CSS pixels apart two places must be on the screen before they are drawn on their own rather than as one group.
+ *
+ * @example
+ * ```ts
+ * import { PLACE_GROUP_PX } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(PLACE_GROUP_PX); // 24
+ * ```
+ */
+export const PLACE_GROUP_PX = 24;
+
+/**
+ * The size, in degrees, of the ground's cells that crowded places are gathered in, for an Earth drawn `radius` CSS pixels across: about {@link PLACE_GROUP_PX} on the screen, rounded up to a power of two so the
+ * groups change at only a few zooms and stay put while the Earth turns. 0 (gather none) when a cell would be under 1/64 of a degree, about 1.7 km.
+ *
+ * @param radius - The Earth's radius on the screen, in CSS pixels.
+ * @returns The cell's size in degrees, from 1/64 to 32, or 0.
+ *
+ * @example
+ * ```ts
+ * import { groupCell } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(groupCell(200), groupCell(1_000_000)); // 8 0
+ * ```
+ */
+export function groupCell(radius: number): number {
+  if (!(radius > 0)) return 0;
+  const degrees = PLACE_GROUP_PX / radius / RAD;
+  if (degrees < 1 / 64) return 0;
+  return 2 ** Math.ceil(Math.log2(Math.min(degrees, 32)));
+}
+
+/**
+ * Gather crowded places: the ground is cut into bands of `cell` degrees of latitude, and each band into cells about as wide on the ground, and the places in one cell become one group drawn at their middle.
+ * The cells are fixed to the ground, so the groups turn with the Earth and do not change as it turns. A `here` place is never gathered. Groups come in the order of their first place; a `cell` of 0 leaves every
+ * place on its own. Thousands of places cost one pass.
+ *
+ * @param places - The places, as {@link cleanPlaces} makes them.
+ * @param cell - The cell's size in degrees ({@link groupCell}), or 0.
+ * @returns The groups, a place on its own being a group of one.
+ *
+ * @example
+ * ```ts
+ * import { groupPlaces } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const places = [{ id: "a", lon: 139.69, lat: 35.69 }, { id: "b", lon: 139.75, lat: 35.66 }, { id: "c", lon: -0.13, lat: 51.51 }];
+ * console.log(groupPlaces(places, 8).map((group) => group.members)); // [[0, 1], [2]]
+ * ```
+ */
+export function groupPlaces(places: readonly Place[], cell: number): PlaceGroup[] {
+  if (!(cell > 0)) return places.map((place, i) => ({ lon: place.lon, lat: place.lat, members: [i] }));
+  const out: PlaceGroup[] = [];
+  const sums: [number, number, number][] = [];
+  const cells = new Map<number, number>();
+  const bands = Math.ceil(180 / cell);
+  for (const [i, place] of places.entries()) {
+    if (place.kind === "here") {
+      out.push({ lon: place.lon, lat: place.lat, members: [i] });
+      sums.push([0, 0, 0]);
+      continue;
+    }
+    const band = Math.min(bands - 1, Math.floor((place.lat + 90) / cell));
+    const across = Math.max(1, Math.floor((360 * Math.cos((-90 + (band + 0.5) * cell) * RAD)) / cell));
+    const key = band * 100_000 + Math.min(across - 1, Math.floor(((place.lon + 180) / 360) * across));
+    const u = toUnit(place.lon, place.lat);
+    const found = cells.get(key);
+    if (found === undefined) {
+      cells.set(key, out.length);
+      out.push({ lon: place.lon, lat: place.lat, members: [i] });
+      sums.push(u);
+    } else {
+      out[found]!.members.push(i);
+      const sum = sums[found]!;
+      sum[0] += u[0];
+      sum[1] += u[1];
+      sum[2] += u[2];
+    }
+  }
+  for (const [g, group] of out.entries()) {
+    if (group.members.length < 2) continue;
+    const [x, y, z] = sums[g]!;
+    const length = Math.hypot(x, y, z) || 1;
+    group.lat = Math.asin(Math.max(-1, Math.min(1, y / length))) / RAD;
+    group.lon = Math.atan2(x, z) / RAD;
+  }
+  return out;
 }

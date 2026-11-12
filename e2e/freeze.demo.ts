@@ -494,3 +494,33 @@ test.describe("meteors on the realistic Earth", () => {
     expect(gpuObjects(await readCounts(page)), "live GPU objects after six switches").toBeLessThanOrEqual(first);
   });
 });
+
+test("a thousand places, handed over and taken away over and over: one draw call for them, nothing drawn at rest, and GPU objects stay flat", async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, "space");
+  const space = page.locator("chikyu-space");
+  let seed = 863;
+  const random = (): number => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  const many = Array.from({ length: 1000 }, (_, i) => ({ id: `p${i}`, lon: random() * 360 - 180, lat: (Math.asin(random() * 2 - 1) * 180) / Math.PI, label: `Place ${i}`, ...(i % 4 === 0 ? { color: "#7dd3fc" } : {}) }));
+  const places = () => space.evaluate((el) => (Reflect.get(el, "stats") as { places: { places: number; sprites: number } }).places);
+  const hand = (list: unknown[]) => space.evaluate((el, value) => void Reflect.set(el, "places", value), list);
+  const settled: number[] = [];
+  for (let round = 0; round < 5; round += 1) {
+    await hand(many);
+    await expect.poll(async () => (await places()).sprites, { timeout: 20_000 }).toBeGreaterThan(20);
+    await untilStill(page);
+    const rest = await bounded(page, 2000, "space");
+    expect(rest.draws, "nothing drawn at rest with a thousand places").toBe(0);
+    expect(rest.frames).toBe(0);
+    settled.push(gpuObjects(await readCounts(page)));
+    await hand([]);
+    await expect.poll(async () => (await places()).places).toBe(0);
+    await untilStill(page);
+  }
+  console.log(`live GPU objects with a thousand places, after each round: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after five rounds than after the second").toBeLessThanOrEqual(settled[1]!);
+  expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
+});
