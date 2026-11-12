@@ -702,6 +702,8 @@ if (flat && controls && stage) {
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("city-names") !== null) element.setAttribute("city-names", address.get("city-names")!);
       if (address.get("borders") === "on") element.setAttribute("borders", "");
+      if (address.get("grid") === "on") element.setAttribute("grid", "");
+      if (address.get("country-names") === "on") element.setAttribute("country-names", "");
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
@@ -781,6 +783,8 @@ if (flat && controls && stage) {
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("city-names") !== null) element.setAttribute("city-names", address.get("city-names")!);
       if (address.get("borders") === "on") element.setAttribute("borders", "");
+      if (address.get("grid") === "on") element.setAttribute("grid", "");
+      if (address.get("country-names") === "on") element.setAttribute("country-names", "");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       element.setAttribute("camera", cameraMode);
       turnFor(true);
@@ -1082,6 +1086,22 @@ if (flat && controls && stage) {
     }
     address.set("borders", on ? "on" : null);
   });
+  // The grid and the country names (`grid=on`, `country-names=on` in the address): on the realistic Earth and the space view; off by default.
+  for (const [id, name] of [
+    ["grid", "grid"],
+    ["country-names", "country-names"],
+  ] as const) {
+    const button = document.querySelector<HTMLButtonElement>(`#${id}`);
+    button?.addEventListener("click", () => {
+      const on = button.getAttribute("aria-pressed") !== "true";
+      button.setAttribute("aria-pressed", String(on));
+      for (const element of [real, space]) {
+        if (on) element?.setAttribute(name, "");
+        else element?.removeAttribute(name);
+      }
+      address.set(name, on ? "on" : null);
+    });
+  }
   // The clock. The date box follows it: <chikyu-space> sends `chikyu-timechange` while time runs and once when it holds, and the box shows it (never while the reader is typing in it).
   // Play runs the clock from the date shown; Pause holds it there and writes the date reached to the address (`time`); Back goes to the date the reader chose. `play=on` and `speed` stay in the address.
   // A link that says nothing about the clock opens moving, from now, at DEFAULT_SPEED (MODULES-815). A link with `speed=0`, `play=off` or a date (`time`) holds; one that names a speed other than 0 runs at it.
@@ -1272,6 +1292,8 @@ if (flat && controls && stage) {
   if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
   if (opened["city-names"] !== undefined) cityNames?.setAttribute("aria-pressed", "true");
   if (opened["borders"] === "on") borders?.setAttribute("aria-pressed", "true");
+  if (opened["grid"] === "on") document.querySelector("#grid")?.setAttribute("aria-pressed", "true");
+  if (opened["country-names"] === "on") document.querySelector("#country-names")?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");
