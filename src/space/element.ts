@@ -25,7 +25,7 @@ import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
-import { rideTiltLimits, rideTurnDegrees, type RideLook } from "./ride.ts";
+import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
 
@@ -120,8 +120,8 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
 
 /**
  * How a ride along is done: `view` `from` (the default) puts the camera at the body looking at the Earth, `follow` keeps it a fixed distance from the body looking at it (`distanceKm`, 3000 by default,
- * for a satellite; a planet or the Moon is kept at the distance the zoom says); `look` `down` (the default) or `horizon` is where a camera at the body points; `smooth` (the default) glides
- * from the old camera to the new one in about a second and a bit, and jumps instead for a reader who asked for reduced motion.
+ * for a satellite; a planet or the Moon is kept at the distance the zoom says); `look` `down` (the default) or `horizon` is where a camera at the body points; `face` opens a ride from the body facing one way (see `face()`; it
+ * makes the look `horizon`), with the controls' yaw and tilt looking round from there; `smooth` (the default) glides from the old camera to the new one in about a second and a bit, and jumps instead for a reader who asked for reduced motion.
  *
  * @example
  * ```ts no-run
@@ -134,12 +134,13 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
 export interface RideOptions {
   view?: "from" | "follow";
   look?: RideLook;
+  face?: RideFace;
   distanceKm?: number;
   smooth?: boolean;
 }
 
 /**
- * What the camera is riding along with now: the body or satellite, how (`from` or `follow`), where it looks, and the distance kept for a satellite.
+ * What the camera is riding along with now: the body or satellite, how (`from` or `follow`), where it looks, the facing it looks round from (`null` when none was chosen), and the distance kept for a satellite.
  *
  * @example
  * ```ts no-run
@@ -153,6 +154,7 @@ export interface Riding {
   target: RideTarget;
   view: "from" | "follow";
   look: RideLook;
+  face: RideFace | null;
   distanceKm: number;
 }
 
@@ -183,6 +185,7 @@ const TIME_EVENT_MS = 250;
  */
 const LIMITS = { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 };
 const RIDE_ZOOM = { "zoom-min": "0.5", "zoom-max": "6" };
+const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
 const readCentre = (value: string | null): GeoPoint | null => {
   if (!value) return null;
@@ -255,6 +258,7 @@ export class ChikyuSpace extends HTMLElement {
   #chosenLabel: HTMLElement | undefined;
   #focusBeforeRide: BodyName = "Earth";
   #lostTold = false;
+  #toldFacing: RideFace | null = null;
   #names: Partial<Record<BodyName, string>> = {};
   #hint = "choose to look at it";
   #tiers: Record<string, number> = {};
@@ -368,6 +372,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#last = performance.now();
     this.#schedule();
     this.addEventListener("pointerdown", this.#down);
+    this.addEventListener("keydown", this.#faceKey);
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#labelBox.addEventListener("click", this.#labelClick);
     this.#labelBox.addEventListener("focusin", this.#labelFocus);
@@ -378,6 +383,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#hands = undefined;
     this.#zoomRange(false);
     this.removeEventListener("pointerdown", this.#down);
+    this.removeEventListener("keydown", this.#faceKey);
     window.removeEventListener("pointerup", this.#up, true);
     clearTimeout(this.#timer);
     this.#timer = undefined;
@@ -734,11 +740,12 @@ export class ChikyuSpace extends HTMLElement {
     if (view.yaw !== now.yaw) model.rideTurn += rideTurnDegrees(wrapYaw(view.yaw - now.yaw), view.zoom);
     // and the tilt is held to what does something in the look: past it a drag would have to come back before anything moved (the controls driving the view are handed the held tilt, the bar's own when one is bound)
     let tilt = view.tilt;
-    const limits = model.ride && model.ride.view === "from" && model.rideDistance !== null ? rideTiltLimits(model.rideDistance, model.ride.look, view.zoom) : null;
+    const limits = model.ride && model.ride.view === "from" && model.rideDistance !== null ? rideTiltLimits(model.rideDistance, model.ride.look, view.zoom, model.ride.face ?? undefined) : null;
     if (limits) tilt = Math.max(limits.min, Math.min(limits.max, tilt));
     this.#model.view = { yaw: view.yaw, tilt, zoom: view.zoom };
     // the whole view is handed back, the yaw as it is, so the controls keep what they held and the element hears nothing it did not already have
     if (tilt !== view.tilt) this.#controls()?.set({ yaw: view.yaw, tilt, zoom: view.zoom }, final, "ride");
+    this.#tellFacing();
     const drawn = this.#model.drawnView;
     if (drawn && !final && view.zoom === drawn.zoom) {
       const turned = Math.max(Math.abs(view.yaw - drawn.yaw), Math.abs(view.tilt - drawn.tilt)) * RAD;
@@ -795,7 +802,8 @@ export class ChikyuSpace extends HTMLElement {
       // the heading starts from the yaw the controls already hold (an address that carries `yaw` is read before the ride begins), so a ride opened from the address looks where the one that was dragged there looked
       model.rideTurn = rideTurnDegrees(model.view.yaw, model.view.zoom);
       const view = typeof target === "string" && target === "Earth" ? "follow" : (options.view ?? "from");
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: options.look ?? "down", distanceKm: Math.max(100, options.distanceKm ?? 3000) };
+      const face = view === "from" && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000) };
       if (typeof target === "string" && view === "follow") model.focus = target;
       else if (wasRiding) model.focus = this.#focusBeforeRide;
     }
@@ -807,7 +815,59 @@ export class ChikyuSpace extends HTMLElement {
     this.#schedule();
     this.#gate?.request();
     this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+    this.#tellFacing();
   }
+
+  /**
+   * Face one way while riding from a body, as from the windows of a plane: `ahead` along the way it goes, `behind`, `left` or `right` (as seen facing ahead), each with the horizon a little above the middle, `down` straight at the Earth or `up`
+   * straight away from it. The camera glides there in half a second (at once for a reader who asked for reduced motion), keeping the zoom; the look becomes `horizon`, and the controls' yaw and tilt go back to 0 and look round from the facing.
+   * `facing` says the facing until the view is turned or tipped from it, and `chikyu-ride-face` tells each change. Nothing happens, and it returns false, when not riding from a body.
+   *
+   * @param face - The way to face.
+   * @returns Whether the camera turned to it.
+   */
+  face(face: RideFace): boolean {
+    const model = this.#model;
+    const ride = model.ride;
+    if (!ride || ride.view !== "from" || !RIDE_FACES.includes(face)) return false;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const pose = model.pose;
+    const newLook = ride.look !== "horizon";
+    model.ride = { ...ride, look: "horizon", face };
+    // the controls go back to 0 so that they look round from the facing; the view is set first, so the change they report back is no change and adds nothing to the turn
+    const zoom = model.view.zoom;
+    model.view = { yaw: 0, tilt: 0, zoom };
+    model.rideTurn = 0;
+    this.#controls()?.set({ yaw: 0, tilt: 0, zoom }, true, "ride");
+    model.transition = !reduced && pose.valid ? { start: performance.now(), duration: 500, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    if (newLook) this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+    this.#tellFacing();
+    return true;
+  }
+
+  /** The way the riding camera faces (`face()`), while the view has not been turned or tipped from it; `null` otherwise. */
+  get facing(): RideFace | null {
+    const ride = this.#model.ride;
+    const view = this.#model.view;
+    return ride && ride.view === "from" && ride.face && view.yaw === 0 && view.tilt === 0 ? ride.face : null;
+  }
+
+  #tellFacing(): void {
+    const now = this.facing;
+    if (now === this.#toldFacing) return;
+    this.#toldFacing = now;
+    this.dispatchEvent(new CustomEvent("chikyu-ride-face", { detail: { face: now } }));
+  }
+
+  /** The facing keys while riding from a body: W ahead, S behind, A left, D right, R up and F down. The arrow keys stay with the controls. */
+  #faceKey = (event: KeyboardEvent): void => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+    const face = FACE_KEYS[event.key.toLowerCase()];
+    if (face && this.face(face)) event.preventDefault();
+  };
 
   /** From a body the zoom only narrows the field a little, so the range is 0.5 to 6: the `zoom-min` and `zoom-max` attributes, unless the page set them itself. */
   #zoomRange(from: boolean): void {
@@ -1055,7 +1115,7 @@ export class ChikyuSpace extends HTMLElement {
     time: number;
     lookups: number;
     satellites: SatelliteStats;
-    ride: { riding: boolean; lost: boolean; gliding: boolean };
+    ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
     camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, and the moons shown round a planet that is near. */
@@ -1085,7 +1145,7 @@ export class ChikyuSpace extends HTMLElement {
       time: this.#model.time,
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
-      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
+      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null, facing: this.facing },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },

@@ -505,10 +505,21 @@ if (flat && controls && stage) {
   const rideButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride]")];
   const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-view]")];
   const lookButtonsRide = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-look]")];
+  const faceButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-face]")];
+  // the facing the ride looks round from, kept in the address with the turn: a reload faces the same way
+  const FACES = ["ahead", "behind", "left", "right", "down", "up"] as const;
+  type Face = (typeof FACES)[number];
+  let rideFace: Face | null = FACES.find((one) => one === address.get("face")) ?? null;
   const markRide = (): void => {
     for (const b of rideButtons) b.classList.toggle("on", b.dataset["ride"] === (rideKey?.startsWith("group:") ? "group" : (rideKey ?? "none")));
     for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
     for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
+    for (const box of document.querySelectorAll<HTMLElement>("[data-ride-faces]")) box.hidden = !rideKey || rideView !== "from";
+    const facing = space?.facing ?? null;
+    for (const b of faceButtons) {
+      b.classList.toggle("on", b.dataset["rideFace"] === facing);
+      b.setAttribute("aria-pressed", String(b.dataset["rideFace"] === facing));
+    }
   };
   const setRideZoom = (keepTurn = false): void => {
     Reflect.get(controls!, "controller").set(keepTurn ? { zoom: 1 } : { zoom: 1, yaw: 0, tilt: 0 }, true, "ride");
@@ -535,7 +546,8 @@ if (flat && controls && stage) {
     if (!keepZoom && space) setRideZoom();
     markRide();
     speakRide();
-    for (const key of ["ride", "rview", "rlook"]) address.set(key, null);
+    rideFace = null;
+    for (const key of ["ride", "rview", "rlook", "face"]) address.set(key, null);
   }
   async function startRide(key: string, keepTurn = false): Promise<void> {
     if (!space) return;
@@ -580,13 +592,26 @@ if (flat && controls && stage) {
       space.selectSatellite(null);
       if (satInfo) satInfo.hidden = true;
     } else if (typeof target !== "string") showSatellite(null);
-    space.ride(target, { view: rideView, look: rideLook });
+    // a ride opened from the address faces the way it names; a new one starts with no facing
+    space.ride(target, { view: rideView, look: rideLook, face: keepTurn ? (rideFace ?? undefined) : undefined });
     setRideZoom(keepTurn);
     speakRide();
     address.set("ride", key);
     address.set("rview", rideView === "follow" ? "follow" : null);
-    address.set("rlook", rideLook === "horizon" ? "horizon" : null);
+    noteRide();
   }
+  /** What the element now rides with: its look and facing, on the buttons and in the address (a facing makes the look `horizon`). */
+  function noteRide(): void {
+    const riding = space?.riding;
+    if (riding && riding.view === "from") {
+      rideLook = riding.look;
+      rideFace = riding.face;
+    }
+    address.set("rlook", riding && rideLook === "horizon" ? "horizon" : null);
+    address.set("face", riding ? rideFace : null);
+    markRide();
+  }
+  for (const button of faceButtons) button.addEventListener("click", () => space?.face(button.dataset["rideFace"] as Face));
   // riding along is for watching it go by: a ride starts the clock (Play), and the date box moves with it
   for (const button of rideButtons) {
     button.addEventListener("click", () => {
@@ -713,6 +738,8 @@ if (flat && controls && stage) {
       element.addEventListener("chikyu-body-click", (e) => lookAtBody((e as CustomEvent<BodyInfo>).detail.name, (e as CustomEvent<BodyInfo>).detail, true));
       element.addEventListener("chikyu-satellite-click", (e) => showSatellite((e as CustomEvent<SatelliteRef>).detail));
       element.addEventListener("chikyu-satellites-unavailable", () => notice(say("satLoadFail")));
+      element.addEventListener("chikyu-ride", () => noteRide());
+      element.addEventListener("chikyu-ride-face", () => noteRide());
       element.addEventListener("chikyu-ride-lost", () => {
         notice(say("rideLost"));
         stopRide();

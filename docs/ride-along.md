@@ -42,6 +42,7 @@ Paused: no timer, nothing drawn. Out of sight or in a hidden tab: the renderer d
 | A drag moves the ground the way the pointer goes | `e2e/drag.gl.ts`: real pointer drags, arrow keys and Auto-turn on the ISS (down and at the horizon), the Moon and behind them; the ground's move is found by sliding the first picture over the second |
 | The address keeps the turn | `e2e/drag.gl.ts`: a ride opens with the address's yaw and tilt, a drag writes them back, and the address brings the same picture back |
 | Smooth switching ends | the glide from the ISS to the Moon takes about 1.2 s, is part of the way after half a second, and then 0 draws |
+| Facing a way again | `e2e/ride-face.gl.ts`: each Face button lands within a degree of its way (ahead, behind, left, right level, down and up straight), the button pressed until a drag, the address's `face` opens the same way, reduced motion jumps, and nothing is drawn at rest after the glide |
 | Lost target | elements too old for the date: `chikyu-ride-lost`, the ordinary camera |
 | Dispose, recover | five switches and a stop leave the buffers and textures where they were; a lost context comes back and still rides |
 | Soak | rides of every kind in the ten-minute soak: heap, GPU objects and draws flat (numbers in the changelog) |

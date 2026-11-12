@@ -12,6 +12,7 @@
 //   &scale=true &orbits=off &labels=1   the space look's scale, the planets' paths, and the names beside the bodies
 //   &satellites=stations,starlink,gps,weather ... &sat=25544   the space look's satellites (any group of the catalogue, from this site's own files, refreshed from CelesTrak's lists every few hours) and the one marked
 //   &ride=iss|css|starlink|Moon|Mars &rview=follow &rlook=horizon   the space look's camera riding along with a body, from it (default) or behind it, looking down (default) or at the horizon
+//   &face=ahead|behind|left|right|down|up   riding from a body, the way the camera faces (at the horizon)
 //   &body=Mars &zoom=moon        the space look's camera (a number is the zoom itself): the body it looks at, and the part of the sky it shows (earth, moon, sun, inner, solar-system, or Jupiter-moons, Saturn-moons ...)
 //   &lang=ja                     the credit line in the corner, in Japanese
 // It draws only when something changes, and nothing while it is out of sight or the tab is hidden.
@@ -19,12 +20,14 @@ import "../src/element.ts";
 import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import type { BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
+import { RIDE_FACES, type RideFace } from "../src/space/ride.ts";
 import { globeCredit } from "./frame-credit.ts";
 import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
 setBodyLabelFontUrl("fonts/Michroma-Regular.ttf");
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);
+const rideFace = (): RideFace | undefined => RIDE_FACES.find((one) => one === query.get("face"));
 const frame = document.getElementById("frame")!;
 const turn = query.get("turn");
 const interactive = query.get("hands") !== "0";
@@ -180,8 +183,8 @@ if (look === "space") {
       }
       if (rideKey === "iss" || rideKey === "css") {
         const at = groupIndex(fileOf.get("stations")!, rideKey === "iss" ? 25544 : 48274);
-        if (at >= 0) element.ride({ group: "stations", index: at }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
-      } else if (rideKey === "starlink") element.ride({ group: "starlink", index: 0 }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
+        if (at >= 0) element.ride({ group: "stations", index: at }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", face: rideFace(), smooth: false });
+      } else if (rideKey === "starlink") element.ride({ group: "starlink", index: 0 }, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", face: rideFace(), smooth: false });
     } catch {
       // No elements: the planets are still shown.
     }
@@ -189,7 +192,7 @@ if (look === "space") {
 }
 
 if (look === "space" && (query.get("ride") === "Moon" || query.get("ride") === "Mars")) {
-  space?.ride(query.get("ride") as BodyName, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", smooth: false });
+  space?.ride(query.get("ride") as BodyName, { view: query.get("rview") === "follow" ? "follow" : "from", look: query.get("rlook") === "horizon" ? "horizon" : "down", face: rideFace(), smooth: false });
 }
 
 if (interactive) {

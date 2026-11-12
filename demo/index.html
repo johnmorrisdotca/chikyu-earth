@@ -197,7 +197,7 @@
                 <p class="fam-fine" id="mission-note" hidden></p>
               </div>
               <div class="box" data-box="ride">
-                <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。">
+                <div class="fam-row" id="ride-controls" hidden data-help-en="Put the camera on a moving body and look at the Earth from there: the ISS or Tiangong (about 90 minutes round), a Starlink satellite, the Moon or Mars. 'Behind it' keeps a distance and watches the body instead. Speed up or slow down time with the Time row; tilt to see the horizon. From a body, Face turns the camera ahead, behind, left, right, down or up again (keys W, S, A, D, F and R on the picture)." data-help-ja="動いている天体にカメラを載せて、そこから地球を見ます。ISS や天宮 (約90分で1周)、Starlink 衛星、月、火星から選べます。「うしろから」は、少し離れて、その天体を見ます。時間の速さは「時間」の行で変え、傾けると地平線が見えます。「その場所から」のときは、「見る方向」で前・うしろ・左・右・下・上にカメラを向け直せます (画面をクリックしたあとは、W、S、A、D、F、R のキーでもできます)。">
                   <span class="fam-label" data-say="rideAlong">Ride along</span>
                   <div class="group fam-seg" role="group" aria-label="Ride along" data-say-label="rideAlong">
                     <button type="button" data-ride="iss" data-say="sat_iss">ISS</button>
@@ -219,6 +219,15 @@
                   <div class="group fam-seg" role="group" aria-label="Looking" data-say-label="rideLook">
                     <button type="button" data-ride-look="down" class="on" data-say="look_down">Straight down</button>
                     <button type="button" data-ride-look="horizon" data-say="look_horizon">At the horizon</button>
+                  </div>
+                  <span class="fam-label" data-say="rideFace" data-ride-faces hidden>Face</span>
+                  <div class="group fam-seg" role="group" aria-label="Face" data-say-label="rideFace" data-ride-faces data-testid="ride-faces" hidden>
+                    <button type="button" data-ride-face="ahead" data-say="face_ahead" aria-keyshortcuts="W">Ahead</button>
+                    <button type="button" data-ride-face="behind" data-say="face_behind" aria-keyshortcuts="S">Behind</button>
+                    <button type="button" data-ride-face="left" data-say="face_left" aria-keyshortcuts="A">Left</button>
+                    <button type="button" data-ride-face="right" data-say="face_right" aria-keyshortcuts="D">Right</button>
+                    <button type="button" data-ride-face="down" data-say="face_down" aria-keyshortcuts="F">Down</button>
+                    <button type="button" data-ride-face="up" data-say="face_up" aria-keyshortcuts="R">Up</button>
                   </div>
                 </div>
                 <p class="fam-fine" id="ride-info" role="status" hidden></p>

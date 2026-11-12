@@ -11,7 +11,7 @@ import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
-import { ridePose, type RideLook } from "./ride.ts";
+import { ridePose, type RideFace, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
@@ -118,6 +118,8 @@ export interface RideState {
   /** `from`: the camera is at the body, looking at the Earth. `follow`: the camera keeps a fixed distance from it, looking at it. */
   view: "from" | "follow";
   look: RideLook;
+  /** In the `horizon` look, the facing the controls look round from (`null`: ahead, with the horizon a little above the middle). */
+  face: RideFace | null;
   /** For `follow` a satellite: how far the camera keeps, in kilometres. */
   distanceKm: number;
 }
@@ -738,7 +740,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let fovNow = FOV;
           let distance = 0;
           if (rideFrom) {
-            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn });
+            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn, face: ride!.face ?? undefined });
             model.rideDistance = Math.hypot(...rideFrom.position);
             camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
             camera.up.set(pose.up[0], pose.up[1], pose.up[2]);

@@ -182,3 +182,47 @@ test("the tilt that does something is from straight down to a little above the h
   const narrow = rideTiltLimits(1.066, "horizon", 6)!;
   assert.ok(narrow.max > range.max * 3, "at a high zoom the same tilt moves less, so the range is wider");
 });
+
+import { RIDE_FACES, type RideFace } from "../src/space/ride.ts";
+
+test("each facing looks its way at yaw and tilt 0: ahead, behind, left and right level with the horizon a little above the middle, down at the Earth and up away from it", () => {
+  const zenith = [1, 0, 0];
+  const ahead = [0, 0, -1];
+  const left = [0, 1, 0];
+  const flat = (v: number[]): number[] => {
+    const u = dot(v, zenith);
+    const f = v.map((n, i) => n - u * zenith[i]!);
+    return f.map((n) => n / len(f));
+  };
+  const degrees = (a: number[], b: number[]): number => (Math.acos(Math.max(-1, Math.min(1, dot(a, b) / (len(a) * len(b))))) * 180) / Math.PI;
+  const plain = ridePose(horizonIss);
+  const ways: Record<RideFace, number[] | null> = { ahead, behind: ahead.map((n) => -n), left, right: left.map((n) => -n), down: null, up: null };
+  for (const face of RIDE_FACES) {
+    const pose = ridePose({ ...horizonIss, face });
+    near(upness(iss.position, cross(pose.forward, pose.up)), 0, 1e-9, `${face}: level, no roll`);
+    const way = ways[face];
+    if (way) {
+      assert.ok(degrees(flat(pose.forward), way) < 1, `${face}: within a degree of its way, ${degrees(flat(pose.forward), way)}`);
+      near(upness(iss.position, pose.forward), upness(iss.position, plain.forward), 1e-9, `${face}: the horizon where the horizon look has it`);
+    }
+  }
+  near(upness(iss.position, ridePose({ ...horizonIss, face: "down" }).forward), -1, 1e-9, "down is straight at the Earth");
+  near(upness(iss.position, ridePose({ ...horizonIss, face: "up" }).forward), 1, 1e-9, "up is straight away from it");
+  const ahead0 = ridePose({ ...horizonIss, face: "ahead" });
+  for (let i = 0; i < 3; i += 1) near(ahead0.forward[i]!, plain.forward[i]!, 1e-12, "ahead is the horizon look as it opens");
+});
+
+test("from a facing the yaw and tilt look round as before, and faced up the tilt reaches back to straight up", () => {
+  const left = ridePose({ ...horizonIss, face: "left", yaw: yawFor(-90) });
+  const ahead = ridePose(horizonIss);
+  for (let i = 0; i < 3; i += 1) near(left.forward[i]!, ahead.forward[i]!, 1e-9, "left, turned back a quarter, is ahead");
+  const range = rideTiltLimits(1.066, "horizon", 1, "up")!;
+  near(range.min, 0, 1e-9, "faced up, the highest tilt is where it is");
+  near(upness(iss.position, ridePose({ ...horizonIss, face: "up", tilt: range.max }).forward), -1, 1e-9, "and it tips as far as straight down");
+  near(upness(iss.position, ridePose({ ...horizonIss, face: "up", tilt: 20 }).forward), Math.cos((20 * 1.5 * Math.PI) / 180), 1e-9, "a tip down from up");
+  const down = rideTiltLimits(1.066, "horizon", 1, "down")!;
+  near(down.max, 0, 1e-9, "faced down, it cannot tip further down");
+  near(upness(iss.position, ridePose({ ...horizonIss, face: "down", tilt: down.min }).forward), Math.sin((20 * Math.PI) / 180), 1e-6, "and tips up to 20 degrees above the horizon");
+  const still = ridePose({ ...iss, face: "left" });
+  near(still.forward[0], -1, 1e-9, "the down look has no facing");
+});
