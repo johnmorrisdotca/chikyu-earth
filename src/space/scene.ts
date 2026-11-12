@@ -6,6 +6,8 @@ import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from ".
 import { sphere } from "../realistic/earth.ts";
 import { BODY_FRAG, CLOUD_FRAG, GLOW_FRAG, GLOW_VERT, SURFACE_FRAG, SURFACE_VERT } from "../realistic/shaders.ts";
 import { createTextureSet, type ThreeParts } from "../realistic/textures.ts";
+import { createTileSet, type TileSet, type TileSources } from "../realistic/tile-set.ts";
+import type { TilePerspective } from "../realistic/tiles.ts";
 import type { Layer } from "../realistic/tiers.ts";
 import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
@@ -206,6 +208,8 @@ export interface SpaceModel {
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
   followModel: { x: number; y: number; shown: boolean; parts: number } | null;
+  /** The map tiles laid over the Earth while the scene is built: what they are doing, for a page or a test. */
+  tiles: TileSet | null;
   /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
   placeSatellite: ((ref: SatelliteRef) => SatelliteScreen | null) | null;
   ratio(): number;
@@ -250,6 +254,7 @@ export const newSpaceModel = (): SpaceModel => ({
   pick: null,
   placeSatellite: null,
   followModel: null,
+  tiles: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
 
@@ -425,6 +430,10 @@ export interface SpaceDeps {
   satellitePainter?: () => SatellitePainter | undefined;
   /** The painter could not make a body (the three.js parts handed over lack something it needs); the body is drawn plain instead. */
   onPainterError?: (error: unknown) => void;
+  /** The map source of each layer now (the folder of the `tiles` attribute), or none: the Earth then keeps the package's own pictures. Read at every draw. */
+  sources?: () => TileSources;
+  /** Told once when the tile set has been read: the width in pixels of the finest level of each of its layers. */
+  onTiles?: (layers: Record<string, number>) => void;
 }
 
 /** An inertial direction from the Earth's centre, in scene axes, for right ascension and declination in degrees. */
@@ -536,6 +545,14 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       });
 
       const earth = new three.Mesh(grid, earthMaterial);
+      // the finer map tiles, laid over the Earth's own picture where the camera is near enough to need them (they turn with the Earth: they are its children)
+      const tiles: TileSet = createTileSet(
+        three,
+        earth as unknown as THREE.Group,
+        { sunDir: sunEarth, lights: earthMaterial.uniforms["lights"] as { value: number }, boost: earthMaterial.uniforms["boost"] as { value: number }, ortho: earthMaterial.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night, extra: { cloudMap: uniform.clouds, sunLocal, cloudShift } },
+        { assets: deps.assets, sources: () => deps.sources?.() ?? {}, cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
+      );
+      model.tiles = tiles;
       const clouds = new three.Mesh(grid, cloudMaterial);
       clouds.scale.setScalar(1.006);
       clouds.renderOrder = 3;
@@ -645,6 +662,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const desiredQ = camera.quaternion.clone();
       const fromQ = camera.quaternion.clone();
       const projected = new three.Vector3();
+      const upAxis = new three.Vector3(0, 1, 0);
+      const eye = new three.Vector3();
+      const ray = new three.Vector3();
 
       const placeAll = (at: Frame): Record<BodyName, Vec3> => {
         const sunAt = placeSun(model.mode, at.sun);
@@ -908,6 +928,32 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const name of BODY_NAMES) px[name] = radiusPxOf(name);
           model.drawn = { frame, distance, radiusPx: px.Earth };
           layer?.resize(px.Earth);
+          // the finer map tiles: the camera as the Earth's own axes have it, so a camera a few kilometres up asks for the tiles under it at the level its height needs
+          {
+            // the Earth is turned about the y axis and sits at the origin, so its own axes are the world's turned back by that angle
+            const turn = earth.rotation.y;
+            eye.copy(camera.position).applyAxisAngle(upAxis, -turn);
+            const away = Math.max(1e-4, eye.length() - 1);
+            const focal = size.height / 2 / half;
+            const look: TilePerspective = {
+              eye: [eye.x, eye.y, eye.z],
+              project: (point) => {
+                projected.set(point[0], point[1], point[2]).applyAxisAngle(upAxis, turn).project(camera);
+                if (projected.z > 1 || projected.z < -1) return null;
+                return { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height };
+              },
+              ground: (x, y) => {
+                ray.set((x / size.width) * 2 - 1, 1 - (y / size.height) * 2, 0.5).unproject(camera).sub(camera.position).normalize().applyAxisAngle(upAxis, -turn);
+                // the nearer point where the line from the camera meets the unit sphere, if it does
+                const b = eye.dot(ray);
+                const rest = b * b - (eye.lengthSq() - 1);
+                if (rest < 0) return null;
+                const t = -b - Math.sqrt(rest);
+                return t < 0 ? null : [eye.x + t * ray.x, eye.y + t * ray.y, eye.z + t * ray.z];
+              },
+            };
+            tiles.sync({ lon: 0, lat: 0, width: size.width, height: size.height, panX: 0, panY: 0, radius: focal / away, perspective: look }, [sunLocal.value.x, sunLocal.value.y, sunLocal.value.z], true, model.ratio());
+          }
           let paintedBodies = sunSlot.drawing ? 1 : 0;
           for (const p of planets.values()) if (p.slot.drawing) paintedBodies += 1;
           let paintedMoons = 0;
@@ -1220,6 +1266,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           layer?.dispose();
           model.pick = null;
           model.placeSatellite = null;
+          model.tiles = null;
+          tiles.dispose();
           textures.dispose();
           ended = true;
           empty(sunSlot);
