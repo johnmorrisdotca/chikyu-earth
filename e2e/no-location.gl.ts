@@ -1,4 +1,4 @@
-// The reader's location is asked for only after they ask for it: neither the line globe nor the realistic Earth asks the browser when it opens, with or without `center`.
+// The reader's location is asked for only after they ask for it: none of the line globe, the realistic Earth and the Earth from space asks the browser when it opens, with or without `center`.
 import { expect, test } from "@playwright/test";
 
 test("no element asks for the reader's location when it opens; the demo asks only on a press", async ({ page }) => {
@@ -36,4 +36,17 @@ test("no element asks for the reader's location when it opens; the demo asks onl
 
   await page.getByRole("button", { name: "Centre on me" }).click();
   await expect.poll(asked).toBe(1);
+
+  // the Earth from space, on the page that loads it: its own, with no `center`, asks nothing either
+  await page.goto("/chikyu-earth/?look=space");
+  await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+  await page.evaluate(() => {
+    const element = document.createElement("chikyu-space");
+    element.className = "bare";
+    element.style.width = "200px";
+    document.body.append(element);
+  });
+  await expect.poll(() => page.locator("chikyu-space.bare").evaluate((el) => el.dataset["state"] ?? "")).not.toBe("");
+  expect(await page.locator("chikyu-space.bare").evaluate((el) => (Reflect.get(el, "centre") as { lon: number; lat: number }).lon)).toBe(0);
+  expect(await asked(), "the space view asked nothing on load").toBe(0);
 });

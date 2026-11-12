@@ -34,6 +34,27 @@ const look = query.get("look");
 // the credit comes first, so it is there whatever else the frame does
 globeCredit({ look, satellites: Boolean(query.get("satellites")) || ["iss", "css", "starlink"].includes(query.get("ride") ?? "") }, query.get("lang") === "ja");
 
+/**
+ * `center=me` is the embedding page's own choice: the page asks the browser once (the elements never do by themselves) and gives the answer to every element it made, whichever look is shown.
+ * Until the answer comes, or if it never does, they open on 0,20.
+ */
+const placed: HTMLElement[] = [];
+let place: string | undefined;
+const centreOn = (element: HTMLElement): void => {
+  element.setAttribute("center", centre === "me" ? (place ?? "0,20") : centre);
+  placed.push(element);
+};
+if (centre === "me") {
+  navigator.geolocation?.getCurrentPosition(
+    (position) => {
+      place = `${position.coords.longitude},${position.coords.latitude}`;
+      for (const element of placed) element.setAttribute("center", place);
+    },
+    () => undefined,
+    { timeout: 8000, maximumAge: 600_000 },
+  );
+}
+
 /** The elements carry the hands; `hands=0` takes them off with `controls="none"`. */
 const still = (element: HTMLElement): void => {
   if (!interactive) element.setAttribute("controls", "none");
@@ -51,9 +72,7 @@ function mount(): ChikyuEarth | ChikyuEarthRealistic {
   const flat = document.createElement("chikyu-earth") as ChikyuEarth;
   flat.setAttribute("size", "420");
   flat.setAttribute("look", look === "thick" || look === "realistic" ? "thick" : "line");
-  if (centre !== "me") flat.setAttribute("center", centre);
-  // `center=me` is the embedding page's own choice: the page asks the browser (the globe never does by itself)
-  else navigator.geolocation?.getCurrentPosition((position) => flat.setAttribute("center", `${position.coords.longitude},${position.coords.latitude}`), () => undefined, { timeout: 8000, maximumAge: 600_000 });
+  centreOn(flat);
   if (query.get("graticule") === "1") flat.setAttribute("graticule", "");
   still(flat);
   frame.append(flat);
@@ -72,7 +91,7 @@ if (look === "realistic") {
   const { setThreeLoader } = await import("../src/realistic/element.ts");
   setThreeLoader(() => import("./three-subset.ts"));
   const element = document.createElement("chikyu-earth-realistic") as ChikyuEarthRealistic;
-  element.setAttribute("center", centre === "me" ? "0,20" : centre);
+  centreOn(element);
   element.setAttribute("texture-base", "textures/");
   const time = query.get("time");
   if (time && Number.isFinite(Date.parse(time))) element.setAttribute("time", time);
@@ -106,7 +125,7 @@ if (look === "space") {
     }
   }
   const element = document.createElement("chikyu-space") as ChikyuSpace;
-  element.setAttribute("center", centre === "me" ? "0,20" : centre);
+  centreOn(element);
   element.setAttribute("texture-base", "textures/");
   if (query.get("bodies") === "painted") element.setAttribute("bodies", "painted");
   if (query.get("light") === "lit" || query.get("light") === "boost") element.setAttribute("light", query.get("light")!);

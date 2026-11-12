@@ -49,6 +49,34 @@ test("center=me: the embedding page asks the browser once and the globe opens th
   expect(await page.evaluate(() => Reflect.get(globalThis, "__asked"))).toBe(1);
 });
 
+// The 3D looks hide the line globe, so the place `me` resolves to must reach the element that is shown (the line globe stays under it, for the day WebGL is not there).
+for (const [look, tag] of [["realistic", "chikyu-earth-realistic"], ["space", "chikyu-space"]] as const) {
+  test(`center=me on look=${look}: one ask, and the shown element opens there`, async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: {
+          getCurrentPosition: (ok: (position: { coords: { longitude: number; latitude: number } }) => void) => {
+            Reflect.set(globalThis, "__asked", ((Reflect.get(globalThis, "__asked") as number | undefined) ?? 0) + 1);
+            ok({ coords: { longitude: 139.69, latitude: 35.69 } });
+          },
+        },
+      });
+    });
+    await page.goto(`${EMBED}?look=${look}&center=me`);
+    await page.locator("body[data-ready=true]").waitFor();
+    // where WebGL is drawn the 3D element stays and is shown; where it is not it gives way to the line globe: the one that is shown has the place
+    await expect.poll(() => page.locator(`${tag}[data-state=live], ${tag}[data-state=unavailable], chikyu-earth:not([hidden])`).count()).toBeGreaterThan(0);
+    const shown = await page.evaluate((name) => {
+      const element = document.querySelector(name) ?? document.querySelector("chikyu-earth");
+      return { name: element?.localName, center: element?.getAttribute("center"), hidden: (element as HTMLElement | null)?.hidden };
+    }, tag);
+    expect(shown.hidden, "the element that is shown").toBe(false);
+    expect(shown.center, `${shown.name} is centred on the answer`).toBe("139.69,35.69");
+    expect(await page.evaluate(() => Reflect.get(globalThis, "__asked")), "asked once").toBe(1);
+  });
+}
+
 test.describe("turning", () => {
   test.use({ reducedMotion: "no-preference" });
 
