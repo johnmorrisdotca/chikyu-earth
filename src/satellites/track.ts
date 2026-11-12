@@ -11,6 +11,11 @@ const EARTH_RADIUS_KM = 6371;
 const DAY_MS = 86_400_000;
 const MIN_STEP_MS = 1000;
 const MAX_STEP_MS = 60_000;
+/**
+ * From this eccentricity up, a satellite is not turned about its orbit's axis at the mean motion above the interpolation limit, because it does not go round at a steady rate or stay at one height
+ * (a Molniya orbit is 10 times quicker at its lowest point than its mean): its place and its streak are SGP4 itself, two calls a frame, for the few that are this eccentric.
+ */
+export const ECCENTRIC_FROM = 0.02;
 
 /**
  * What `createSatellites` can be told.
@@ -103,6 +108,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const normal = new Float32Array(n * 3);
   const rate = new Float64Array(n);
   const classColour = new Float32Array(n * 3);
+  const eccentric: number[] = [];
   let newestEpochMs = 0;
   for (let i = 0; i < n; i += 1) {
     const set = usable[i]!;
@@ -116,6 +122,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     normal[i * 3 + 1] = ci;
     normal[i * 3 + 2] = Math.cos(oRad) * si;
     rate[i] = (set.MEAN_MOTION * 2 * Math.PI) / DAY_MS;
+    if (set.ECCENTRICITY >= ECCENTRIC_FROM) eccentric.push(i);
     const kind = classOfElements(set.MEAN_MOTION, set.ECCENTRICITY) ?? "other";
     const hex = Number.parseInt(CLASS_COLOURS[kind].slice(1), 16);
     classColour[i * 3] = ((hex >> 16) & 255) / 255;
@@ -140,17 +147,19 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const pinOk = new Uint8Array(n);
   let pinMs = Number.NaN;
 
-  /** Turn `x,y,z` about the unit axis `nx,ny,nz` by `ang` radians. */
-  const turn = (x: number, y: number, z: number, nx: number, ny: number, nz: number, ang: number): [number, number, number] => {
+  /** Turn `x,y,z` about the unit axis `nx,ny,nz` by `ang` radians, into `out` at `at` (no allocation: it runs for every satellite on every frame). */
+  const turn = (x: number, y: number, z: number, nx: number, ny: number, nz: number, ang: number, out: Float32Array, at: number): void => {
     const c = Math.cos(ang);
     const s = Math.sin(ang);
     const dot = nx * x + ny * y + nz * z;
-    const cx = ny * z - nz * y;
-    const cy = nz * x - nx * z;
-    const cz = nx * y - ny * x;
     const k = 1 - c;
-    return [x * c + cx * s + nx * dot * k, y * c + cy * s + ny * dot * k, z * c + cz * s + nz * dot * k];
+    out[at] = x * c + (ny * z - nz * y) * s + nx * dot * k;
+    out[at + 1] = y * c + (nz * x - nx * z) * s + ny * dot * k;
+    out[at + 2] = z * c + (nx * y - ny * x) * s + nz * dot * k;
   };
+  const place = new Float64Array(6);
+  const isEccentric = new Uint8Array(n);
+  for (const i of eccentric) isEccentric[i] = 1;
 
   /** SGP4 for the whole group at one moment, into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
   const sample = (buffer: Float32Array, ok: Uint8Array, ms: number): void => {
@@ -231,16 +240,36 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
           dimmed[i] = dim;
           dimVersion += 1;
         }
+        const w = k * 2;
+        if (isEccentric[i] === 1) {
+          if (!exactAt(i, ms, place)) {
+            positions.fill(0, k, k + 3);
+            segments.fill(0, w, w + 6);
+            shown[i] = 0;
+            continue;
+          }
+          positions[k] = place[0]!;
+          positions[k + 1] = place[1]!;
+          positions[k + 2] = place[2]!;
+          segments[w + 3] = place[0]!;
+          segments[w + 4] = place[1]!;
+          segments[w + 5] = place[2]!;
+          if (exactAt(i, ms - span, place)) {
+            segments[w] = place[0]!;
+            segments[w + 1] = place[1]!;
+            segments[w + 2] = place[2]!;
+          } else {
+            segments[w] = positions[k]!;
+            segments[w + 1] = positions[k + 1]!;
+            segments[w + 2] = positions[k + 2]!;
+          }
+          shown[i] = 1;
+          count += 1;
+          continue;
+        }
         if (pinOk[i] !== 1) {
-          positions[k] = 0;
-          positions[k + 1] = 0;
-          positions[k + 2] = 0;
-          segments[k * 2] = 0;
-          segments[k * 2 + 1] = 0;
-          segments[k * 2 + 2] = 0;
-          segments[k * 2 + 3] = 0;
-          segments[k * 2 + 4] = 0;
-          segments[k * 2 + 5] = 0;
+          positions.fill(0, k, k + 3);
+          segments.fill(0, w, w + 6);
           shown[i] = 0;
           continue;
         }
@@ -249,18 +278,11 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         const nz = normal[k + 2]!;
         const sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
         const along = rate[i]! * (ms - pinMs);
-        const now = turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along);
-        const then = turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along - sweep);
-        positions[k] = now[0];
-        positions[k + 1] = now[1];
-        positions[k + 2] = now[2];
-        const s = k * 2;
-        segments[s] = then[0];
-        segments[s + 1] = then[1];
-        segments[s + 2] = then[2];
-        segments[s + 3] = now[0];
-        segments[s + 4] = now[1];
-        segments[s + 5] = now[2];
+        turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along, positions, k);
+        turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along - sweep, segments, w);
+        segments[w + 3] = positions[k]!;
+        segments[w + 4] = positions[k + 1]!;
+        segments[w + 5] = positions[k + 2]!;
         shown[i] = 1;
         count += 1;
       }
