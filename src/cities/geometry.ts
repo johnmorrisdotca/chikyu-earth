@@ -76,6 +76,8 @@ export interface CityLayoutOptions {
    * (a fallback font for Japanese, say) would otherwise lay names over one another. Left out, the estimate alone is used, as in Node.
    */
   measure?: (text: string) => number;
+  /** Boxes another layer's names, rings and marks already take (left, top, width and height from the picture's top left): no name is put over one. */
+  taken?: readonly { left: number; top: number; width: number; height: number }[];
 }
 
 /**
@@ -224,7 +226,7 @@ export function layoutCities(cities: readonly NamedCity[], frame: CityFrame, lan
   const height = Math.ceil(options.size * 1.35);
   const texts = seen.map((one) => cityNameText(one.city, lang));
   const items: LabelItem[] = seen.map((one, index) => ({ x: one.x, y: one.y, r: options.dot, w: Math.max(nameWidth(texts[index]!, options.size), options.measure ? Math.ceil(options.measure(texts[index]!)) + 4 : 0), h: height, priority: seen.length - index }));
-  return placeLabels(items, frame.width, frame.height, options.max).map((place) => {
+  return placeLabels(items, frame.width, frame.height, options.max, 64, options.taken).map((place) => {
     const one = seen[place.item]!;
     return { city: one.city, text: texts[place.item]!, x: one.x, y: one.y, left: place.left, top: place.top, width: items[place.item]!.w, height };
   });

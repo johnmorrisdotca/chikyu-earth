@@ -67,4 +67,4 @@ earth.addEventListener("chikyu-marker-click", (event) => {
 });
 ```
 
-Markers are one canvas pass for thousands of places and a pool of at most 24 buttons for the labels. See [attachMarkers](api:attachMarkers) in the reference and [docs/markers.md](../markers.md).
+Markers are one canvas pass for thousands of places and a pool of at most 24 buttons for the labels. On the realistic Earth the markers' labels keep clear of the element's own places' names and markers, and the cities', stars' and constellations' names keep clear of the markers' labels. See [attachMarkers](api:attachMarkers) in the reference and [docs/markers.md](../markers.md).

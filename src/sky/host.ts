@@ -26,6 +26,8 @@ export interface SkyHost {
   refresh(): void;
   /** The places where the sky's names must not go (the property `keepClear`): rectangles in the element's pixels, or elements of the page. `null` for none. */
   setKeepClear(areas: readonly SkyKeepClear[] | null): void;
+  /** Lays the names out once more on the last frame, where a layer placed before this one has moved between draws (a marker list changed, city names arrived). Nothing happens when there is no frame or no name is asked for. */
+  relayout(): void;
   /** The look of the names, as a partial hoshi-stars `LabelStyle` (the property `skyStyle`). */
   setStyle(style: Partial<SkyLabelStyle>): void;
   /** Picks a constellation by its IAU abbreviation (`Ori`), or lets it go (`null`): the property `constellation`. Sends no event. */
@@ -51,6 +53,11 @@ export interface SkyHostOptions {
   importer?: () => Promise<typeof import("@johnmorrisdotca/hoshi-stars/sky-labels")>;
   /** Brings hoshi-stars' `constellations` in, for the names of the figures: a dynamic import by default. */
   constellations?: () => Promise<typeof import("@johnmorrisdotca/hoshi-stars/constellations")>;
+  /**
+   * The boxes the layers placed before the sky take in the picture just drawn (the places' names and marks, the markers' labels, the bodies' and the cities' names), as left, top, width and height from the picture's top left. No star name, ring or figure name goes over one.
+   * Read when the names are laid out; the element refills the same list, so nothing is made at a draw.
+   */
+  taken?: () => readonly { left: number; top: number; width: number; height: number }[];
   /** Brings a sky culture of hoshi-stars in (`western`, `japanese` or `chinese`): a dynamic import of the culture by default, a page's own (or a test's) where it has one. */
   cultures?: (id: string) => Promise<Culture>;
 }
@@ -143,7 +150,10 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let covered: CoverMask | undefined;
   /** The places the page asked to keep clear, and as boxes from the picture's top left: measured when something has changed (a resize, a new list), never at each frame. */
   let keepList: readonly SkyKeepClear[] = [];
+  const pageKeep: KeepBox[] = [];
+  /** What the names keep off: the page's places (`pageKeep`) and the boxes the layers placed before the sky take (the pool `ext`, refilled at each layout). */
   const keep: KeepBox[] = [];
+  const ext: KeepBox[] = [];
   let keepStale = true;
   let keepWatch: ResizeObserver | undefined;
   let keepEvents = false;
@@ -161,7 +171,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     queuedFrame = true;
     const run = (): void => {
       queuedFrame = false;
-      if (module && last && (keep.length > 0 || options.attribute("constellation-names") !== null || shownAbbr !== null)) compute();
+      if (module && last && (pageKeep.length > 0 || options.attribute("constellation-names") !== null || shownAbbr !== null)) compute();
     };
     if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(run);
     else setTimeout(run, 16);
@@ -185,14 +195,14 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   const measureKeep = (rewatch: boolean): void => {
     keepStale = false;
     const items = keepItems();
-    keep.length = 0;
+    pageKeep.length = 0;
     if (items.length === 0) {
       keepWatch?.disconnect();
       return;
     }
     const host = root.host as HTMLElement;
     const own = host.getBoundingClientRect();
-    for (const item of items) keep.push(keepBox(item, own));
+    for (const item of items) pageKeep.push(keepBox(item, own));
     if (!rewatch) return;
     // a box that grows or shrinks is read again and the layer laid out again; the observer is set again only when the list has changed
     if (typeof ResizeObserver === "undefined") return;
@@ -213,7 +223,23 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   function markStale(): void {
     keepStale = true;
     // scrolled or resized while something is kept clear: the names are laid out again at the next frame, once however many events
-    if (keep.length > 0) later();
+    if (pageKeep.length > 0) later();
+  }
+  /** Joins the page's places and the boxes of the layers placed before: the objects are reused, nothing is made at a layout. */
+  function mergeKeep(): void {
+    keep.length = 0;
+    for (const one of pageKeep) keep.push(one);
+    const others = options.taken?.();
+    if (!others) return;
+    for (let i = 0; i < others.length; i += 1) {
+      const o = others[i]!;
+      const one = (ext[i] ??= { l: 0, t: 0, r: 0, b: 0 });
+      one.l = o.left;
+      one.t = o.top;
+      one.r = o.left + o.width;
+      one.b = o.top + o.height;
+      keep.push(one);
+    }
   }
   let keepRewatch = true;
 
@@ -958,6 +984,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       measureKeep(keepRewatch);
       keepRewatch = false;
     }
+    mergeKeep();
     takenStale = true;
     hulls.length = 0;
     if (names) names.update(frame.project, view, keep.length > 0 ? blockedAt : covered);
@@ -1027,6 +1054,9 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
       configure();
       compute();
+    },
+    relayout() {
+      if (module && wanted() && last) compute();
     },
     setKeepClear(areas) {
       keepList = areas ? [...areas] : [];

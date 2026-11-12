@@ -280,6 +280,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-sky-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       loadFont: loadMichroma,
+      taken: () => this.#boxesBeforeSky(),
     });
     this.#sky.setStyle(this.#skyStyle);
     this.#sky.setKeepClear(this.#keepClear);
@@ -293,7 +294,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       attribute: (name) => this.getAttribute(name),
       language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-city-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
-      onLayout: () => this.#countryFrame(),
+      onLayout: () => this.#relayNames(false, true),
     });
     this.#cities.setStyle(this.#citiesStyle);
     Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
@@ -353,16 +354,17 @@ export class ChikyuEarthRealistic extends HTMLElement {
       placeSprites: () => this.#placeLayer?.sprites ?? null,
       onPose: (pose) => {
         if (this.#hands) this.#hands.controller.grabRadius = discRadius(pose.width, pose.height, 1);
+        // the places first, then the markers (they keep off what the places take), then the cities', countries', stars' and constellations' names
+        if (this.#placeLayer && (this.#placeList.length > 0 || this.#placeLayer.stats.shown > 0)) {
+          this.#placeLayer.frame(orthoView(pose), [], [], this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
+          this.#notePlacesLost();
+        }
         this.#pose = { ...pose, transform: "" };
         this.#posing = true;
         try {
           for (const listener of this.#listeners) listener(this.#pose);
         } finally {
           this.#posing = false;
-        }
-        if (this.#placeLayer && (this.#placeList.length > 0 || this.#placeLayer.stats.shown > 0)) {
-          this.#placeLayer.frame(orthoView(pose), [], [], this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
-          this.#notePlacesLost();
         }
         this.#cityFrame();
       },
@@ -759,9 +761,39 @@ export class ChikyuEarthRealistic extends HTMLElement {
         return at.z;
       },
     };
-    this.#cities.frame(frame);
     this.#nameFrame = frame;
+    this.#relayNames(true, false);
+  }
+
+  /**
+   * Lays the names that come after the places and the markers out on the last frame, in the order of the layers: the cities' names clear of the places' names, rings and marks and of the markers' labels; the countries' names clear of those and the cities'; the stars' and constellations'
+   * names clear of all of them. `cities` says whether the cities are laid out again (a new frame), or only what follows them (the cities told that they changed); `sky` says whether the stars' names are laid out again, which a draw does itself after the names.
+   */
+  #relayNames(cities: boolean, sky: boolean): void {
+    if (cities && this.#nameFrame) this.#cities?.frame(this.#nameFrame, this.#boxesBeforeCities());
     this.#countryFrame();
+    if (sky) this.#sky?.relayout();
+  }
+
+  /** What the cities' names keep off: what the places layer takes (names, rings, marks) and the markers' labels (a city is named beside its own dot, which a marker may sit on, so the marks are not kept clear of). The list is refilled, not made again. */
+  #beforeCities: { left: number; top: number; width: number; height: number }[] = [];
+  #boxesBeforeCities(): readonly { left: number; top: number; width: number; height: number }[] {
+    const out = this.#beforeCities;
+    out.length = 0;
+    out.push(...(this.#placeLayer?.boxes ?? []));
+    for (const boxes of this.#claimedNames.values()) out.push(...boxes);
+    return out;
+  }
+
+  /** What the stars' and constellations' names keep off: everything before them, the cities' names last. The list is refilled, not made again. */
+  #beforeSky: { left: number; top: number; width: number; height: number }[] = [];
+  #boxesBeforeSky(): readonly { left: number; top: number; width: number; height: number }[] {
+    const out = this.#beforeSky;
+    out.length = 0;
+    out.push(...(this.#placeLayer?.boxes ?? []));
+    for (const boxes of this.#claims.values()) out.push(...boxes);
+    out.push(...(this.#cities?.boxes ?? []));
+    return out;
   }
 
   /** The frame the names were last laid out on. */
@@ -857,17 +889,25 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#listeners.add(listener);
         return () => this.#listeners.delete(listener);
       },
-      claim: (owner, boxes) => {
-        if (boxes.length === 0) this.#claims.delete(owner);
-        else this.#claims.set(owner, boxes);
+      taken: () => this.#placeLayer?.boxes ?? [],
+      claim: (owner, boxes, names) => {
+        if (boxes.length === 0) {
+          this.#claims.delete(owner);
+          this.#claimedNames.delete(owner);
+        } else {
+          this.#claims.set(owner, boxes);
+          this.#claimedNames.set(owner, names ?? boxes);
+        }
         // laid out again only when the overlay changed between draws: at a draw the names are laid out after it anyway
-        if (!this.#posing) this.#countryFrame();
+        if (!this.#posing) this.#relayNames(true, true);
       },
     };
   }
 
   /** The boxes overlays on the element (markers) take, by overlay. */
   #claims = new Map<object, readonly { left: number; top: number; width: number; height: number }[]>();
+  /** The part of each overlay's boxes that is its labels'. */
+  #claimedNames = new Map<object, readonly { left: number; top: number; width: number; height: number }[]>();
   /** True while the overlays are told of a draw. */
   #posing = false;
 

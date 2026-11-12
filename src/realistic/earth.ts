@@ -374,6 +374,8 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           // the name written on the Earth: the layer is made the first time the settings ask for it, and keeps itself right
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, turned, model.bodyLabel, { invalidate: deps.invalidate, ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, radius);
+          deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
+          // the sky after the places, the markers and the city names, so its names keep clear of what they take as it is laid out
           if (deps.onSky) {
             // the sky as the picture's own axes see it: a direction in space, turned as the satellites are into the picture's axes, falls where its sideways and upward parts say, in front when it points towards the viewer
             spun.updateWorldMatrix(true, false);
@@ -395,7 +397,6 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
               },
             });
           }
-          deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
           // the borders: made the first time a set is switched on, above the clouds and under the air
           if ((model.borders.countries || model.borders.regions) && !borders && !model.borders.stats.failed) {
             try {
