@@ -29,6 +29,7 @@ import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
 import { rideTiltLimits, rideTurnDegrees, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
+import { createPaintState, paintedGround, type PaintSpec } from "../paint/buffer.ts";
 
 export { BODY_NAMES, type BodyName, type CameraMode, type RideTarget };
 
@@ -217,6 +218,8 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * const space = document.createElement("chikyu-space") as ChikyuSpace;
  * space.setAttribute("time", "2026-11-02T12:00Z");
  * space.setAttribute("speed", "86400");
+ * space.paint = { id: "25544", length: "1w", swath: "coverage" };
+ * space.clearPaint();
  * space.addEventListener("chikyu-timechange", (event) => {
  *   const { time, running } = (event as CustomEvent<{ time: number; running: boolean }>).detail;
  *   console.log(new Date(time).toISOString(), running ? "running" : "held");
@@ -228,6 +231,7 @@ export class ChikyuSpace extends HTMLElement {
   static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
 
   #model: SpaceModel = newSpaceModel();
+  #paint = createPaintState();
   #mode: number | "now" = "now";
   #speed = 1;
   #view: View | undefined;
@@ -357,6 +361,14 @@ export class ChikyuSpace extends HTMLElement {
       onMoving: () => this.#gate?.request(),
       onRideLost: () => this.#rideLost(),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      paint: {
+        data: this.#paint.data,
+        width: this.#paint.width,
+        height: this.#paint.height,
+        step: (ms) => this.#paint.step(ms, (at) => paintedGround(this.#model.satellites.groups, this.#paint.id, at)),
+        span: () => this.#paint.spanMinutes,
+        on: () => this.#paint.on,
+      },
       ...(painter ? { painter } : {}),
       satellitePainter: () => satellitePainter,
       onPainterError: (error) => this.dispatchEvent(new CustomEvent("chikyu-bodies-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
@@ -907,6 +919,28 @@ export class ChikyuSpace extends HTMLElement {
    * @param satellites - The group, or `null` to remove it.
    * @param style - How to draw it.
    */
+  /**
+   * Paint one satellite's path on the Earth. `id` is a NORAD catalogue number or `group:index`. `length` is how long the trail is kept, in simulated time (`1d` when left out, or `1w`, `1m`). `swath` is `track` (the point under the satellite, the default) or `coverage` (where it is at least 10° above the horizon). Setting another satellite clears the trail. `null` clears it.
+   */
+  get paint(): PaintSpec | null {
+    return this.#paint.on ? { id: this.#paint.id, length: this.#paint.length, swath: this.#paint.swath } : null;
+  }
+  set paint(value: PaintSpec | null) {
+    this.#paint.set(value);
+    this.#gate?.request();
+  }
+
+  /** Take the painted trail off the Earth. */
+  clearPaint(): void {
+    this.#paint.clear();
+    this.#gate?.request();
+  }
+
+  /** Texels the trail has painted. 0 after `clearPaint`, and again when the painted satellite changes. */
+  get paintPixels(): number {
+    return this.#paint.pixels;
+  }
+
   setSatellites(group: string, satellites: Satellites | null, style: Partial<SatelliteStyle> = {}): void {
     const groups = this.#model.satellites.groups;
     if (satellites === null) {

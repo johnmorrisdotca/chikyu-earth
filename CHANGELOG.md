@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Paint a satellite's path on the Earth** (MODULES-1167). `paint` on `<chikyu-space>` and `<chikyu-earth-realistic>` is `{ id, length, swath }`. `id` is a NORAD catalogue number or `group:index`. `length` is `1d` (the default), `1w` or `1m` of simulated time. `swath` is `track` (the point under the satellite, the default) or `coverage` (the ground where the satellite is at least 10° above the horizon, from its height). `clearPaint()` takes the trail off. Changing the satellite clears it. The trail is one equirectangular texture on the globe. It is stamped only while simulated time moves, one upload a frame, and nothing at rest or while painting is off. A part older than `length` fades out. The date line and the poles are split so the line does not cross the map. The demo's satellite card has Paint, Clear, and 1 day, 1 week, 1 month.
+
 ## 0.35.0 - 2026-11-12
 
 - **The figures follow a sky culture** (MODULES-1125). `constellation-culture` is `iau` (the 88, the default), `western`, `japanese` (the 88 by their Japanese names, then the traditional figures such as Subaru, the Pleiades) or `chinese`; the lines, the hovered and picked figure and its name follow it, and the events carry `id`, `kind` and `culture`. The value is exactly what the page sets (a Japanese page keeps the IAU's figures unless it says `japanese`); an unknown value is `iau` with one warning. Each culture's data is a dynamic import of its own, fetched only when asked for. hoshi-stars' `createFigureLines` takes no culture yet, so the lines of a culture are laid out here from `figures(culture)`.

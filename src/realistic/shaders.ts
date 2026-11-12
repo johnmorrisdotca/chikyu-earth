@@ -33,6 +33,10 @@ uniform float cloudShift;
 uniform float lights;
 uniform float boost;
 uniform float ortho;
+uniform sampler2D paintMap;
+uniform float paintNow;
+uniform float paintSpan;
+uniform float paintOn;
 ${tile ? "uniform vec4 nightRect;\nvarying vec2 vUvG;" : ""}
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -84,6 +88,15 @@ void main() {
   night += vec3(0.04, 0.08, 0.20) * smoothstep(-0.20, -0.06, ndl) * (1.0 - smoothstep(-0.06, 0.06, ndl)) * 0.28;
   vec3 col = mix(night, lit, day);
   col += pow(albedo, vec3(0.75)) * boost * 0.65 * (1.0 - day);
+  if (paintOn > 0.5) {
+    vec4 stamp = texture2D(paintMap, ${tile ? "vUvG" : "vUv"});
+    float then = floor(stamp.r * 255.0 + 0.5) * 256.0 + floor(stamp.g * 255.0 + 0.5);
+    float age = paintNow - then;
+    if (age < -32768.0) age += 65536.0;
+    if (age > 32768.0) age -= 65536.0;
+    float show = stamp.a * step(-1.0, age) * (1.0 - smoothstep(paintSpan * 0.82, paintSpan, age));
+    col = mix(col, vec3(1.0, 0.55, 0.12), clamp(show, 0.0, 0.92));
+  }
 
   gl_FragColor = vec4(col, 1.0);
 }`;
