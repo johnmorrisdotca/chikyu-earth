@@ -1,5 +1,5 @@
 // The credit line under the space view follows the bodies drawn: the view reads the body painter's `credit` again when a body drawing asks for a redraw (a picture arrived, a window of tiles changed), writes the line only
-// when its text changed, and hides it when there is none. A painter of the test's own stands in for wakusei-planets', whose credit names the pictures on the screen now. Chromium, drawn in software.
+// when its text changed, and hides it when there is none. A painter of the test's own stands in for wakusei-planets', whose credit names the pictures of the bodies the view holds. Chromium, drawn in software.
 import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
 
@@ -11,7 +11,7 @@ const WAKUSEI = (() => {
   }
 })();
 const [WAKUSEI_MAJOR, WAKUSEI_MINOR] = WAKUSEI.split(".").map(Number) as [number, number];
-/** wakusei-planets 0.39 is the first whose painter carries `credit` for the pictures on the screen. */
+/** wakusei-planets 0.39 is the first whose painter carries `credit` for its pictures. */
 const HAS_CREDIT = WAKUSEI_MAJOR > 0 || WAKUSEI_MINOR >= 39;
 
 const SPACE = "chikyu-space";
@@ -88,15 +88,47 @@ test("the credit follows the painter's credit at each redraw a body asks for, is
 test.describe("with wakusei-planets' own painter", () => {
   test.skip(!HAS_CREDIT, `wakusei-planets ${WAKUSEI} has no painter credit yet (0.39 and later)`);
 
-  test("Jupiter drawn shows Nestaeric's credit, and a view with no CC BY body shows none", async ({ page }) => {
+  // the view makes every body it holds (the Sun, the Moon and each planet) in every view, so the painter's credit names all their pictures, in an Earth view as in a Jupiter view: the credit is for what the view holds, not only for what is big on the screen
+  test("the credit names the pictures of the bodies the view holds, is read after the bodies are made, and the Sun's and Jupiter's CC BY 4.0 credits are in it", async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __made: string[]; __readsAfterMake: number; __wrapBodyPainter: (real: object) => object; __real: { credit: { en: string } } };
+      w.__made = [];
+      w.__readsAfterMake = 0;
+      w.__wrapBodyPainter = (real) => {
+        w.__real = real as { credit: { en: string } };
+        return new Proxy(real, {
+          get(target, key) {
+            if (key === "make") {
+              return (...args: unknown[]) => {
+                w.__made.push(String(args[1]));
+                return (Reflect.get(target, "make") as (...a: unknown[]) => unknown).apply(target, args);
+              };
+            }
+            if (key === "credit" && w.__made.length > 0) w.__readsAfterMake += 1;
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      };
+    });
     await page.goto("/chikyu-earth/?look=space&time=2026-11-10T04:00Z&speed=0&center=-100,40");
     await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+    const made = (): Promise<string[]> => page.evaluate(() => [...new Set((window as unknown as { __made: string[] }).__made)].sort());
+    // the probe: the bodies made in an Earth view, then in a Jupiter view
+    await expect.poll(async () => (await made()).length, { timeout: 60_000, message: "the bodies are made" }).toBeGreaterThanOrEqual(10);
+    const inEarthView = await made();
+    console.log(`bodies made in an Earth view: ${inEarthView.join(", ")}`);
+    expect(inEarthView, "every body is made in an Earth view").toEqual(expect.arrayContaining(["Sun", "Moon", "Jupiter", "Neptune"]));
+    await expect(note(page)).toContainText("Solar System Scope", { timeout: 60_000 });
+    await expect(note(page)).toContainText("CC BY 4.0");
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "body", "Jupiter"));
     await expect(note(page)).toContainText("Nestaeric", { timeout: 60_000 });
     await expect(note(page)).toContainText("CC BY 4.0");
-    // the Earth and its Moon: public-domain pictures only, so no CC BY line
-    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "body", "Earth"));
-    await expect(note(page)).not.toContainText("Nestaeric", { timeout: 60_000 });
-    await expect(note(page)).not.toContainText("CC BY 4.0");
+    console.log(`bodies made in a Jupiter view: ${(await made()).join(", ")}`);
+    expect(await made(), "every body is made in a Jupiter view too").toEqual(expect.arrayContaining(["Sun", "Moon", "Jupiter", "Neptune"]));
+    // the line is the painter's credit as it is now, and the view read it after the bodies were made (not only when it was set up)
+    expect(await page.evaluate(() => (window as unknown as { __readsAfterMake: number }).__readsAfterMake), "the credit is read after a body is made").toBeGreaterThan(0);
+    const real = await page.evaluate(() => (window as unknown as { __real: { credit: { en: string } } }).__real.credit.en);
+    await expect(note(page)).toHaveText(real);
   });
 });
