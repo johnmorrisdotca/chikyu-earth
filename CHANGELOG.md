@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Place dots cost less, and a missing ring is told only when a place is left out** (MODULES-1165). The fallback circles (when the three.js parts have no `Points`) no longer ask for a compositor layer each, skip a move that did not change, and are projected once a frame. They fade at the Earth's edge and are dimmer at night, as the rings in the picture are. `stats.places.sprites` counts only the rings in the one draw call (0 in the fallback); `stats.places.dots` counts the circles drawn in the page instead. `chikyu-places-unavailable` is sent once, and only when places in sight had no room (`omitted`), not merely because `Points` is missing. The reason names `PLACE_DOTS`.
+
 ## 0.37.0 - 2026-11-12
 
 - **A satellite's owner country as an ISO code** (MODULES-1112), for a page that puts a flag on a satellite card. `satelliteInfo` and the click event's `info` have `ownerCountry`, an ISO 3166-1 alpha-2 code (`CN`, `US`, `PK`), when the elements carry an owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country. An organisation (`ESA`, `ISS`, `ITSO`, `SES`, `GLOB`, `EUME`, `NATO`, `AB` and the like), several countries, an unknown owner, or a code the list does not give to one country (`CIS`, the former Soviet registration) has none, and the field is left off. New in `@johnmorrisdotca/chikyu-earth/satellites` and `/catalogue`: `ownerCountry(code)` and `OWNER_COUNTRIES`, every code of the catalogue's owner list, each row checked. Data only: no flag, no new dependency.

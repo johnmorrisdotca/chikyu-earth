@@ -100,6 +100,14 @@ void main() {
  * @param sun - The direction to the Sun in the scene's axes, the uniform the Earth's own surface uses.
  * @returns The rings, or null.
  */
+/** Make the place rings the first time there is something to draw. One try: without `Points` the result stays null, and a later frame does not ask again. Null data does not count as the try. True when this call made the try. */
+export function beginPlaceSprites(state: { sprites: PlaceSprites | null; tried: boolean }, data: PlaceSpriteData | null, create: () => PlaceSprites | null): boolean {
+  if (!data || state.sprites || state.tried) return false;
+  state.sprites = create();
+  state.tried = true;
+  return true;
+}
+
 export function createPlaceSprites(three: ThreeParts, parent: THREE.Object3D, sun: { value: THREE.Vector3 }): PlaceSprites | null {
   const Points = three.Points;
   if (!Points) return null;

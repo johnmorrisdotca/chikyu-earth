@@ -15,7 +15,7 @@ import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
-import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
+import { beginPlaceSprites, createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
 import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
@@ -320,8 +320,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
-      let placeSprites: PlaceSprites | null = null;
-      let placeSpritesTried = false;
+      const placeRings: { sprites: PlaceSprites | null; tried: boolean } = { sprites: null, tried: false };
       let gridLayer: GridLayer | null = null;
 
       return {
@@ -411,13 +410,11 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             borders.sync({ points: points.length > 0 ? points : [look], angle: Math.asin(Math.min(1, (1.4 * Math.hypot(size.width, size.height)) / 8 / radius)) / RAD, radius });
           }
           const spriteData = deps.placeSprites?.() ?? null;
-          if (spriteData && !placeSprites && !placeSpritesTried) {
-            placeSprites = createPlaceSprites(three, turned, sunDir);
-            placeSpritesTried = true;
+          if (beginPlaceSprites(placeRings, spriteData, () => createPlaceSprites(three, turned, sunDir))) {
             // told once: without `Points` the page's layer draws these rings itself
-            deps.onPlaceRings?.(placeSprites !== null);
+            deps.onPlaceRings?.(placeRings.sprites !== null);
           }
-          placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
+          placeRings.sprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           // the grid: made the first time it is switched on, over the ground and under the clouds
           if (model.grid.on && !gridLayer && !model.grid.stats.failed) {
             try {
@@ -446,7 +443,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           meteors?.dispose();
           nameOn?.dispose();
           borders?.dispose();
-          placeSprites?.dispose();
+          placeRings.sprites?.dispose();
           gridLayer?.dispose();
           model.tiles = null;
           tiles.dispose();
