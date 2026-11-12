@@ -10,6 +10,17 @@ admin-0 countries, which Natural Earth places in the **public domain**
 (https://github.com/johnmorrisdotca/chizu, MIT, by John Morris), whose `world-geo` entry
 (`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime.
 
+## Borders
+
+The borders on the realistic Earth and the space view (`borders`, `src/borders/`) are drawn from the same data: chizu's
+`world-geo`, Natural Earth 5.1.2's admin-0 countries at 1:110m, credited as chizu credits them. chizu's NOTICE.md quotes
+Natural Earth's terms of use (https://www.naturalearthdata.com/about/terms-of-use/, read by chizu on 2026-10-01): the data
+"are in the public domain" and "Crediting the authors is unnecessary"; it is done here anyway: Natural Earth, made by
+volunteers and supported by the North American Cartographic Information Society. Only the edges two countries share are
+drawn; the code that finds them is this package's own and MIT. Natural Earth draws borders as they are held on the ground
+(de facto), and so do these lines. The regions (provinces, states) are the page's own data, handed over through
+`borderData.regions`, with the page's own licence; this package ships none (2026-11-11).
+
 ## Country names and codes
 
 Each outline's English name, Japanese name and country code come from **chizu**'s `world-geo`, whose names are
