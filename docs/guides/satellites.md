@@ -95,7 +95,7 @@ console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, v
 
 ## Choosing one
 
-A press on a satellite (not a drag that turns the view, and not one behind the Earth) fires `chikyu-satellite-click` with `{ group, index, info }`; `info` has its name, NORAD number, the age of its elements, its height, speed and period. `selectSatellite({ group, index })` marks one from code (a ring, its orbit and its name beside it), and `satelliteInfo(ref)` tells you about it. A page with a search box or a list of names uses those two, so a keyboard reader can choose too.
+A press on a satellite (not a drag that turns the view, and not one behind the Earth) fires `chikyu-satellite-click` with `{ group, index, info }`; `info` has its name, NORAD number, the age of its elements, its height, speed and period, and `ownerCountry`, the owner's country as a two-letter ISO code (`CN`, `US`, `PK`), when the elements carry the catalogue's owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country; an organisation (ESA, the ISS, Intelsat, SES), several countries or an unknown owner has none. `ownerCountry(code)` and `OWNER_COUNTRIES` give the same for any code. The package draws no flag. `selectSatellite({ group, index })` marks one from code (a ring, its orbit and its name beside it), and `satelliteInfo(ref)` tells you about it. A page with a search box or a list of names uses those two, so a keyboard reader can choose too.
 
 ## The catalogue
 

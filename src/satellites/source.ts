@@ -42,6 +42,7 @@ export function toElementSet(record: Record<string, unknown>): ElementSet | stri
   out["OBJECT_NAME"] = name || `NORAD ${String(record["NORAD_CAT_ID"] ?? "?")}`;
   if (typeof record["OBJECT_ID"] === "string" && record["OBJECT_ID"]) out["OBJECT_ID"] = record["OBJECT_ID"];
   if (typeof record["CLASSIFICATION_TYPE"] === "string" && record["CLASSIFICATION_TYPE"]) out["CLASSIFICATION_TYPE"] = record["CLASSIFICATION_TYPE"];
+  for (const key of ["COUNTRY_CODE", "OWNER"]) if (typeof record[key] === "string" && record[key].trim()) out[key] = record[key].trim();
   const epoch = record["EPOCH"];
   if (typeof epoch !== "string" || !Number.isFinite(Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(epoch) ? epoch : `${epoch}Z`))) return "the epoch is missing or is not a date";
   out["EPOCH"] = epoch;

@@ -51,6 +51,10 @@ export interface ElementSet {
   CLASSIFICATION_TYPE?: string;
   ELEMENT_SET_NO?: number;
   REV_AT_EPOCH?: number;
+  /** The owner's code, as Space-Track's catalogue writes it (`US`, `PRC`, `ESA`), when the source carries it. */
+  COUNTRY_CODE?: string;
+  /** The owner's code, as CelesTrak's SATCAT writes it (the same codes), when the source carries it. */
+  OWNER?: string;
 }
 
 /**
@@ -84,6 +88,8 @@ export interface SatelliteInfo {
   periodMinutes: number;
   /** Degrees. */
   inclinationDeg: number;
+  /** The owner's country as an ISO 3166-1 alpha-2 code (`ownerCountry`), when the elements carry an owner code (`COUNTRY_CODE` or `OWNER`) and the owner is one country; absent for an organisation, several countries or an unknown owner. */
+  ownerCountry?: string;
 }
 
 /**

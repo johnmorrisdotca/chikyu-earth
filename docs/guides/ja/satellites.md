@@ -95,7 +95,7 @@ console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, v
 
 ## 1機を選ぶ
 
-衛星を押すと (表示を回すドラッグや、地球の裏側の衛星は対象外です)、`chikyu-satellite-click` が `{ group, index, info }` と一緒に発生します。`info` には、名前、NORAD 番号、軌道要素の古さ、高さ、速さ、周期が入っています。`selectSatellite({ group, index })` はコードから1機を選び (リング、軌道、横に名前が出ます)、`satelliteInfo(ref)` はその情報を返します。検索ボックスや名前の一覧があるページでは、この2つを使えば、キーボードだけの人も選べます。
+衛星を押すと (表示を回すドラッグや、地球の裏側の衛星は対象外です)、`chikyu-satellite-click` が `{ group, index, info }` と一緒に発生します。`info` には、名前、NORAD 番号、軌道要素の古さ、高さ、速さ、周期が入っています。軌道要素にカタログの持ち主コード (`COUNTRY_CODE` か `OWNER`) があり、持ち主が1つの国のときは、`ownerCountry` にその国の2文字の ISO コード (`CN`、`US`、`PK` など) も入ります。持ち主が組織 (ESA、ISS、インテルサット、SES など) のもの、複数の国のもの、持ち主が分からないものには入りません。どのコードでも、`ownerCountry(code)` と `OWNER_COUNTRIES` で同じことを調べられます。このパッケージは国旗を描きません。`selectSatellite({ group, index })` はコードから1機を選び (リング、軌道、横に名前が出ます)、`satelliteInfo(ref)` はその情報を返します。検索ボックスや名前の一覧があるページでは、この2つを使えば、キーボードだけの人も選べます。
 
 ## カタログ
 
