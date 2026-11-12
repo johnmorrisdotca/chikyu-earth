@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SkyFrame } from "../src/sky/frame.ts";
+import { pathOutside, touches } from "../src/sky/cover.ts";
 import { createSkyHost } from "../src/sky/host.ts";
 
 interface FakeNode {
@@ -115,7 +116,7 @@ test("names are measured as they are drawn: one that runs over a brighter star's
   measure = (_node, index) => ({ left: index * 300, top: 0, right: index * 300 + 120, bottom: 18 });
   made = 0;
   const apart = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
-  apart.frame(frame);
+  apart.frame({ ...frame, discs: [] });
   await until(apart);
   assert.equal(apart.stats.names, 12, "names that do not touch are all shown");
   measure = undefined;
@@ -178,4 +179,35 @@ test("a name lying wholly on a body is left out: hoshi-stars tests the star's po
   measure = undefined;
   lying.dispose();
   clear.dispose();
+});
+
+test("a line stops at the edge of a body and never runs over it: the pieces are outside, and the cut is at the edge", () => {
+  const disc = (x: number, y: number): boolean => (x - 200) ** 2 + (y - 200) ** 2 <= 80 ** 2;
+  const pieces: number[][] = [];
+  let from: number[] = [];
+  const path = { moveTo: (x: number, y: number) => (from = [x, y]), lineTo: (x: number, y: number) => pieces.push([...from, x, y]) };
+  // across the middle: two pieces, each ending on the circle
+  pathOutside(path, 0, 200, 400, 200, disc);
+  assert.equal(pieces.length, 2);
+  assert.ok(Math.abs(pieces[0]![2]! - 120) < 0.3 && Math.abs(pieces[1]![0]! - 280) < 0.3, `cut at 120 and 280: ${pieces.map((p) => p.map((n) => n.toFixed(1)).join(",")).join(" | ")}`);
+  // wholly outside: whole, and nothing where there is no body
+  pieces.length = 0;
+  pathOutside(path, 0, 0, 100, 0, disc);
+  assert.deepEqual(pieces, [[0, 0, 100, 0]]);
+  pieces.length = 0;
+  pathOutside(path, 0, 0, 100, 100, undefined);
+  assert.deepEqual(pieces, [[0, 0, 100, 100]]);
+  // one end under the body: the piece from the other end to the edge; wholly under: nothing
+  pieces.length = 0;
+  pathOutside(path, 200, 200, 200, 0, disc);
+  assert.equal(pieces.length, 1);
+  assert.ok(Math.abs(pieces[0]![1]! - 120) < 0.3 && pieces[0]![3] === 0);
+  pieces.length = 0;
+  pathOutside(path, 180, 200, 220, 200, disc);
+  assert.equal(pieces.length, 0);
+  // a label whose name only touches the body is on it; one clear of it is not
+  const label = { x: 400, y: 50, ring: 6, leader: false, leaderX1: 0, leaderY1: 0 };
+  assert.equal(touches(disc, 20, 150, 60, 170, label), false);
+  assert.equal(touches(disc, 20, 150, 130, 220, label), true, "its box reaches the body");
+  assert.equal(touches(disc, 300, 0, 340, 20, { ...label, x: 200, y: 125, ring: 6 }), true, "the star's ring reaches the body");
 });
