@@ -360,7 +360,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
               deps.onSatellitesError?.(error);
             }
           }
-          layer?.update(model.time, model.speed);
+          layer?.update(model.time, model.speed, radius);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
           model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...centre } };
           textures.sync(radius * model.ratio());

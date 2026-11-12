@@ -164,10 +164,22 @@ export interface Satellites {
   at(ms: number, out: Float32Array): void;
   /** True if satellite `index` was placed by the last `at` (its elements are not too old at that moment). */
   visible(index: number): boolean;
-  /** How many of them the last `at` placed. */
+  /** How many of them the last `at` or `arc` placed. */
   readonly placed: number;
+  /** The newest element epoch in the group, in milliseconds since the Unix epoch, or 0 when it is empty. The date of the data. */
+  readonly newestEpochMs: number;
+  /** Red, green and blue, from 0 to 1, of each satellite's orbit class, 3 numbers a satellite. It does not change. */
+  readonly classColour: Float32Array;
   /** The game time between the two moments SGP4 is run at (1000 to 60000 ms); the space view sets it from the clock's speed. */
   setStep(ms: number): void;
+  /** Place every satellite with SGP4 at `ms` and keep that place. `arc` turns it along the orbit until the next `pin`. One batch, no interpolation. */
+  pin(ms: number): void;
+  /**
+   * The place of each satellite at `ms` into `positions` (3 numbers each) and the stretch of orbit it travels over `spanMs` of game time into `segments` (6 numbers each: where it was `spanMs` earlier, then where it is).
+   * The place is the last `pin`, turned about the orbit's axis by the mean motion, so a fast clock does not run SGP4 for every satellite on every frame. A `spanMs` that would turn it more than half a revolution is cut there. An orbit with an eccentricity of 0.02 or more is placed by SGP4 itself instead (two calls a frame), because a turn at the mean motion would put it off its path.
+   * Returns how many were written.
+   */
+  arc(ms: number, spanMs: number, positions: Float32Array, segments: Float32Array): number;
   /** One satellite at exactly `ms` (no interpolation): position in Earth radii and velocity in km/s into `out` (6 numbers). False if its elements are too old or SGP4 gave up. */
   exact(index: number, ms: number, out: Float64Array): boolean;
   /** The path of satellite `index` for one revolution from `ms`, `points` + 1 points in order along it (the last on the first), into a new array of Earth radii. */

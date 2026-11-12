@@ -84,10 +84,10 @@ earth.addEventListener("chikyu-satellite-click", (event) => {
 ```
 
 - **One draw call a group**, however many satellites it holds, so every group of the catalogue can be on at once (the demo's "All satellites": about 4,000 satellites in 14 groups).
-- **The frame budget.** Never more than 30 draws a second (fewer on a small device or a low battery), SGP4 about once a second of the clock with the places between interpolated, nothing drawn while the clock holds or the element is out of sight, and one WebGL context for the page. The groups are hidden while the clock runs faster than `MAX_SATELLITE_SPEED`, when they would only blur. `element.stats.satellites` says how many were placed and how long a draw spent on them.
+- **The frame budget.** Never more than 30 draws a second (fewer on a small device or a low battery), SGP4 about once a second of the clock with the places between interpolated, nothing drawn while the clock holds or the element is out of sight, and one WebGL context for the page. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit, not a blurred interpolation. `element.stats.satellites` says how many were placed, how many streaks, the newest element set's moment, and how long a draw spent on them.
 - **Behind the Earth.** A satellite behind the Earth is hidden by it, and cannot be pressed.
 - `showSatellites(group, on)`, `satelliteGroups`, `selectSatellite(ref)` (a ring round it and its orbit), `selectedSatellite` and `satelliteInfo(ref)` are the space view's, and so is the event `chikyu-satellite-click`.
 - Elements go stale, as the satellites guide says: the ones more than 14 days from the moment shown are dimmer.
-- `three` must hand over `Points` (the demo's `three-subset.ts` lists the parts).
+- `three` must hand over `Points`, and `LineSegments` for the streaks above `MAX_SATELLITE_SPEED` (the demo's `three-subset.ts` lists the parts). Without `Points` there are no satellites and `chikyu-satellites-unavailable` is sent; without `LineSegments` the satellites are dots alone above 60 times real time, and one warning is written to the console.
 
 The demo's Satellites row is on the realistic look too, and the page `fullscreen.html?sats=all` shows every group on the full-screen dark view.

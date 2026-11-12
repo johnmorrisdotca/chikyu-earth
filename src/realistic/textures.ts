@@ -22,6 +22,8 @@ export type ThreeParts = {
 } & {
   /** Only the satellites use it, so a loader that hands over a subset of three.js without it still draws everything else. */
   Points?: typeof THREE.Points;
+  /** Only the satellites above 60 times real time use it, for their streaks: without it they are dots alone there, and one warning is written to the console. */
+  LineSegments?: typeof THREE.LineSegments;
 } & {
   /** Only the name written on the Earth (`body-label`) uses these, so a subset of three.js without them still draws everything else. */
   CanvasTexture?: typeof THREE.CanvasTexture;

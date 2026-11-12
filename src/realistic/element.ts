@@ -9,7 +9,6 @@ import { airFor, readAirThickness } from "./air.ts";
 import { IMMERSIVE_STYLE, immersiveWheel } from "./immersive.ts";
 import { NOTES_STYLE, setAirNote } from "./air-note.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
-import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
@@ -87,7 +86,7 @@ const readDrift = (value: string | null): number => (value !== null && Number.is
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
-type SatelliteStats = { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -179,7 +178,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "satellite-tint"];
 
   #model: EarthModel = newModel();
   #mode: number | "now" = "now";
@@ -459,6 +458,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#model.grid.on = readGrid(value);
       this.#gate?.soon();
     } else if ((COUNTRY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#countries?.refresh();
+    else if (name === "satellite-tint") {
+      this.#model.satellites.orbitTint = value === "orbit";
+      this.#gate?.soon();
+    }
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -988,9 +991,20 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   // --- satellites ---------------------------------------------------------------------------------------------------------------------------------
   /**
+   * Colour each satellite by its orbit class (low, medium, geostationary, highly elliptical, other). Off by default, so a group keeps the colour it was given. The attribute is `satellite-tint="orbit"`.
+   */
+  get satelliteTint(): "off" | "orbit" {
+    return this.#model.satellites.orbitTint ? "orbit" : "off";
+  }
+  set satelliteTint(value: "off" | "orbit") {
+    if (value === "orbit") this.setAttribute("satellite-tint", "orbit");
+    else this.removeAttribute("satellite-tint");
+  }
+
+  /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds, so every group of the catalogue can be shown at once. Giving the name of a group
    * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations). The groups are placed by SGP4 about once a second and interpolated
-   * between, are hidden while the clock runs faster than `MAX_SATELLITE_SPEED`, are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
+   * between. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit instead of being hidden. They are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
    *
    * @param group - The group's name, for `showSatellites`, `selectSatellite` and the events.
    * @param satellites - The group, or `null` to remove it.
@@ -1058,7 +1072,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
       lastBatchMs = Math.max(lastBatchMs, group.satellites.timing.lastBatchMs);
       maxBatchMs = Math.max(maxBatchMs, group.satellites.timing.maxBatchMs);
     }
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, tooFast: drawn.tooFast, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+    let epochMs = 0;
+    for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
   }
 
   // A press that does not turn the view (under 6 pixels) on a satellite tells the page, which chooses it with `selectSatellite` if it likes.
@@ -1104,9 +1120,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     return Math.min(live, 1000 / Math.min(30, Math.max(1, (satellites ? SATELLITE_RATE : SUN_RATE) * RAD * speed * radius)));
   }
 
-  /** Is anything on show that moves faster than the Earth turns: a group of satellites the clock is slow enough to place? */
+  /** Is anything on show that moves faster than the Earth turns: a group of satellites, including above the interpolation limit where they are drawn as streaks? */
   #satellitesMoving(): boolean {
-    if (Math.abs(this.speed) > MAX_SATELLITE_SPEED) return false;
     for (const group of this.#model.satellites.groups.values()) if (group.visible && group.satellites.count > 0) return true;
     return false;
   }

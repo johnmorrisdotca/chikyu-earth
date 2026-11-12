@@ -26,10 +26,12 @@ export interface SatelliteState {
   /** The groups whose members are ringed and named (`labelSatellites`): the scene tells the page where each is, at every draw. */
   marked: Set<string>;
   /** Written at each draw: satellites placed, whether the clock is too fast for the groups, and the milliseconds the last update took. */
-  drawn: { placed: number; tooFast: boolean; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
+  /** Colour each dot by its orbit class. Off by default: a group keeps the one colour it was given. */
+  orbitTint: boolean;
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), drawn: { placed: 0, tooFast: false, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), orbitTint: false, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -40,21 +42,34 @@ const ORBIT_REFRESH_WALL_MS = 1000;
 const POINT_VERT = /* glsl */ `
 uniform float size;
 attribute float dim;
+attribute vec3 cls;
 varying float vDim;
+varying vec3 vCls;
 void main() {
   vDim = dim;
+  vCls = cls;
   gl_PointSize = size;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 const POINT_FRAG = /* glsl */ `
 uniform vec3 tint;
 uniform float ring;
+uniform float byClass;
 varying float vDim;
+varying vec3 vCls;
 void main() {
   float d = length(gl_PointCoord - vec2(0.5));
   if (d > 0.5) discard;
-  float a = ring > 0.5 ? smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d)) : smoothstep(0.5, 0.2, d);
-  gl_FragColor = vec4(tint, a * (1.0 - 0.7 * vDim));
+  vec3 ink = byClass > 0.5 ? vCls : tint;
+  if (ring > 0.5) {
+    float a = smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d));
+    gl_FragColor = vec4(ink, a * (1.0 - 0.7 * vDim));
+  } else {
+    float rim = smoothstep(0.28, 0.42, d);
+    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rim);
+    float a = smoothstep(0.50, 0.40, d);
+    gl_FragColor = vec4(colour, a * (1.0 - 0.7 * vDim));
+  }
 }`;
 
 interface Drawn {
@@ -70,6 +85,14 @@ interface Drawn {
   linesAt: number;
   linesWall: number;
   style: string;
+  /** The streak drawn above the interpolation limit; none when the three.js parts handed over lack `LineSegments`, and the dots alone are drawn then. */
+  streak: THREE.LineSegments | null;
+  streakPositions: Float32Array;
+  streakColours: Float32Array;
+  streakAttribute: THREE.BufferAttribute;
+  pinWall: number;
+  /** The game time the group was last pinned at. */
+  pinTime: number;
 }
 
 /**
@@ -95,8 +118,10 @@ export interface SatelliteScreen {
 export interface SatelliteLayer {
   /** Where one satellite of a shown group is on the screen as of the last update, or `null` when its group is not shown, it is not placed (its elements are too old) or it is behind the camera. */
   placeOf(ref: SatelliteRef, camera: THREE.Camera, size: { width: number; height: number }): SatelliteScreen | null;
-  /** Place every shown group for `model.time` and the chosen satellite exactly. */
-  update(time: number, speed: number): void;
+  /** Place every shown group for `model.time` and the chosen satellite exactly. `earthPx` is the Earth's radius on the screen, so a dot grows as the view zooms in. */
+  update(time: number, speed: number, earthPx?: number): void;
+  /** Set the dot size from the Earth's radius on the screen for this frame, after the camera is known. */
+  resize(earthPx: number): void;
   /** The satellite nearest to a point of the view (CSS pixels) within `radius`, if one is in front of the Earth. */
   pick(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): SatelliteRef | null;
   /** Where the chosen satellite is in the view, if it is. */
@@ -109,17 +134,29 @@ export interface SatelliteLayer {
 export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state: SatelliteState, ratio: () => number): SatelliteLayer {
   if (!three.Points) throw new Error("Satellites need `Points` from three.js: add it to the parts the three loader hands over (see setThreeLoader)");
   const Points = three.Points;
+  const LineSegments = three.LineSegments;
+  let warned = false;
+  /** Without `LineSegments` the streaks cannot be drawn, so above the interpolation limit the dots alone are shown. Said once, in the console, and nothing else is lost. */
+  const warnNoStreaks = (): void => {
+    if (warned) return;
+    warned = true;
+    console.warn("chikyu-earth: the three.js parts handed over lack `LineSegments`, so above 60 times real time the satellites are dots without streaks. Add `LineSegments` to the parts the three loader hands over (see setThreeLoader).");
+  };
   const drawn = new Map<string, Drawn>();
   const tmp = new Float64Array(6);
   const projected = new three.Vector3();
   const world = new three.Vector3();
   const view = new three.Vector3();
+  const ink = new three.Color();
+  let basis = 0;
+  let lastGame = 0;
 
-  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 } }, transparent: true, depthWrite: false });
+  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
   const selectedGeometry = new three.BufferGeometry();
   selectedGeometry.setAttribute("position", new three.BufferAttribute(selectedPosition, 3));
   selectedGeometry.setAttribute("dim", new three.BufferAttribute(new Float32Array(1), 1));
+  selectedGeometry.setAttribute("cls", new three.BufferAttribute(new Float32Array([1, 1, 1]), 3));
   const selectedPoints = new Points(selectedGeometry, selectedMaterial);
   selectedPoints.frustumCulled = false;
   selectedPoints.renderOrder = 6;
@@ -139,6 +176,11 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     scene.remove(entry.points);
     entry.geometry.dispose();
     entry.material.dispose();
+    if (entry.streak) {
+      scene.remove(entry.streak);
+      entry.streak.geometry.dispose();
+      (entry.streak.material as THREE.Material).dispose();
+    }
     for (const line of entry.lines) {
       scene.remove(line.loop);
       line.geometry.dispose();
@@ -181,10 +223,16 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   const find = (ref: SatelliteRef): Satellites | undefined => state.groups.get(ref.group)?.satellites;
 
   return {
-    update(time, speed) {
+    update(time, speed, earthPx = 0) {
       const started = performance.now();
       const tooFast = Math.abs(speed) > MAX_SATELLITE_SPEED;
       const step = Math.min(60_000, Math.max(1000, Math.abs(speed) * 1000));
+      if (basis === 0 && earthPx > 0) basis = earthPx;
+      const dotScale = basis > 0 && earthPx > 0 ? Math.min(2.5, Math.max(0.45, Math.sqrt(earthPx / basis))) : 1;
+      const frameMs = speed * (1000 / 30);
+      const since = lastGame === 0 ? frameMs : time - lastGame;
+      const span = tooFast ? (Math.abs(since) > 0 && Math.abs(since) < Math.abs(frameMs) * 4 ? since : frameMs) : 0;
+      lastGame = time;
       for (const [name, entry] of drawn) {
         if (state.groups.get(name)?.satellites !== entry.source) {
           drop(entry);
@@ -192,44 +240,101 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         }
       }
       let placed = 0;
+      let segments = 0;
       for (const [name, group] of state.groups) {
         let entry = drawn.get(name);
         if (!entry) {
-          const positions = new Float32Array(group.satellites.count * 3);
+          const count = group.satellites.count;
+          const positions = new Float32Array(count * 3);
           const geometry = new three.BufferGeometry();
           const attribute = new three.BufferAttribute(positions, 3);
           geometry.setAttribute("position", attribute);
           const dim = new three.BufferAttribute(group.satellites.dimmed, 1);
           geometry.setAttribute("dim", dim);
-          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 } }, transparent: true, depthWrite: false });
+          geometry.setAttribute("cls", new three.BufferAttribute(group.satellites.classColour, 3));
+          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 } }, transparent: true, depthWrite: false });
           const points = new Points(geometry, material);
           points.frustumCulled = false;
           points.renderOrder = 5;
           scene.add(points);
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "" };
+          const streakPositions = new Float32Array(count * 6);
+          const streakColours = new Float32Array(count * 6);
+          const streakGeometry = new three.BufferGeometry();
+          const streakAttribute = new three.BufferAttribute(streakPositions, 3);
+          streakGeometry.setAttribute("position", streakAttribute);
+          streakGeometry.setAttribute("color", new three.BufferAttribute(streakColours, 3));
+          let streak: THREE.LineSegments | null = null;
+          if (LineSegments) {
+            streak = new LineSegments(streakGeometry, new three.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 }));
+            streak.frustumCulled = false;
+            streak.renderOrder = 4;
+            streak.visible = false;
+            scene.add(streak);
+          }
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0 };
           drawn.set(name, entry);
         }
-        const style = `${group.color}|${group.size}|${ratio()}`;
+        const style = `${group.color}|${group.size}|${ratio()}|${dotScale}|${state.orbitTint ? 1 : 0}`;
         if (style !== entry.style) {
           entry.style = style;
-          entry.material.uniforms["size"]!.value = group.size * ratio();
+          entry.material.uniforms["size"]!.value = group.size * dotScale * ratio();
           entry.material.uniforms["tint"]!.value.set(group.color);
+          entry.material.uniforms["byClass"]!.value = state.orbitTint ? 1 : 0;
+          ink.set(group.color);
+          const colours = group.satellites.classColour;
+          for (let i = 0; i < group.satellites.count; i += 1) {
+            const r = state.orbitTint ? colours[i * 3]! : ink.r;
+            const g = state.orbitTint ? colours[i * 3 + 1]! : ink.g;
+            const b = state.orbitTint ? colours[i * 3 + 2]! : ink.b;
+            for (const end of [0, 1]) {
+              const c = i * 6 + end * 3;
+              entry.streakColours[c] = r;
+              entry.streakColours[c + 1] = g;
+              entry.streakColours[c + 2] = b;
+            }
+          }
+          if (entry.streak) (entry.streak.geometry.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
         }
-        const show = group.visible && !tooFast;
+        const show = group.visible;
         entry.points.visible = show;
         if (!show) {
+          if (entry.streak) entry.streak.visible = false;
           for (const line of entry.lines) line.loop.visible = false;
           continue;
         }
-        group.satellites.setStep(step);
-        group.satellites.at(time, entry.positions);
-        entry.attribute.needsUpdate = true;
-        if (entry.dimVersion !== group.satellites.dimVersion) {
-          entry.dimVersion = group.satellites.dimVersion;
-          entry.dim.needsUpdate = true;
+        if (tooFast) {
+          // pinned again about once a second, and at once when the time jumped (a date typed in, a scrub), so a place is never turned across days
+          if (entry.pinWall === 0 || started - entry.pinWall >= 1000 || Math.abs(time - entry.pinTime) > 1500 * Math.abs(speed)) {
+            group.satellites.pin(time);
+            entry.pinWall = started;
+            entry.pinTime = time;
+          }
+          const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions);
+          entry.attribute.needsUpdate = true;
+          if (entry.streak) {
+            entry.streakAttribute.needsUpdate = true;
+            entry.streak.visible = n > 0 && Math.abs(span) > 0;
+          } else warnNoStreaks();
+          if (entry.dimVersion !== group.satellites.dimVersion) {
+            entry.dimVersion = group.satellites.dimVersion;
+            entry.dim.needsUpdate = true;
+          }
+          for (const line of entry.lines) line.loop.visible = false;
+          placed += n;
+          if (entry.streak) segments += n;
+        } else {
+          if (entry.streak) entry.streak.visible = false;
+          entry.pinWall = 0;
+          group.satellites.setStep(step);
+          group.satellites.at(time, entry.positions);
+          entry.attribute.needsUpdate = true;
+          if (entry.dimVersion !== group.satellites.dimVersion) {
+            entry.dimVersion = group.satellites.dimVersion;
+            entry.dim.needsUpdate = true;
+          }
+          placed += group.satellites.placed;
+          orbitsOf(entry, group, time, started);
         }
-        placed += group.satellites.placed;
-        orbitsOf(entry, group, time, started);
       }
 
       const chosen = state.selected;
@@ -256,11 +361,25 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         selectedKey = "";
       }
       state.drawn.placed = placed;
+      state.drawn.segments = segments;
+      state.drawn.dotScale = dotScale;
       state.drawn.tooFast = tooFast;
       state.drawn.updateMs = performance.now() - started;
       if (state.drawn.updateMs > state.drawn.maxUpdateMs) state.drawn.maxUpdateMs = state.drawn.updateMs;
       state.drawn.updates += 1;
       state.drawn.totalMs += state.drawn.updateMs;
+    },
+
+    resize(earthPx) {
+      if (!(earthPx > 0)) return;
+      if (basis === 0) basis = earthPx;
+      const dotScale = Math.min(2.5, Math.max(0.45, Math.sqrt(earthPx / basis)));
+      state.drawn.dotScale = dotScale;
+      for (const [name, entry] of drawn) {
+        const group = state.groups.get(name);
+        if (!group) continue;
+        entry.material.uniforms["size"]!.value = group.size * dotScale * ratio();
+      }
     },
 
     pick(x, y, camera, size, radius) {

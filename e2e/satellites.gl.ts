@@ -17,7 +17,7 @@ interface Stats {
   contexts: number;
   canvas: { width: number; height: number; pixels: number };
   time: number;
-  satellites: { groups: number; placed: number; tooFast: boolean; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+  satellites: { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 }
 const statsOf = (page: Page): Promise<Stats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as Stats);
 
@@ -208,20 +208,41 @@ test.describe("moving", () => {
     expect(satellites.maxBatchMs, "one SGP4 batch").toBeLessThan(120);
   });
 
-  test("faster than 60 times real time the groups are hidden and SGP4 is not run, and the frame rate stays capped", async ({ page }) => {
+  test("faster than 60 times real time the satellites are streaks, one SGP4 batch a second, and the frame rate stays capped", async ({ page }) => {
     await open(page, "", "stations,starlink");
     await setSpeed(page, 3600);
     await settle(page, 1000);
     const m = await measure(page, 4000);
-    console.log(`3600x with satellites: ${m.frames.toFixed(1)} frames a second, ${m.propagations.toFixed(0)} SGP4 calls a second, tooFast ${m.stats.satellites.tooFast}`);
+    console.log(`3600x with satellites: ${m.frames.toFixed(1)} frames a second, ${m.propagations.toFixed(0)} SGP4 calls a second, streaks ${m.stats.satellites.segments}, tooFast ${m.stats.satellites.tooFast}`);
     expect(m.stats.satellites.tooFast).toBe(true);
-    expect(m.propagations).toBe(0);
+    expect(m.stats.satellites.placed).toBeGreaterThan(2000);
+    expect(m.stats.satellites.segments, "one streak for each satellite drawn").toBe(m.stats.satellites.placed);
+    expect(m.stats.satellites.epochMs).toBeGreaterThan(0);
+    expect(m.propagations, "about one SGP4 sample a second, not one a frame").toBeGreaterThan(2000 * 0.4);
+    expect(m.propagations).toBeLessThan(2000 * 3);
     expect(m.frames).toBeLessThanOrEqual(31);
     await setSpeed(page, 0);
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "time", Date.parse("2026-11-02T18:00:00Z")));
-    await settle(page, 600);
-    expect((await statsOf(page)).satellites.tooFast).toBe(false);
-    expect((await statsOf(page)).satellites.placed).toBeGreaterThan(2000);
+    await settle(page, 1500);
+    const held = (await statsOf(page)).satellites;
+    expect(held.tooFast).toBe(false);
+    expect(held.segments, "a held clock draws dots, not streaks").toBe(0);
+    expect(held.placed).toBeGreaterThan(2000);
+  });
+
+  test("orbit tint changes the colours, and the dot size follows the zoom", async ({ page }) => {
+    await open(page, "", "stations");
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
+    const start = (await statsOf(page)).satellites.dotScale;
+    expect(start).toBeGreaterThan(0);
+    await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, f: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: 4, panX: 0, panY: 0 }, true));
+    await expect.poll(async () => (await statsOf(page)).satellites.dotScale).toBeGreaterThan(start + 0.2);
+    await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, f: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: 0.4, panX: 0, panY: 0 }, true));
+    await expect.poll(async () => (await statsOf(page)).satellites.dotScale).toBeLessThan(start);
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "satelliteTint"))).toBe("off");
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "satelliteTint", "orbit"));
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "satelliteTint"))).toBe("orbit");
+    expect(await page.locator(SPACE).evaluate((el) => el.getAttribute("satellite-tint"))).toBe("orbit");
   });
 
 

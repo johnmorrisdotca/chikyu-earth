@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { frameAt } from "../src/space/ephemeris.ts";
 import { createSatellites, DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
+import { ECCENTRIC_FROM } from "../src/satellites/track.ts";
 import { madeUp } from "./madeup-elements.ts";
 
 interface Snapshot {
@@ -155,6 +156,97 @@ test("a satellite whose elements are more than 14 days from the moment shown is 
   assert.ok(group.dimVersion > before);
   group.at(epoch + 40 * 86_400_000, out);
   assert.equal(group.placed, 0);
+});
+
+test("above the interpolation limit each satellite is a streak along its orbit, one SGP4 sample, and the class colours differ", () => {
+  const group = createSatellites(stations);
+  const index = group.sets.findIndex((set) => set.NORAD_CAT_ID === 25544);
+  const ms = Date.parse("2026-11-02T18:00:00Z");
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  const before = group.propagations;
+  const drawn = group.arc(ms, 120_000, positions, segments);
+  assert.equal(drawn, group.count, "every station is drawn, not hidden");
+  assert.equal(drawn, group.placed);
+  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
+  assert.equal(group.propagations - before, group.count + eccentric * 2, "one SGP4 call each to pin the place, and two more for each eccentric orbit, which SGP4 places itself");
+  const pinned = group.propagations;
+  group.arc(ms + 1000, 120_000, positions, segments);
+  assert.equal(group.propagations - pinned, eccentric * 2, "the next frame turns the pinned place and calls SGP4 only for the eccentric ones");
+  const set = group.sets[index]!;
+  const sweep = Math.min(Math.PI, (set.MEAN_MOTION * 2 * Math.PI * 120_000) / 86_400_000);
+  const radius = Math.hypot(positions[index * 3]!, positions[index * 3 + 1]!, positions[index * 3 + 2]!);
+  const chord = 2 * radius * Math.sin(sweep / 2);
+  const s = index * 6;
+  const length = Math.hypot(segments[s + 3]! - segments[s]!, segments[s + 4]! - segments[s + 1]!, segments[s + 5]! - segments[s + 2]!);
+  assert.ok(Math.abs(length - chord) / chord < 0.2, `streak ${length.toFixed(4)} against ${chord.toFixed(4)} Earth radii`);
+  const geo = createSatellites([{ ...set, NORAD_CAT_ID: 1, MEAN_MOTION: 1.0027, ECCENTRICITY: 0.0001, INCLINATION: 0.05 }]);
+  assert.ok(Math.hypot(group.classColour[index * 3]! - geo.classColour[0]!, group.classColour[index * 3 + 1]! - geo.classColour[1]!, group.classColour[index * 3 + 2]! - geo.classColour[2]!) > 0.2, "a low orbit and a geostationary orbit are not the same colour");
+  assert.equal(group.newestEpochMs > 0, true);
+});
+
+test("a fast clock with the whole recorded catalogue draws one streak each and does not sample SGP4 per frame", () => {
+  const sets = [...stations, ...starlink];
+  const group = createSatellites(sets);
+  const ms = Date.parse("2026-11-02T18:00:00Z");
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  const span = 3_600 * (1000 / 30);
+  group.pin(ms);
+  const once = group.propagations;
+  let drawn = 0;
+  for (let frame = 0; frame < 30; frame += 1) drawn = group.arc(ms + frame * span, span, positions, segments);
+  assert.equal(drawn, group.count, "every satellite in the recorded catalogue is a streak");
+  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
+  assert.equal(group.propagations - once, eccentric * 2 * 30, "only the eccentric ones call SGP4 on a frame, two calls each: the rest turn the pinned place");
+});
+
+test("a streak ends where SGP4 puts the satellite and starts where it was one frame earlier, forwards, backwards and for a retrograde orbit", () => {
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const sets = [base, { ...base, NORAD_CAT_ID: 2, INCLINATION: 98.2, RA_OF_ASC_NODE: 40, MEAN_MOTION: 14.9, ECCENTRICITY: 0.001 }, { ...base, NORAD_CAT_ID: 3, INCLINATION: 140, RA_OF_ASC_NODE: 200, MEAN_MOTION: 13, ECCENTRICITY: 0.001 }];
+  const group = createSatellites(sets);
+  const km = 6371;
+  const ms = Date.parse(base.EPOCH + "Z") + 3_600_000;
+  const here = new Float64Array(6);
+  const there = new Float64Array(6);
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  for (const span of [120_000, -120_000]) {
+    for (const age of [0, 600_000]) {
+      group.pin(ms);
+      group.arc(ms + age, span, positions, segments);
+      for (let i = 0; i < group.count; i += 1) {
+        assert.ok(group.exact(i, ms + age, here) && group.exact(i, ms + age - span, there));
+        const s = i * 6;
+        const end = Math.hypot(segments[s + 3]! - here[0]!, segments[s + 4]! - here[1]!, segments[s + 5]! - here[2]!) * km;
+        const start = Math.hypot(segments[s]! - there[0]!, segments[s + 1]! - there[1]!, segments[s + 2]! - there[2]!) * km;
+        assert.ok(end < 80, `satellite ${i}, span ${span}, ${age} ms after the pin: the streak ends ${end.toFixed(0)} km from the satellite`);
+        assert.ok(start < 80, `satellite ${i}, span ${span}, ${age} ms after the pin: the streak starts ${start.toFixed(0)} km from where it was one frame before`);
+      }
+    }
+  }
+});
+
+test("a highly eccentric orbit is SGP4 itself on every frame: its streak is the real stretch of the orbit, not a turn at the mean motion", () => {
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const molniya = { ...base, NORAD_CAT_ID: 9, OBJECT_NAME: "MOLNIYA", MEAN_MOTION: 2.00614, ECCENTRICITY: 0.74, INCLINATION: 63.4, ARG_OF_PERICENTER: 270, MEAN_ANOMALY: 0, BSTAR: 0, MEAN_MOTION_DOT: 0 };
+  const group = createSatellites([molniya]);
+  const km = 6371;
+  const t0 = Date.parse(`${molniya.EPOCH}Z`);
+  const positions = new Float32Array(3);
+  const segments = new Float32Array(6);
+  const here = new Float64Array(6);
+  const there = new Float64Array(6);
+  for (const [age, span] of [[-600_000, 20_000], [0, 120_000], [3 * 3_600_000, 120_000], [6 * 3_600_000, 20_000]] as const) {
+    group.pin(t0 + 3_600_000);
+    group.arc(t0 + 3_600_000 + age + 600_000, span, positions, segments);
+    const ms = t0 + 3_600_000 + age + 600_000;
+    assert.ok(group.exact(0, ms, here) && group.exact(0, ms - span, there));
+    const length = Math.hypot(here[0]! - there[0]!, here[1]! - there[1]!, here[2]! - there[2]!) * km;
+    const drawn = Math.hypot(segments[3]! - segments[0]!, segments[4]! - segments[1]!, segments[5]! - segments[2]!) * km;
+    assert.ok(Math.abs(drawn - length) < 1, `streak ${drawn.toFixed(1)} km against ${length.toFixed(1)} km`);
+    assert.ok(Math.hypot(positions[0]! - here[0]!, positions[1]! - here[1]!, positions[2]! - here[2]!) * km < 1, "the dot is where SGP4 puts it, however long since the last pin");
+  }
 });
 
 test("an old element set mixed with fresh ones is the only one dimmed", () => {
