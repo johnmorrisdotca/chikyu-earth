@@ -5,9 +5,6 @@ import type { BodyPainter } from "../src/space/index.ts";
 /** wakusei-planets' finer map tiles, on its own site (GitHub Pages, which allows any page to read them). */
 export const PLANET_TILES = "https://johnmorrisdotca.github.io/wakusei-planets/tiles/";
 
-/** The widest planet picture the demo serves (wakusei-planets' npm package ships 512 and 1024). */
-export const DEMO_MAX_TEXTURE = 1024;
-
 /** The credit of wakusei-planets' pictures and tiles, as its NOTICE.md gives them (read 2026-11-11). */
 export const PLANET_CREDIT = {
   en: "Planet and Moon pictures: NASA, USGS and JPL (public domain); Solar System Scope, Shady Tex and Nestaeric (CC BY 4.0), by way of Wakusei Planets.",
@@ -19,10 +16,8 @@ export async function planetPainter(): Promise<BodyPainter | null> {
   try {
     const { createPainter } = await import("@johnmorrisdotca/wakusei-planets/painter");
     const painter = createPainter({ textureBase: "planets/", tiles: PLANET_TILES }) as unknown as BodyPainter;
-    // The demo serves wakusei-planets' npm pictures, which stop at 1024 wide; asking for 2048 got a 404 for each big body (the finer tiles cover a body that is big in the view).
-    const make: BodyPainter["make"] = (three, name, context) =>
-      context ? painter.make(three, name, { ...context, maxTexture: Math.min(context.maxTexture, DEMO_MAX_TEXTURE) }) : painter.make(three, name);
-    return { ...painter, make, credit: PLANET_CREDIT };
+    // wakusei-planets 0.38 stops at the widest picture its package ships when it has no far base (and takes the 2048 ones from its own site), so `make` is passed straight through.
+    return { ...painter, make: painter.make.bind(painter), credit: PLANET_CREDIT };
   } catch {
     return null;
   }

@@ -43,8 +43,8 @@ importers:
         specifier: ^1.6.1
         version: 1.6.1
       '@johnmorrisdotca/wakusei-planets':
-        specifier: ^0.37.1
-        version: 0.37.1(three@0.186.1)
+        specifier: ^0.38.0
+        version: 0.38.0(three@0.186.1)
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
@@ -425,8 +425,8 @@ packages:
     resolution: {integrity: sha512-/t4bkx/VSHD0qSw58DhLb7FLycnst6SWgf22UTq65aZVnT3JHCg3WztOM3QcmenBzvpViy28SwcebDiXoDP3uw==}
     engines: {node: '>=24'}
 
-  '@johnmorrisdotca/wakusei-planets@0.37.1':
-    resolution: {integrity: sha512-V1IwUgIGguMRf5zfCnfPWHeuOBLbc9YPNU6vAs8GzQJdeqtoH6nP05H20wF/qXQJkNUS7ki3j0IBppouVT8vEA==}
+  '@johnmorrisdotca/wakusei-planets@0.38.0':
+    resolution: {integrity: sha512-rJOF83e+inJmtgQk4yfFvU3ZMKjSDORVwPl58Xdfb8rcISoS0bYHj1qlmJzAqu2Qa3DvBDyFy9uj/JSv1m934g==}
     engines: {node: '>=24'}
     peerDependencies:
       '@johnmorrisdotca/chikyu-earth': '>=0.10.0'
@@ -1873,7 +1873,7 @@ snapshots:
 
   '@johnmorrisdotca/kuni@1.6.1': {}
 
-  '@johnmorrisdotca/wakusei-planets@0.37.1(three@0.186.1)':
+  '@johnmorrisdotca/wakusei-planets@0.38.0(three@0.186.1)':
     dependencies:
       '@johnmorrisdotca/kazoku-ui': 0.41.0(three@0.186.1)
     optionalDependencies:
