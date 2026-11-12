@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A page can mark places where the sky's names must not go** (MODULES-1124). `<chikyu-space>` and `<chikyu-earth-realistic>` take `keepClear` (a list of rectangles in the element's pixels, or of page elements) and the attribute `keep-clear` (a CSS selector). A star name that touches one is left out, a star whose point is in one is not named, and the picked constellation's name moves clear of it; the lines are still drawn. The boxes are read when the list changes or the page is resized or scrolled, never at each frame.
 ## 0.34.1 - 2026-11-11
 
 - **The sky is behind the Earth: constellation lines no longer cross it** (MODULES-1103). The lines were drawn over the Earth's disc (in a ride, across the whole globe). Each line is now cut exactly at the Earth's edge, the air's rim included, in the picture's own camera, in the space view and in a ride at any height, on the day side and the night side. A star whose point, ring or name box touches the Earth, the Moon or the Sun has its name and ring left out (a name only partly on the Earth was shown before), and the figure under the pointer is not lit over the Earth.

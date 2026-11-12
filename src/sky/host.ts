@@ -3,6 +3,7 @@
 import type { CoverMask, FigureLines, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
 import { boxCovered, pathOutside, touches } from "./cover.ts";
+import { inKeep, keepBox, touchesKeep, type KeepBox, type SkyKeepClear } from "./keep-clear.ts";
 import type { SkyFrame } from "./frame.ts";
 import type { SkyLabelStyle } from "./style.ts";
 
@@ -18,6 +19,8 @@ export interface SkyHost {
   frame(frame: SkyFrame | null): void;
   /** What the settings are now (`star-names`, `star-names-magnitude`, `constellation-lines`, the language): read again after any of them changed. */
   refresh(): void;
+  /** The places where the sky's names must not go (the property `keepClear`): rectangles in the element's pixels, or elements of the page. `null` for none. */
+  setKeepClear(areas: readonly SkyKeepClear[] | null): void;
   /** The look of the names, as a partial hoshi-stars `LabelStyle` (the property `skyStyle`). */
   setStyle(style: Partial<SkyLabelStyle>): void;
   readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
@@ -42,7 +45,7 @@ export interface SkyHostOptions {
 const NAME_POOL = 40;
 
 /** The attributes this layer reads. */
-export const SKY_ATTRIBUTES = ["star-names", "star-names-magnitude", "constellation-lines"] as const;
+export const SKY_ATTRIBUTES = ["star-names", "star-names-magnitude", "constellation-lines", "keep-clear"] as const;
 
 /**
  * Makes the layer of one element, inside its shadow root. Nothing of hoshi-stars is loaded, and nothing is added to the root, until one of the three attributes is there.
@@ -68,6 +71,14 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let figureName: HTMLElement | undefined;
   let attached = false;
   let covered: CoverMask | undefined;
+  /** The places the page asked to keep clear, and as boxes from the picture's top left: measured when something has changed (a resize, a new list), never at each frame. */
+  let keepList: readonly SkyKeepClear[] = [];
+  const keep: KeepBox[] = [];
+  let keepStale = true;
+  let keepWatch: ResizeObserver | undefined;
+  let keepEvents = false;
+  /** Whether a point of the picture is on a body or in a place kept clear: what the names are laid out against (the lines are cut at the bodies only). */
+  const blockedAt: CoverMask = (x, y) => (covered ? covered(x, y) : false) || inKeep(keep, x, y);
   /** The language the names were last laid out in: the page may change its language after the element was made, so it is read again at each draw. */
   let usedLang: "en" | "ja" | undefined;
   /** The names drawn at the last frame that were left out because they ran over another as the browser draws them (by label), and how many names are shown. */
@@ -75,6 +86,54 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let drawnNames = 0;
 
   const wanted = (): boolean => options.attribute("star-names") !== null || options.attribute("constellation-lines") !== null;
+
+  /** The places to keep clear now: the property's and the elements the attribute's selector matches. */
+  const keepItems = (): SkyKeepClear[] => {
+    const items = [...keepList];
+    const selector = options.attribute("keep-clear");
+    if (selector) {
+      try {
+        items.push(...Array.from(doc.querySelectorAll(selector)));
+      } catch {
+        // not a selector: nothing is kept clear by it
+      }
+    }
+    return items;
+  };
+  /** Reads the boxes of the places to keep clear: when the list, the selector or a box has changed, and not at each frame. */
+  const measureKeep = (rewatch: boolean): void => {
+    keepStale = false;
+    const items = keepItems();
+    keep.length = 0;
+    if (items.length === 0) {
+      keepWatch?.disconnect();
+      return;
+    }
+    const host = root.host as HTMLElement;
+    const own = host.getBoundingClientRect();
+    for (const item of items) keep.push(keepBox(item, own));
+    if (!rewatch) return;
+    // a box that grows or shrinks is read again and the layer laid out again; the observer is set again only when the list has changed
+    if (typeof ResizeObserver === "undefined") return;
+    keepWatch ??= new ResizeObserver(() => {
+      keepStale = true;
+      if (module && last) compute();
+    });
+    keepWatch.disconnect();
+    for (const item of items) if ("getBoundingClientRect" in item && item instanceof Element) keepWatch.observe(item);
+    keepWatch.observe(host);
+    const view = doc.defaultView;
+    if (!keepEvents && view && items.length > 0) {
+      keepEvents = true;
+      view.addEventListener("resize", markStale);
+      view.addEventListener("scroll", markStale, { capture: true, passive: true });
+    }
+  };
+  function markStale(): void {
+    keepStale = true;
+  }
+  let keepRewatch = true;
+
 
   const attach = (): void => {
     if (attached) return;
@@ -131,7 +190,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
    * Where the picked figure's name goes: where hoshi-stars put it, or, where a body covers that, the nearest place round it that is clear of every body and inside the picture. Answers `null` where there is none. The name's box is set from its middle, the way it is drawn (up from its point, centred).
    */
   function placeFigureName(x: number, y: number, frame: SkyFrame): { x: number; y: number } | null {
-    if (!covered) {
+    if (!covered && keep.length === 0) {
       spot.x = x;
       spot.y = y;
       return spot;
@@ -145,7 +204,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         const cx = Math.max(w / 2 + 2, Math.min(frame.width - w / 2 - 2, x + across * w));
         const cy = Math.max(h + 2, Math.min(frame.height - 2, y + down * h * 1.4));
         const away = Math.abs(cx - x) + Math.abs(cy - y);
-        if (away < best && !boxCovered(covered, cx - w / 2, cy - h, cx + w / 2, cy)) {
+        if (away < best && !(covered && boxCovered(covered, cx - w / 2, cy - h, cx + w / 2, cy)) && !touchesKeep(keep, cx - w / 2, cy - h, cx + w / 2, cy)) {
           best = away;
           spot.x = cx;
           spot.y = cy;
@@ -272,11 +331,12 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
       const rect = name.getBoundingClientRect();
       // no part of a name or of its ring is drawn over a body (the Earth, the Moon, the Sun): the sky is behind them. hoshi-stars tests the star's own point only, so a name set beside a star at the Earth's edge can run onto it, and the label (name, ring and all) is left out
-      const own = covered ? (root.host as HTMLElement).getBoundingClientRect() : undefined;
+      const blocked = keep.length > 0 ? blockedAt : covered;
+      const own = blocked ? (root.host as HTMLElement).getBoundingClientRect() : undefined;
       // the catalogue letter set under the name is part of the label
       const under = designations[i]!.hidden || typeof designations[i]!.getBoundingClientRect !== "function" ? undefined : designations[i]!.getBoundingClientRect();
       const bottom = under ? Math.max(rect.bottom, under.bottom) : rect.bottom;
-      if (covered && own && touches(covered, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top, names!.labels[i]!)) {
+      if (blocked && own && (touches(blocked, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top, names!.labels[i]!) || touchesKeep(keep, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top))) {
         name.hidden = true;
         designations[i]!.hidden = true;
         culled.push(true);
@@ -358,7 +418,11 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     const discs = frame.discs;
     covered = frame.covered ?? (discs.length === 0 ? undefined : (x, y) => discs.some((d) => (x - d.x) * (x - d.x) + (y - d.y) * (y - d.y) <= d.radius * d.radius));
     const view = { width: frame.width, height: frame.height };
-    if (names) names.update(frame.project, view, covered);
+    if (keepStale || keepRewatch) {
+      measureKeep(keepRewatch);
+      keepRewatch = false;
+    }
+    if (names) names.update(frame.project, view, keep.length > 0 ? blockedAt : covered);
     if (lines) lines.update(frame.project, view, names ? names.labels : undefined);
     placeNames();
     drawLines();
@@ -405,6 +469,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       compute();
     },
     refresh() {
+      keepRewatch = true;
       if (!wanted()) {
         names = undefined;
         lines = undefined;
@@ -421,6 +486,12 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       configure();
       compute();
     },
+    setKeepClear(areas) {
+      keepList = areas ? [...areas] : [];
+      keepRewatch = true;
+      keepStale = true;
+      if (module && wanted() && last) compute();
+    },
     setStyle(next) {
       style = next;
       if (module) {
@@ -432,6 +503,13 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "", stars: starPoints() };
     },
     dispose() {
+      keepWatch?.disconnect();
+      keepWatch = undefined;
+      if (keepEvents) {
+        doc.defaultView?.removeEventListener("resize", markStale);
+        doc.defaultView?.removeEventListener("scroll", markStale, { capture: true });
+        keepEvents = false;
+      }
       doc.removeEventListener("kazoku-languagechange", onLanguage);
       doc.fonts?.removeEventListener?.("loadingdone", onFonts);
       canvas?.remove();

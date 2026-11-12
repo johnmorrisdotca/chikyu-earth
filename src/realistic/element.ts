@@ -19,6 +19,7 @@ import { folderSource } from "../door/map.ts";
 import { ownCredit } from "../door/own.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
+import type { SkyKeepClear } from "../sky/keep-clear.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, orthoView, readPlaces, type Place, type PlaceLook } from "../markers/places.ts";
 import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
@@ -208,6 +209,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The names of the stars and the constellation lines (`star-names`, `constellation-lines`), and the look of the names. */
   #sky: SkyHost | undefined;
   #skyStyle: Partial<SkyLabelStyle> = {};
+  #keepClear: SkyKeepClear[] = [];
   #airNote: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
@@ -249,6 +251,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       loadFont: loadMichroma,
     });
     this.#sky.setStyle(this.#skyStyle);
+    this.#sky.setKeepClear(this.#keepClear);
     this.#placeLayer = createPlaceLayer(root.getElementById("places")!);
     this.#placeList = readPlaces(this.getAttribute("places"));
     this.#placeLayer.set(this.#placeList);
@@ -489,6 +492,19 @@ export class ChikyuEarthRealistic extends HTMLElement {
   set skyStyle(value: Partial<SkyLabelStyle>) {
     this.#skyStyle = { ...value };
     this.#sky?.setStyle(this.#skyStyle);
+  }
+
+  /**
+   * Places on the picture where the sky's names must not go: a page's own text laid over the element, say. Each is a rectangle in the element's own CSS pixels from its top left (`{ x, y, width, height }`), or an element of the page whose box is read. A star name whose box touches
+   * one is left out, and so is a star whose point is in one (the next star is named instead); the picked constellation's name is moved clear of it. The lines are still drawn. The boxes are read when the list changes, when the page or an element is resized or scrolled, and not at each frame: a
+   * page that moves its text without resizing it sets the property again. The attribute `keep-clear` takes a CSS selector for the same (`keep-clear=".hero h1, .hero .lead"`). Nothing is redrawn at rest.
+   */
+  get keepClear(): SkyKeepClear[] {
+    return [...this.#keepClear];
+  }
+  set keepClear(value: readonly SkyKeepClear[] | null) {
+    this.#keepClear = value ? [...value] : [];
+    this.#sky?.setKeepClear(this.#keepClear);
   }
 
   /**
