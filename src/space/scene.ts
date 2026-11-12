@@ -11,7 +11,7 @@ import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
-import { ridePose, type RideLook } from "./ride.ts";
+import { faceOffset, ridePose, type RideFace, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
@@ -122,6 +122,8 @@ export interface RideState {
   /** `from`: the camera is at the body, looking at the Earth. `follow`: the camera keeps a fixed distance from it, looking at it. `above` (a satellite): the camera is on the line from the Earth's centre through the satellite, looking straight down. */
   view: "from" | "follow" | "above";
   look: RideLook;
+  /** The facing the yaw and tilt look round from, or null. */
+  face: RideFace | null;
   /** For `follow` a satellite: how far the camera keeps, in kilometres. */
   distanceKm: number;
 }
@@ -801,7 +803,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let fovNow = FOV;
           let distance = 0;
           if (rideFrom) {
-            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn });
+            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn, ...(ride!.face ? { face: ride!.face } : {}) });
             model.rideDistance = Math.hypot(...rideFrom.position);
             camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
             camera.up.set(pose.up[0], pose.up[1], pose.up[2]);
@@ -830,11 +832,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const lon = model.centre.lon - way * model.view.yaw;
             const lat = Math.max(-90, Math.min(90, baseLat - way * model.view.tilt));
             const aim = direction(spin + lon, lat);
-            if (followed && ride && ride.view === "above") {
-              // above the satellite: on the line from the Earth's centre through it, looking straight down at it, the way it is going at the top of the picture; the satellite stays in the middle and the Earth turns beneath.
-              // A drag turns the picture about the satellite (yaw) and tips the camera back or ahead of it (tilt).
+            if (followed && ride && (ride.view === "above" || (ride.view === "follow" && ride.face))) {
+              // above the satellite, or a follow that was asked to face a way: on a line from the satellite, looking at it. With no facing, straight above, the way it is going at the top of the picture.
+              // A facing puts the camera ahead, behind, left, right, down or up; a drag turns and tips from there.
               distance = Math.max(1e-4, ride.distanceKm / 6371 / Math.max(1e-9, model.view.zoom));
-              const up = aboveAxes(followed.place, followed.velocity, model.view.yaw * RAD, Math.max(-80, Math.min(80, model.view.tilt)) * RAD);
+              const base = ride.face ? faceOffset(ride.face) : { yaw: 0, tilt: 0 };
+              const up = aboveAxes(followed.place, followed.velocity, base.yaw + model.view.yaw * RAD, base.tilt + Math.max(-80, Math.min(80, model.view.tilt)) * RAD);
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + up.offset[0] * distance, target.y + up.offset[1] * distance, target.z + up.offset[2] * distance);
               camera.up.set(up.up[0], up.up[1], up.up[2]);

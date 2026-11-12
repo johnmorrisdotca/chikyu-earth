@@ -34,7 +34,7 @@ import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
-import { rideTiltLimits, rideTurnDegrees, type RideLook } from "./ride.ts";
+import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
 
@@ -130,7 +130,7 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
 /**
  * How a ride along is done: `view` `from` (the default) puts the camera at the body looking at the Earth, `follow` keeps it a fixed distance from the body looking at it (`distanceKm`, 3000 by default,
  * for a satellite; a planet or the Moon is kept at the distance the zoom says); `above` (a satellite only; a body is followed) puts it on the line from the Earth's centre through the satellite, `distanceKm` (divided by the zoom) above it, looking straight down at it with the way it is going at the top
- * of the picture, the satellite held in the middle while the Earth turns beneath (a drag turns the picture about the satellite and tips the camera back or ahead of it); `look` `down` (the default) or `horizon` is where a camera at the body points; `smooth` (the default) glides
+ * of the picture, the satellite held in the middle while the Earth turns beneath (a drag turns the picture about the satellite and tips the camera back or ahead of it); `look` `down` (the default) or `horizon` is where a camera at the body points; `face` opens looking one way (see `face`); `smooth` (the default) glides
  * from the old camera to the new one in about a second and a bit, and jumps instead for a reader who asked for reduced motion.
  *
  * @example
@@ -144,12 +144,14 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
 export interface RideOptions {
   view?: "from" | "follow" | "above";
   look?: RideLook;
+  /** Face this way as the ride opens (`face`). */
+  face?: RideFace;
   distanceKm?: number;
   smooth?: boolean;
 }
 
 /**
- * What the camera is riding along with now: the body or satellite, how (`from` or `follow`), where it looks, and the distance kept for a satellite.
+ * What the camera is riding along with now: the body or satellite, how (`from`, `follow` or `above`), where it looks, the facing it looks round from (`null` when none was chosen), and the distance kept for a satellite.
  *
  * @example
  * ```ts no-run
@@ -163,8 +165,11 @@ export interface Riding {
   target: RideTarget;
   view: "from" | "follow" | "above";
   look: RideLook;
+  face: RideFace | null;
   distanceKm: number;
 }
+
+const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
 type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
@@ -287,6 +292,7 @@ export class ChikyuSpace extends HTMLElement {
   #tiers: Record<string, number> = {};
   #hands: ElementControls | undefined;
   #ridden: Partial<Record<keyof typeof RIDE_ZOOM, string>> = {};
+  #toldFacing: RideFace | null = null;
   #placeLayer: PlaceLayer | undefined;
   #placeList: Place[] = [];
   /** Counts the turns to a place, so a new one stops the one before. */
@@ -422,6 +428,8 @@ export class ChikyuSpace extends HTMLElement {
     this.addEventListener("pointerdown", this.#down);
     // before the shared hands (which hear it after this): a plain wheel in an immersive view zooms
     this.addEventListener("wheel", this.#wheel, { capture: true, passive: false });
+    this.addEventListener("keydown", this.#faceKey);
+    if (!this.hasAttribute("tabindex")) this.tabIndex = 0;
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
     this.#labelBox.addEventListener("click", this.#labelClick);
     this.#labelBox.addEventListener("focusin", this.#labelFocus);
@@ -437,6 +445,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#zoomRange(false);
     this.removeEventListener("pointerdown", this.#down);
     this.removeEventListener("wheel", this.#wheel, { capture: true });
+    this.removeEventListener("keydown", this.#faceKey);
     window.removeEventListener("pointerup", this.#up, true);
     clearTimeout(this.#timer);
     this.#timer = undefined;
@@ -987,6 +996,7 @@ export class ChikyuSpace extends HTMLElement {
       if (turned * (this.#model.heightPx / 2) < 0.5) return;
     }
     this.#gate?.request();
+    this.#tellFacing();
   }
 
   /**
@@ -1039,7 +1049,15 @@ export class ChikyuSpace extends HTMLElement {
       const asked = options.view ?? "from";
       // above a body is meant for a satellite: a body is followed
       const view = typeof target === "string" && (target === "Earth" || asked === "above") ? "follow" : asked;
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: options.look ?? "down", distanceKm: Math.max(100, options.distanceKm ?? 3000) };
+      // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
+      const faceable = !(view === "follow" && typeof target === "string");
+      const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000) };
+      if (face) {
+        model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
+        model.rideTurn = 0;
+        this.#controls()?.set({ yaw: 0, tilt: 0, zoom: model.view.zoom }, true, "ride");
+      }
       if (typeof target === "string" && view === "follow") model.focus = target;
       else if (wasRiding) model.focus = this.#focusBeforeRide;
     }
@@ -1051,7 +1069,68 @@ export class ChikyuSpace extends HTMLElement {
     this.#schedule();
     this.#gate?.request();
     this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+    this.#tellFacing();
   }
+
+  /**
+   * Face one way while riding: `ahead` along the way it goes, `behind`, `left` or `right` (as seen facing ahead), `down` straight at the Earth, `up` straight away from it.
+   * In the `above` view, `down` looks straight down at the satellite and the Earth below it. The camera glides there in half a second (at once for a reader who asked for reduced motion) and keeps the zoom.
+   * The facing stays pressed until the view is turned or tipped. `chikyu-ride-face` is sent with `{ face }` (`null` when it is let go). Keys, while the element is focused: W ahead, S behind, A left, D right, R up, F down. The arrow keys stay with the view controls.
+   *
+   * @param face - The way to face.
+   * Following a body (a planet, the Moon) there is no way to face: it returns `false`. Held keys do not repeat, and keys typed in a field or in editable text are left to it.
+   *
+   * @returns Whether the camera faces that way now (`true` too when it already did, and nothing moves).
+   */
+  face(face: RideFace): boolean {
+    const model = this.#model;
+    const ride = model.ride;
+    if (!ride || !RIDE_FACES.includes(face)) return false;
+    // following a body there is no way to face: only from a body or a satellite, following a satellite, or above it
+    if (ride.view === "follow" && typeof ride.target === "string") return false;
+    // already facing that way: nothing to turn, and no glide started again
+    if (this.facing === face) return true;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const pose = model.pose;
+    const zoom = model.view.zoom;
+    model.ride = { ...ride, look: ride.view === "from" ? "horizon" : ride.look, face };
+    model.view = { yaw: 0, tilt: 0, zoom };
+    model.rideTurn = 0;
+    this.#controls()?.set({ yaw: 0, tilt: 0, zoom }, true, "ride");
+    model.rideTurn = 0;
+    model.view = { yaw: 0, tilt: 0, zoom };
+    model.transition = !reduced && pose.valid ? { start: performance.now(), duration: 500, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    this.#tellFacing();
+    return true;
+  }
+
+  /** The facing (`face`), while the view has not been turned or tipped from it; `null` otherwise. */
+  get facing(): RideFace | null {
+    const ride = this.#model.ride;
+    const view = this.#model.view;
+    return ride?.face && view.yaw === 0 && view.tilt === 0 ? ride.face : null;
+  }
+
+  #tellFacing(): void {
+    const now = this.facing;
+    if (now === this.#toldFacing) return;
+    this.#toldFacing = now;
+    this.dispatchEvent(new CustomEvent("chikyu-ride-face", { detail: { face: now } }));
+  }
+
+  /** W ahead, S behind, A left, D right, R up, F down, while this element is focused and a ride is on. */
+  #faceKey = (event: KeyboardEvent): void => {
+    // a held key repeats: the first press turns, the repeats would only start the glide again and again
+    if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.repeat) return;
+    // typing in a field anywhere on the way to this element (its own shadow root and slots included), or in editable text, is typing, not facing
+    const typing = event.composedPath().some((node) => node instanceof HTMLElement && (node.matches("input, textarea, select") || node.isContentEditable));
+    if (typing) return;
+    const face = FACE_KEYS[event.key.toLowerCase()];
+    if (face && this.face(face)) event.preventDefault();
+  };
 
   /** From a body the zoom only narrows the field a little, so the range is 0.5 to 6: the `zoom-min` and `zoom-max` attributes, unless the page set them itself. */
   #zoomRange(from: boolean): void {
@@ -1334,7 +1413,7 @@ export class ChikyuSpace extends HTMLElement {
     time: number;
     lookups: number;
     satellites: SatelliteStats;
-    ride: { riding: boolean; lost: boolean; gliding: boolean };
+    ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
     camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, the moons shown round a planet that is near and the moons held (shown, or gone from the view for less than four seconds), whether the Moon is the painter's (`moon`), and the bodies with finer map tiles on them (`tiles`). */
@@ -1373,7 +1452,7 @@ export class ChikyuSpace extends HTMLElement {
       time: this.#model.time,
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
-      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null },
+      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null, facing: this.facing },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons, held: this.#model.painted.held, moon: this.#model.painted.moon, tiles: this.#model.painted.tiles },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
