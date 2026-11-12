@@ -70,15 +70,19 @@ const turn = (page: Page) =>
     if (!controls.state.turning) controls.play();
   });
 
-/** Frames the element has drawn (its own count; a frame of the space view is a few dozen GL draw calls). */
-const framesDrawn = (page: Page, look: (typeof LOOKS)[number]) => page.locator(ELEMENT[look]).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+/** The page's counts and the element's frames drawn, read in one go: read one after the other, a frame could be in the draw calls and not yet in the frames (or the other way), and a count of a dozen frames then reads a frame's cost out by a few draws a frame. */
+const snapshot = (page: Page, look: (typeof LOOKS)[number]) =>
+  page.evaluate(
+    (tag) => ({ counts: JSON.parse(JSON.stringify(Reflect.get(window, "__kazokuCount"))) as Awaited<ReturnType<typeof readCounts>>, frames: (Reflect.get(document.querySelector(tag)!, "stats") as { draws: number }).draws }),
+    ELEMENT[look],
+  );
 
 const bounded = async (page: Page, ms: number, look: (typeof LOOKS)[number] = "realistic") => {
-  const start = await readCounts(page);
-  const framesStart = await framesDrawn(page, look);
+  const start = await snapshot(page, look);
   await page.waitForTimeout(ms);
-  const end = await readCounts(page);
-  return { frames: (await framesDrawn(page, look)) - framesStart, draws: end.draws - start.draws, requests: end.rafRequests - start.rafRequests, callbacks: end.rafCallbacks - start.rafCallbacks, outstanding: end.rafRequests - end.rafCallbacks };
+  const stop = await snapshot(page, look);
+  const end = stop.counts;
+  return { frames: stop.frames - start.frames, draws: end.draws - start.counts.draws, requests: end.rafRequests - start.counts.rafRequests, callbacks: end.rafCallbacks - start.counts.rafCallbacks, outstanding: end.rafRequests - end.rafCallbacks };
 };
 
 for (const look of LOOKS) {
