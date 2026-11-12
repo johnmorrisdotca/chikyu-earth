@@ -170,7 +170,7 @@ export interface Satellites {
   pin(ms: number): void;
   /**
    * The place of each satellite at `ms` into `positions` (3 numbers each) and the stretch of orbit it travels over `spanMs` of game time into `segments` (6 numbers each: where it was `spanMs` earlier, then where it is).
-   * The place is the last `pin`, turned about the orbit's axis by the mean motion, so a fast clock does not run SGP4 for every satellite on every frame. A `spanMs` that would turn it more than half a revolution is cut there.
+   * The place is the last `pin`, turned about the orbit's axis by the mean motion, so a fast clock does not run SGP4 for every satellite on every frame. A `spanMs` that would turn it more than half a revolution is cut there. An orbit with an eccentricity of 0.02 or more is placed by SGP4 itself instead (two calls a frame), because a turn at the mean motion would put it off its path.
    * Returns how many were written.
    */
   arc(ms: number, spanMs: number, positions: Float32Array, segments: Float32Array): number;
