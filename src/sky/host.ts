@@ -2,7 +2,7 @@
 // (`frame`); it draws the names and lines on a canvas and a few labels over the picture, never redraws at rest, and lights the figure under the pointer. Stars are directions, so only the camera's turn matters, never its distance.
 import type { CoverMask, FigureLines, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
-import { pathOutside, touches } from "./cover.ts";
+import { boxCovered, pathOutside, touches } from "./cover.ts";
 import type { SkyFrame } from "./frame.ts";
 import type { SkyLabelStyle } from "./style.ts";
 
@@ -126,6 +126,35 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     return context;
   };
 
+  const spot = { x: 0, y: 0 };
+  /**
+   * Where the picked figure's name goes: where hoshi-stars put it, or, where a body covers that, the nearest place round it that is clear of every body and inside the picture. Answers `null` where there is none. The name's box is set from its middle, the way it is drawn (up from its point, centred).
+   */
+  function placeFigureName(x: number, y: number, frame: SkyFrame): { x: number; y: number } | null {
+    if (!covered) {
+      spot.x = x;
+      spot.y = y;
+      return spot;
+    }
+    const box = typeof figureName!.getBoundingClientRect === "function" ? figureName!.getBoundingClientRect() : undefined;
+    const w = box && box.width > 0 ? box.width : 80;
+    const h = box && box.height > 0 ? box.height : 14;
+    let best = Number.POSITIVE_INFINITY;
+    for (const down of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
+      for (const across of [0, -0.5, 0.5, -1, 1, -1.5, 1.5]) {
+        const cx = Math.max(w / 2 + 2, Math.min(frame.width - w / 2 - 2, x + across * w));
+        const cy = Math.max(h + 2, Math.min(frame.height - 2, y + down * h * 1.4));
+        const away = Math.abs(cx - x) + Math.abs(cy - y);
+        if (away < best && !boxCovered(covered, cx - w / 2, cy - h, cx + w / 2, cy)) {
+          best = away;
+          spot.x = cx;
+          spot.y = cy;
+        }
+      }
+    }
+    return best === Number.POSITIVE_INFINITY ? null : spot;
+  }
+
   /** The lines and the rings, and the names: drawn again from what `update` laid out. */
   function drawLines(): void {
     const frame = last;
@@ -172,10 +201,12 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     // the picked figure's name
     if (figureName) {
       const name = lines?.name;
-      if (name && !covered?.(name.x, name.y)) {
+      if (name) {
         figureName.hidden = false;
         if (figureName.textContent !== name.text) figureName.textContent = name.text;
-        figureName.style.transform = `translate(${Math.round(name.x)}px,${Math.round(name.y)}px) translate(-50%,-100%)`;
+        const at = placeFigureName(name.x, name.y, frame);
+        if (at) figureName.style.transform = `translate(${Math.round(at.x)}px,${Math.round(at.y)}px) translate(-50%,-100%)`;
+        else figureName.hidden = true;
       } else figureName.hidden = true;
     }
   }

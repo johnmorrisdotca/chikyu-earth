@@ -118,9 +118,7 @@ export function pathOutside(path: Path, x0: number, y0: number, x1: number, y1: 
  * @returns True where some part is over a body.
  */
 export function touches(covered: (x: number, y: number) => boolean, left: number, top: number, right: number, bottom: number, label: { x: number; y: number; ring: number; leader?: boolean; leaderX1: number; leaderY1: number }): boolean {
-  const middle = (left + right) / 2;
-  const centre = (top + bottom) / 2;
-  if (covered(left, top) || covered(middle, top) || covered(right, top) || covered(left, bottom) || covered(middle, bottom) || covered(right, bottom) || covered(left, centre) || covered(right, centre)) return true;
+  if (boxCovered(covered, left, top, right, bottom)) return true;
   if (covered(label.x, label.y)) return true;
   // the ring is drawn a pixel wide and round: eight points of it, a pixel out
   const ring = label.ring + 1;
@@ -129,4 +127,18 @@ export function touches(covered: (x: number, y: number) => boolean, left: number
   return Boolean(label.leader) && covered(label.leaderX1, label.leaderY1);
 }
 
-
+/**
+ * Whether any part of a box is on a body: its corners and the middle of its edges.
+ *
+ * @param covered - Whether a body covers a point of the picture.
+ * @param left - The box's left.
+ * @param top - The top.
+ * @param right - The right.
+ * @param bottom - The bottom.
+ * @returns True where some part is over a body.
+ */
+export function boxCovered(covered: (x: number, y: number) => boolean, left: number, top: number, right: number, bottom: number): boolean {
+  const middle = (left + right) / 2;
+  const centre = (top + bottom) / 2;
+  return covered(left, top) || covered(middle, top) || covered(right, top) || covered(left, bottom) || covered(middle, bottom) || covered(right, bottom) || covered(left, centre) || covered(right, centre);
+}
