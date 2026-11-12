@@ -91,7 +91,9 @@ test("a satellite that goes behind the Earth is not ringed, and the page is told
   });
   await labelOn(page);
   await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
-  const before = (await names(page)).length;
+  // the names as they are, by text: the count of two views can be the same while the names are others
+  const set = async (): Promise<string> => JSON.stringify((await names(page)).map((n) => n.text).sort());
+  const before = await set();
   // turn the view to the other side of the Earth: what was in front is behind
   await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 180, tilt: 0, zoom: 1, panX: 0, panY: 0 }, true));
   await expect.poll(async () => (await page.evaluate(() => Reflect.get(window, "__seen") as unknown[])).length, { timeout: 30_000, message: "the page is told" }).toBeGreaterThan(0);
@@ -104,7 +106,8 @@ test("a satellite that goes behind the Earth is not ringed, and the page is told
   }
   // the last thing said about each is what placeSatellite says now
   for (const [index, visible] of last) expect((await placeOf(page, index))?.visible ?? false, `satellite ${index}`).toBe(visible);
-  expect((await names(page)).length === before, "a different view, a different set of names").toBe(false);
+  // the layer lays the names out at a draw of its own, after the page was told: wait for it, and for names that are not the first view's
+  await expect.poll(set, { timeout: 15_000, message: "a different view, a different set of names" }).not.toBe(before);
 });
 
 test("nothing is drawn at rest: the places layer is not drawn again while the view and the clock hold", async ({ page }) => {
