@@ -240,22 +240,30 @@ export function shapeBoxes(shapes: BorderShapes): Map<string, [number, number, n
  * ```
  */
 export function codesNear(boxes: ReadonlyMap<string, readonly [number, number, number, number]>, lon: number, lat: number, angle: number): string[] {
-  const reach = Math.max(0, angle);
-  const south = lat - reach;
-  const north = lat + reach;
-  // past a pole the view takes in every longitude
-  const spread = south <= -90 || north >= 90 ? 180 : Math.min(180, reach / Math.max(0.01, Math.cos(Math.max(Math.abs(south), Math.abs(north)) * RAD)));
+  const phi0 = lat * RAD;
+  const sin0 = Math.sin(phi0);
+  const cos0 = Math.cos(phi0);
+  const reach = Math.cos(Math.min(180, Math.max(0, angle)) * RAD);
+  /** The cosine of the nearest distance from the place to a meridian `apart` degrees away, between two latitudes: the nearest point is where sin(lat) sin(lat0) + cos(lat) cos(lat0) cos(apart) is largest, held between them. */
+  const nearestOnMeridian = (apart: number, south: number, north: number): number => {
+    const best = Math.atan2(sin0, cos0 * Math.cos(apart * RAD)) / RAD;
+    const at = Math.max(south, Math.min(north, best > 90 ? 90 : best < -90 ? -90 : best)) * RAD;
+    return sin0 * Math.sin(at) + cos0 * Math.cos(at) * Math.cos(apart * RAD);
+  };
   const found: string[] = [];
-  for (const [code, [west, boxSouth, east, boxNorth]] of boxes) {
-    if (boxNorth < south || boxSouth > north) continue;
-    if (spread < 180) {
-      // the box's middle longitude and half its width, against the view's
-      const width = (((east - west) % 360) + 360) % 360;
-      const middle = west + width / 2;
-      const apart = Math.abs((((middle - lon) % 360) + 540) % 360 - 180);
-      if (apart > width / 2 + spread) continue;
+  for (const [code, [west, south, east, north]] of boxes) {
+    const width = (((east - west) % 360) + 360) % 360;
+    const fromWest = (((lon - west) % 360) + 360) % 360;
+    let near: number;
+    if (fromWest <= width) {
+      // the place is within the box's longitudes: the nearest point is straight north or south of it
+      const at = Math.max(south, Math.min(north, lat));
+      near = Math.cos((at - lat) * RAD);
+    } else {
+      // outside them: the nearest point is on one of the box's two edge meridians (along a parallel the distance grows away from the place)
+      near = Math.max(nearestOnMeridian(fromWest, south, north), nearestOnMeridian(fromWest - width, south, north));
     }
-    found.push(code);
+    if (near >= reach - 1e-12) found.push(code);
   }
   return found;
 }

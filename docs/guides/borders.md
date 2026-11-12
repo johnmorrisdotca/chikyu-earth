@@ -30,7 +30,7 @@ earth.borderData = {
 earth.borders = { countries: true, regions: true };
 ```
 
-- **Regions when they can be told apart.** The regions are drawn once the Earth's radius on the screen is 900 CSS pixels or more (`BORDER_REGIONS_RADIUS`, about 7 km to a pixel), and only the countries near the middle of the view are asked for, each once. Zoom out and they are put away; the countries' borders stay at any size.
+- **Regions when they can be told apart.** The regions are drawn once the Earth's radius on the screen is 900 CSS pixels or more (`BORDER_REGIONS_RADIUS`, about 7 km to a pixel), and only the countries the view shows are asked for (on the space view, those within its horizon), each once. Zoom out and they are put away; the countries' borders stay at any size.
 - **Countries without regions.** Where the page gives no regions for a country, only its border with its neighbours is drawn.
 - **Borders that are disputed.** Natural Earth draws the borders as they are held on the ground (de facto), not as any one country claims them, and says so; these lines are the same. They are not a statement about any claim.
 - **Not installed.** When the shapes cannot be loaded (chizu is missing, or a page's `borderData.countries` fails), `chikyu-borders-unavailable` is sent with the reason, no line is drawn, and the Earth goes on as before. A three.js handed over without `LineSegments` is told the same way.

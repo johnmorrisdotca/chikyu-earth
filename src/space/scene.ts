@@ -1089,7 +1089,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const fx = camera.position.x * Math.cos(turn) - camera.position.z * Math.sin(turn);
             const fz = camera.position.x * Math.sin(turn) + camera.position.z * Math.cos(turn);
             const far = Math.hypot(fx, camera.position.y, fz) || 1;
-            borders.sync({ lon: Math.atan2(fx, fz) / RAD, lat: Math.asin(Math.max(-1, Math.min(1, camera.position.y / far))) / RAD, angle: Math.acos(Math.min(1, 1 / far)) / RAD, radius: Math.min(px.Earth, 1e5) });
+            borders.sync({ points: [{ lon: Math.atan2(fx, fz) / RAD, lat: Math.asin(Math.max(-1, Math.min(1, camera.position.y / far))) / RAD }], angle: Math.acos(Math.min(1, 1 / far)) / RAD, radius: Math.min(px.Earth, 1e5) });
           }
           if (model.rideLost) deps.onRideLost?.();
           if (model.transition) deps.onMoving?.();

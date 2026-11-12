@@ -8,7 +8,7 @@ import { BORDER_REGIONS_RADIUS, codesNear, shapeBoxes, sharedEdges, type BorderS
 /** The lines sit this far above the ground (in Earth radii): over the map tiles and the sphere's flat facets, and under the clouds. */
 const BORDER_RADIUS = 1.0015;
 const COUNTRY_LOOK = { color: "#ffd75e", opacity: 0.85 } as const;
-const REGION_LOOK = { color: "#ffe9a8", opacity: 0.5 } as const;
+const REGION_LOOK = { color: "#ffd75e", opacity: 0.6 } as const;
 
 /**
  * Where the borders' shapes come from. `countries` gives the countries (chizu's `world-geo`, Natural Earth 1:110m, when left out); `regions` gives one country's regions by its code, or `null`
@@ -59,10 +59,9 @@ export interface BorderState {
 
 export const newBorderState = (): BorderState => ({ countries: false, regions: false, data: {}, stats: { countries: 0, regions: 0, shown: { countries: false, regions: false }, loaded: [], builds: 0, failed: false } });
 
-/** The place in the middle of the view, how far round the sphere the view reaches (degrees), and the Earth's radius on the screen (CSS pixels). */
+/** Places the view shows, how far round the sphere the view reaches from each (degrees), and the Earth's radius on the screen (CSS pixels). */
 export interface BorderView {
-  lon: number;
-  lat: number;
+  points: readonly { lon: number; lat: number }[];
   angle: number;
   radius: number;
 }
@@ -176,7 +175,10 @@ export function createBorderLayer(three: ThreeParts, parent: THREE.Object3D, sta
     sync(view) {
       if (state.countries || state.regions) loadCountries();
       const close = view.radius >= BORDER_REGIONS_RADIUS;
-      if (state.regions && close && boxes) loadRegions(codesNear(boxes, view.lon, view.lat, view.angle));
+      if (state.regions && close && boxes) {
+        const near = boxes;
+        loadRegions([...new Set(view.points.flatMap((point) => codesNear(near, point.lon, point.lat, view.angle)))]);
+      }
       countries.visible = state.countries && stats.countries > 0;
       regions.visible = state.regions && close && stats.regions > 0;
       stats.shown = { countries: countries.visible, regions: regions.visible };

@@ -57,7 +57,7 @@ async function still(page: Page, tag: string): Promise<void> {
 const shot = async (page: Page, tag: string): Promise<string> => (await page.locator(tag).screenshot()).toString("base64");
 
 /** The pixels that changed from one picture to the next, and how many of them turned towards the borders' yellow. */
-const changed = (page: Page, before: string, after: string): Promise<{ changed: number; warm: number }> =>
+const changed = (page: Page, before: string, after: string): Promise<{ changed: number; warm: number; cooler: number }> =>
   page.evaluate(
     async ([a, b]) => {
       const read = async (data: string): Promise<Uint8ClampedArray> => {
@@ -75,14 +75,16 @@ const changed = (page: Page, before: string, after: string): Promise<{ changed: 
       const two = await read(b);
       let count = 0;
       let warm = 0;
+      let cooler = 0;
       for (let i = 0; i < Math.min(one.length, two.length); i += 4) {
         const diff = Math.abs(one[i]! - two[i]!) + Math.abs(one[i + 1]! - two[i + 1]!) + Math.abs(one[i + 2]! - two[i + 2]!);
         if (diff < 60) continue;
         count += 1;
         // the borders' yellow pulls a pixel towards yellow: its red and green rise against its blue, over the dark night as over bright cloud or desert
         if ((two[i]! + two[i + 1]!) / 2 - two[i + 2]! > (one[i]! + one[i + 1]!) / 2 - one[i + 2]! + 15) warm += 1;
+        else if ((one[i]! + one[i + 1]!) / 2 - one[i + 2]! > (two[i]! + two[i + 1]!) / 2 - two[i + 2]! + 15) cooler += 1;
       }
-      return { changed: count, warm };
+      return { changed: count, warm, cooler };
     },
     [before, after] as const,
   );
@@ -190,7 +192,7 @@ test.describe("the regions on the realistic Earth", () => {
       await expect.poll(async () => (await bordersOf(page, tag)).shown.regions).toBe(false);
       await still(page, tag);
       const drawn = await changed(page, await shot(page, tag), both);
-      console.log(`regions ${when}: ${drawn.changed} pixels changed, ${drawn.warm} warm`);
+      console.log(`regions ${when}: ${drawn.changed} pixels changed, ${drawn.warm} towards yellow, ${drawn.cooler} away from it`);
       expect(drawn.changed, "the line between the two halves").toBeGreaterThan(150);
       expect(drawn.warm / drawn.changed).toBeGreaterThan(0.6);
       // zoomed out again, the regions are put away and nothing more is asked for

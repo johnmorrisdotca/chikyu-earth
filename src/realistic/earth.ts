@@ -389,8 +389,14 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             }
           }
           if (borders) {
-            const middle = pointOnEarth({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, size.width / 2, size.height / 2) ?? look;
-            borders.sync({ lon: middle.lon, lat: middle.lat, angle: Math.asin(Math.min(1, Math.hypot(size.width, size.height) / 2 / radius)) / RAD, radius });
+            // the ground the view shows, as a grid of 5 by 5 points across the box, each reaching half a cell's diagonal and a margin for the ground leaning away towards the edge
+            const pose = { lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius };
+            const points: GeoPoint[] = [];
+            for (let i = 0; i <= 4; i += 1) for (let j = 0; j <= 4; j += 1) {
+              const at = pointOnEarth(pose, (size.width * i) / 4, (size.height * j) / 4);
+              if (at) points.push(at);
+            }
+            borders.sync({ points: points.length > 0 ? points : [look], angle: Math.asin(Math.min(1, (1.4 * Math.hypot(size.width, size.height)) / 8 / radius)) / RAD, radius });
           }
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {

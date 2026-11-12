@@ -93,4 +93,8 @@ test("near a place: the countries a view of it can reach", () => {
   // from over the pole, every longitude is in reach
   assert.ok(codesNear(boxes, 0, 85, 10).includes("RU") && codesNear(boxes, 0, 85, 10).includes("CA"));
   assert.ok(codesNear(boxes, 0, 0, 90).length > 100, "the whole near side");
+  // measured on the sphere, not on the map: from Germany 30 degrees takes in Greenland, but not Canada (35 degrees to Newfoundland) nor the United States
+  const germany = codesNear(boxes, 10, 50, 30);
+  assert.ok(germany.includes("GL") && germany.includes("DE"));
+  assert.ok(!germany.includes("CA") && !germany.includes("US"));
 });
