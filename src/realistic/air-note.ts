@@ -16,7 +16,7 @@ export const AIR_NOTE = {
 
 /** The styles of the lines under the picture (`#notes`, with the air's `#air-note` and the meteors' `#meteor-note` in it, one above the other) in an element's shadow root. */
 export const NOTES_STYLE =
-  "#notes{position:absolute;left:8px;right:8px;bottom:6px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;pointer-events:none}#notes>p{position:static;margin:0;max-width:100%;font:11px/1.3 system-ui,sans-serif;color:#dfe6f2;background:#0b0e14b3;padding:2px 6px;border-radius:4px}#notes>p[hidden]{display:none}";
+  "#notes{position:absolute;left:8px;right:8px;bottom:6px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;pointer-events:none}#notes>p{position:static;margin:0;max-width:100%;font:11px/1.3 system-ui,sans-serif;color:#dfe6f2;background:#0b0e14b3;padding:2px 6px;border-radius:4px}#notes>p[hidden]{display:none}#notes>#bodies-note{max-height:4.6em;overflow-y:auto;pointer-events:auto;overscroll-behavior:contain}";
 
 /** The words of the line for a thickness: a whole number is written plainly, any other with up to one decimal. */
 export function airNoteText(lang: "en" | "ja", thickness: number): string {
