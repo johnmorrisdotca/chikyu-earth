@@ -45,6 +45,45 @@ export function satelliteAxes(position: Vec3, velocity: Vec3): { x: Vec3; y: Vec
 }
 
 /**
+ * The camera of the view above a satellite: where it stands from the satellite (a unit vector, to be multiplied by the height) and the way its picture's top points. With no turn and no tip the camera is straight above the satellite, looking straight down at it, the way the satellite is going at the top of
+ * the picture. `yaw` turns the picture about the satellite (the top points the other way round the satellite); `tilt` tips the camera back (positive) or ahead of the satellite (negative), so it looks down at it from behind or in front.
+ *
+ * @param position - The satellite's place from the Earth's centre.
+ * @param velocity - Its velocity.
+ * @param yaw - The turn of the picture about the satellite, in radians.
+ * @param tilt - How far the camera is tipped back from straight above, in radians.
+ * @returns The unit offset of the camera from the satellite, and the unit vector at the top of its picture.
+ *
+ * @example
+ * ```ts
+ * import { aboveAxes } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const view = aboveAxes([1.07, 0, 0], [0, 0, 1], 0, 0);
+ * console.log(view.offset, view.up);
+ * ```
+ */
+export function aboveAxes(position: Vec3, velocity: Vec3, yaw: number, tilt: number): { offset: Vec3; up: Vec3 } {
+  let axes = satelliteAxes(position, velocity);
+  if (!axes) {
+    // no way it is going (or no place): any level direction will do
+    const length = Math.hypot(position[0], position[1], position[2]);
+    const z: Vec3 = length > 0 ? [position[0] / length, position[1] / length, position[2] / length] : [1, 0, 0];
+    const from: Vec3 = Math.abs(z[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const cross: Vec3 = [from[1] * z[2] - from[2] * z[1], from[2] * z[0] - from[0] * z[2], from[0] * z[1] - from[1] * z[0]];
+    const size = Math.hypot(cross[0], cross[1], cross[2]) || 1;
+    const x: Vec3 = [cross[0] / size, cross[1] / size, cross[2] / size];
+    axes = { x, y: [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]], z };
+  }
+  const { x, y, z } = axes;
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const top: Vec3 = [cy * x[0] + sy * y[0], cy * x[1] + sy * y[1], cy * x[2] + sy * y[2]];
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  return { offset: [ct * z[0] - st * top[0], ct * z[1] - st * top[1], ct * z[2] - st * top[2]], up: top };
+}
+
+/**
  * The 4 by 4 matrix, row by row (what three.js's `Matrix4.set` takes), that puts a model of radius 1 at a place, turned to the satellite's axes and scaled: its columns are the axes times the scale, then the place.
  *
  * @param place - Where the model's middle goes, in the scene's units.
