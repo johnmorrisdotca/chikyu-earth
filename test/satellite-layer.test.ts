@@ -100,3 +100,20 @@ test("three.js parts with LineSegments draw a streak for every satellite above 6
   assert.equal(state.drawn.segments, count);
   assert.equal(warnings.length, 0);
 });
+
+test("a jump in the time above 60 times real time pins the satellites again at once, not up to a second later", () => {
+  const state = newSatelliteState();
+  const group = createSatellites(stations);
+  state.groups.set("stations", { satellites: group, color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  const speed = MAX_SATELLITE_SPEED * 10;
+  layer.update(time, speed, 300);
+  const pinned = group.propagations;
+  layer.update(time + speed * 33, speed, 300);
+  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= 0.02).length;
+  assert.equal(group.propagations - pinned, eccentric * 2, "the next frame does not pin again");
+  const before = group.propagations;
+  layer.update(time + 5 * 86_400_000, speed, 300);
+  assert.ok(group.propagations - before >= group.count, "five days on, the whole group is pinned again in that frame");
+});

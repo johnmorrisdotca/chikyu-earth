@@ -91,6 +91,8 @@ interface Drawn {
   streakColours: Float32Array;
   streakAttribute: THREE.BufferAttribute;
   pinWall: number;
+  /** The game time the group was last pinned at. */
+  pinTime: number;
 }
 
 /**
@@ -269,7 +271,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
             streak.visible = false;
             scene.add(streak);
           }
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0 };
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0 };
           drawn.set(name, entry);
         }
         const style = `${group.color}|${group.size}|${ratio()}|${dotScale}|${state.orbitTint ? 1 : 0}`;
@@ -301,9 +303,11 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           continue;
         }
         if (tooFast) {
-          if (entry.pinWall === 0 || started - entry.pinWall >= 1000) {
+          // pinned again about once a second, and at once when the time jumped (a date typed in, a scrub), so a place is never turned across days
+          if (entry.pinWall === 0 || started - entry.pinWall >= 1000 || Math.abs(time - entry.pinTime) > 1500 * Math.abs(speed)) {
             group.satellites.pin(time);
             entry.pinWall = started;
+            entry.pinTime = time;
           }
           const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions);
           entry.attribute.needsUpdate = true;
