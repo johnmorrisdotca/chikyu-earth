@@ -29,8 +29,15 @@ export function nearestSegment(segments: SegmentList, start: number, end: number
   return best;
 }
 
-/** The convex hull of a figure's segment ends (Andrew's monotone chain), as x y pairs. */
-function hull(segments: SegmentList, start: number, end: number): number[] {
+/**
+ * The convex hull of a figure's segment ends (Andrew's monotone chain), as x y pairs: made once for a figure and kept while the picture holds, then asked of with `areaInHull` at each pointer.
+ *
+ * @param segments - The segments, four numbers each.
+ * @param start - The figure's first segment.
+ * @param end - One past its last.
+ * @returns The hull's corners, x then y for each, round the figure.
+ */
+export function hullOf(segments: SegmentList, start: number, end: number): number[] {
   const points: [number, number][] = [];
   for (let s = start; s < end; s += 1) {
     points.push([segments[s * 4]!, segments[s * 4 + 1]!], [segments[s * 4 + 2]!, segments[s * 4 + 3]!]);
@@ -63,7 +70,18 @@ function hull(segments: SegmentList, start: number, end: number): number[] {
  * @returns The hull's area where the point is inside it, else -1.
  */
 export function hullAreaAround(segments: SegmentList, start: number, end: number, x: number, y: number): number {
-  const h = hull(segments, start, end);
+  return areaInHull(hullOf(segments, start, end), x, y);
+}
+
+/**
+ * The area of a hull when a point is inside it, or -1 when it is not (and for a hull with fewer than three corners).
+ *
+ * @param h - The hull, from `hullOf`.
+ * @param x - The point, x.
+ * @param y - The point, y.
+ * @returns The area where the point is inside, else -1.
+ */
+export function areaInHull(h: readonly number[], x: number, y: number): number {
   const n = h.length / 2;
   if (n < 3) return -1;
   let area = 0;

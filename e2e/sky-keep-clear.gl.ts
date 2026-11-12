@@ -112,3 +112,22 @@ test("the attribute keep-clear takes a selector, and a block that is resized is 
   await page.locator(SPACE).evaluate((el) => el.removeAttribute("keep-clear"));
   await expect.poll(async () => (await names(page)).length, { timeout: 15_000, message: "without the attribute the names are back" }).toBeGreaterThan(0);
 });
+
+test("a block fixed on the screen is kept clear as the page scrolls under it: the names are laid out again, once, with no camera move", async ({ page }) => {
+  await open(page);
+  // the page grows below, so that it can scroll; the block is fixed on the screen, over the middle of the picture
+  await page.evaluate(() => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    document.body.append(spacer);
+  });
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "keepClear", [document.getElementById("page-text")]));
+  await atRest(page);
+  const block = await blockBox(page);
+  expect(touching(await names(page), block), "no name touches the block").toEqual([]);
+  const before = await draws(page);
+  await page.evaluate(() => window.scrollBy(0, 160));
+  // the picture moved up the screen under the block: names that were clear of it are under it now, until the layer is laid out again
+  await expect.poll(async () => touching(await names(page), await blockBox(page)), { timeout: 15_000, message: "after a scroll no name touches the block" }).toEqual([]);
+  expect(await draws(page), "the picture is not drawn again for it").toBe(before);
+});

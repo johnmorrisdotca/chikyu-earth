@@ -239,3 +239,44 @@ test("a place kept clear: no star is named in it, a list of places is read once,
   assert.equal(inKeep(areas, 40, 10), true);
   assert.equal(inKeep(areas, 60, 10), false);
 });
+
+test("a figure picked while its culture is on its way is picked when it has come, and a culture that cannot be loaded says so once and leaves the IAU's figures", async () => {
+  measure = undefined;
+  made = 0;
+  const attribute = (culture: string) => (name: string): string | null => (name === "constellation-lines" ? "0.3" : name === "constellation-culture" ? culture : null);
+  // the page sets the property at once: the culture's figures are not here yet
+  const host = createSkyHost({
+    root,
+    attribute: attribute("japanese"),
+    language: () => "en",
+    onError: (error) => assert.fail(String(error)),
+    loadFont: async () => undefined,
+    cultures: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/japanese")).japanese,
+  });
+  host.frame({ ...frame, discs: [] });
+  host.pick("subaru");
+  for (let waited = 0; waited < 20_000 && host.picked !== "subaru"; waited += 20) await wait(20);
+  assert.equal(host.picked, "subaru", "the pick was kept until the culture was here");
+  assert.equal(host.stats.culture, "japanese");
+  host.dispose();
+  // a culture that cannot be had
+  const warnings: string[] = [];
+  const warn = console.warn;
+  console.warn = (message: unknown) => warnings.push(String(message));
+  const errors: unknown[] = [];
+  try {
+    const failing = createSkyHost({ root, attribute: attribute("chinese"), language: () => "en", onError: (error) => errors.push(error), loadFont: async () => undefined, cultures: async () => Promise.reject(new Error("offline")) });
+    failing.frame({ ...frame, discs: [] });
+    for (let waited = 0; waited < 10_000 && warnings.length === 0; waited += 20) await wait(20);
+    await wait(100);
+    failing.refresh();
+    await wait(50);
+    assert.equal(warnings.length, 1, `one warning: ${warnings.join(" | ")}`);
+    assert.match(warnings[0]!, /could not be loaded/);
+    assert.equal(errors.length, 1, "the page is told");
+    assert.equal(failing.stats.culture, "iau", "the IAU's figures are shown instead");
+    failing.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});

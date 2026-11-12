@@ -239,7 +239,8 @@ test("a ride on a geostationary satellite: its orbit seen edge-on is not drawn t
     return api.selectedSatellite;
   });
   expect(chosen, "the ridden satellite is marked").not.toBeNull();
-  for (const [name, view] of [["horizon", { yaw: 0, tilt: 0, zoom: 1 }], ["the hero's own view (zoom 0.6, a field of 100 degrees)", { yaw: 0, tilt: 0, zoom: 0.6 }]] as const) {
+  // (the Earth is small in the hero's own view, a field of 100 degrees: fewer rows are across it)
+  for (const [name, view, across, least] of [["horizon", { yaw: 0, tilt: 0, zoom: 1 }, 30, 10], ["the hero's own view (zoom 0.6, a field of 100 degrees)", { yaw: 0, tilt: 0, zoom: 0.6 }, 10, 5]] as const) {
     await controls(page, view);
     await atRest(page);
     await page.locator(SPACE).evaluate((el) => {
@@ -255,9 +256,9 @@ test("a ride on a geostationary satellite: its orbit seen edge-on is not drawn t
     for (let y = 0; y < seen.height; y += 3) {
       const points: { x: number; y: number }[] = [];
       for (let x = 0; x < seen.width; x += 3) if (onEarth(seen.camera, seen.width, seen.height, x, y, 0.95)) points.push({ x: own.x + x, y: own.y + y });
-      if (points.length > 10) rows.push({ y, points });
+      if (points.length > across) rows.push({ y, points });
     }
-    expect(rows.length, `the Earth is in the picture (${name})`).toBeGreaterThan(5);
+    expect(rows.length, `the Earth is in the picture (${name})`).toBeGreaterThan(least);
     const colours = await coloursAt(page, rows.flatMap((row) => row.points));
     let at = 0;
     const white: number[] = [];

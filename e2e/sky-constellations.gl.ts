@@ -86,6 +86,7 @@ test("hovering a figure lights it and shows its name, with an event; leaving let
   await page.mouse.move(box.x + at.x, box.y + at.y);
   await expect.poll(async () => (await sky(page)).hover, { message: "a figure is hovered" }).not.toBeNull();
   const hovered = (await sky(page)).hover!;
+  expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.getElementById("sk-live")?.textContent ?? ""), "a hover is not announced").toBe("");
   const seen = (await events(page)).filter((e) => e.type === "chikyu-constellation-hover");
   expect(seen.at(-1)!.detail, "the event says which").toMatchObject({ abbreviation: hovered, culture: "iau" });
   expect(seen.at(-1)!.detail!.name.length, "with its name").toBeGreaterThan(2);
@@ -113,6 +114,14 @@ test("a click picks a figure and the name stays; a click on the Earth, Escape or
   expect(pick[0]!.detail).toMatchObject({ abbreviation: picked, culture: "iau" });
   expect(pick[0]!.detail!.japanese.endsWith("座"), "with its Japanese name").toBe(true);
   expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "constellation")), "the property says it").toBe(picked);
+  // a pick is read out, politely, with the figure's name; a hover was not
+  const announced = await page.locator(SPACE).evaluate((el) => {
+    const live = el.shadowRoot!.getElementById("sk-live")!;
+    return { text: live.textContent ?? "", role: live.getAttribute("role"), polite: live.getAttribute("aria-live") };
+  });
+  expect(announced.role).toBe("status");
+  expect(announced.polite).toBe("polite");
+  expect(announced.text, "the pick is announced with the name").toContain(pick[0]!.detail!.name);
   // the pointer leaves: the lines stay lit and the name stays
   await page.mouse.move(box.x - 10, box.y - 10);
   await expect.poll(async () => (await sky(page)).hover).toBeNull();
