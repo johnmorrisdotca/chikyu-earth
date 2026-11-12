@@ -188,3 +188,37 @@ export function createPlaceSprites(three: ThreeParts, parent: THREE.Object3D, su
     },
   };
 }
+
+/** The picture's place rings, made the first time there is something to draw, and the page told once whether they could be made. */
+export interface PlaceRings {
+  /** As {@link PlaceSprites.sync}; the first call with data makes the rings (once, never again if they could not be made). */
+  sync(data: PlaceSpriteData | null, ratio: number, width: number, height: number, lit: boolean): void;
+  dispose(): void;
+}
+
+/**
+ * The rings for a picture, made on the first `sync` that has data. `onRings(true)` or `onRings(false)` is called once, that first time, with whether the rings could be made (`make` returned them: `Points` was there); a picture
+ * that cannot draw them never tries again and never tells again.
+ *
+ * @param make - Makes the rings for the picture, or returns null when it cannot (see {@link createPlaceSprites}); called at most once.
+ * @param onRings - Told once whether the picture can draw the rings.
+ * @returns The rings, to be synced at each draw and disposed with the picture.
+ */
+export function createPlaceRings(make: () => PlaceSprites | null, onRings?: (drawn: boolean) => void): PlaceRings {
+  let sprites: PlaceSprites | null = null;
+  let tried = false;
+  return {
+    sync(data, ratio, width, height, lit) {
+      if (data && !sprites && !tried) {
+        tried = true;
+        sprites = make();
+        onRings?.(sprites !== null);
+      }
+      sprites?.sync(data, ratio, width, height, lit);
+    },
+    dispose() {
+      sprites?.dispose();
+      sprites = null;
+    },
+  };
+}

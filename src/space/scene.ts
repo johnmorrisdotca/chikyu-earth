@@ -15,7 +15,7 @@ import { ridePose, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
-import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
+import { createPlaceRings, createPlaceSprites, type PlaceRings, type PlaceSpriteData } from "../markers/place-sprites.ts";
 import type { CountryFrame } from "../country-names/geometry.ts";
 import type { GeoPoint } from "../types.ts";
 import { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
@@ -622,8 +622,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
-      let placeSprites: PlaceSprites | null = null;
-      let placeSpritesTried = false;
+      const placeRings: PlaceRings = createPlaceRings(() => createPlaceSprites(three, earth, sunEarth), (drawn) => deps.onPlaceRings?.(drawn));
       let gridLayer: GridLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
@@ -1078,13 +1077,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             });
           }
           const spriteData = deps.placeSprites?.() ?? null;
-          if (spriteData && !placeSprites && !placeSpritesTried) {
-            placeSprites = createPlaceSprites(three, earth, sunEarth);
-            placeSpritesTried = true;
-            // told once: without `Points` the page's layer draws these rings itself
-            deps.onPlaceRings?.(placeSprites !== null);
-          }
-          placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
+          // made the first time there is something to draw, and the page told once: without `Points` its layer draws these rings itself
+          placeRings.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
@@ -1210,7 +1204,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           meteors?.dispose();
           nameOn?.dispose();
           borders?.dispose();
-          placeSprites?.dispose();
+          placeRings.dispose();
           gridLayer?.dispose();
           modelSlot.turn += 1;
           dropModel();

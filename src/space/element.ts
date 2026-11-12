@@ -10,7 +10,7 @@ import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/h
 import type { SkyKeepClear } from "../sky/keep-clear.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, readPlaceGroups, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
-import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
+import { createPlaceLayer, PLACE_STYLE, placesUnavailableEvent, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
 import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "../realistic/sun.ts";
 import { SHORT_NAMES } from "../satellites/names.ts";
@@ -338,6 +338,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#placeLayer.set(this.#placeList);
     this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
     this.#placeLayer.grouping = readPlaceGroups(this.getAttribute("place-groups"));
+    this.#placeLayer.onOmitted = (omitted) => this.dispatchEvent(placesUnavailableEvent(omitted));
     this.#cities = createCityHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -672,6 +673,16 @@ export class ChikyuSpace extends HTMLElement {
 
   /**
    * Whether places that crowd are gathered into one ring with their count (the attribute `place-groups`): on by default, `off` leaves every place its own ring. Setting the property writes the attribute.
+   *
+   * @example
+   * ```ts no-run
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const earth = document.querySelector("chikyu-space") as ChikyuSpace;
+   * earth.placeGroups = false; // writes place-groups="off": every place keeps its own ring
+   * console.log(earth.getAttribute("place-groups"), earth.placeGroups); // "off" false
+   * earth.placeGroups = true; // removes the attribute: crowds are gathered again
+   * ```
    */
   get placeGroups(): boolean {
     return this.#placeLayer?.grouping ?? readPlaceGroups(this.getAttribute("place-groups"));
@@ -681,11 +692,10 @@ export class ChikyuSpace extends HTMLElement {
     else this.setAttribute("place-groups", "off");
   }
 
-  /** The picture said whether it can draw the rings of the places that are not markers of their own. Without `Points` the places' layer draws them itself and the page is told once, so no place is lost without a word. */
+  /** The picture said whether it can draw the rings of the places that are not markers of their own. Without `Points` the places' layer draws them itself; the page is told, once, only if some place in sight has no room (`onOmitted`), so no place is lost without a word. */
   #ringsDrawn(drawn: boolean): void {
     if (!this.#placeLayer || this.#placeLayer.ringsInPicture === drawn) return;
     this.#placeLayer.ringsInPicture = drawn;
-    if (!drawn) this.dispatchEvent(new CustomEvent("chikyu-places-unavailable", { detail: { reason: "the three.js parts handed over lack Points: the places' rings are drawn as small circles in the page, at most 600, and stats.places.omitted counts the rest" } }));
     this.#gate?.request();
   }
 
