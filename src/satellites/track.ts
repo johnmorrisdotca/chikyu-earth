@@ -2,6 +2,7 @@
 // (about once a second), never one a frame. satellite.js (MIT) does the SGP4 itself; this file never touches the screen and imports on a server.
 import { json2satrec, sgp4 } from "satellite.js";
 import { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS } from "./limits.ts";
+import { ownerCountry } from "./owners.ts";
 import type { ElementSet, RefusedElementSet, SatelliteInfo, Satellites } from "./types.ts";
 
 /** The Earth's mean radius in kilometres: the unit of every position here (the same as the space view's). */
@@ -253,6 +254,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         periodMinutes: 1440 / set.MEAN_MOTION,
         inclinationDeg: set.INCLINATION,
       };
+      const country = ownerCountry(set.COUNTRY_CODE ?? set.OWNER);
+      if (country) info.ownerCountry = country;
       return info;
     },
   };

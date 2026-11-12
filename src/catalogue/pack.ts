@@ -308,6 +308,8 @@ export function unpackCatalogue(bytes: Uint8Array): PackedCatalogue {
       MEAN_MOTION_DDOT: nddot[i]!,
     };
     if (id) set.OBJECT_ID = id;
+    const owner = part(i, 2);
+    if (owner) set.COUNTRY_CODE = owner;
     return set;
   };
   const kindAt = (i: number): ObjectKind => KINDS[kind[i]!] ?? "UNK";
