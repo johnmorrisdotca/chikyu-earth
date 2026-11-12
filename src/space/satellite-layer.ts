@@ -90,9 +90,44 @@ interface Drawn {
   streakPositions: Float32Array;
   streakColours: Float32Array;
   streakAttribute: THREE.BufferAttribute;
+  /** The wall-clock time of the last frame that pinned a slice of the group; 0 when the group is not being pinned (it is pinned whole at the first frame). */
   pinWall: number;
-  /** The game time the group was last pinned at. */
+  /** The game time of that frame, to tell a jump of the clock. */
   pinTime: number;
+  /** The first satellite of the next slice to pin. */
+  pinNext: number;
+}
+
+/** How long, in milliseconds of wall time, a satellite's place is kept before SGP4 places it again when the clock is too fast to interpolate: about once a second. */
+export const PIN_PERIOD_MS = 1000;
+
+/**
+ * How many satellites of a group to pin in a frame that comes `elapsedMs` after the last one, so that each is pinned again about once every {@link PIN_PERIOD_MS} and no frame that comes at a lively pace pins them all: a share of the group in
+ * proportion to the time since the last frame (a 60 Hz frame pins about a sixtieth, a 30 Hz one a thirtieth), at least one. A frame that comes a second or more after the last one pins the whole group, as one always did: a picture that
+ * is drawn that seldom has no frames for a single batch to hitch.
+ *
+ * @param count - How many satellites the group has.
+ * @param elapsedMs - Wall-clock milliseconds since the last frame that pinned a slice.
+ * @returns How many to pin now, from 0 (an empty group) to `count`. Internal: not exported from the package.
+ */
+export const pinSliceSize = (count: number, elapsedMs: number): number => (count <= 0 ? 0 : Math.min(count, Math.max(1, Math.ceil((count * Math.min(PIN_PERIOD_MS, Math.max(0, elapsedMs))) / PIN_PERIOD_MS))));
+
+/**
+ * The slice of a group to pin in this frame: up to two runs of satellites as `[first, count]` (the second when the slice reaches the end and goes on from the start), and where the next slice begins.
+ *
+ * @param count - How many satellites the group has.
+ * @param next - Where the last slice ended (the first satellite of this one).
+ * @param elapsedMs - Wall-clock milliseconds since the last frame that pinned a slice.
+ * @returns The runs to pin and the start of the next slice. Internal: not exported from the package.
+ */
+export function pinPlan(count: number, next: number, elapsedMs: number): { runs: [number, number][]; next: number } {
+  const slice = pinSliceSize(count, elapsedMs);
+  if (slice === 0) return { runs: [], next: 0 };
+  const first = next >= 0 && next < count ? Math.floor(next) : 0;
+  const part = Math.min(slice, count - first);
+  const runs: [number, number][] = [[first, part]];
+  if (part < slice) runs.push([0, slice - part]);
+  return { runs, next: (first + slice) % count };
 }
 
 /**
@@ -271,7 +306,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
             streak.visible = false;
             scene.add(streak);
           }
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0 };
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0, pinNext: 0 };
           drawn.set(name, entry);
         }
         const style = `${group.color}|${group.size}|${ratio()}|${dotScale}|${state.orbitTint ? 1 : 0}`;
@@ -303,12 +338,19 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           continue;
         }
         if (tooFast) {
-          // pinned again about once a second, and at once when the time jumped (a date typed in, a scrub), so a place is never turned across days
-          if (entry.pinWall === 0 || started - entry.pinWall >= 1000 || Math.abs(time - entry.pinTime) > 1500 * Math.abs(speed)) {
+          // pinned whole at the first frame and when the time jumped (a date typed in, a scrub), so a place is never turned across days; after that a slice a frame, each satellite again about once a second,
+          // so SGP4 never runs for the whole group (17,000 satellites take about 12 ms) in one frame
+          const total = group.satellites.count;
+          if (entry.pinWall === 0 || Math.abs(time - entry.pinTime) > 1500 * Math.abs(speed)) {
             group.satellites.pin(time);
-            entry.pinWall = started;
-            entry.pinTime = time;
+            entry.pinNext = 0;
+          } else {
+            const plan = pinPlan(total, entry.pinNext, started - entry.pinWall);
+            for (const [first, part] of plan.runs) group.satellites.pin(time, first, part);
+            entry.pinNext = plan.next;
           }
+          entry.pinWall = started;
+          entry.pinTime = time;
           const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions);
           entry.attribute.needsUpdate = true;
           if (entry.streak) {

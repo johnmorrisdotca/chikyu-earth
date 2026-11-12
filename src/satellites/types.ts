@@ -172,8 +172,11 @@ export interface Satellites {
   readonly classColour: Float32Array;
   /** The game time between the two moments SGP4 is run at (1000 to 60000 ms); the space view sets it from the clock's speed. */
   setStep(ms: number): void;
-  /** Place every satellite with SGP4 at `ms` and keep that place. `arc` turns it along the orbit until the next `pin`. One batch, no interpolation. */
-  pin(ms: number): void;
+  /**
+   * Place satellites with SGP4 at `ms` and keep that place, and the time it was kept at: every satellite, or `count` of them from index `first`, so a big group can be pinned a slice a frame instead of all in one.
+   * `arc` turns each satellite along its orbit from its own last pin. No interpolation. A satellite never pinned is pinned by the first `arc`.
+   */
+  pin(ms: number, first?: number, count?: number): void;
   /**
    * The place of each satellite at `ms` into `positions` (3 numbers each) and the stretch of orbit it travels over `spanMs` of game time into `segments` (6 numbers each: where it was `spanMs` earlier, then where it is).
    * The place is the last `pin`, turned about the orbit's axis by the mean motion, so a fast clock does not run SGP4 for every satellite on every frame. A `spanMs` that would turn it more than half a revolution is cut there. An orbit with an eccentricity of 0.02 or more is placed by SGP4 itself instead (two calls a frame), because a turn at the mean motion would put it off its path.

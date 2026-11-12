@@ -146,7 +146,9 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const timing = { lastBatchMs: 0, maxBatchMs: 0 };
   const pinned = new Float32Array(n * 3);
   const pinOk = new Uint8Array(n);
-  let pinMs = Number.NaN;
+  // when each satellite was last pinned (NaN: never), so a group can be pinned a slice at a time and `arc` turns each from its own pin
+  const pinMsOf = new Float64Array(n).fill(Number.NaN);
+  let pinnedCount = 0;
 
   /** Turn `x,y,z` about the unit axis `nx,ny,nz` by `ang` radians, into `out` at `at` (no allocation: it runs for every satellite on every frame). */
   const turn = (x: number, y: number, z: number, nx: number, ny: number, nz: number, ang: number, out: Float32Array, at: number): void => {
@@ -162,10 +164,12 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const isEccentric = new Uint8Array(n);
   for (const i of eccentric) isEccentric[i] = 1;
 
-  /** SGP4 for the whole group at one moment, into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
-  const sample = (buffer: Float32Array, ok: Uint8Array, ms: number): void => {
+  /** SGP4 for satellites `from` up to (not including) `to` at one moment (the whole group by default), into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
+  const sample = (buffer: Float32Array, ok: Uint8Array, ms: number, from = 0, to = n, skipEccentric = false): void => {
     const started = performance.now();
-    for (let i = 0; i < n; i += 1) {
+    for (let i = from; i < to; i += 1) {
+      // an eccentric orbit is placed by SGP4 at every frame by `arc` and never read from a pin
+      if (skipEccentric && isEccentric[i] === 1) continue;
       const epoch = epochs[i]!;
       if (Math.abs(ms - epoch) > maxAgeMs) {
         ok[i] = 0;
@@ -221,16 +225,24 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     get placed() {
       return placed;
     },
-    pin(ms) {
+    pin(ms, first = 0, count = n) {
       if (n === 0) return;
-      sample(pinned, pinOk, ms);
-      pinMs = ms;
+      const from = Math.max(0, Math.min(n, Math.floor(first)));
+      const to = Math.max(from, Math.min(n, from + Math.floor(count)));
+      if (to === from) return;
+      sample(pinned, pinOk, ms, from, to, true);
+      for (let i = from; i < to; i += 1) {
+        if (Number.isNaN(pinMsOf[i])) pinnedCount += 1;
+        pinMsOf[i] = ms;
+      }
     },
     arc(ms, spanMs, positions, segments) {
       if (n === 0) return 0;
-      if (!Number.isFinite(pinMs)) {
-        sample(pinned, pinOk, ms);
-        pinMs = ms;
+      // a satellite never pinned is pinned now, all together
+      if (pinnedCount < n) {
+        sample(pinned, pinOk, ms, 0, n, true);
+        pinMsOf.fill(ms);
+        pinnedCount = n;
       }
       const span = spanMs;
       let count = 0;
@@ -278,7 +290,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         const ny = normal[k + 1]!;
         const nz = normal[k + 2]!;
         const sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
-        const along = rate[i]! * (ms - pinMs);
+        const along = rate[i]! * (ms - pinMsOf[i]!);
         turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along, positions, k);
         turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along - sweep, segments, w);
         segments[w + 3] = positions[k]!;
