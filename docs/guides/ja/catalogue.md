@@ -37,6 +37,7 @@ console.log(file.count, file.norad[1], file.recordAt(1).owner, legend("kind", "e
 - **物体の種類**は、カタログの物体種別から決めます。`readKind` は Space-Track の `PAYLOAD`、`ROCKET BODY`、`DEBRIS`、`TBA`、または短い記号 `PAY`、`R/B`、`DEB`、`UNK` を読みます。それ以外は種類不明です。
 - **色と凡例**は、軌道の分類ごと、種類ごとにあります。`legend("class", lang)` と `legend("kind", lang)` が、凡例に並べる順にラベルと色を返します。言語は `en` か `ja` です。`CLASS_COLOURS` と `KIND_COLOURS` は暗い背景向けに選んだ色そのものです。
 - **衛星群**: `FLEETS` は、Starlink、OneWeb、GPS、Galileo、GLONASS、BeiDou、Iridium、宇宙ステーションを、名前のパターンで見分けます。`fleetOf(name, kind)` はその物体がどの群に属するかを返します（群に入るのは人工衛星だけです）。`countFleets` は群ごとの数を数えます。フィルターに表示される「N / M」は、この数です。名前から群がわからない衛星は、どの群にも入りません。
+- **所有者の国**: レコードの `owner` は、カタログ独自のコード（`PRC`、`PAKI`、`ESA`、`CIS` など）です。`ownerCountry(code)` は、所有者が1つの国のとき、その国の ISO 3166-1 の2文字コード（`CN`、`PK`）を返します。組織、複数の国、所有者が不明なもの、旧ソ連の登録である `CIS` には `undefined` を返します。`OWNER_COUNTRIES` は、カタログの所有者一覧の132個のコードをすべて収めた表です。どちらも `/satellites` でも使えます。そこでは衛星の `info.ownerCountry` が同じ答えになります（パックファイルから読んだ衛星でも同じです）。このパッケージは国旗を描きません。
 
 ## パック形式のファイル
 
@@ -64,7 +65,7 @@ const debris = packedElementsFrom("https://example.org/catalogue/debris.pack.gz"
 console.log(debris.info.id);
 ```
 
-`readPackedFrom(url)` は同じリクエストをして、ファイル全体を返します。物体の位置だけでなく、種類、所有国、打ち上げ日も表示したいページで使えます。
+`readPackedFrom(url)` は同じリクエストをして、ファイル全体を返します。物体の位置だけでなく、種類、所有者、打ち上げ日も表示したいページで使えます。
 
 ## ファイルを作る
 

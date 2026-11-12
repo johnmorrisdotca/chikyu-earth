@@ -82,7 +82,7 @@ export const OWNER_COUNTRIES: Readonly<Record<string, string | null>> = {
   LKA: "LK", // Democratic Socialist Republic of Sri Lanka
   LTU: "LT", // Lithuania
   LUXE: "LU", // Luxembourg
-  MA: "MA", // Morroco
+  MA: "MA", // Morocco
   MALA: "MY", // Malaysia
   MCO: "MC", // Principality of Monaco
   MDA: "MD", // Republic of Moldova

@@ -37,6 +37,7 @@ console.log(file.count, file.norad[1], file.recordAt(1).owner, legend("kind", "e
 - **The kind of an object**, from the catalogue's own object type: `readKind` takes Space-Track's `PAYLOAD`, `ROCKET BODY`, `DEBRIS` and `TBA`, or the short codes `PAY`, `R/B`, `DEB` and `UNK`. Anything else is unknown.
 - **A colour and a legend** for each class and kind, in English or Japanese: `legend("class", lang)` and `legend("kind", lang)` give the labels and colours in the order a legend lists them, and `CLASS_COLOURS` and `KIND_COLOURS` are the colours themselves, chosen for a dark background.
 - **Fleets**: `FLEETS` lists Starlink, OneWeb, GPS, Galileo, GLONASS, BeiDou, Iridium and the space stations by the pattern their names follow. `fleetOf(name, kind)` says which one an object belongs to (only payloads belong to a fleet) and `countFleets` counts them, which is the "N of M" a filter shows. A satellite whose name does not say its fleet is not matched.
+- **An owner's country**: a record's `owner` is the catalogue's own code (`PRC`, `PAKI`, `ESA`, `CIS`). `ownerCountry(code)` gives the country's ISO 3166-1 alpha-2 code (`CN`, `PK`) when the owner is one country, and `undefined` for an organisation, several countries, an unknown owner or `CIS`, the former Soviet registration. `OWNER_COUNTRIES` is the whole table, the 132 codes of the catalogue's owner list. Both are also in `/satellites`, where a satellite's `info.ownerCountry` is the same answer, including for a satellite read from a packed file. The package draws no flag.
 
 ## The packed file
 
