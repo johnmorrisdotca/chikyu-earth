@@ -715,8 +715,11 @@ if (flat && controls && stage) {
     // the Sun, the planets, Pluto and their moons are wakusei-planets' (an optional peer): the real ones, or plain spheres where it is not there
     if (!planetsTried) {
       planetsTried = true;
-      // a browser test may hand the page a painter of its own (`window.__bodyPainter`) to watch how the view reads the painter's credit
-      const planets = (Reflect.get(window, "__bodyPainter") as BodyPainter | undefined) ?? (await planetPainter());
+      // a browser test may hand the page a painter of its own (`window.__bodyPainter`), or a function that wraps the real one (`window.__wrapBodyPainter`), to watch how the view reads the painter's credit
+      const own = Reflect.get(window, "__bodyPainter") as BodyPainter | undefined;
+      const wrap = Reflect.get(window, "__wrapBodyPainter") as ((real: BodyPainter) => BodyPainter) | undefined;
+      const real = own ?? (await planetPainter());
+      const planets = real && !own && wrap ? wrap(real) : real;
       if (planets) setBodyPainter(planets);
       planetsHere = planets !== null;
     }
