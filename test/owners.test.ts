@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { OWNER_COUNTRIES, ownerCountry } from "../src/satellites/owners.ts";
 import { createSatellites } from "../src/satellites/track.ts";
 import { parseElements } from "../src/satellites/source.ts";
+import { packCatalogue, unpackCatalogue } from "../src/catalogue/pack.ts";
 import type { ElementSet } from "../src/satellites/types.ts";
 
 test("a national owner is its country's two-letter code", () => {
@@ -70,4 +71,15 @@ test("parsing keeps the owner code a source serves", () => {
   const parsed = parseElements(JSON.stringify([{ ...iss({}), COUNTRY_CODE: " US " }, { ...iss({ NORAD_CAT_ID: 9 }), OWNER: "JPN" }]));
   assert.equal(parsed.sets[0]?.COUNTRY_CODE, "US");
   assert.equal(parsed.sets[1]?.OWNER, "JPN");
+});
+
+test("an owner survives the packed catalogue and reaches the satellite's info", () => {
+  const record = { set: iss({}), kind: "PAY" as const, owner: "PRC" };
+  const file = unpackCatalogue(packCatalogue([record]));
+  assert.equal(file.recordAt(0).owner, "PRC");
+  const sets = file.sets();
+  assert.equal(sets[0]?.COUNTRY_CODE, "PRC", "the packed set carries the owner code");
+  assert.equal(createSatellites(sets).info(0, Date.parse("2026-11-02T12:00:00Z"))?.ownerCountry, "CN");
+  const none = unpackCatalogue(packCatalogue([{ set: iss({}), kind: "PAY" as const }]));
+  assert.equal("COUNTRY_CODE" in none.sets()[0]!, false, "no owner, no key");
 });
