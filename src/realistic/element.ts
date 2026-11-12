@@ -6,6 +6,7 @@ import { adoptStyles } from "../adopt.ts";
 import type { SharedRenderer, View } from "@johnmorrisdotca/kazoku-ui/renderer";
 import type { GeoPoint, GlobeView } from "../types.ts";
 import { airFor, readAirThickness } from "./air.ts";
+import { IMMERSIVE_STYLE, immersiveWheel } from "./immersive.ts";
 import { NOTES_STYLE, setAirNote } from "./air-note.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
@@ -58,7 +59,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}:host([immersive]){aspect-ratio:auto;width:100%;height:100%;touch-action:none!important;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -83,8 +84,6 @@ const readCentre = (value: string | null): GeoPoint | null => {
 const readCamera = (value: string | null): CameraMode => (value === "ground" || value === "sun" ? value : "space");
 /** A `cloud-drift` attribute: degrees an hour the clouds are made to move eastward against the ground (0, the default: where the picture has them). */
 const readDrift = (value: string | null): number => (value !== null && Number.isFinite(Number(value)) ? Number(value) : 0);
-/** The plain wheel in an immersive view is a pinch of this share: a notch (100) zooms about 1.2 times, as the family's mouse wheel does with Alt. */
-const WHEEL_AS_PINCH = 0.2;
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
@@ -1054,15 +1053,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (satellite) this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite) }, bubbles: true, composed: true }));
   };
 
-  // In an immersive view a plain wheel zooms. It is passed on to the shared hands as the wheel's own pinch (Ctrl and a small step), so whichever hands hold the view (the element's, or a bar bound to it) apply it with their limits;
-  // Ctrl, Command, Alt and Shift with the wheel are the family's own and are left alone.
-  #wheel = (event: WheelEvent): void => {
-    if (!this.hasAttribute("immersive") || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const pixels = event.deltaMode === 1 ? event.deltaY * 33 : event.deltaMode === 2 ? event.deltaY * 800 : event.deltaY;
-    this.dispatchEvent(new WheelEvent("wheel", { deltaY: Math.max(-250, Math.min(250, pixels)) * WHEEL_AS_PINCH, deltaMode: 0, clientX: event.clientX, clientY: event.clientY, ctrlKey: true, bubbles: true, cancelable: true, composed: true }));
-  };
+  #wheel = (event: WheelEvent): void => immersiveWheel(this, event);
 
   /** The view as it is (for a page that wants to read it back). */
   get view(): GlobeView {

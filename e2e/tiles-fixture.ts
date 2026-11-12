@@ -73,3 +73,22 @@ export async function routeTiles(page: Page, fail: (tile: string) => boolean = (
 export const routeNoTiles = async (page: Page): Promise<void> => {
   await page.route("**/tiles/**", (route) => route.fulfill({ status: 404 }));
 };
+
+/** The shape of wakusei-planets' tile set (its manifest's pyramid, from 4096 across), for Mars and the Moon. */
+const planetLevel = (n: number) => ({ level: n, width: 2048 * 2 ** n, height: 1024 * 2 ** n, columns: 4 * 2 ** n, rows: 2 * 2 ** n });
+export const PLANET_MANIFEST = { version: 1, tileSize: 512, base: 2048, bodies: { mars: { levels: [1, 2, 3].map(planetLevel) }, moon: { levels: [1, 2, 3].map(planetLevel) } } };
+
+/** Serve a made-up set at the demo's address of wakusei-planets' finer tiles, every tile flat grey, nothing downloaded. The returned list is the tiles fetched, as `body/level/column/row`. */
+export async function routePlanetTiles(page: Page): Promise<string[]> {
+  const tiles: string[] = [];
+  let picture: Buffer | undefined;
+  await page.route("https://johnmorrisdotca.github.io/wakusei-planets/tiles/**", (route) => {
+    const path = new URL(route.request().url()).pathname.split("/tiles/")[1] ?? "";
+    if (path === "manifest.json") return route.fulfill({ json: PLANET_MANIFEST, headers: { "access-control-allow-origin": "*" } });
+    if (!/^\w+\/\d\/\d+\/\d+\.webp$/.test(path)) return route.fulfill({ status: 404, headers: { "access-control-allow-origin": "*" } });
+    tiles.push(path.replace(/\.webp$/, ""));
+    picture ??= png([150, 110, 90]);
+    return route.fulfill({ body: picture, contentType: "image/webp", headers: { "access-control-allow-origin": "*" } });
+  });
+  return tiles;
+}

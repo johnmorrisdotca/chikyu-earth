@@ -161,6 +161,41 @@ for (const look of LOOKS) {
   });
 }
 
+test.describe("the full-screen space view (fullscreen.html?look=space), with the planets' pictures", () => {
+  const openFull = async (page: Page): Promise<void> => {
+    await page.addInitScript(COUNT_SCRIPT);
+    await page.goto(`/chikyu-earth/fullscreen.html?look=space&time=${NOON}&speed=0`);
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { bodies: { painted: number } }).bodies.painted), { timeout: 30_000 }).toBe(9);
+    await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
+    await page.waitForTimeout(1500);
+  };
+
+  test("at rest nothing is drawn and no frame is asked for", async ({ page }) => {
+    await openFull(page);
+    const rest = await bounded(page, 3000, "space");
+    expect(rest.draws).toBe(0);
+    expect(rest.frames).toBe(0);
+    expect(rest.requests).toBeLessThanOrEqual(2);
+  });
+
+  test("on a 5K screen at a pixel ratio of 2 the full-screen canvas stays inside 6 million pixels and 4096 a side", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 2560, height: 1440 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await openFull(page);
+    const size = await page.locator("chikyu-space").evaluate((el) => {
+      const canvases = [...el.shadowRoot!.querySelectorAll("canvas")].filter((canvas) => canvas.getAttribute("aria-hidden") !== "true" && !canvas.classList.contains("cm-canvas")) as HTMLCanvasElement[];
+      const box = el.getBoundingClientRect();
+      return { pixels: Math.max(...canvases.map((c) => c.width * c.height)), side: Math.max(...canvases.flatMap((c) => [c.width, c.height])), count: canvases.length, width: box.width, height: box.height };
+    });
+    expect([size.width, size.height], "the element is the whole screen").toEqual([2560, 1440]);
+    expect(size.count).toBe(1);
+    expect(withinPixelBudget(size)).toBe(true);
+    expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
+    await context.close();
+  });
+});
+
 test("changing the look over and over gives back what it took: GPU objects stay flat in the one context, and the line look lets the context go", async ({ page }) => {
   // six rounds, each waiting twice for the space view to be at rest (where it opens, and where it is sent): about 25 s a round
   test.setTimeout(240_000);
