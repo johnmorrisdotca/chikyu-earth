@@ -254,6 +254,36 @@ test("the map tiles: zooming in and out over and over gives back what it took, h
   expect(settled[5]!, "zoomed out, the tiles' textures and buffers are all gone").toBeLessThanOrEqual(settled[0]! + 2);
 });
 
+test("the borders: nothing drawn at rest with them on, and switching the look over and over with them on gives back what it took", async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, "realistic", "&borders=on");
+  const shownIn = (tag: string) => page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { borders: { shown: { countries: boolean } } }).borders.shown.countries);
+  await expect.poll(() => shownIn("chikyu-earth-realistic"), { timeout: 30_000, message: "the countries' borders are drawn" }).toBe(true);
+  await untilStill(page);
+  const rest = await bounded(page, 2000);
+  expect(rest.draws, "no GL draws at rest with the borders on").toBe(0);
+  expect(rest.frames).toBe(0);
+  const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
+  const settled: number[] = [];
+  for (let round = 0; round < 4; round += 1) {
+    await look("Space");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await expect.poll(() => shownIn("chikyu-space"), { timeout: 30_000 }).toBe(true);
+    await untilStill(page);
+    expect((await bounded(page, 1500, "space")).draws, "nor in the space view").toBe(0);
+    await look("Realistic");
+    await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
+    await expect.poll(() => shownIn("chikyu-earth-realistic"), { timeout: 30_000 }).toBe(true);
+    await untilStill(page);
+    await page.waitForTimeout(DOWNGRADE_AFTER_MS + 500);
+    const counted = await readCounts(page);
+    settled.push(gpuObjects(counted));
+    expect(counted.contexts).toBe(1);
+  }
+  console.log(`live GPU objects with the borders on, after each round: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after four rounds than after the first").toBeLessThanOrEqual(settled[0]! + 8);
+});
+
 test("the planets: the Sun, planets, Pluto and moons painted, the looks switched and the moons shown, nothing grows and nothing is drawn at rest", async ({ page }) => {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T14:00Z&speed=0&bodies=painted&center=10,20`);

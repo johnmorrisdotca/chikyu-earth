@@ -16,6 +16,8 @@ import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "./body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
+import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
+import { pointOnEarth } from "./tiles.ts";
 export type { ThreeParts };
 
 type Three = ThreeParts;
@@ -97,6 +99,8 @@ export interface EarthModel {
   meteors: MeteorState;
   /** The name written on the Earth (src/realistic/body-label.ts): off unless the element sets it. */
   bodyLabel: BodyLabelState;
+  /** The borders of the countries and of their regions (src/borders/layer.ts): off unless the element switches them on. */
+  borders: BorderState;
 }
 
 export interface EarthDeps {
@@ -147,6 +151,7 @@ export const newModel = (): EarthModel => ({
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
+  borders: newBorderState(),
 });
 
 /**
@@ -305,6 +310,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
+      let borders: BorderLayer | null = null;
 
       return {
         scene,
@@ -373,6 +379,19 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             });
           }
           deps.onPose?.({ lon: look.lon, lat: look.lat, radius, cx: size.width / 2 + view.panX, cy: size.height / 2 + view.panY, width: size.width, height: size.height });
+          // the borders: made the first time a set is switched on, above the clouds and under the air
+          if ((model.borders.countries || model.borders.regions) && !borders && !model.borders.stats.failed) {
+            try {
+              borders = createBorderLayer(three, turned, model.borders, deps.invalidate, 2.5);
+            } catch (error) {
+              model.borders.stats.failed = true;
+              model.borders.onError?.(error);
+            }
+          }
+          if (borders) {
+            const middle = pointOnEarth({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, size.width / 2, size.height / 2) ?? look;
+            borders.sync({ lon: middle.lon, lat: middle.lat, angle: Math.asin(Math.min(1, Math.hypot(size.width, size.height) / 2 / radius)) / RAD, radius });
+          }
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {
             const wait = meteors.step({ now: performance.now(), time: model.time, facing: unitVector({ lon: look.lon, lat: look.lat }), sun: [sx, sy, sz], radius, width: size.width, height: size.height });
@@ -390,6 +409,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
+          borders?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();
