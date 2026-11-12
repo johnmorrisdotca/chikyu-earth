@@ -1,18 +1,13 @@
 // The sky is behind the Earth: no constellation line, star ring or star name is drawn over the Earth's disc or its air, in the space view and in a ride (a camera 1,150 km up sees the Earth 110 degrees across, and the limb is an arc across the picture), on the lit side and on the
 // night side. The cover is geometric (the ray through a pixel against the Earth's angular radius), never the brightness of the pixel. And the sky's labels never rise above a page's own content: the element is a stacking context. Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
-import { AIR_THICKNESS_DEFAULT, airTop } from "../src/realistic/air.ts";
 import { routeElements } from "./recorded.ts";
+import { onEarth, type Camera } from "./sky-geometry.ts";
 
 test.use({ reducedMotion: "reduce" });
 
 const SPACE = "chikyu-space";
 const CONTROLS = "kazoku-view-controls";
-interface Camera {
-  position: number[];
-  quaternion: number[];
-  fov: number;
-}
 /** What the page says, read in one go so a draw between two readings cannot change it. */
 interface Seen {
   width: number;
@@ -23,21 +18,6 @@ interface Seen {
   /** Each label shown: its box, from the picture's top left. */
   boxes: { text: string; l: number; t: number; r: number; b: number }[];
   figures: number;
-}
-
-/** Whether a point of the picture shows the Earth with its air, from the camera alone: the ray through it is within the angular radius of the air's top (the sine of which is its radius over the camera's distance from the centre, in Earth radii), less `margin` of it (a line is a pixel wide and drawn with antialiasing, so a pixel of it or two beside the edge is not on the Earth). */
-function onEarth(camera: Camera, width: number, height: number, x: number, y: number, margin = 0.985): boolean {
-  const reach = Math.tan((camera.fov * Math.PI) / 360);
-  const local = [((x / width) * 2 - 1) * reach * (width / height), (1 - (y / height) * 2) * reach, -1];
-  const [qx, qy, qz, qw] = camera.quaternion as [number, number, number, number];
-  const tx = 2 * (qy * local[2]! - qz * local[1]!);
-  const ty = 2 * (qz * local[0]! - qx * local[2]!);
-  const tz = 2 * (qx * local[1]! - qy * local[0]!);
-  const ray = [local[0]! + qw * tx + (qy * tz - qz * ty), local[1]! + qw * ty + (qz * tx - qx * tz), local[2]! + qw * tz + (qx * ty - qy * tx)];
-  const away = Math.hypot(...(camera.position as [number, number, number]));
-  const down = camera.position.map((n) => -n / away);
-  const cosine = (ray[0]! * down[0]! + ray[1]! * down[1]! + ray[2]! * down[2]!) / Math.hypot(ray[0]!, ray[1]!, ray[2]!);
-  return Math.acos(Math.max(-1, Math.min(1, cosine))) < Math.asin(Math.min(1, airTop(AIR_THICKNESS_DEFAULT) / away)) * margin;
 }
 
 const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
@@ -241,7 +221,7 @@ test("a ride looking straight down: the Earth fills the picture, and no line or 
 
 test("a ride on a geostationary satellite: its orbit seen edge-on is not drawn through the Earth", async ({ page }, testInfo) => {
   // PAKSAT-MM1 in the demo's own geostationary file (35,793 km up, inclination 0): its orbit seen from it is a straight line, whose far half runs behind the Earth
-  await page.goto("/chikyu-earth/?look=space&time=2026-11-03T12:00Z&speed=0&center=-100,40&sats=geostationary&sat=59915&ride=chosen&rlook=horizon&light=lit&scale=true&orbits=off&constellation-lines=0.3&star-names=10");
+  await page.goto("/chikyu-earth/?look=space&time=2026-11-03T12:00Z&speed=0&center=-100,40&sats=geostationary&sat=59915&ride=chosen&rlook=horizon&light=boost&scale=true&orbits=off&constellation-lines=0.3&star-names=10");
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
   await expect.poll(async () => (await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean; gliding: boolean } }).ride)).riding, { timeout: 30_000 }).toBe(true);
   await expect.poll(async () => (await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride)).gliding, { timeout: 30_000 }).toBe(false);
@@ -259,7 +239,7 @@ test("a ride on a geostationary satellite: its orbit seen edge-on is not drawn t
     return api.selectedSatellite;
   });
   expect(chosen, "the ridden satellite is marked").not.toBeNull();
-  for (const [name, view] of [["horizon", { yaw: 0, tilt: 0, zoom: 1 }]] as const) {
+  for (const [name, view] of [["horizon", { yaw: 0, tilt: 0, zoom: 1 }], ["the hero's own view (zoom 0.6, a field of 100 degrees)", { yaw: 0, tilt: 0, zoom: 0.6 }]] as const) {
     await controls(page, view);
     await atRest(page);
     await page.locator(SPACE).evaluate((el) => {
@@ -268,15 +248,16 @@ test("a ride on a geostationary satellite: its orbit seen edge-on is not drawn t
     });
     await page.locator(SPACE).screenshot({ path: testInfo.outputPath(`geostationary-${name}.png`) });
     const seen = await read(page);
+    assertBehind(seen, `a geostationary ride, ${name}`);
     const own = (await page.locator(SPACE).boundingBox())!;
     // every third row across the Earth: the share of its pixels that are white (a path drawn across the globe is a row of them; clouds are never a whole row)
     const rows: { y: number; points: { x: number; y: number }[] }[] = [];
     for (let y = 0; y < seen.height; y += 3) {
       const points: { x: number; y: number }[] = [];
       for (let x = 0; x < seen.width; x += 3) if (onEarth(seen.camera, seen.width, seen.height, x, y, 0.95)) points.push({ x: own.x + x, y: own.y + y });
-      if (points.length > 30) rows.push({ y, points });
+      if (points.length > 10) rows.push({ y, points });
     }
-    expect(rows.length, `the Earth is in the picture (${name})`).toBeGreaterThan(10);
+    expect(rows.length, `the Earth is in the picture (${name})`).toBeGreaterThan(5);
     const colours = await coloursAt(page, rows.flatMap((row) => row.points));
     let at = 0;
     const white: number[] = [];
