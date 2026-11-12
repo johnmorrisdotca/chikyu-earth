@@ -12,8 +12,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       '@johnmorrisdotca/kazoku-ui':
-        specifier: ^0.38.1
-        version: 0.38.1(three@0.186.1)
+        specifier: ^0.41.0
+        version: 0.41.0(three@0.186.1)
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1
@@ -43,8 +43,8 @@ importers:
         specifier: ^1.6.1
         version: 1.6.1
       '@johnmorrisdotca/wakusei-planets':
-        specifier: ^0.5.0
-        version: 0.5.0(three@0.186.1)
+        specifier: ^0.37.1
+        version: 0.37.1(three@0.186.1)
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
@@ -411,17 +411,8 @@ packages:
     resolution: {integrity: sha512-8N2tvfUr9wUf41rcA0+QjOVLCsSiS2tSvMixXKsWDs5+cUzVBJCyst5Qk8Nd8vDGWuVz6mOUMcTgbiaIE/FL9A==}
     engines: {node: '>=22'}
 
-  '@johnmorrisdotca/kazoku-ui@0.11.0':
-    resolution: {integrity: sha512-2kB+VxkHw9oTHnjL0O2UKo0JkI9ci6KvzwKJnhxNr5Hoeg6/A3Tiaoiiwo7cShrr/VRQISRYv3QhdzLeJKN6Bw==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      three: '>=0.160.0'
-    peerDependenciesMeta:
-      three:
-        optional: true
-
-  '@johnmorrisdotca/kazoku-ui@0.38.1':
-    resolution: {integrity: sha512-ruxpr6F9+BRnJsf9YZlqAeO5UcUS5edC39olyGffO8M4r0Xpah4eLwY5mWXyhDiLbZAWftrGVg37B5URAeW/Qw==}
+  '@johnmorrisdotca/kazoku-ui@0.41.0':
+    resolution: {integrity: sha512-Zp/iTun5jgsXMPAJ9qCoIpr6Oc6O/kBSwAeEw4MdNRwwmALHtAwAuALXewecxhQ2j5HUEXamu5HKTA8OFOz+HA==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -434,8 +425,8 @@ packages:
     resolution: {integrity: sha512-/t4bkx/VSHD0qSw58DhLb7FLycnst6SWgf22UTq65aZVnT3JHCg3WztOM3QcmenBzvpViy28SwcebDiXoDP3uw==}
     engines: {node: '>=24'}
 
-  '@johnmorrisdotca/wakusei-planets@0.5.0':
-    resolution: {integrity: sha512-bmjQfnXlf9nrqNzq3CeS1E6VlbMrY2kEc5XEr8faABXuZPHRyFZVoHNEjqkjJbWWJ/bt6rS+wdEG7O68vYXJnQ==}
+  '@johnmorrisdotca/wakusei-planets@0.37.1':
+    resolution: {integrity: sha512-V1IwUgIGguMRf5zfCnfPWHeuOBLbc9YPNU6vAs8GzQJdeqtoH6nP05H20wF/qXQJkNUS7ki3j0IBppouVT8vEA==}
     engines: {node: '>=24'}
     peerDependencies:
       '@johnmorrisdotca/chikyu-earth': '>=0.10.0'
@@ -1876,19 +1867,15 @@ snapshots:
 
   '@johnmorrisdotca/hoshi-stars@0.30.0': {}
 
-  '@johnmorrisdotca/kazoku-ui@0.11.0(three@0.186.1)':
-    optionalDependencies:
-      three: 0.186.1
-
-  '@johnmorrisdotca/kazoku-ui@0.38.1(three@0.186.1)':
+  '@johnmorrisdotca/kazoku-ui@0.41.0(three@0.186.1)':
     optionalDependencies:
       three: 0.186.1
 
   '@johnmorrisdotca/kuni@1.6.1': {}
 
-  '@johnmorrisdotca/wakusei-planets@0.5.0(three@0.186.1)':
+  '@johnmorrisdotca/wakusei-planets@0.37.1(three@0.186.1)':
     dependencies:
-      '@johnmorrisdotca/kazoku-ui': 0.11.0(three@0.186.1)
+      '@johnmorrisdotca/kazoku-ui': 0.41.0(three@0.186.1)
     optionalDependencies:
       three: 0.186.1
 

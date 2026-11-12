@@ -2,7 +2,7 @@
 title: "You are here, and places on the Earth"
 section: how-to
 order: 19
-description: "Mark the reader's own place and their favourite places on the space view or the realistic Earth: a beam, a pin or a ring standing out of the ground, turning with the Earth, hidden on its far side, with names that never overlap. The page asks for the reader's place; the package stores nothing and sends nothing."
+description: "Mark the reader's own place and any number of favourite places on the space view or the realistic Earth: a beam, a pin or a ring standing out of the ground, turning with the Earth, hidden on its far side and dimmer at night, with names that never overlap, thousands in one draw call, crowds gathered with their count, and goToPlace to turn to one. The page asks for the reader's place; the package stores nothing and sends nothing."
 ---
 
 `<chikyu-space>` and `<chikyu-earth-realistic>` can mark places on the Earth: where the reader is, and places they keep. Each place stands out of the ground as a small marker that turns with the Earth, is hidden when it goes round to the far side, and keeps its size in pixels at any zoom.
@@ -17,14 +17,43 @@ description: "Mark the reader's own place and their favourite places on the spac
 
 | Attribute | Property | Means |
 |---|---|---|
-| `places` | `places` | A JSON array of places, each `{ id, lon, lat, label, kind }`. Setting the property writes the attribute; an empty list takes the attribute away. |
+| `places` | `places` | A JSON array of places, each `{ id, lon, lat, label, kind, color }`. Setting the property writes the attribute; an empty list takes the attribute away. |
 | `places-look` | `placesLook` | `beam` (the default): a light rising out of the ground with a ring at its foot. `pin`: a thin stick with a round head. `ring`: only the ring on the ground. |
 
 - **Kinds.** `kind: "here"` is the reader's own place: taller, brighter and with a quiet pulse round its foot. Any other place is a `favourite`: shorter, thinner and still. Colours come from `--chikyu-place-here` and `--chikyu-place-favourite` on the element or the page.
+- **A colour of its own.** `color` gives one place its own colour: a hex colour (`#e8475f`), `rgb()` or `hsl()` with numbers, or a colour's name. Anything else is left out and the kind's colour is used.
 - **Standing out of the ground.** The marker stands up from the ground as the picture sees it, so near the edge of the Earth it leans out sideways and its ring is seen almost edge on. Where the reader looks straight down on it, it leans towards the top of the screen instead of shrinking to a dot.
 - **Names.** A place's `label` is shown at the top of its marker when there is room, `here` first and then in the order given. Names never overlap one another or the names of the bodies in the space view; a name with no free place is left out, and the marker is still drawn. Names are measured in the page's own font.
-- **Nothing at rest.** The places are laid out when the picture is drawn (the camera moved, the clock stepped, a setting changed) and not otherwise. The pulse is a CSS animation: it never draws the picture again, it stops while the element is out of sight, and a reader who asked for less motion gets none. `stats.places` has `places`, `shown`, `labels` and `renders`.
-- **At most 200.** A longer list is cut to `MAX_PLACES`. A place with a longitude outside -180 to 180 or a latitude outside -90 to 90 is left out.
+- **Dimmer at night.** A place on the Earth's night side is drawn at half strength, and its name a little dimmer, so it can still be read; the twilight is between. With `light="lit"` the whole Earth is lit and nothing is dimmed.
+- **Nothing at rest.** The places are laid out when the picture is drawn (the camera moved, the clock stepped, a setting changed) and not otherwise. The pulse is a CSS animation: it never draws the picture again, it stops while the element is out of sight, and a reader who asked for less motion gets none.
+- **At most 5,000.** A longer list is cut to `MAX_PLACES`. A place with a longitude outside -180 to 180 or a latitude outside -90 to 90 is left out.
+
+## Many places
+
+A page can hand over thousands of places, and they stay cheap:
+
+```js no-run
+const places = shops.map((shop) => ({ id: shop.id, lon: shop.lon, lat: shop.lat, label: shop.name, color: shop.open ? "#7dd3fc" : "#94a3b8" }));
+space.places = [...(here ? [here] : []), ...places];
+```
+
+- **Markers of their own for the first few.** The first `PLACE_MARKS` (32) places in sight, `here` first and then in the order given, stand up out of the ground with their names. Put the places that matter most first.
+- **One draw call for the rest.** Every other place is a ring lying on the ground, all of them drawn together in one draw call, however many there are. The rings keep their size in pixels, turn with the Earth, fade at its edge, are left out on its far side and are dimmer on its night side, as the markers are.
+- **Crowds are gathered.** Places closer than about `PLACE_GROUP_PX` (24) pixels on the screen become one larger ring with their count beside it. The ground is cut into cells fixed to it, so the groups turn with the Earth and change only when the zoom changes by about half or double. Zoom in and they come apart. The reader's own place is never gathered. `groupPlaces` and `groupCell` are the same rule for a page or a server. Gathering is on by default; `place-groups="off"` (or `placeGroups = false`) leaves every place its own ring.
+- **What it costs.** `stats.places` has `places` (handed over), `shown` (in sight, those in groups counted), `marks` (standing on their own), `labels` (named), `sprites` (rings in the one draw call), `groups` (of those, the groups) and `omitted` (places in sight that had no room, below) and `renders` (times laid out). Without three.js's `Points` (a subset of three.js that leaves it out) the picture cannot draw the rings, so the element draws them itself as small circles in the page, at most `PLACE_DOTS` (600), and sends `chikyu-places-unavailable` once. Places in sight beyond that room are counted in `omitted`: no place is left out without a count.
+
+## Go to a place
+
+`goToPlace` turns the view so a place is in the middle, at a pace a reader can follow (at once for a reader who asked for less motion). Name the place by its `id` or by its label:
+
+```js no-run
+const place = await space.goToPlace("tokyo");
+if (!place) console.log("no such place");
+```
+
+- **The zoom stays.** Only the turn changes; the page zooms if it wants to.
+- **Looking at the Earth.** In the space view the camera must be looking at the Earth: while it rides along or looks at another body, nothing moves and the call resolves `undefined`.
+- **The tilt is held to 90 degrees** either way from `center`, as a drag is: a place more than 90 degrees of latitude from `center` comes as near the middle as that allows. Set `center` near the reader's own place.
 
 ## The reader's own place
 
@@ -60,4 +89,4 @@ space.places = [...(here ? [here] : []), ...saved];
 
 ## The parts without a browser
 
-`@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box) and `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`).
+`@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box), `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`, and with `sun` how far into the night each is), and `groupPlaces` with `groupCell` (crowded places gathered, for an Earth so many pixels across).

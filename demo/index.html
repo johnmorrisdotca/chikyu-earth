@@ -88,7 +88,7 @@
                     <button type="button" data-camera="sun" data-say="camera_sun">Sun side</button>
                   </div>
                 </div>
-                <div class="fam-row" id="light-controls" hidden data-help-en="Sun is the true light: the night side is dark. Always lit shows the day picture lit from the camera's side, so a ride on the night side is never a black frame. Night boost keeps the true day and night but raises the night side so land and coasts show. The air is drawn 3 times its real thickness so it can be seen; True air thickness draws it as it is." data-help-ja="「太陽」は本物の光で、夜の側は暗くなります。「いつも明るい」は、カメラの側から昼の画像を照らすので、夜の側を回っても真っ暗になりません。「夜を明るく」は、昼と夜はそのままで、夜の側を持ち上げて陸と海岸が見えるようにします。大気は見やすいように実際の厚さの3倍で描いています。「大気を実際の厚さで」を押すと、そのままの厚さで描きます。">
+                <div class="fam-row" id="light-controls" hidden data-help-en="Sun is the true light: the night side is dark. Always lit shows the day picture lit from the camera's side, so a ride on the night side is never a black frame. Night boost keeps the true day and night but raises the night side so land and coasts show. The air is drawn 3 times its real thickness so it can be seen; True air thickness draws it as it is. Borders draws the borders between countries on the land. Grid draws the meridians and parallels, with the equator, the tropics, the polar circles and the prime meridian picked out. Country names names the countries you can see, as many as fit." data-help-ja="「太陽」は本物の光で、夜の側は暗くなります。「いつも明るい」は、カメラの側から昼の画像を照らすので、夜の側を回っても真っ暗になりません。「夜を明るく」は、昼と夜はそのままで、夜の側を持ち上げて陸と海岸が見えるようにします。大気は見やすいように実際の厚さの3倍で描いています。「大気を実際の厚さで」を押すと、そのままの厚さで描きます。「境界線」を押すと、陸の上に国と国の境界線を描きます。「経線と緯線」を押すと、経線と緯線を描きます。赤道、北回帰線と南回帰線、北極圏と南極圏の線、本初子午線は目立つ色です。「国名」を押すと、見えている国の名前を、重ならない数だけ出します。">
                   <span class="fam-label" data-say="light">Light</span>
                   <div class="group fam-seg" role="group" aria-label="Light" data-say-label="light">
                     <button type="button" data-light="sun" class="on" data-say="light_sun">Sun</button>
@@ -112,6 +112,9 @@
                   <button type="button" class="fam-button" id="constellation-lines" aria-pressed="false" data-say="constellationLines">Constellation lines</button>
                   <button type="button" class="fam-button" id="air-true" aria-pressed="false" data-say="airTrue">True air thickness</button>
                   <button type="button" class="fam-button" id="city-names" aria-pressed="false" data-say="cityNames">City names</button>
+                  <button type="button" class="fam-button" id="borders" aria-pressed="false" data-say="borders">Borders</button>
+                  <button type="button" class="fam-button" id="grid" aria-pressed="false" data-say="grid">Grid</button>
+                  <button type="button" class="fam-button" id="country-names" aria-pressed="false" data-say="countryNames">Country names</button>
                 </div>
                 <div class="fam-row" id="time-controls" hidden data-help-en="Choose the date and time, or go back to now. In the space view, Play runs the clock from the date shown and the date follows it; Pause holds it there; Back to the date returns to the date you chose. The speeds are multiples of real time: 3600 is an hour a second, 86400 a day a second, and the minus one runs back. A day a second shows the Earth turning and the Moon moving." data-help-ja="日付と時刻を選びます。「今」にもどすこともできます。宇宙の見た目では、「再生」で表示している日時から時計が進み、日付もいっしょに進みます。「一時停止」で止まり、「もとの日付へ」で選んだ日付にもどります。速さは実際の時間の何倍かです。3600は1秒で1時間、86400は1秒で1日、マイナスは逆戻りです。速さを 86400 (1秒で1日) にすると、地球が回り、月が動くのが見えます。">
                   <label class="field">

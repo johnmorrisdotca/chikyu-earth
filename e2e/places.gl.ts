@@ -210,3 +210,108 @@ test("the demo's favourites come from the address, are drawn quieter than here, 
   await page.getByRole("group", { name: "Favourites" }).getByRole("button", { name: "Tokyo", exact: true }).click();
   await expect.poll(async () => (await listed()).map((p) => p.id)).toEqual(["city:London", "city:Cairo"]);
 });
+
+/** `n` places: most spread over the Earth, a crowd round Tokyo and one in every fifth with a colour of its own; the first is the reader's own. */
+const crowdOf = (n: number): { id: string; lon: number; lat: number; label: string; kind: string; color?: string }[] => {
+  let seed = 863;
+  const random = (): number => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  return Array.from({ length: n }, (_, i) => {
+    const near = i % 3 === 0;
+    const lon = near ? TOKYO.lon + (random() - 0.5) * 16 : random() * 360 - 180;
+    const lat = near ? TOKYO.lat + (random() - 0.5) * 12 : (Math.asin(random() * 2 - 1) * 180) / Math.PI;
+    return { id: i === 0 ? "here" : `spot-${i}`, lon, lat, label: i === 0 ? "You are here" : `Spot ${i}`, kind: i === 0 ? "here" : "favourite", ...(i % 5 === 1 ? { color: "#ff6b8a" } : {}) };
+  });
+};
+interface ManyStats extends PlaceStats {
+  marks: number;
+  groups: number;
+  sprites: number;
+}
+const manyOf = (target: Locator): Promise<ManyStats> => target.evaluate((el) => (Reflect.get(el, "stats") as { places: ManyStats }).places);
+const framesOf = (target: Locator): Promise<number> => target.evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+
+/** The GL draw calls of one frame: a change that asks for one draw, and what it cost once the page is still again. */
+async function oneFrame(page: Page, target: Locator): Promise<number> {
+  await untilStill(page);
+  const before = await counts(page);
+  const frames = await framesOf(target);
+  await target.evaluate((el) => el.setAttribute("places-look", el.getAttribute("places-look") === "ring" ? "beam" : "ring"));
+  await expect.poll(() => framesOf(target)).toBeGreaterThan(frames);
+  await untilStill(page);
+  expect(await framesOf(target), "one frame drawn").toBe(frames + 1);
+  return (await counts(page)).draws - before.draws;
+}
+
+for (const where of ["space", "realistic"] as const) {
+  test.describe(`a thousand places ${where === "space" ? "in the space view" : "on the realistic Earth"}`, () => {
+    // the space view glides to the place; the realistic Earth, for a reader who asked for less motion, goes there at once
+    test.use({ reducedMotion: where === "space" ? "no-preference" : "reduce" });
+
+    test("are one draw call however many there are, gather when they crowd, keep their names apart, add nothing at rest, and goToPlace turns to one", async ({ page }) => {
+      test.setTimeout(120_000);
+      const glErrors: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error" && /WebGL|THREE/.test(message.text())) glErrors.push(message.text().slice(0, 300));
+      });
+      let target: Locator;
+      if (where === "space") target = await openSpace(page, `time=2026-11-02T03:00Z&center=${TOKYO.lon},${TOKYO.lat}`);
+      else {
+        await openEarth(page, `time=${NOON}&center=${TOKYO.lon},${TOKYO.lat}&hide=Cities,Stadiums`);
+        target = page.locator(EARTH);
+      }
+      const many = crowdOf(1000);
+      // a frame with a handful of places, all drawn as markers of their own, against a frame with a thousand: the thousand add one draw call
+      await setPlaces(target, many.slice(0, 3));
+      await expect.poll(async () => (await manyOf(target)).shown).toBeGreaterThan(0);
+      expect((await manyOf(target)).sprites).toBe(0);
+      const few = await oneFrame(page, target);
+      await setPlaces(target, many);
+      await expect.poll(async () => (await manyOf(target)).places).toBe(1000);
+      await expect.poll(async () => (await manyOf(target)).sprites).toBeGreaterThan(20);
+      const stats = await manyOf(target);
+      expect(stats.marks, "at most PLACE_MARKS stand up on their own").toBeLessThanOrEqual(32);
+      expect(stats.groups, "the crowd round Tokyo is gathered").toBeGreaterThan(0);
+      expect(stats.shown).toBeGreaterThan(stats.marks + stats.sprites);
+      const thousand = await oneFrame(page, target);
+      console.log(`${where}: GL draw calls for a frame with 3 places ${few}, with 1,000 places ${thousand}; ${JSON.stringify(stats)}`);
+      expect(glErrors, "the rings' program compiles").toEqual([]);
+      expect(thousand - few, "the thousand places are one draw call").toBe(1);
+
+      // names and the groups' counts never overlap, and the reader's own place is named
+      const names = await nameBoxes(target, ".pl-name:not(.pl-measure)");
+      expect(names.map((n) => n.text)).toContain("You are here");
+      expect(names.some((n) => /^\d+$/.test(n.text)), "a group shows its count").toBe(true);
+      expect(overlapping(names)).toEqual([]);
+      // a colour of the page's own reaches a marker
+      expect(await target.evaluate((el) => [...el.shadowRoot!.querySelectorAll<HTMLElement>(".pl-mark:not([hidden])")].some((m) => m.style.getPropertyValue("--c") === "#ff6b8a"))).toBe(true);
+
+      // nothing at rest
+      await untilStill(page);
+      const rest = await counts(page);
+      const renders = (await manyOf(target)).renders;
+      await page.waitForTimeout(2000);
+      expect((await counts(page)).draws, "no draw at rest").toBe(rest.draws);
+      expect((await counts(page)).rafRequests, "no frame asked for at rest").toBe(rest.rafRequests);
+      expect((await manyOf(target)).renders).toBe(renders);
+
+      // go to a place far round the Earth: the reader's own place, moved to Lima, comes to the middle of the view
+      const lima = [{ ...many[0]!, lon: -77.04, lat: -12.05 }, ...many.slice(1)];
+      await setPlaces(target, lima);
+      await expect.poll(async () => hereFoot(target)).toBeNull();
+      const went = await target.evaluate(async (el) => (await (el as HTMLElement & { goToPlace(text: string, options?: { smooth?: boolean }): Promise<{ id: string } | undefined> }).goToPlace("You are here"))?.id);
+      expect(went).toBe("here");
+      expect(await target.evaluate(async (el) => (el as HTMLElement & { goToPlace(text: string): Promise<unknown> }).goToPlace("Nowhere"))).toBeUndefined();
+      const box = (await target.boundingBox())!;
+      await expect.poll(async () => {
+        const foot = await hereFoot(target);
+        return foot ? Math.hypot(foot.x - (box.x + box.width / 2), foot.y - (box.y + box.height / 2)) : Infinity;
+      }, { timeout: 20_000 }).toBeLessThan(4);
+      await untilStill(page);
+      await setPlaces(target, []);
+      await expect.poll(async () => (await manyOf(target)).sprites).toBe(0);
+    });
+  });
+}

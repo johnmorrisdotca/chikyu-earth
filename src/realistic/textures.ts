@@ -32,6 +32,9 @@ export type ThreeParts = {
   SRGBColorSpace?: typeof THREE.SRGBColorSpace;
   NormalBlending?: typeof THREE.NormalBlending;
   AdditiveBlending?: typeof THREE.AdditiveBlending;
+} & {
+  /** Only the borders (`borders`) use it, so a subset of three.js without it still draws everything else. */
+  LineSegments?: typeof THREE.LineSegments;
 };
 
 /** Milliseconds a lower texture size must be enough before the larger one is let go. */

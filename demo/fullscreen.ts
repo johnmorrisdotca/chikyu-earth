@@ -1,4 +1,5 @@
-// The full-screen page: <chikyu-earth-realistic immersive> filling the window on a dark page, the way a home page would use it. The address says what it shows:
+// The full-screen page: <chikyu-earth-realistic immersive> (or, with look=space, <chikyu-space immersive>) filling the window on a dark page, the way a home page would use it. The address says what it shows:
+//   ?look=space               the space view: the Earth, the Moon, the Sun and the planets with their pictures (wakusei-planets'); the wheel goes out to the Moon and the planets and back
 //   ?time=2026-11-02T14:00Z   a date to hold (UTC); with none the clock runs from now, at an hour a second, and times are shown in the device's own time zone
 //   &speed=600                the clock's speed (0 holds); &play=off holds a view that would run
 //   &camera=space|sun|ground  how the camera is held (space by default: the Earth turns beneath it)
@@ -8,6 +9,7 @@
 import "@johnmorrisdotca/kazoku-ui/view-controls/define";
 import type { ViewChangeDetail } from "@johnmorrisdotca/kazoku-ui/view-controls/element";
 import type { CameraMode, ChikyuEarthRealistic } from "../src/realistic/element.ts";
+import type { ChikyuSpace } from "../src/space/element.ts";
 import { airNoteText } from "../src/realistic/air-note.ts";
 import { setBodyLabelFontUrl } from "../src/realistic/body-label.ts";
 setBodyLabelFontUrl("fonts/Michroma-Regular.ttf");
@@ -15,8 +17,8 @@ import { fetchGroup, GROUP_STYLE, setsOfGroup } from "./groups.ts";
 
 const query = new URLSearchParams(location.search);
 const WORDS = {
-  en: { title: "Chikyu Earth, full screen", back: "The demo", play: "Play", pause: "Pause", clock: "Clock", camera: "Camera", sats: "Satellites", air: "Air", air_true: "True air thickness", cam_space: "In the stars", cam_sun: "Sun side", cam_ground: "Ground", sats_all: "All satellites", sats_off: "Hide satellites", label: "The Earth from space, with its sunlit and dark sides", help: "Drag to turn. Wheel or pinch to zoom.", loading: "Loading satellites", shown: "{n} satellites shown" },
-  ja: { title: "地球 (全画面)", back: "デモ", play: "再生", pause: "一時停止", clock: "時計", camera: "カメラ", sats: "人工衛星", air: "大気", air_true: "大気を実際の厚さで", cam_space: "星に固定", cam_sun: "太陽側", cam_ground: "地上", sats_all: "すべての人工衛星", sats_off: "人工衛星を隠す", label: "宇宙から見た地球。昼の側と夜の側", help: "ドラッグで回転します。ホイールかピンチで拡大・縮小します。", loading: "人工衛星を読み込み中", shown: "{n} 機の人工衛星を表示中" },
+  en: { title: "Chikyu Earth, full screen", back: "The demo", play: "Play", pause: "Pause", clock: "Clock", camera: "Camera", sats: "Satellites", air: "Air", air_true: "True air thickness", cam_space: "In the stars", cam_sun: "Sun side", cam_ground: "Ground", sats_all: "All satellites", sats_off: "Hide satellites", label: "The Earth from space, with its sunlit and dark sides", label_space: "The Earth, the Moon, the Sun and the planets where they are now", help: "Drag to turn. Wheel or pinch to zoom.", loading: "Loading satellites", shown: "{n} satellites shown" },
+  ja: { title: "地球 (全画面)", back: "デモ", play: "再生", pause: "一時停止", clock: "時計", camera: "カメラ", sats: "人工衛星", air: "大気", air_true: "大気を実際の厚さで", cam_space: "星に固定", cam_sun: "太陽側", cam_ground: "地上", sats_all: "すべての人工衛星", sats_off: "人工衛星を隠す", label: "宇宙から見た地球。昼の側と夜の側", label_space: "今の位置にある地球、月、太陽、惑星", help: "ドラッグで回転します。ホイールかピンチで拡大・縮小します。", loading: "人工衛星を読み込み中", shown: "{n} 機の人工衛星を表示中" },
 };
 type Key = keyof (typeof WORDS)["en"];
 const lang = (query.get("lang") ?? navigator.language).toLowerCase().startsWith("ja") ? "ja" : "en";
@@ -26,16 +28,32 @@ for (const node of document.querySelectorAll<HTMLElement>("[data-say]")) node.te
 for (const node of document.querySelectorAll<HTMLElement>("[data-say-label]")) node.setAttribute("aria-label", say(node.dataset["sayLabel"] as Key));
 document.title = say("title");
 
-const { setThreeLoader } = await import("../src/realistic/element.ts");
-setThreeLoader(() => import("./three-subset.ts"));
-const earth = document.createElement("chikyu-earth-realistic") as ChikyuEarthRealistic;
+const space = query.get("look") === "space";
+let earth: ChikyuEarthRealistic | ChikyuSpace;
+if (space) {
+  const [{ setThreeLoader, setBodyPainter }, { planetPainter }] = await Promise.all([import("../src/space/element.ts"), import("./planet-painter.ts")]);
+  setThreeLoader(() => import("./three-subset.ts"));
+  const planets = await planetPainter();
+  if (planets) setBodyPainter(planets);
+  earth = document.createElement("chikyu-space") as ChikyuSpace;
+  // the page writes the pictures' credit itself, under the title, where the controls at the bottom do not cover it
+  earth.setAttribute("bodies-credit", "off");
+  const credit = document.querySelector<HTMLElement>("#credit-line")!;
+  credit.textContent = planets?.credit?.[lang] ?? "";
+  credit.hidden = !planets?.credit;
+  if (query.get("scale") === "true") earth.setAttribute("scale", "true");
+} else {
+  const { setThreeLoader } = await import("../src/realistic/element.ts");
+  setThreeLoader(() => import("./three-subset.ts"));
+  earth = document.createElement("chikyu-earth-realistic") as ChikyuEarthRealistic;
+  earth.setAttribute("tiles", "tiles/");
+}
 earth.id = "sp";
 earth.setAttribute("immersive", "");
 earth.setAttribute("camera", "space");
 earth.setAttribute("texture-base", "textures/");
-earth.setAttribute("tiles", "tiles/");
 earth.setAttribute("center", query.get("center") ?? "0,20");
-earth.setAttribute("aria-label", say("label"));
+earth.setAttribute("aria-label", say(space ? "label_space" : "label"));
 // the page says the air is drawn thicker itself (in the line under the title, where the controls at the bottom do not cover it)
 earth.setAttribute("air-label", "off");
 if (query.get("air-thickness")) earth.setAttribute("air-thickness", query.get("air-thickness")!);
@@ -46,6 +64,11 @@ const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const satsButton = document.querySelector<HTMLButtonElement>("#sats")!;
 document.querySelector("main")!.prepend(earth);
 bar.setAttribute("for", "sp");
+// the space view's zoom goes out past the Moon to the planets (the element's own range); the Earth alone stops at a tenth
+if (space) {
+  bar.setAttribute("zoom-min", "0.000001");
+  bar.setAttribute("zoom-max", "2.5");
+}
 status.textContent = say("help");
 
 // the clock: from now at an hour a second unless the address holds it; a reader who asks for reduced motion gets a still view with Play ready

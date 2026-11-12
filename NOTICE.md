@@ -10,6 +10,21 @@ admin-0 countries, which Natural Earth places in the **public domain**
 (https://github.com/johnmorrisdotca/chizu, MIT, by John Morris), whose `world-geo` entry
 (`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime.
 
+## Borders
+
+The borders on the realistic Earth and the space view (`borders`, `src/borders/`) are drawn from the same data: chizu's
+`world-geo`, Natural Earth 5.1.2's admin-0 countries at 1:110m, credited as chizu credits them. chizu's NOTICE.md quotes
+Natural Earth's terms of use (https://www.naturalearthdata.com/about/terms-of-use/, read by chizu on 2026-10-01): the data
+"are in the public domain" and "Crediting the authors is unnecessary"; it is done here anyway: Natural Earth, made by
+volunteers and supported by the North American Cartographic Information Society. Only the edges two countries share are
+drawn; the code that finds them is this package's own and MIT. Natural Earth draws borders as they are held on the ground
+(de facto), and so do these lines. The regions (provinces, states) are the page's own data, handed over through
+`borderData.regions`, with the page's own licence; this package ships none (2026-11-11).
+
+## The grid and the country names on the 3D Earth
+
+The grid (`grid`, `src/grid/`) is drawn from numbers alone: meridians and parallels every 15 degrees, the tropics and polar circles at the Earth's tilt of 23.4393 degrees (the IAU's obliquity of the ecliptic at J2000, as under "The printable sheets"). The country names on the realistic Earth and the space view (`country-names`, `src/country-names/`) are chizu's `world-geo` names (see "Country names and codes" below), loaded only when asked for; where each name goes is worked out by this package's own code (MIT) from the same Natural Earth outlines (see "Borders"), and no label positions are taken from any other map (2026-11-12).
+
 ## Country names and codes
 
 Each outline's English name, Japanese name and country code come from **chizu**'s `world-geo`, whose names are
@@ -55,7 +70,14 @@ item to: NASA's Scientific Visualization Studio" (Visualizer Ernie Wright, USRA;
 ## The planets' places
 
 `<chikyu-space>` computes positions with **astronomy-engine** (https://github.com/cosinekitty/astronomy, MIT, copyright Don Cross), the page's own optional peer dependency: this package does not
-bundle or ship it. In this package the planets are drawn as plain colours, from no picture. The demo site's space view paints the Sun, the planets and the moons with the pictures of **wakusei-planets** (https://github.com/johnmorrisdotca/wakusei-planets, MIT, by John Morris), a separate optional package, whose own NOTICE.md credits each picture (public-domain NASA, USGS and JPL imagery from Wikimedia Commons); they are served beside the demo and are not in this package.
+bundle or ship it. In this package the planets are drawn as plain colours, from no picture: a page that wants their pictures hands the view a painter (`setBodyPainter`), and the painter's pictures are the page's, with their own credit, which the view writes under the picture when the painter carries one (`credit`).
+
+The demo site's space views paint the Sun, the planets, Pluto, their moons and the Moon with the pictures of **wakusei-planets** (https://github.com/johnmorrisdotca/wakusei-planets, MIT, by John Morris), a separate optional package. Its 512 and 1024 pixel pictures are copied from its npm package and served beside the demo (`planets/`); its finer map tiles are read from its own site (https://johnmorrisdotca.github.io/wakusei-planets/tiles/) when a planet or the Moon is big on the screen. None of them is in this package. Their sources and licences, as wakusei-planets' NOTICE.md gives them (read 2026-11-11, version 0.36.0):
+
+- Mars, Pluto, the Moon, the moons of Jupiter and Saturn, Triton, Charon, the Earth and Saturn's rings, and the finer tiles: maps by NASA, the USGS, JPL and the missions' teams, public domain (NASA asks to be acknowledged as the source).
+- Venus, Saturn's bands, Neptune and the Sun: **Solar System Scope** (https://www.solarsystemscope.com/textures/), whose page says (read 2026-11-11): "Distributed under Attribution 4.0 International license: You may use, adapt, and share these textures for any purpose, even commercially." Mercury: "Mercury Realistic 8K" by **Shady Tex** (https://sketchfab.com/3d-models/mercury-realistic-8k-215f364627054d25ae03bcd72afda714), the same map as Solar System Scope's. Jupiter, Uranus and Saturn's poles: "Jupiter", "Uranus" and "Saturn" by **Nestaeric** (https://sketchfab.com/Nestaeric). Each Sketchfab page shows the licence "CC Attribution" (read 2026-11-11). All of these are **CC BY 4.0** (https://creativecommons.org/licenses/by/4.0/: "You must give appropriate credit, provide a link to the license, and indicate if changes were made"). wakusei-planets resized and reprojected them; its NOTICE.md says what was done to each.
+
+The demo credits them on the screen: the space view writes "Planet and Moon pictures: NASA, USGS and JPL (public domain); Solar System Scope, Shady Tex and Nestaeric (CC BY 4.0), by way of Wakusei Planets." under the picture (in Japanese on a Japanese page), the full-screen page writes it under its title, and the demo's credit links lead here.
 
 ## Satellites
 

@@ -70,15 +70,19 @@ const turn = (page: Page) =>
     if (!controls.state.turning) controls.play();
   });
 
-/** Frames the element has drawn (its own count; a frame of the space view is a few dozen GL draw calls). */
-const framesDrawn = (page: Page, look: (typeof LOOKS)[number]) => page.locator(ELEMENT[look]).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
+/** The page's counts and the element's frames drawn, read in one go: read one after the other, a frame could be in the draw calls and not yet in the frames (or the other way), and a count of a dozen frames then reads a frame's cost out by a few draws a frame. */
+const snapshot = (page: Page, look: (typeof LOOKS)[number]) =>
+  page.evaluate(
+    (tag) => ({ counts: JSON.parse(JSON.stringify(Reflect.get(window, "__kazokuCount"))) as Awaited<ReturnType<typeof readCounts>>, frames: (Reflect.get(document.querySelector(tag)!, "stats") as { draws: number }).draws }),
+    ELEMENT[look],
+  );
 
 const bounded = async (page: Page, ms: number, look: (typeof LOOKS)[number] = "realistic") => {
-  const start = await readCounts(page);
-  const framesStart = await framesDrawn(page, look);
+  const start = await snapshot(page, look);
   await page.waitForTimeout(ms);
-  const end = await readCounts(page);
-  return { frames: (await framesDrawn(page, look)) - framesStart, draws: end.draws - start.draws, requests: end.rafRequests - start.rafRequests, callbacks: end.rafCallbacks - start.rafCallbacks, outstanding: end.rafRequests - end.rafCallbacks };
+  const stop = await snapshot(page, look);
+  const end = stop.counts;
+  return { frames: stop.frames - start.frames, draws: end.draws - start.counts.draws, requests: end.rafRequests - start.counts.rafRequests, callbacks: end.rafCallbacks - start.counts.rafCallbacks, outstanding: end.rafRequests - end.rafCallbacks };
 };
 
 for (const look of LOOKS) {
@@ -160,6 +164,41 @@ for (const look of LOOKS) {
     });
   });
 }
+
+test.describe("the full-screen space view (fullscreen.html?look=space), with the planets' pictures", () => {
+  const openFull = async (page: Page): Promise<void> => {
+    await page.addInitScript(COUNT_SCRIPT);
+    await page.goto(`/chikyu-earth/fullscreen.html?look=space&time=${NOON}&speed=0`);
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { bodies: { painted: number } }).bodies.painted), { timeout: 30_000 }).toBe(9);
+    await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
+    await page.waitForTimeout(1500);
+  };
+
+  test("at rest nothing is drawn and no frame is asked for", async ({ page }) => {
+    await openFull(page);
+    const rest = await bounded(page, 3000, "space");
+    expect(rest.draws).toBe(0);
+    expect(rest.frames).toBe(0);
+    expect(rest.requests).toBeLessThanOrEqual(2);
+  });
+
+  test("on a 5K screen at a pixel ratio of 2 the full-screen canvas stays inside 6 million pixels and 4096 a side", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 2560, height: 1440 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await openFull(page);
+    const size = await page.locator("chikyu-space").evaluate((el) => {
+      const canvases = [...el.shadowRoot!.querySelectorAll("canvas")].filter((canvas) => canvas.getAttribute("aria-hidden") !== "true" && !canvas.classList.contains("cm-canvas")) as HTMLCanvasElement[];
+      const box = el.getBoundingClientRect();
+      return { pixels: Math.max(...canvases.map((c) => c.width * c.height)), side: Math.max(...canvases.flatMap((c) => [c.width, c.height])), count: canvases.length, width: box.width, height: box.height };
+    });
+    expect([size.width, size.height], "the element is the whole screen").toEqual([2560, 1440]);
+    expect(size.count).toBe(1);
+    expect(withinPixelBudget(size)).toBe(true);
+    expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
+    await context.close();
+  });
+});
 
 test("changing the look over and over gives back what it took: GPU objects stay flat in the one context, and the line look lets the context go", async ({ page }) => {
   // six rounds, each waiting twice for the space view to be at rest (where it opens, and where it is sent): about 25 s a round
@@ -255,6 +294,76 @@ test("the map tiles: zooming in and out over and over gives back what it took, h
   expect(Math.max(...settled.slice(1)), "no more GPU objects after six rounds than after the second").toBeLessThanOrEqual(settled[1]! + 8);
   expect(Math.max(...peaks.slice(1)), "the same number with the tiles on, round after round").toBeLessThanOrEqual(peaks[1]! + 8);
   expect(settled[5]!, "zoomed out, the tiles' textures and buffers are all gone").toBeLessThanOrEqual(settled[0]! + 2);
+});
+
+test("the borders: nothing drawn at rest with them on, and switching the look over and over with them on gives back what it took", async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, "realistic", "&borders=on");
+  const shownIn = (tag: string) => page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { borders: { shown: { countries: boolean } } }).borders.shown.countries);
+  await expect.poll(() => shownIn("chikyu-earth-realistic"), { timeout: 30_000, message: "the countries' borders are drawn" }).toBe(true);
+  await untilStill(page);
+  const rest = await bounded(page, 2000);
+  expect(rest.draws, "no GL draws at rest with the borders on").toBe(0);
+  expect(rest.frames).toBe(0);
+  const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
+  const settled: number[] = [];
+  for (let round = 0; round < 4; round += 1) {
+    await look("Space");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await expect.poll(() => shownIn("chikyu-space"), { timeout: 30_000 }).toBe(true);
+    await untilStill(page);
+    expect((await bounded(page, 1500, "space")).draws, "nor in the space view").toBe(0);
+    await look("Realistic");
+    await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
+    await expect.poll(() => shownIn("chikyu-earth-realistic"), { timeout: 30_000 }).toBe(true);
+    await untilStill(page);
+    await page.waitForTimeout(DOWNGRADE_AFTER_MS + 500);
+    const counted = await readCounts(page);
+    settled.push(gpuObjects(counted));
+    expect(counted.contexts).toBe(1);
+  }
+  console.log(`live GPU objects with the borders on, after each round: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after four rounds than after the first").toBeLessThanOrEqual(settled[0]! + 8);
+});
+
+test("the grid and the country names: nothing drawn at rest with them on, and switching the look over and over with them on gives back what it took", async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, "realistic", "&grid=on&country-names=on");
+  const statsIn = (tag: string) =>
+    page.locator(tag).evaluate((el) => {
+      const stats = Reflect.get(el, "stats") as { grid: { shown: boolean; builds: number }; countryNames: { names: number; renders: number } };
+      return { grid: stats.grid.shown, builds: stats.grid.builds, names: stats.countryNames.names, renders: stats.countryNames.renders };
+    });
+  const ready = async (tag: string): Promise<void> => {
+    await expect.poll(async () => (await statsIn(tag)).grid, { timeout: 30_000, message: "the grid is drawn" }).toBe(true);
+    await expect.poll(async () => (await statsIn(tag)).names, { timeout: 30_000, message: "the countries are named" }).toBeGreaterThan(0);
+  };
+  await ready("chikyu-earth-realistic");
+  await untilStill(page);
+  const before = await statsIn("chikyu-earth-realistic");
+  const rest = await bounded(page, 2000);
+  expect(rest.draws, "no GL draws at rest with the grid and the names on").toBe(0);
+  expect(rest.frames).toBe(0);
+  expect((await statsIn("chikyu-earth-realistic")).renders, "nor are the names laid out again").toBe(before.renders);
+  const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
+  const settled: number[] = [];
+  for (let round = 0; round < 4; round += 1) {
+    await look("Space");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await ready("chikyu-space");
+    await untilStill(page);
+    expect((await bounded(page, 1500, "space")).draws, "nor in the space view").toBe(0);
+    await look("Realistic");
+    await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
+    await ready("chikyu-earth-realistic");
+    await untilStill(page);
+    await page.waitForTimeout(DOWNGRADE_AFTER_MS + 500);
+    const counted = await readCounts(page);
+    settled.push(gpuObjects(counted));
+    expect(counted.contexts).toBe(1);
+  }
+  console.log(`live GPU objects with the grid and the names on, after each round: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after four rounds than after the first").toBeLessThanOrEqual(settled[0]! + 8);
 });
 
 test("the planets: the Sun, planets, Pluto and moons painted, the looks switched and the moons shown, nothing grows and nothing is drawn at rest", async ({ page }) => {
@@ -463,4 +572,34 @@ test.describe("meteors on the realistic Earth", () => {
     await page.waitForTimeout(1500);
     expect(gpuObjects(await readCounts(page)), "live GPU objects after six switches").toBeLessThanOrEqual(first);
   });
+});
+
+test("a thousand places, handed over and taken away over and over: one draw call for them, nothing drawn at rest, and GPU objects stay flat", async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, "space");
+  const space = page.locator("chikyu-space");
+  let seed = 863;
+  const random = (): number => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  const many = Array.from({ length: 1000 }, (_, i) => ({ id: `p${i}`, lon: random() * 360 - 180, lat: (Math.asin(random() * 2 - 1) * 180) / Math.PI, label: `Place ${i}`, ...(i % 4 === 0 ? { color: "#7dd3fc" } : {}) }));
+  const places = () => space.evaluate((el) => (Reflect.get(el, "stats") as { places: { places: number; sprites: number } }).places);
+  const hand = (list: unknown[]) => space.evaluate((el, value) => void Reflect.set(el, "places", value), list);
+  const settled: number[] = [];
+  for (let round = 0; round < 5; round += 1) {
+    await hand(many);
+    await expect.poll(async () => (await places()).sprites, { timeout: 20_000 }).toBeGreaterThan(20);
+    await untilStill(page);
+    const rest = await bounded(page, 2000, "space");
+    expect(rest.draws, "nothing drawn at rest with a thousand places").toBe(0);
+    expect(rest.frames).toBe(0);
+    settled.push(gpuObjects(await readCounts(page)));
+    await hand([]);
+    await expect.poll(async () => (await places()).places).toBe(0);
+    await untilStill(page);
+  }
+  console.log(`live GPU objects with a thousand places, after each round: ${settled.join(", ")}`);
+  expect(Math.max(...settled.slice(1)), "no more GPU objects after five rounds than after the second").toBeLessThanOrEqual(settled[1]!);
+  expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
 });

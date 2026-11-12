@@ -51,6 +51,8 @@ console.log(earth.camera);
 
 The light reads the real Sun and the real moment in every mode: only the camera moves. The clouds are one snapshot, not a forecast, so they stay where the picture has them and turn with the Earth; `cloud-drift="1.5"` makes them slide east by that many degrees an hour, for life, and says nothing about the weather.
 
+**The space view full screen.** `<chikyu-space immersive>` works the same way: it fills its box in any shape, the Earth fits the shorter side with its glow inside it, a plain wheel zooms, and a drag anywhere turns the view round the Earth. Its zoom goes on out past the Moon to the Sun and the planets (to a millionth of Fit) and back in to 2.5 times, so a reader can wheel out to the Moon and back. Put a bar on it with the element's own range (`zoom-min="0.000001" zoom-max="2.5"`). The demo's `fullscreen.html?look=space` is that page, with the planets' pictures (see the real planets guide) and their credit under the title. The canvas is the window's size in CSS pixels; the shared renderer lowers the pixel ratio so that it never passes 6 million pixels or 4096 a side, on a 5K screen too.
+
 `<chikyu-space>` takes the same `camera` (it was always the ground before 0.24), and `earth-size` (the share of the shorter side the Earth's disc fills at Fit, 0.9 by default so the glow is never cut), `earth-x` and `earth-y` (where the Earth's centre is in the view, 0.5 and 0.5 in the middle). Both elements fill their box in any shape, so the demo's panel, Wide and the embed frame draw edge to edge, with no square inside.
 
 ## How the Earth looks

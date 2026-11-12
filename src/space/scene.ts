@@ -15,11 +15,15 @@ import { ridePose, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
-import type { CityFrame } from "../cities/geometry.ts";
+import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
+import type { CountryFrame } from "../country-names/geometry.ts";
+import type { GeoPoint } from "../types.ts";
 import { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
+import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
+import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
 type Three = ThreeParts;
@@ -162,8 +166,8 @@ export interface SpaceModel {
   bodies: string;
   /** Filled at each draw. */
   drawn: { frame: Frame; distance: number; radiusPx: number } | null;
-  /** What the painter has made now: the Sun and planets with a drawing, and the moons shown (set at each draw). */
-  painted: { bodies: number; moons: number };
+  /** What the painter has made now: the Sun and planets with a drawing, the moons shown and the moons held (shown, or gone from the view for less than `MOON_KEEP_MS`), whether the Moon is the painter's, and the bodies with finer map tiles on them (set at each draw). */
+  painted: { bodies: number; moons: number; held: number; moon: boolean; tiles: number };
   /** How many times astronomy-engine has been asked for a frame. */
   lookups: number;
   /** Game seconds a second (the clock's speed). */
@@ -174,6 +178,10 @@ export interface SpaceModel {
   meteors: MeteorState;
   /** The name written on the Earth (src/realistic/body-label.ts): off unless the element sets it. */
   bodyLabel: BodyLabelState;
+  /** The borders of the countries and of their regions, on the Earth (src/borders/layer.ts): off unless the element switches them on. */
+  borders: BorderState;
+  /** The meridians and parallels on the Earth (src/grid/layer.ts): off unless the element switches them on. */
+  grid: GridState;
   /** The body or satellite the camera rides along with, or null. */
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
@@ -182,6 +190,8 @@ export interface SpaceModel {
   transition: { start: number; duration: number; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
   /** The shared controls' view as the last draw used it, and how tall the view was (CSS pixels): `setView` skips a draw for a turn that moves nothing by half a pixel. */
   drawnView: { yaw: number; tilt: number; zoom: number } | null;
+  /** The point of the ground the view would look at with yaw and tilt 0, as of the last draw (the middle of the view is this less the yaw and tilt), or null while the camera rides or looks at another body. */
+  lookBase: GeoPoint | null;
   heightPx: number;
   pose: Pose;
   /** Pixels a second that riding makes things move on the screen at 1x clock speed (0 when not riding): the draw rate follows it. */
@@ -217,13 +227,14 @@ export const newSpaceModel = (): SpaceModel => ({
   bodies: "",
   light: "sun",
   drawn: null,
-  painted: { bodies: 0, moons: 0 },
+  painted: { bodies: 0, moons: 0, held: 0, moon: false, tiles: 0 },
   lookups: 0,
   speed: 1,
   ride: null,
   rideLost: false,
   transition: null,
   drawnView: null,
+  lookBase: null,
   heightPx: 420,
   pose: { p: [0, 0, 0], q: [0, 0, 0, 1], fov: FOV, valid: false },
   rideMotion: 0,
@@ -232,6 +243,8 @@ export const newSpaceModel = (): SpaceModel => ({
   satellites: newSatelliteState(),
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
+  borders: newBorderState(),
+  grid: newGridState(),
   pick: null,
   placeSatellite: null,
   followModel: null,
@@ -260,11 +273,33 @@ export interface BodyDrawing {
   object: THREE.Object3D;
   /** Told at each draw the unit direction from the body to the Sun, in scene axes (x to the vernal equinox, y north). */
   light?(toSun: Vec3): void;
-  /** Told at each draw, after the object is placed and scaled: the direction to the Sun, the moment shown, and how many CSS pixels across its radius the body is (a sharper picture is worth fetching only for a big one). */
-  update?(info: { toSun: Vec3; ms: number; radiusPx: number }): void;
+  /**
+   * Told at each draw, after the object is placed and scaled: the direction to the Sun, the moment shown, how many CSS pixels across its radius the body is (a sharper picture is worth fetching only for a big one), and the
+   * camera with the size of the view in CSS pixels (`view`), so a body big in the view can lay finer map tiles over the part of it that is seen, and a glow can face the camera.
+   */
+  update?(info: { toSun: Vec3; ms: number; radiusPx: number; view?: BodyView }): void;
+  /** What the window of finer map tiles on the body is doing (`shown` is the level on it now, or `null`), for a drawing that has one. */
+  readonly tiles?: { shown: number | null } | undefined;
   /** True to have the scene turn the object to face the camera (a disc or a glow). */
   billboard?: boolean;
   dispose(): void;
+}
+
+/**
+ * The camera that draws the bodies and the size of its view in CSS pixels, as the space view tells a drawing at each draw. The camera's matrices are current.
+ *
+ * @example
+ * ```ts no-run
+ * import type { BodyView } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const across = (view: BodyView): number => view.width;
+ * console.log(typeof across);
+ * ```
+ */
+export interface BodyView {
+  camera: THREE.Camera;
+  width: number;
+  height: number;
 }
 
 /**
@@ -305,6 +340,8 @@ export interface PaintContext {
   ratio: number;
   /** The widest picture, in pixels, the GPU should be given. */
   maxTexture: number;
+  /** True to draw every body that has a surface picture from it, in any look but `plain`: the space view asks for this, so a planet or the Moon is never shown shaded where it has a real map. */
+  mapped?: boolean;
 }
 
 /**
@@ -343,6 +380,8 @@ export interface BodyPainter {
   make(three: ThreeParts, name: string, context?: PaintContext): BodyDrawing | Promise<BodyDrawing>;
   moons?(planet: PlanetName, ms: number): readonly BodyMoon[];
   looks?: readonly string[];
+  /** Whose pictures the painter draws, in English and Japanese: the space view writes it under the picture while the painter draws the bodies. */
+  credit?: { en: string; ja: string };
 }
 
 export interface SpaceDeps {
@@ -360,8 +399,12 @@ export interface SpaceDeps {
   onSky?: (frame: SkyFrame) => void;
   /** Where points of the Earth's surface fall on the screen at this draw, for the places drawn on it. Called at each draw. */
   onPlaces?: (view: PlaceView) => void;
-  /** Where the Earth is on the screen and how to find a place on it, for the names of cities. Called at each draw, with `null` while no Earth is shown. */
-  onCities?: (frame: CityFrame | null) => void;
+  /** The rings the places' layer wants drawn in one draw call, read right after `onPlaces`. */
+  placeSprites?: () => PlaceSpriteData | null;
+  /** Told once, when the rings of the places that are not markers of their own were first wanted: whether the picture can draw them (false when the three.js parts handed over lack `Points`). */
+  onPlaceRings?: (drawn: boolean) => void;
+  /** Where the Earth is on the screen (its disc) and how to find a place on it, for the names of cities and countries. Called at each draw, with `null` while no Earth is shown. */
+  onCities?: (frame: CountryFrame | null) => void;
   /** The name written on the Earth could not be made. */
   onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
@@ -552,7 +595,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
         };
         try {
-          const made = (slot.plain || look === "plain" ? plainPainter : painter).make(three, slot.name, { look, invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap() });
+          const made = (slot.plain || look === "plain" ? plainPainter : painter).make(three, slot.name, { look, invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
           if (typeof (made as Promise<BodyDrawing>).then === "function") (made as Promise<BodyDrawing>).then(arrive, fail);
           else arrive(made as BodyDrawing);
         } catch (error) {
@@ -560,6 +603,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         }
       };
       const sunSlot = newSlot("Sun");
+      // the Moon from the painter when there is one (its picture, and finer tiles where it has them); the view's own Moon until it arrives, and if it cannot be made
+      const moonSlot = newSlot("Moon");
       type Planet = { slot: Slot; orbit: THREE.LineLoop; positions: Float32Array; samples: Vec3[]; epoch: number; toSun: Vec3 };
       const planets = new Map<PlanetName, Planet>();
       for (const name of PLANETS) {
@@ -576,6 +621,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
+      let borders: BorderLayer | null = null;
+      let placeSprites: PlaceSprites | null = null;
+      let placeSpritesTried = false;
+      let gridLayer: GridLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number } = { key: "", drawing: null, turn: 0, parts: 0 };
@@ -653,6 +702,18 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const name of PLANETS) pos[name] = placeAround(mode, sunPos, helioOf(frame.planets[name]));
           const radiusOf = (name: BodyName): number => (name === "Earth" ? 1 : RADIUS[name]![mode]);
 
+          if (deps.painter && lookNow() !== "plain") fill(moonSlot, true);
+          else if (moonSlot.look !== null) {
+            empty(moonSlot);
+            moonSlot.look = null;
+          }
+          const paintedMoon = moonSlot.drawing;
+          if (paintedMoon) {
+            paintedMoon.object.position.set(moonPos[0], moonPos[1], moonPos[2]);
+            paintedMoon.object.scale.setScalar(RADIUS["Moon"]![mode]);
+            paintedMoon.light?.(moonToSun);
+          }
+
           // the Sun and the planets, drawn by the painter, and the planets' orbits round the Sun
           fill(sunSlot);
           const sunDrawing = sunSlot.drawing;
@@ -705,6 +766,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let rideFrom: { position: Vec3; velocity: Vec3; hidden: BodyName | null; gameSeconds: number } | null = null;
           let followed: { place: Vec3; velocity: Vec3; ref: SatelliteRef } | null = null;
           model.rideLost = false;
+          model.lookBase = null;
           model.rideMotion = 0;
           model.rideDistance = null;
           const ride = model.ride;
@@ -731,7 +793,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             } else model.rideLost = true;
           }
           const hidden = rideFrom?.hidden ?? null;
-          moon.visible = hidden !== "Moon";
+          moon.visible = hidden !== "Moon" && !paintedMoon;
+          if (paintedMoon) paintedMoon.object.visible = hidden !== "Moon";
           if (sunDrawing) sunDrawing.object.visible = hidden !== "Sun";
           for (const [name, p] of planets) if (p.slot.drawing) p.slot.drawing.object.visible = hidden !== name;
 
@@ -779,6 +842,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               camera.near = Math.max(1e-4, distance * 0.02);
               camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
             } else {
+              if (way === 1 && focus === "Earth") model.lookBase = { lon: model.centre.lon + spin - frame.spin, lat: baseLat };
               distance = Math.max(1.05 * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
@@ -845,7 +909,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const p of planets.values()) if (p.slot.drawing) paintedBodies += 1;
           let paintedMoons = 0;
           for (const held of moonSlots.values()) if (held.slot.drawing?.object.visible) paintedMoons += 1;
-          model.painted = { bodies: paintedBodies, moons: paintedMoons };
+          let tiled = 0;
+          for (const drawing of [sunSlot.drawing, moonSlot.drawing, ...[...planets.values()].map((p) => p.slot.drawing), ...[...moonSlots.values()].map((held) => held.slot.drawing)]) if (drawing?.tiles?.shown != null) tiled += 1;
+          model.painted = { bodies: paintedBodies, moons: paintedMoons, held: 0, moon: paintedMoon !== undefined, tiles: tiled };
           // the followed satellite as a model, when the page has one for it: made once, placed where the satellite is, pointed the way it flies, sized to read and lit by the Sun
           const satellitePainter = deps.satellitePainter?.();
           const group = followed ? model.satellites.groups.get(followed.ref.group) : undefined;
@@ -894,10 +960,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             model.followModel = null;
           }
           const sunToSun = unit([-frame.sun[0], -frame.sun[1], -frame.sun[2]]);
-          sunDrawing?.update?.({ toSun: sunToSun, ms: model.time, radiusPx: px.Sun });
+          const bodyView = { camera, width: size.width, height: size.height };
+          sunDrawing?.update?.({ toSun: sunToSun, ms: model.time, radiusPx: px.Sun, view: bodyView });
+          paintedMoon?.update?.({ toSun: moonToSun, ms: model.time, radiusPx: px.Moon, view: bodyView });
           for (const name of PLANETS) {
             const p = planets.get(name)!;
-            p.slot.drawing?.update?.({ toSun: p.toSun, ms: model.time, radiusPx: px[name] });
+            p.slot.drawing?.update?.({ toSun: p.toSun, ms: model.time, radiusPx: px[name], view: bodyView });
           }
           if (painter.moons && lookNow() !== "plain") {
             const now = performance.now();
@@ -925,7 +993,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 drawing.object.scale.setScalar(drawn);
                 const moonPx = away <= drawn * 1.001 ? 1e5 : ((size.height / 2) * (drawn / Math.sqrt(away * away - drawn * drawn))) / half;
                 drawing.light?.(p.toSun);
-                drawing.update?.({ toSun: p.toSun, ms: model.time, radiusPx: moonPx });
+                drawing.update?.({ toSun: p.toSun, ms: model.time, radiusPx: moonPx, view: bodyView });
               }
             }
             let soonest = Number.POSITIVE_INFINITY;
@@ -941,9 +1009,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             if (releaseTimer !== undefined) clearTimeout(releaseTimer);
             releaseTimer = soonest < Number.POSITIVE_INFINITY ? setTimeout(() => deps.invalidate(), soonest + 50) : undefined;
           }
+          model.painted.held = moonSlots.size;
           const ratio = model.ratio();
           const earthPx = Math.min(px.Earth, 1e5) * ratio;
-          textures.sync({ day: earthPx, night: earthPx, clouds: earthPx, water: earthPx, moon: Math.min(px.Moon, 1e5) * ratio });
+          textures.sync({ day: earthPx, night: earthPx, clouds: earthPx, water: earthPx, moon: paintedMoon ? 0 : Math.min(px.Moon, 1e5) * ratio });
           if (deps.onLabels && model.labels) {
             const places = {} as Record<BodyName, BodyPlace | null>;
             for (const name of BODY_NAMES) {
@@ -982,6 +1051,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             deps.onPlaces({
               width: size.width,
               height: size.height,
+              radius: hidden === "Earth" || rideFrom ? 0 : Math.min(px.Earth, 1e5),
               at(lon, lat, out) {
                 const la = lat * RAD;
                 const lo = lon * RAD;
@@ -1007,6 +1077,14 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               },
             });
           }
+          const spriteData = deps.placeSprites?.() ?? null;
+          if (spriteData && !placeSprites && !placeSpritesTried) {
+            placeSprites = createPlaceSprites(three, earth, sunEarth);
+            placeSpritesTried = true;
+            // told once: without `Points` the page's layer draws these rings itself
+            deps.onPlaceRings?.(placeSprites !== null);
+          }
+          placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
@@ -1053,10 +1131,13 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               const ground = new three.Vector3();
               const eye = camera.position;
               const turned = earth.quaternion;
+              ground.set(0, 0, 0).project(camera);
+              const disc = { x: ((ground.x + 1) / 2) * size.width, y: ((1 - ground.y) / 2) * size.height, radius: Math.min(px.Earth, 1e5) };
               deps.onCities({
                 width: size.width,
                 height: size.height,
                 radius: Math.min(px.Earth, 1e5),
+                ...(ground.z > -1 && ground.z < 1 ? { disc } : {}),
                 project(lon, lat, out) {
                   const phi = lat * RAD;
                   const lambda = lon * RAD;
@@ -1090,6 +1171,32 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             if (meteorTimer !== undefined) clearTimeout(meteorTimer);
             meteorTimer = Number.isFinite(wait) ? setTimeout(() => deps.invalidate(), wait) : undefined;
           }
+          // the borders, on the Earth: made the first time a set is switched on, above the clouds and under the air; the view's middle is the point under the camera, as far round as its horizon
+          if ((model.borders.countries || model.borders.regions) && !borders && !model.borders.stats.failed) {
+            try {
+              borders = createBorderLayer(three, earth, model.borders, () => deps.invalidate(), 3.5);
+            } catch (error) {
+              model.borders.stats.failed = true;
+              model.borders.onError?.(error);
+            }
+          }
+          if (borders) {
+            const turn = earth.rotation.y;
+            const fx = camera.position.x * Math.cos(turn) - camera.position.z * Math.sin(turn);
+            const fz = camera.position.x * Math.sin(turn) + camera.position.z * Math.cos(turn);
+            const far = Math.hypot(fx, camera.position.y, fz) || 1;
+            borders.sync({ points: [{ lon: Math.atan2(fx, fz) / RAD, lat: Math.asin(Math.max(-1, Math.min(1, camera.position.y / far))) / RAD }], angle: Math.acos(Math.min(1, 1 / far)) / RAD, radius: Math.min(px.Earth, 1e5) });
+          }
+          // the grid, on the Earth: made the first time it is switched on, over the ground and under the clouds
+          if (model.grid.on && !gridLayer && !model.grid.stats.failed) {
+            try {
+              gridLayer = createGridLayer(three, earth, model.grid, sunEarth, 2.5);
+            } catch (error) {
+              model.grid.stats.failed = true;
+              model.grid.onError?.(error);
+            }
+          }
+          gridLayer?.sync(Math.min(px.Earth, 1e5));
           if (model.rideLost) deps.onRideLost?.();
           if (model.transition) deps.onMoving?.();
           return false;
@@ -1102,6 +1209,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
+          borders?.dispose();
+          placeSprites?.dispose();
+          gridLayer?.dispose();
           modelSlot.turn += 1;
           dropModel();
           layer?.dispose();
@@ -1110,6 +1220,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           textures.dispose();
           ended = true;
           empty(sunSlot);
+          empty(moonSlot);
           for (const held of moonSlots.values()) empty(held.slot);
           moonSlots.clear();
           for (const p of planets.values()) {
