@@ -184,6 +184,16 @@
                   <div class="group fam-seg" id="sat-results" role="group" aria-label="Matches" data-say-label="satMatches" hidden></div>
                 </div>
                 <p class="fam-fine" id="sat-info" role="status" hidden></p>
+                <div class="fam-row" id="paint-controls" hidden>
+                  <span class="fam-label" data-say="paintLabel">Trail</span>
+                  <button type="button" class="fam-button" id="paint" data-say="paint">Paint</button>
+                  <button type="button" class="fam-button" id="paint-clear" data-say="paintClear">Clear</button>
+                  <span class="group fam-seg" id="paint-length" role="group" aria-label="Trail length" data-say-label="paintLength">
+                    <button type="button" data-length="1d" data-say="paintDay" aria-pressed="true">1 day</button>
+                    <button type="button" data-length="1w" data-say="paintWeek">1 week</button>
+                    <button type="button" data-length="1m" data-say="paintMonth">1 month</button>
+                  </span>
+                </div>
                 <p class="fam-fine" id="sat-source-note" role="status" hidden></p>
                 <p class="fam-fine" id="sat-about" hidden></p>
                 <p class="fam-fine" id="sat-note" hidden></p>

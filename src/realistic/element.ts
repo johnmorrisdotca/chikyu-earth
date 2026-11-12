@@ -9,6 +9,8 @@ import { airFor, readAirThickness } from "./air.ts";
 import { IMMERSIVE_STYLE, immersiveWheel } from "./immersive.ts";
 import { NOTES_STYLE, setAirNote } from "./air-note.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
+
+import { createPaintState, paintedGround, type PaintSpec } from "../paint/buffer.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
@@ -171,6 +173,8 @@ export const readTime = (value: string | null): number | "now" => {
  * earth.setAttribute("tiles", "/tiles/");
  * earth.setAttribute("speed", "86400");
  * earth.placeGroups = false; // place-groups="off": every place keeps its own ring
+ * earth.paint = { id: "25544", length: "1d", swath: "track" };
+ * earth.clearPaint();
  * earth.addEventListener("chikyu-timechange", (event) => {
  *   const { time, running } = (event as CustomEvent<{ time: number; running: boolean }>).detail;
  *   console.log(new Date(time).toISOString(), running ? "running" : "held");
@@ -182,6 +186,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "satellite-tint"];
 
   #model: EarthModel = newModel();
+  #paint = createPaintState();
   #mode: number | "now" = "now";
   #view: View | undefined;
   #gate: Gate | undefined;
@@ -358,6 +363,14 @@ export class ChikyuEarthRealistic extends HTMLElement {
       },
       onPlaceRings: (drawn) => this.#ringsDrawn(drawn),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      paint: {
+        data: this.#paint.data,
+        width: this.#paint.width,
+        height: this.#paint.height,
+        step: (ms) => this.#paint.step(ms, (at) => paintedGround(this.#model.satellites.groups, this.#paint.id, at)),
+        span: () => this.#paint.spanMinutes,
+        on: () => this.#paint.on,
+      },
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
       onTier: (layer, width) => {
         if (layer in this.#tiers) this.#tiers[layer as EarthLayer] = width;
@@ -1033,6 +1046,28 @@ export class ChikyuEarthRealistic extends HTMLElement {
    * @param satellites - The group, or `null` to remove it.
    * @param style - How to draw it.
    */
+  /**
+   * Paint one satellite's path on the Earth. `id` is a NORAD catalogue number or `group:index`. `length` is how long the trail is kept, in simulated time (`1d` when left out, or `1w`, `1m`). `swath` is `track` (the point under the satellite, the default) or `coverage` (where it is at least 10° above the horizon). Setting another satellite clears the trail. `null` clears it.
+   */
+  get paint(): PaintSpec | null {
+    return this.#paint.on ? { id: this.#paint.id, length: this.#paint.length, swath: this.#paint.swath } : null;
+  }
+  set paint(value: PaintSpec | null) {
+    this.#paint.set(value);
+    this.#gate?.soon();
+  }
+
+  /** Take the painted trail off the Earth. */
+  clearPaint(): void {
+    this.#paint.clear();
+    this.#gate?.soon();
+  }
+
+  /** Texels the trail has painted. 0 after `clearPaint`, and again when the painted satellite changes. */
+  get paintPixels(): number {
+    return this.#paint.pixels;
+  }
+
   setSatellites(group: string, satellites: Satellites | null, style: Partial<SatelliteStyle> = {}): void {
     const groups = this.#model.satellites.groups;
     if (satellites === null) {

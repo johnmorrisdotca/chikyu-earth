@@ -20,6 +20,8 @@ import type { CountryFrame } from "../country-names/geometry.ts";
 import type { GeoPoint } from "../types.ts";
 import { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
+import { paintMinute } from "../paint/buffer.ts";
+import { createPaintTexture } from "../paint/texture.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
@@ -419,6 +421,8 @@ export interface SpaceDeps {
   onRideLost?: () => void;
   /** The satellites could not be drawn (the three.js parts handed over lack `Points`). */
   onSatellitesError?: (error: unknown) => void;
+  /** The painted satellite trail. Read at every draw; nothing is uploaded while `step` returns false. */
+  paint?: { data: Uint8Array; width: number; height: number; step(ms: number): boolean; span(): number; on(): boolean };
   /** How the Sun, the planets and their moons are drawn; left out, plain spheres in the right colours (see `BodyPainter`). */
   painter?: BodyPainter;
   /** The models of large satellites, for a followed satellite (see `SatellitePainter`); none, and a satellite is a dot. */
@@ -518,6 +522,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         fragmentShader: SURFACE_FRAG,
         uniforms: { dayMap: uniform.day, nightMap: uniform.night, waterMap: uniform.water, cloudMap: uniform.clouds, sunDir: sunEarth, sunLocal, cloudShift, lights: { value: 1 }, boost: { value: 0 }, ortho: { value: 0 } },
       });
+      const paint = createPaintTexture(three, deps.paint?.data ?? new Uint8Array(4), deps.paint?.width ?? 1, deps.paint?.height ?? 1);
+      Object.assign(earthMaterial.uniforms, paint.uniforms);
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: CLOUD_FRAG,
@@ -689,6 +695,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           glow.scale.setScalar(airTop(model.airThickness));
           earthMaterial.uniforms["lights"]!.value = model.light === "lit" ? 0 : 1;
           earthMaterial.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
+          if (deps.paint) {
+            if (deps.paint.step(model.time)) paint.upload();
+            paint.uniforms.paintNow.value = paintMinute(model.time);
+            paint.uniforms.paintSpan.value = deps.paint.span();
+            paint.uniforms.paintOn.value = deps.paint.on() ? 1 : 0;
+          }
 
           // the Moon, with its near side to the Earth
           moon.position.set(moonPos[0], moonPos[1], moonPos[2]);
@@ -1230,6 +1242,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           grid.dispose();
           solid.dispose();
+          paint.dispose();
           earthMaterial.dispose();
           cloudMaterial.dispose();
           atmosphereMaterial.dispose();

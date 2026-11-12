@@ -328,3 +328,30 @@ test("taking a group away frees its buffers, and a lost context is recovered wit
   expect((await statsOf(page)).satellites.placed).toBeGreaterThan(2000);
   expect(errors).toEqual([]);
 });
+
+const paintPixels = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "paintPixels") as number);
+
+test("painting the ISS at an hour a second grows the trail, rest stops it, and Clear or another satellite empties it", async ({ page }) => {
+  await open(page, "", "stations");
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "paint", { id: "25544", length: "1d" }));
+  await expect.poll(() => paintPixels(page), { timeout: 20_000 }).toBeGreaterThan(10);
+  const filled = await paintPixels(page);
+  await setSpeed(page, 3600);
+  await expect.poll(() => paintPixels(page), { timeout: 20_000 }).toBeGreaterThan(filled);
+  const moving = await paintPixels(page);
+  await setSpeed(page, 0);
+  await settle(page);
+  const held = await paintPixels(page);
+  await page.waitForTimeout(1000);
+  expect(await paintPixels(page)).toBe(held);
+  await page.locator(SPACE).evaluate((el) => (el as unknown as { clearPaint(): void }).clearPaint());
+  expect(await paintPixels(page)).toBe(0);
+  const cleared = await page.locator(SPACE).evaluate((el) => {
+    Reflect.set(el, "paint", { id: "stations:1", length: "1d" });
+    return Reflect.get(el, "paintPixels") as number;
+  });
+  expect(cleared, "switching satellite clears the trail before the next frame").toBe(0);
+  await setSpeed(page, 3600);
+  await expect.poll(() => paintPixels(page), { timeout: 20_000 }).toBeGreaterThan(0);
+  expect(moving).toBeGreaterThan(filled);
+});
