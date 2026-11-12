@@ -138,9 +138,18 @@ test("nothing is drawn at rest: the places layer is not drawn again while the vi
   await open(page);
   await labelOn(page);
   await expect.poll(async () => (await placesStats(page)).satelliteNames, { timeout: 30_000 }).toBeGreaterThan(0);
+  // the names were laid out by the first draw that saw the ringed group, and the call that asked for them asked for a draw of its own, which a draw already under way does not answer: on a slow machine that second draw
+  // is still to come when the names are first seen. Put a draw of our own behind it: setView asks for a draw of the view it is given, a request made while one is waiting is the same draw, and the draw that shows this
+  // view is therefore after every request made before it. A view a hundredth of a degree round is a view of its own (setView ignores an equal one) and moves no satellite in or out of sight.
+  const camera = (): Promise<number[]> => page.locator(SPACE).evaluate((el) => [...(Reflect.get(el, "stats") as { camera: { position: number[] } }).camera.position]);
+  const before = { renders: (await placesStats(page)).renders, camera: await camera() };
+  await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0.01, tilt: 0, zoom: 1, panX: 0, panY: 0 }, true));
+  await expect
+    .poll(async () => (await placesStats(page)).renders > before.renders && (await camera()).some((value, axis) => Math.abs(value - before.camera[axis]!) > 1e-9), { timeout: 30_000, message: "a draw that shows the new view" })
+    .toBe(true);
   const drawn = (await placesStats(page)).renders;
   await page.evaluate(async () => {
     for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
   });
-  expect((await placesStats(page)).renders).toBe(drawn);
+  expect((await placesStats(page)).renders, "the places layer is not drawn again at rest").toBe(drawn);
 });
