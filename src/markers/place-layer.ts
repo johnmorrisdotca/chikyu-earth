@@ -38,7 +38,7 @@ export const PLACE_STYLE =
   ".pl-name[data-kind=satellite]{--c:#cfeaff;color:#cfeaff;font-weight:500;background:rgba(4,10,20,.5);border-color:transparent}" +
   ".pl-sat{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border:1.2px solid #cfeaff;border-radius:50%;opacity:.85;will-change:transform}" +
   ".pl-sat[hidden]{display:none}" +
-  ".pl-dot{position:absolute;left:0;top:0;box-sizing:border-box;border:1.5px solid var(--c);border-radius:50%;opacity:.9;will-change:transform}" +
+  ".pl-dot{position:absolute;left:0;top:0;box-sizing:border-box;border:1.5px solid var(--c);border-radius:50%;opacity:.9}" +
   ".pl-dot[hidden]{display:none}" +
   ".pl-name.pl-measure{visibility:hidden}";
 
@@ -76,9 +76,18 @@ export const PLACE_MARKS = 32;
  * ```
  */
 export const PLACE_DOTS = 600;
+
+/** The page is told once, and only when places in sight had no room in the fallback circles. Missing `Points` alone is not a loss: the circles still draw, up to {@link PLACE_DOTS}. Returns null when nothing new was lost. */
+export function placesLostNotice(state: { told: boolean }, omitted: number): { reason: string } | null {
+  if (state.told || !(omitted > 0)) return null;
+  state.told = true;
+  return { reason: `the three.js parts handed over lack Points: the places' rings are drawn as small circles in the page, at most ${PLACE_DOTS}, and stats.places.omitted counts the rest` };
+}
 /** The most names a group's count gets. */
 const GROUP_NAMES = 24;
 const EDGE = 0.02;
+/** How far past the edge a ring fades in, the same span the picture's rings use. */
+const LIMB = 0.12;
 const MARGIN = 60;
 const RING: Record<"here" | "favourite", number> = { here: 9, favourite: 6 };
 const FALLBACK = { here: "#7df9ff", favourite: "#ffd27a" };
@@ -103,10 +112,10 @@ export interface PlaceLayer {
   grouping: boolean;
   /**
    * Whether the picture draws the rings that are not markers of their own (true by default). False when the three.js parts lack `Points`: the layer then draws those rings itself as small circles in the page, up to {@link PLACE_DOTS},
-   * and `stats.omitted` counts the places in sight it had no room for.
+   * fading at the Earth's edge and dimmer at night, and `stats.omitted` counts the places in sight it had no room for. `stats.sprites` counts only the rings the picture draws; `stats.dots` counts the circles.
    */
   ringsInPicture: boolean;
-  readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; omitted: number };
+  readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
   /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
   readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
   dispose(): void;
@@ -137,11 +146,15 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const marks: Mark[] = [];
   const names: HTMLElement[] = [];
   const sizes = new Map<string, { width: number; height: number }>();
-  const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, omitted: 0 };
+  const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 };
   let grouping = true;
   let ringsInPicture = true;
   // the small circles that stand in for the picture's rings when it cannot draw them: the element, and what it was last written with
-  const dots: { root: HTMLElement; r: number; color: string; fill: number }[] = [];
+  const dots: { root: HTMLElement; r: number; color: string; fill: number; x: string; y: string; opacity: string }[] = [];
+  // where each group fell on the screen the last time the picture could not draw the rings: x, y, facing. Grown when the groups grow, never one array a frame.
+  let projected = new Float32Array(0);
+  // the ring sizes written last, so a frame that changes none does not copy the buffer
+  let shapeHeld = new Float32Array(0);
   let boxes: { left: number; top: number; width: number; height: number }[] = [];
   const rings: HTMLElement[] = [];
   const measures: HTMLElement[] = [];
@@ -240,14 +253,27 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     name.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
   };
 
-  // a small circle standing in for a ring the picture cannot draw: `fill` is how much of it is solid (a group of several)
-  const showDot = (i: number, x: number, y: number, r: number, fill: number, color: string): void => {
+  const unitOf = (lon: number, lat: number): [number, number, number] => {
+    const lonR = (lon * Math.PI) / 180;
+    const latR = (lat * Math.PI) / 180;
+    return [Math.cos(latR) * Math.sin(lonR), Math.sin(latR), Math.cos(latR) * Math.cos(lonR)];
+  };
+  // the same night as the picture's rings: 0 in daylight, 1 once the Sun is about 7 degrees below the horizon
+  const nightAt = (lon: number, lat: number, sun: readonly [number, number, number] | null): number => {
+    if (!sun) return 0;
+    const u = unitOf(lon, lat);
+    const cosine = u[0] * sun[0] + u[1] * sun[1] + u[2] * sun[2];
+    const k = Math.max(0, Math.min(1, (0.05 - cosine) / 0.17));
+    return k * k * (3 - 2 * k);
+  };
+  // a small circle standing in for a ring the picture cannot draw: `fill` is how much of it is solid (a group of several). A place that has not moved is left as it was.
+  const showDot = (i: number, x: number, y: number, r: number, fill: number, color: string, facing: number, night: number): void => {
     let dot = dots[i];
     if (!dot) {
       const root = doc.createElement("i");
       root.className = "pl-dot";
       box.append(root);
-      dot = { root, r: -1, color: "", fill: -1 };
+      dot = { root, r: -1, color: "", fill: -1, x: "", y: "", opacity: "" };
       dots[i] = dot;
     }
     if (dot.r !== r) {
@@ -266,7 +292,21 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       dot.root.style.background = fill > 0 ? `color-mix(in srgb, ${color} ${Math.round(fill * 100)}%, transparent)` : "none";
     }
     if (dot.root.hidden) dot.root.hidden = false;
-    dot.root.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+    const xText = x.toFixed(1);
+    const yText = y.toFixed(1);
+    if (dot.x !== xText || dot.y !== yText) {
+      dot.x = xText;
+      dot.y = yText;
+      dot.root.style.transform = `translate(${xText}px,${yText}px)`;
+    }
+    const opacity = (Math.min(1, (facing - EDGE) / LIMB) * (1 - 0.5 * night) * 0.9).toFixed(2);
+    if (dot.opacity !== opacity) {
+      dot.opacity = opacity;
+      dot.root.style.opacity = opacity;
+    }
+  };
+  const hideDots = (from: number): void => {
+    for (let i = from; i < dots.length; i += 1) if (!dots[i]!.root.hidden) dots[i]!.root.hidden = true;
   };
 
   /** Gather the places again for a new list or a new cell, and write the rings' places and colours. */
@@ -304,7 +344,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     hideFrom(marks.map((m) => m.root), 0);
     hideFrom(names, 0);
     hideFrom(rings, 0);
-    if (dots.length > 0) hideFrom(dots.map((d) => d.root), 0);
+    hideDots(0);
     stats.omitted = 0;
     stats.shown = 0;
     stats.labels = 0;
@@ -313,6 +353,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     stats.marks = 0;
     stats.groups = 0;
     stats.sprites = 0;
+    stats.dots = 0;
     if (sprites && sprites.shapes.some((v) => v !== 0)) {
       sprites.shapes.fill(0);
       sprites.shapesVersion += 1;
@@ -342,7 +383,6 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     set grouping(value) {
       if (value === grouping) return;
       grouping = value;
-      groupedFor = null;
     },
     get ringsInPicture() {
       return ringsInPicture;
@@ -363,12 +403,21 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       stats.renders += 1;
       const cell = grouping ? groupCell(view.radius ?? 0) : 0;
       if (groupedFor !== places || groupedCell !== cell) regroup(cell);
-      // which groups are in sight, and the places that get markers of their own: `here` first, then in the order given
+      // which groups are in sight, and the places that get markers of their own: `here` first, then in the order given.
+      // without the picture's rings the screen place is kept, so each group is projected once
+      const fallback = !ringsInPicture;
+      if (fallback && projected.length < groups.length * 3) projected = new Float32Array(groups.length * 3);
+      const sunUnit = sun ? unitOf(sun.lon, sun.lat) : null;
       const inSight: number[] = [];
       let shown = 0;
       for (const [g, group] of groups.entries()) {
         if (!view.at(group.lon, group.lat, point) || point.facing <= EDGE) continue;
         if (point.x < -MARGIN || point.y < -MARGIN || point.x > view.width + MARGIN || point.y > view.height + MARGIN) continue;
+        if (fallback) {
+          projected[g * 3] = point.x;
+          projected[g * 3 + 1] = point.y;
+          projected[g * 3 + 2] = point.facing;
+        }
         inSight.push(g);
         shown += group.members.length;
       }
@@ -424,8 +473,13 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       let omitted = 0;
       if (sprites) {
         const shapes = sprites.shapes;
-        const before = shapes.slice(0, groups.length * 2);
-        shapes.fill(0, 0, groups.length * 2);
+        const span = groups.length * 2;
+        if (shapeHeld.length < span) {
+          const next = new Float32Array(span);
+          next.set(shapeHeld);
+          shapeHeld = next;
+        }
+        shapes.fill(0, 0, span);
         const marked = new Set(layout.shapes.map((shape) => chosen[shape.index]!));
         const counts: { x: number; y: number; r: number; w: number; h: number; priority: number }[] = [];
         const owners: number[] = [];
@@ -437,12 +491,15 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
           const ring = n > 1 ? Math.min(14, 6 + 2.2 * Math.log2(n)) : RING[first.kind === "here" ? "here" : "favourite"];
           shapes[g * 2] = ring;
           shapes[g * 2 + 1] = n > 1 ? 0.3 : 0;
-          if (!ringsInPicture || n > 1) view.at(group.lon, group.lat, point);
+          if (fallback) {
+            point.x = projected[g * 3]!;
+            point.y = projected[g * 3 + 1]!;
+            point.facing = projected[g * 3 + 2]!;
+          } else if (n > 1) view.at(group.lon, group.lat, point);
           if (ringsInPicture) drawnSprites += 1;
           else if (drawnDots < PLACE_DOTS) {
-            showDot(drawnDots, point.x, point.y, ring, n > 1 ? 0.3 : 0, sprites.colors[g]!);
+            showDot(drawnDots, point.x, point.y, ring, n > 1 ? 0.3 : 0, sprites.colors[g]!, point.facing, nightAt(group.lon, group.lat, sunUnit));
             drawnDots += 1;
-            drawnSprites += 1;
           } else {
             omitted += n;
             continue;
@@ -458,7 +515,12 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
             }
           }
         }
-        if (shapes.some((v, i) => v !== before[i])) sprites.shapesVersion += 1;
+        let shapesChanged = false;
+        for (let i = 0; i < span; i += 1) {
+          if (shapes[i] !== shapeHeld[i]) shapesChanged = true;
+          shapeHeld[i] = shapes[i]!;
+        }
+        if (shapesChanged) sprites.shapesVersion += 1;
         const placed = placeLabels(counts, view.width, view.height, GROUP_NAMES, 64, busy);
         for (const spot of placed) {
           const group = groups[owners[spot.item]!]!;
@@ -470,7 +532,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
           used += 1;
         }
       }
-      if (dots.length > 0) hideFrom(dots.map((d) => d.root), drawnDots);
+      hideDots(drawnDots);
       stats.omitted = omitted;
       // the ringed satellites: a ring round each that can be seen, and its name where it is free of the places' names and the boxes taken
       const seen = satellites.filter((mark) => mark.visible);
@@ -510,6 +572,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       stats.labels = layout.labels.length;
       stats.groups = drawnGroups;
       stats.sprites = drawnSprites;
+      stats.dots = drawnDots;
       stats.rings = seen.length;
       stats.satelliteNames = placed.length;
     },

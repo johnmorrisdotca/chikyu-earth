@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Place dots cost less, and a missing ring is told only when a place is left out** (MODULES-1165). The fallback circles (when the three.js parts have no `Points`) no longer ask for a compositor layer each, skip a move that did not change, and are projected once a frame. They fade at the Earth's edge and are dimmer at night, as the rings in the picture are. `stats.places.sprites` counts only the rings in the one draw call (0 in the fallback); `stats.places.dots` counts the circles drawn in the page instead. `chikyu-places-unavailable` is sent once, and only when places in sight had no room (`omitted`), not merely because `Points` is missing. The reason names `PLACE_DOTS`.
+
 ## 0.36.0 - 2026-11-12
 
 - **kazoku-ui 0.41.0, a dependency of this package** (`^0.38.1` to `^0.41.0`, for MacBook browser runs in CI's own Playwright image): a page that installs chikyu-earth now gets kazoku-ui 0.41. What it changes for this package's elements: in Safari a trackpad pinch over a view zooms the view and no longer the whole page (kazoku-ui 0.40.2); `<kazoku-view-controls>` writes a pace, direction or axis read from the address back to its attributes (0.40.0, 0.40.1), which matters only to a page that reads them. The elements' own attributes, events and defaults are unchanged.
