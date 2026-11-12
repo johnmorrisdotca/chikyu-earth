@@ -86,6 +86,6 @@ earth.addEventListener("chikyu-satellite-click", (event) => {
 - **地球の裏側。** 地球の裏にある衛星は地球に隠れ、押すこともできません。
 - `showSatellites(group, on)`、`satelliteGroups`、`selectSatellite(ref)` (衛星のまわりの輪と軌道)、`selectedSatellite`、`satelliteInfo(ref)` は宇宙の表示と同じで、イベント `chikyu-satellite-click` も同じです。
 - 軌道要素は古くなります。人工衛星のガイドのとおり、表示している時刻から14日以上離れたものは、うすく描きます。
-- `three` として `Points` と、`MAX_SATELLITE_SPEED` より速いときの線のための `LineSegments` を渡す必要があります (必要な部品は、デモの `three-subset.ts` に並んでいます)。`Points` がないと人工衛星は出ず、`chikyu-satellites-unavailable` が送られます。`LineSegments` がないときは、実際の60倍より速いと点だけになり、コンソールに警告を1回書きます。
+- `three` として `Points` と、`MAX_SATELLITE_SPEED` より速いときの線のための `LineSegments` を渡す必要があります (必要な部品は、デモの `three-subset.ts` に並んでいます)。`Points` がないと人工衛星は出ず、`chikyu-satellites-unavailable` が送られます。`LineSegments` がないときは、実際の60倍より速いと点だけになり、コンソールに警告を1回出します。
 
 デモの「人工衛星」の行は、リアルな見た目でも使えます。`fullscreen.html?sats=all` は、全画面の暗い表示ですべてのグループを見せます。
