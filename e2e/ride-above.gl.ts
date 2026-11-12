@@ -123,14 +123,29 @@ test.describe("with motion allowed", () => {
     await expect.poll(async () => (await ride()).riding, { timeout: 30_000 }).toBe(true);
     await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
     expect(new URL(page.url()).searchParams.get("rview"), "from it: no rview in the address").toBeNull();
+    // a glide is short, and a poll from the test can miss it on a busy machine (MODULES-1190): the page counts each one at every animation frame, from here on
+    await page.locator(SPACE).evaluate((el) => {
+      let was = false;
+      Reflect.set(window, "__glides", 0);
+      const watch = (): void => {
+        const now = (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride.gliding;
+        if (now && !was) Reflect.set(window, "__glides", (Reflect.get(window, "__glides") as number) + 1);
+        was = now;
+        requestAnimationFrame(watch);
+      };
+      watch();
+    });
+    const glides = (): Promise<number> => page.evaluate(() => Reflect.get(window, "__glides") as number);
     // the button: the view changes by a glide, and the address says so
+    const first = await glides();
     await page.locator('[data-ride-view="above"]').dispatchEvent("click");
-    await expect.poll(async () => (await ride()).gliding, { timeout: 10_000, message: "the camera glides into the view" }).toBe(true);
+    await expect.poll(glides, { timeout: 10_000, message: "the camera glides into the view" }).toBeGreaterThan(first);
     await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
     expect(new URL(page.url()).searchParams.get("rview"), "the address says above").toBe("above");
     expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "riding") as { view: string }).view)).toBe("above");
+    const second = await glides();
     await page.locator('[data-ride-view="from"]').dispatchEvent("click");
-    await expect.poll(async () => (await ride()).gliding, { timeout: 10_000, message: "and out of it" }).toBe(true);
+    await expect.poll(glides, { timeout: 10_000, message: "and out of it" }).toBeGreaterThan(second);
     await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
     expect(new URL(page.url()).searchParams.get("rview"), "from it again: no rview").toBeNull();
     // above a body is a follow: the button and the address say follow
