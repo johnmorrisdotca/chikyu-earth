@@ -14,3 +14,5 @@ export type { SkyLabelStyle } from "../sky/style.ts";
 export type { SkyKeepClear } from "../sky/keep-clear.ts";
 export { CITY_NAMES_DEFAULT, CITY_NAMES_MAX, TIER_RADIUS, cityNameText, cityRank, cityTiersFor, layoutCities, nameWidth, readCityNames, type CityFrame, type CityLayoutOptions, type CityName, type CityNameTier, type NamedCity } from "../cities/geometry.ts";
 export { CITY_NAMES_ATTRIBUTES, type CityNamesStyle } from "../cities/host.ts";
+export { BORDER_ATTRIBUTES, BORDER_REGIONS_RADIUS, codesNear, readBorders, shapeBoxes, sharedEdges, type BorderFeature, type BorderSets, type BorderShapes } from "../borders/lines.ts";
+export type { BorderData, BorderStats } from "../borders/layer.ts";

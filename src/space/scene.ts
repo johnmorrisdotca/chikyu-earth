@@ -20,6 +20,7 @@ import { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes 
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
+import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
 type Three = ThreeParts;
@@ -174,6 +175,8 @@ export interface SpaceModel {
   meteors: MeteorState;
   /** The name written on the Earth (src/realistic/body-label.ts): off unless the element sets it. */
   bodyLabel: BodyLabelState;
+  /** The borders of the countries and of their regions, on the Earth (src/borders/layer.ts): off unless the element switches them on. */
+  borders: BorderState;
   /** The body or satellite the camera rides along with, or null. */
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
@@ -232,6 +235,7 @@ export const newSpaceModel = (): SpaceModel => ({
   satellites: newSatelliteState(),
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
+  borders: newBorderState(),
   pick: null,
   placeSatellite: null,
   followModel: null,
@@ -576,6 +580,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
+      let borders: BorderLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number } = { key: "", drawing: null, turn: 0, parts: 0 };
@@ -1089,6 +1094,22 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             if (meteorTimer !== undefined) clearTimeout(meteorTimer);
             meteorTimer = Number.isFinite(wait) ? setTimeout(() => deps.invalidate(), wait) : undefined;
           }
+          // the borders, on the Earth: made the first time a set is switched on, above the clouds and under the air; the view's middle is the point under the camera, as far round as its horizon
+          if ((model.borders.countries || model.borders.regions) && !borders && !model.borders.stats.failed) {
+            try {
+              borders = createBorderLayer(three, earth, model.borders, () => deps.invalidate(), 3.5);
+            } catch (error) {
+              model.borders.stats.failed = true;
+              model.borders.onError?.(error);
+            }
+          }
+          if (borders) {
+            const turn = earth.rotation.y;
+            const fx = camera.position.x * Math.cos(turn) - camera.position.z * Math.sin(turn);
+            const fz = camera.position.x * Math.sin(turn) + camera.position.z * Math.cos(turn);
+            const far = Math.hypot(fx, camera.position.y, fz) || 1;
+            borders.sync({ points: [{ lon: Math.atan2(fx, fz) / RAD, lat: Math.asin(Math.max(-1, Math.min(1, camera.position.y / far))) / RAD }], angle: Math.acos(Math.min(1, 1 / far)) / RAD, radius: Math.min(px.Earth, 1e5) });
+          }
           if (model.rideLost) deps.onRideLost?.();
           if (model.transition) deps.onMoving?.();
           return false;
@@ -1101,6 +1122,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
+          borders?.dispose();
           modelSlot.turn += 1;
           dropModel();
           layer?.dispose();

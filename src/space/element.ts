@@ -13,6 +13,8 @@ import { cleanPlaces, readPlaces, type Place, type PlaceLook, type PlaceView } f
 import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
 import { SHORT_NAMES } from "../satellites/names.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
+import { BORDER_ATTRIBUTES, readBorders, type BorderSets } from "../borders/lines.ts";
+import type { BorderData, BorderStats } from "../borders/layer.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -210,6 +212,9 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * (`speed` set to 0): a page writes the date into its date box from it. It is not sent for a `time` the page sets itself. `chikyu-time` is the older event of every step the clock takes (up to thirty a second):
  * it is kept for pages that use it, but a page that shows the date wants `chikyu-timechange`.
  *
+ * `borders` draws the borders on the Earth's land as thin lines that turn with it, as on `<chikyu-earth-realistic>`: `countries`, `regions` (from the page's `borderData.regions`, once the Earth is
+ * large enough), or both with a bare attribute; `chikyu-borders-unavailable` is sent when the shapes cannot be loaded.
+ *
  * @example
  * ```ts no-run
  * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
@@ -225,7 +230,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -317,6 +322,8 @@ export class ChikyuSpace extends HTMLElement {
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-city-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
     });
     this.#cities.setStyle(this.#citiesStyle);
+    Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
+    this.#model.borders.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-borders-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#applyBodyLabel();
     setAirNote(this.#airNote, this, this.#model.airThickness);
@@ -442,6 +449,10 @@ export class ChikyuSpace extends HTMLElement {
       this.#gate?.request();
     }
     else if ((CITY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#cities?.refresh();
+    else if (name === "borders") {
+      Object.assign(this.#model.borders, readBorders(value));
+      this.#gate?.request();
+    }
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -596,6 +607,31 @@ export class ChikyuSpace extends HTMLElement {
   set cityNamesStyle(value: CityNamesStyle) {
     this.#citiesStyle = { ...value };
     this.#cities?.setStyle(this.#citiesStyle);
+  }
+
+  /**
+   * Which borders are drawn on the Earth (the attribute `borders`): the countries' at any size, and the regions' (provinces, states, prefectures) once the Earth is large enough on the screen to tell them apart.
+   * Setting it writes the attribute: both sets as `borders="countries regions"`, one as its own word, none takes the attribute away.
+   */
+  get borders(): BorderSets {
+    return readBorders(this.getAttribute("borders"));
+  }
+  set borders(value: BorderSets) {
+    const words = [value.countries ? "countries" : "", value.regions ? "regions" : ""].filter(Boolean);
+    if (words.length === 0) this.removeAttribute("borders");
+    else this.setAttribute("borders", words.join(" "));
+  }
+
+  /**
+   * Where the borders' shapes come from (see `BorderData`): `countries` in place of chizu's `world-geo`, and `regions`, a country's regions by its code, which draws the regions; without it none are drawn.
+   * Set it before `borders` is switched on: shapes already loaded are kept.
+   */
+  get borderData(): BorderData {
+    return { ...this.#model.borders.data };
+  }
+  set borderData(value: BorderData) {
+    this.#model.borders.data = { ...value };
+    this.#gate?.request();
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -1103,6 +1139,8 @@ export class ChikyuSpace extends HTMLElement {
     places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
+    /** The borders: the segments of each set, whether each was drawn at the last draw, the countries whose regions have arrived, how many times a set's lines were made, and whether a set could not be loaded. */
+    borders: BorderStats;
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -1125,6 +1163,7 @@ export class ChikyuSpace extends HTMLElement {
       followModel: this.#model.followModel,
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
+      borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
     };
   }
 
