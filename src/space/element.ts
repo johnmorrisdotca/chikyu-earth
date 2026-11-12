@@ -1070,7 +1070,7 @@ export class ChikyuSpace extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
-    followModel: { x: number; y: number; shown: boolean } | null;
+    followModel: { x: number; y: number; shown: boolean; parts: number } | null;
     /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
     places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */

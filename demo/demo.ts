@@ -574,6 +574,8 @@ if (flat && controls && stage) {
       if (index < 0 || !space) return;
       target = { group, index };
     }
+    // above is for a satellite: a body is followed, and the button and the address say so
+    if (typeof target === "string" && rideView === "above") rideView = "follow";
     rideKey = key;
     markRide();
     if (key === "chosen") {

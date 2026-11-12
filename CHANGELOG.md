@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Ride above a satellite** (MODULES-1138). `ride(ref, { view: "above" })` puts the camera on the line from the Earth's centre through the satellite, `distanceKm` over the zoom above it, looking straight down at it with the way it is going at the top of the picture. The satellite stays in the middle while the clock moves it and the Earth turns beneath; a drag turns the picture about it and tips the camera back or ahead of it; the zoom changes the height; a satellite model is drawn there as in the follow view. It glides from and to the other views (a jump for reduced motion) and draws as the follow view does. `aboveAxes` gives the camera's place and top. The demo has an "Above it" button and the address `rview=above`.
+
 ## 0.34.1 - 2026-11-11
 
 - **The sky is behind the Earth: constellation lines no longer cross it** (MODULES-1103). The lines were drawn over the Earth's disc (in a ride, across the whole globe). Each line is now cut exactly at the Earth's edge, the air's rim included, in the picture's own camera, in the space view and in a ride at any height, on the day side and the night side. A star whose point, ring or name box touches the Earth, the Moon or the Sun has its name and ring left out (a name only partly on the Earth was shown before), and the figure under the pointer is not lit over the Earth.

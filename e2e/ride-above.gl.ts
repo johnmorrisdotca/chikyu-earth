@@ -74,7 +74,9 @@ test("above: the satellite stays in the middle of the picture over a minute of t
   expect(Math.abs(after.place!.x - after.width / 2) < 3 && Math.abs(after.place!.y - after.height / 2) < 3, "still in the middle a minute on").toBe(true);
   const moved = after.camera.position.map((n, i) => n - before.camera.position[i]!);
   const travelled = Math.hypot(...moved);
-  expect(travelled, "the camera went with the satellite (about 460 km, 0.07 of the Earth's radius)").toBeGreaterThan(0.04);
+  // the camera is about 1.54 Earth radii from the centre (the ISS's 1.066 and 3,000 km above it), so a minute of the satellite's 7.66 km/s (0.0687 radian) takes it about 0.105 of a radius
+  expect(travelled, "the camera went with the satellite, about 0.105 of the Earth's radius in a minute").toBeGreaterThan(0.09);
+  expect(travelled).toBeLessThan(0.115);
   // the way it went is the top of the picture (from the picture before: the camera's up, now, is along the way it went)
   const up = axis(after.camera, [0, 1, 0]);
   const along = (moved[0]! * up[0]! + moved[1]! * up[1]! + moved[2]! * up[2]!) / travelled;
@@ -108,4 +110,35 @@ test("above: the zoom changes the height, a drag turns the picture about the sat
   const radial = tipped.camera.position.map((n) => n / Math.hypot(...tipped.camera.position));
   expect(down[0]! * radial[0]! + down[1]! * radial[1]! + down[2]! * radial[2]!, "no longer straight down").toBeLessThan(0.95);
   expect(Math.abs(tipped.place!.x - tipped.width / 2) < 3 && Math.abs(tipped.place!.y - tipped.height / 2) < 3, "the satellite is in the middle").toBe(true);
+});
+
+test.describe("with motion allowed", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("above: the camera glides into it and out of it, and the address says rview=above", async ({ page }) => {
+    await routeElements(page);
+    await page.goto("/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=-100,40&sats=stations&ride=iss&light=lit");
+    await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+    const ride = (): Promise<{ riding: boolean; gliding: boolean }> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean; gliding: boolean } }).ride);
+    await expect.poll(async () => (await ride()).riding, { timeout: 30_000 }).toBe(true);
+    await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
+    expect(new URL(page.url()).searchParams.get("rview"), "from it: no rview in the address").toBeNull();
+    // the button: the view changes by a glide, and the address says so
+    await page.locator('[data-ride-view="above"]').dispatchEvent("click");
+    await expect.poll(async () => (await ride()).gliding, { timeout: 10_000, message: "the camera glides into the view" }).toBe(true);
+    await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
+    expect(new URL(page.url()).searchParams.get("rview"), "the address says above").toBe("above");
+    expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "riding") as { view: string }).view)).toBe("above");
+    await page.locator('[data-ride-view="from"]').dispatchEvent("click");
+    await expect.poll(async () => (await ride()).gliding, { timeout: 10_000, message: "and out of it" }).toBe(true);
+    await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
+    expect(new URL(page.url()).searchParams.get("rview"), "from it again: no rview").toBeNull();
+    // above a body is a follow: the button and the address say follow
+    await page.locator('[data-ride-view="above"]').dispatchEvent("click");
+    await expect.poll(async () => (await ride()).gliding, { timeout: 30_000 }).toBe(false);
+    await page.locator('[data-ride="Moon"]').dispatchEvent("click");
+    await expect.poll(async () => new URL(page.url()).searchParams.get("rview"), { timeout: 30_000, message: "a body is followed, and the address says so" }).toBe("follow");
+    expect(await page.locator('[data-ride-view="follow"]').evaluate((b) => b.classList.contains("on"))).toBe(true);
+    expect(await page.locator('[data-ride-view="above"]').evaluate((b) => b.classList.contains("on"))).toBe(false);
+  });
 });

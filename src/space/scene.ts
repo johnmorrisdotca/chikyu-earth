@@ -193,7 +193,7 @@ export interface SpaceModel {
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
-  followModel: { x: number; y: number; shown: boolean } | null;
+  followModel: { x: number; y: number; shown: boolean; parts: number } | null;
   /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
   placeSatellite: ((ref: SatelliteRef) => SatelliteScreen | null) | null;
   ratio(): number;
@@ -578,7 +578,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let nameOn: BodyLabelLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
-      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number } = { key: "", drawing: null, turn: 0 };
+      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number } = { key: "", drawing: null, turn: 0, parts: 0 };
       const dropModel = (): void => {
         if (!modelSlot.drawing) return;
         scene.remove(modelSlot.drawing.object);
@@ -866,6 +866,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                   made.object.visible = false;
                   scene.add(made.object);
                   modelSlot.drawing = made;
+                  // how many meshes the model is made of: a draw call each, which a test of the draw budget adds to the scene's own
+                  modelSlot.parts = 0;
+                  made.object.traverse((part) => {
+                    if ((part as THREE.Mesh).isMesh) modelSlot.parts += 1;
+                  });
                   deps.invalidate();
                 })
                 .catch((error: unknown) => deps.onPainterError?.(error));
@@ -882,7 +887,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             modelSlot.drawing.light?.(toSunNow);
             modelSlot.drawing.update?.({ toSun: toSunNow, ms: model.time, radiusPx: size.height * MODEL_RADIUS_SHARE });
             projected.set(followed.place[0], followed.place[1], followed.place[2]).project(camera);
-            model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true };
+            model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true, parts: modelSlot.parts };
           } else {
             if (modelSlot.drawing) modelSlot.drawing.object.visible = false;
             model.followModel = null;
