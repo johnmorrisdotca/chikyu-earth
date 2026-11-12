@@ -44,6 +44,8 @@ export interface CityHostOptions {
   onError(error: unknown): void;
   /** Loads kuni's cities; the page's own copy when it has one (the property is for tests and for pages that bundle their own). */
   load?(tier: CityNameTier): Promise<readonly NamedCity[]>;
+  /** Told when the names were laid out again between draws (a tier arrived, the language or a font changed), so names that keep clear of these can be laid out again. */
+  onLayout?(): void;
 }
 
 export interface CityHost {
@@ -54,6 +56,8 @@ export interface CityHost {
   /** The look of the names (the property `cityNamesStyle`). */
   setStyle(style: CityNamesStyle): void;
   readonly stats: { on: boolean; max: number; radius: number; tiers: CityNameTier[]; cities: number; names: number; renders: number };
+  /** The boxes the names and their dots take in the picture just drawn, for other names to keep clear of. */
+  readonly boxes: { left: number; top: number; width: number; height: number }[];
   dispose(): void;
 }
 
@@ -168,6 +172,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
           lists.set(tier, cities);
           version += 1;
           compute();
+          options.onLayout?.();
         })
         .catch((error: unknown) => options.onError(error));
     }
@@ -236,12 +241,18 @@ export function createCityHost(options: CityHostOptions): CityHost {
   // the family's chooser tells the document when the page's language changes: the names are written again, though nothing else is drawn
   const onLanguage = (): void =>
     queueMicrotask(() => {
-      if (max !== null && last && usedLang !== undefined && usedLang !== options.language()) compute();
+      if (max !== null && last && usedLang !== undefined && usedLang !== options.language()) {
+        compute();
+        options.onLayout?.();
+      }
     });
   doc.addEventListener("kazoku-languagechange", onLanguage);
   // a font arrives: the names are measured in the font they are drawn in, so they are laid out again
   const onFonts = (): void => {
-    if (max !== null && last) compute();
+    if (max !== null && last) {
+      compute();
+      options.onLayout?.();
+    }
   };
   doc.fonts?.addEventListener?.("loadingdone", onFonts);
 
@@ -267,6 +278,13 @@ export function createCityHost(options: CityHostOptions): CityHost {
       style = { ...next };
       vars();
       compute();
+    },
+    get boxes() {
+      const dot = (style.dotSize ?? DEFAULTS.dot) + 1;
+      return shown.flatMap((one) => [
+        { left: one.left, top: one.top, width: one.width, height: one.height },
+        { left: one.x - dot, top: one.y - dot, width: dot * 2, height: dot * 2 },
+      ]);
     },
     get stats() {
       return { on: max !== null, max: max ?? 0, radius: last?.radius ?? 0, tiers: [...lists.keys()], cities: [...lists.values()].reduce((sum, list) => sum + list.length, 0), names: shown.length, renders };

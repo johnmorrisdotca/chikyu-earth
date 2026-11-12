@@ -18,6 +18,7 @@ import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type Body
 import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
+import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
 import { pointOnEarth } from "./tiles.ts";
 export type { ThreeParts };
 
@@ -102,6 +103,8 @@ export interface EarthModel {
   bodyLabel: BodyLabelState;
   /** The borders of the countries and of their regions (src/borders/layer.ts): off unless the element switches them on. */
   borders: BorderState;
+  /** The meridians and parallels (src/grid/layer.ts): off unless the element switches them on. */
+  grid: GridState;
 }
 
 export interface EarthDeps {
@@ -155,6 +158,7 @@ export const newModel = (): EarthModel => ({
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
   borders: newBorderState(),
+  grid: newGridState(),
 });
 
 /**
@@ -315,6 +319,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       let nameOn: BodyLabelLayer | null = null;
       let borders: BorderLayer | null = null;
       let placeSprites: PlaceSprites | null = null;
+      let gridLayer: GridLayer | null = null;
 
       return {
         scene,
@@ -405,6 +410,16 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           const spriteData = deps.placeSprites?.() ?? null;
           if (spriteData && !placeSprites) placeSprites = createPlaceSprites(three, turned, sunDir);
           placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
+          // the grid: made the first time it is switched on, over the ground and under the clouds
+          if (model.grid.on && !gridLayer && !model.grid.stats.failed) {
+            try {
+              gridLayer = createGridLayer(three, turned, model.grid, sunDir, 1.5);
+            } catch (error) {
+              model.grid.stats.failed = true;
+              model.grid.onError?.(error);
+            }
+          }
+          gridLayer?.sync(radius);
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, turned, model.meteors);
           if (meteors) {
             const wait = meteors.step({ now: performance.now(), time: model.time, facing: unitVector({ lon: look.lon, lat: look.lat }), sun: [sx, sy, sz], radius, width: size.width, height: size.height });
@@ -424,6 +439,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           nameOn?.dispose();
           borders?.dispose();
           placeSprites?.dispose();
+          gridLayer?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

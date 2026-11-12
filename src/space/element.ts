@@ -17,6 +17,10 @@ import { SHORT_NAMES } from "../satellites/names.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
 import { BORDER_ATTRIBUTES, readBorders, type BorderSets } from "../borders/lines.ts";
 import type { BorderData, BorderStats } from "../borders/layer.ts";
+import { GRID_ATTRIBUTES, readGrid } from "../grid/lines.ts";
+import type { GridStats } from "../grid/layer.ts";
+import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/geometry.ts";
+import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -202,7 +206,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${PLACE_STYLE}${SKY_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -216,6 +220,9 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  *
  * `borders` draws the borders on the Earth's land as thin lines that turn with it, as on `<chikyu-earth-realistic>`: `countries`, `regions` (from the page's `borderData.regions`, once the Earth is
  * large enough), or both with a bare attribute; `chikyu-borders-unavailable` is sent when the shapes cannot be loaded.
+ *
+ * `grid` draws the meridians and parallels on the Earth, and `country-names` names its countries, as on `<chikyu-earth-realistic>`: the names keep clear of the bodies', the places' and the
+ * cities' names and stay on the Earth's disc; `chikyu-country-names-unavailable` is sent when the outlines cannot be loaded.
  *
  * @example
  * ```ts no-run
@@ -232,7 +239,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look"];
 
   #model: SpaceModel = newSpaceModel();
   #mode: number | "now" = "now";
@@ -248,6 +255,9 @@ export class ChikyuSpace extends HTMLElement {
   /** The names of cities on the Earth (`city-names`), and the look of the names. */
   #cities: CityHost | undefined;
   #citiesStyle: CityNamesStyle = {};
+  /** The names of the countries on the Earth (`country-names`), and the look of the names. */
+  #countries: CountryHost | undefined;
+  #countriesStyle: CountryNamesStyle = {};
   #satNames: Record<number, string> = {};
   /** The ringed satellites of the last draw (`labelSatellites`), laid out with the places. */
   #marks: SatelliteMark[] = [];
@@ -324,10 +334,20 @@ export class ChikyuSpace extends HTMLElement {
       attribute: (name) => this.getAttribute(name),
       language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-city-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      onLayout: () => this.#countryFrame(),
     });
     this.#cities.setStyle(this.#citiesStyle);
     Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
     this.#model.borders.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-borders-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
+    this.#model.grid.on = readGrid(this.getAttribute("grid"));
+    this.#model.grid.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-grid-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
+    this.#countries = createCountryHost({
+      root,
+      attribute: (name) => this.getAttribute(name),
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+      onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-country-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+    });
+    this.#countries.setStyle(this.#countriesStyle);
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#applyBodyLabel();
     setAirNote(this.#airNote, this, this.#model.airThickness);
@@ -362,7 +382,6 @@ export class ChikyuSpace extends HTMLElement {
       onSky: (sky) => this.#sky?.frame(sky),
       onPlaces: (view) => this.#drawPlaces(view),
       placeSprites: () => this.#placeLayer?.sprites ?? null,
-      onCities: (frame) => this.#cities?.frame(frame),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onSatelliteMarks: (marks) => this.#showMarks(marks),
       onSelected: (place) => this.#placeChosen(place),
@@ -407,6 +426,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#placeLayer?.dispose();
     this.#placeLayer = undefined;
     this.#cities?.dispose();
+    this.#countries?.dispose();
+    this.#countries = undefined;
     this.#cities = undefined;
   }
 
@@ -442,6 +463,7 @@ export class ChikyuSpace extends HTMLElement {
         this.#applyBodyLabel();
         this.#sky?.refresh();
         this.#cities?.refresh();
+        this.#countries?.refresh();
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
@@ -457,7 +479,10 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "borders") {
       Object.assign(this.#model.borders, readBorders(value));
       this.#gate?.request();
-    }
+    } else if (name === "grid") {
+      this.#model.grid.on = readGrid(value);
+      this.#gate?.request();
+    } else if ((COUNTRY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#countries?.refresh();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -611,6 +636,29 @@ export class ChikyuSpace extends HTMLElement {
   #drawPlaces(view: PlaceView): void {
     const layer = this.#placeLayer;
     if (!layer || (this.#placeList.length === 0 && this.#marks.length === 0 && layer.stats.shown === 0 && layer.stats.rings === 0)) return;
+    layer.frame(view, this.#bodyNameBoxes(), this.#marks, this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
+  }
+
+  /** Tells the names of cities, then of countries, where the Earth is in the picture just drawn; the countries' names keep clear of the bodies', the places' and the cities'. */
+  #nameFrame(frame: CountryFrame | null): void {
+    this.#cities?.frame(frame);
+    this.#lastNameFrame = frame;
+    this.#countryFrame();
+  }
+
+  /** The frame the names were last laid out on. */
+  #lastNameFrame: CountryFrame | null = null;
+
+  /** Lays the countries' names out on the last frame, clear of the bodies', the places' and the cities' names as they are now. */
+  #countryFrame(): void {
+    const countries = this.#countries;
+    if (!countries) return;
+    const frame = this.#lastNameFrame;
+    countries.frame(frame, countries.stats.on && frame ? [...this.#bodyNameBoxes(), ...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? [])] : []);
+  }
+
+  /** The boxes the bodies' names take beside them in the picture just drawn. */
+  #bodyNameBoxes(): { left: number; top: number; width: number; height: number }[] {
     const taken: { left: number; top: number; width: number; height: number }[] = [];
     if (this.#model.labels && this.#places) {
       for (const name of BODY_NAMES) {
@@ -627,7 +675,7 @@ export class ChikyuSpace extends HTMLElement {
         taken.push({ left: at.x + Math.max(4, Math.min(at.r, 40)), top: at.y - 8, ...box });
       }
     }
-    layer.frame(view, taken, this.#marks, this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
+    return taken;
   }
 
   /**
@@ -639,6 +687,27 @@ export class ChikyuSpace extends HTMLElement {
   set cityNamesStyle(value: CityNamesStyle) {
     this.#citiesStyle = { ...value };
     this.#cities?.setStyle(this.#citiesStyle);
+  }
+
+  /** Whether the meridians and parallels are drawn on the Earth (the attribute `grid`). Setting it writes the attribute, or takes it away. */
+  get grid(): boolean {
+    return readGrid(this.getAttribute("grid"));
+  }
+  set grid(value: boolean) {
+    if (value) this.setAttribute("grid", "");
+    else this.removeAttribute("grid");
+  }
+
+  /**
+   * The look of the names of countries (`country-names`): font, weight, colour, the outline round the text, and the smallest and largest text size. Any of them may be left out; the Earth's size, the
+   * language and the data are not set here.
+   */
+  get countryNamesStyle(): CountryNamesStyle {
+    return { ...this.#countriesStyle };
+  }
+  set countryNamesStyle(value: CountryNamesStyle) {
+    this.#countriesStyle = { ...value };
+    this.#countries?.setStyle(this.#countriesStyle);
   }
 
   /**
@@ -1176,6 +1245,10 @@ export class ChikyuSpace extends HTMLElement {
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
     /** The borders: the segments of each set, whether each was drawn at the last draw, the countries whose regions have arrived, how many times a set's lines were made, and whether a set could not be loaded. */
     borders: BorderStats;
+    /** The grid: whether it was drawn at the last draw, whether every 15 degrees (else 30), its segments then, how many times its lines were made, and whether it could not be made. */
+    grid: GridStats;
+    /** The names of countries: whether `country-names` is set and the most it asks for, the countries loaded, the names shown at the last draw, how many times they were laid out, and whether the outlines could not be loaded. */
+    countryNames: CountryNamesStats;
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -1199,6 +1272,8 @@ export class ChikyuSpace extends HTMLElement {
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
+      grid: { ...this.#model.grid.stats },
+      countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
     };
   }
 

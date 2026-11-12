@@ -39,6 +39,8 @@ export interface OverlayHost {
   readonly overlayRoot: HTMLElement;
   readonly pose: OverlayPose | null;
   subscribe(listener: (pose: OverlayPose) => void): () => void;
+  /** Tells the element the boxes an overlay's marks and labels take now (an empty list when it is taken away), so the element's own names keep clear of them. */
+  claim?(owner: object, boxes: readonly { left: number; top: number; width: number; height: number }[]): void;
 }
 
 /**
@@ -372,6 +374,10 @@ export function attachMarkers(element: OverlayElement, options: MarkerOptions = 
       }
     }
     shown = placed.length;
+    const boxes: { left: number; top: number; width: number; height: number }[] = [];
+    for (const p of placed) boxes.push({ left: p.left, top: p.top, width: items[p.item]!.w, height: items[p.item]!.h });
+    for (let k = 0; k < hitX.length; k += 1) boxes.push({ left: hitX[k]! - hitR[k]!, top: hitY[k]! - hitR[k]!, width: hitR[k]! * 2, height: hitR[k]! * 2 });
+    host.claim?.(api, boxes);
     stats.markers = visible.length - groups.reduce((sum, g) => sum + (g.members.length > 1 ? g.members.length : 0), 0);
     stats.clusters = clusters;
     stats.labels = placed.length;
@@ -529,6 +535,7 @@ export function attachMarkers(element: OverlayElement, options: MarkerOptions = 
     stats,
     detach() {
       unsubscribe();
+      host.claim?.(api, []);
       element.removeEventListener("pointermove", onMove);
       element.removeEventListener("pointerleave", onLeave);
       element.removeEventListener("pointerdown", onDown);

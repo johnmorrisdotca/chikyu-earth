@@ -16,3 +16,7 @@ export { CITY_NAMES_DEFAULT, CITY_NAMES_MAX, TIER_RADIUS, cityNameText, cityRank
 export { CITY_NAMES_ATTRIBUTES, type CityNamesStyle } from "../cities/host.ts";
 export { BORDER_ATTRIBUTES, BORDER_REGIONS_RADIUS, codesNear, readBorders, shapeBoxes, sharedEdges, type BorderFeature, type BorderSets, type BorderShapes } from "../borders/lines.ts";
 export type { BorderData, BorderStats } from "../borders/layer.ts";
+export { EARTH_TILT, GRID_ATTRIBUTES, GRID_FINE_RADIUS, gridLines, readGrid, type GridLines } from "../grid/lines.ts";
+export type { GridStats } from "../grid/layer.ts";
+export { COUNTRY_LETTER_SPACING, COUNTRY_NAMES_ATTRIBUTES, COUNTRY_NAMES_DEFAULT, COUNTRY_NAMES_MAX, countryNameBox, countryNameText, countrySpots, layoutCountryNames, readCountryNames, type CountryFrame, type CountryLayoutOptions, type CountryName, type CountrySpots, type NamedShape } from "../country-names/geometry.ts";
+export type { CountryNamesStats, CountryNamesStyle } from "../country-names/host.ts";

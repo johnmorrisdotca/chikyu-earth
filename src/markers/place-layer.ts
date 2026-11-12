@@ -85,6 +85,8 @@ export interface PlaceLayer {
   /** The rings the picture draws for the places that are not markers of their own, as of the last `frame`; null while there are none. */
   readonly sprites: PlaceSpriteData | null;
   readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number };
+  /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
+  readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
   dispose(): void;
 }
 
@@ -114,6 +116,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const names: HTMLElement[] = [];
   const sizes = new Map<string, { width: number; height: number }>();
   const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0 };
+  let boxes: { left: number; top: number; width: number; height: number }[] = [];
   const rings: HTMLElement[] = [];
   const measures: HTMLElement[] = [];
   // the groups of the places for the cell they were made with, and the rings' data the picture reads
@@ -283,6 +286,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       if (!view || (places.length === 0 && satellites.length === 0)) {
         clear();
         if (places.length > 0) stats.renders += 1;
+        boxes = [];
         return;
       }
       stats.renders += 1;
@@ -415,6 +419,9 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         used += 1;
       }
       hideFrom(names, used);
+      boxes = busy.slice(taken.length);
+      for (const spot of placed) boxes.push({ left: spot.left, top: spot.top, width: items[spot.item]!.w, height: items[spot.item]!.h });
+      for (const shape of layout.shapes) boxes.push({ left: shape.tipX - 5, top: shape.tipY - 5, width: 10, height: 10 });
       stats.shown = shown;
       stats.marks = order.length;
       stats.labels = layout.labels.length;
@@ -424,6 +431,9 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       stats.satelliteNames = placed.length;
     },
     stats,
+    get boxes() {
+      return boxes;
+    },
     dispose() {
       watcher?.disconnect();
       fonts?.removeEventListener?.("loadingdone", refit);

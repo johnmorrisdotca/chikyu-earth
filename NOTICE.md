@@ -21,6 +21,10 @@ drawn; the code that finds them is this package's own and MIT. Natural Earth dra
 (de facto), and so do these lines. The regions (provinces, states) are the page's own data, handed over through
 `borderData.regions`, with the page's own licence; this package ships none (2026-11-11).
 
+## The grid and the country names on the 3D Earth
+
+The grid (`grid`, `src/grid/`) is drawn from numbers alone: meridians and parallels every 15 degrees, the tropics and polar circles at the Earth's tilt of 23.4393 degrees (the IAU's obliquity of the ecliptic at J2000, as under "The printable sheets"). The country names on the realistic Earth and the space view (`country-names`, `src/country-names/`) are chizu's `world-geo` names (see "Country names and codes" below), loaded only when asked for; where each name goes is worked out by this package's own code (MIT) from the same Natural Earth outlines (see "Borders"), and no label positions are taken from any other map (2026-11-12).
+
 ## Country names and codes
 
 Each outline's English name, Japanese name and country code come from **chizu**'s `world-geo`, whose names are
