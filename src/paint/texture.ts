@@ -18,8 +18,9 @@ export interface PaintTexture {
 
 /** A texture over `data` (equirectangular, north in the first row). The same uniforms go on the sphere and on any tile laid over it. */
 export function createPaintTexture(three: ThreeParts, data: Uint8Array, width = PAINT_W, height = PAINT_H): PaintTexture {
-  const texture = new three.Texture();
-  texture.image = { data, width, height };
+  const DataTexture = (three as ThreeParts & { DataTexture?: new (data: Uint8Array, width: number, height: number) => THREE.Texture }).DataTexture;
+  const texture = DataTexture ? new DataTexture(data, width, height) : new three.Texture();
+  if (!DataTexture) texture.image = { data, width, height };
   texture.generateMipmaps = false;
   texture.flipY = false;
   texture.magFilter = three.LinearFilter;
