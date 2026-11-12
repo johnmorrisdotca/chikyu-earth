@@ -22,6 +22,14 @@ async function rideSettled(page: Page): Promise<void> {
   await expect.poll(async () => (await stats()).ride.gliding, { timeout: 10_000 }).toBe(false);
 }
 
+/** The lines of text under the picture (the pictures' credit, which names the bodies made now and so differs between two pages, and the air's) are part of a screenshot: take them off before pictures are compared. */
+async function withoutTextLines(page: Page): Promise<void> {
+  await page.locator("chikyu-space").evaluate((el) => {
+    el.setAttribute("bodies-credit", "off");
+    el.setAttribute("air-label", "off");
+  });
+}
+
 async function open(page: Page, query: string, wait: "flat" | "realistic" | "space" | "ride"): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/?${query}`);
@@ -134,6 +142,7 @@ test("behind the Moon: the Moon follows a drag", async ({ page }) => {
 test("the address keeps a ride's turn: it opens as it was left, a drag writes it back, and the picture comes back from it", async ({ page }) => {
   const stateOf = (): Promise<{ yaw: number; tilt: number }> => page.locator(CONTROLS).evaluate((el) => Reflect.get(el, "state") as { yaw: number; tilt: number });
   await open(page, `look=space&${FIXED}&sats=stations&ride=iss&yaw=-21&tilt=-20`, "ride");
+  await withoutTextLines(page);
   const opened = await stateOf();
   expect(opened.yaw, "the address's yaw is kept when the ride starts").toBe(-21);
   expect(opened.tilt, "and its tilt").toBe(-20);
@@ -143,6 +152,7 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
     await other.goto(`/chikyu-earth/?look=space&${FIXED}&sats=stations&ride=iss`);
     await other.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
     await rideSettled(other);
+    await withoutTextLines(other);
     await settle(other, 500);
     const shot = await other.locator(GLOBE).screenshot();
     await other.close();
@@ -169,6 +179,7 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
   await again.goto(url.href);
   await again.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
   await rideSettled(again);
+  await withoutTextLines(again);
   await settle(again, 500);
   const after = await again.locator(GLOBE).screenshot();
   expect(await changedShare(again, before, after), "the address brings the same picture back").toBeLessThan(0.03);
