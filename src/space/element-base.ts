@@ -410,6 +410,7 @@ export class ChikyuSpace extends HTMLElement {
       cap: () => this.#textureCap(),
       air: () => airFor(this.getAttribute("air")),
       invalidate: () => this.#gate?.request(),
+      onBodies: () => this.#showBodiesCredit(),
       onError: (error) => this.#fail(error instanceof Error ? error.message : String(error)),
       onTier: (layer: Layer, width: number) => {
         this.#tiers[layer] = width;
@@ -572,14 +573,25 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /** The body painter's credit under the picture, in the element's or the page's language: shown while the painter draws the bodies (not `plain`), unless `bodies-credit` is `off`. */
+  /** The painter's credit as last told to the page (`chikyu-bodies-credit`): both languages, or empty for none. */
+  #creditKey = "";
   #showBodiesCredit(): void {
     const note = this.#bodiesNote;
     if (!note) return;
     const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
-    const credit = painter?.credit?.[lang] ?? "";
-    note.textContent = credit;
-    note.lang = lang;
-    note.hidden = credit === "" || this.bodies === "plain" || this.getAttribute("bodies-credit") === "off";
+    // read again at each redraw a body asks for (a picture arrived, a window of tiles changed): a painter's credit names the pictures on the screen now. Written only when the text changed, never at every frame.
+    const given = painter?.credit;
+    // a page that writes the credit itself (`bodies-credit="off"`) hears when the painter's credit changed
+    const key = given ? `${given.en}\n${given.ja}` : "";
+    if (key !== this.#creditKey) {
+      this.#creditKey = key;
+      this.dispatchEvent(new CustomEvent("chikyu-bodies-credit", { detail: given ? { en: given.en, ja: given.ja } : null }));
+    }
+    const credit = given?.[lang] ?? "";
+    if (note.textContent !== credit) note.textContent = credit;
+    if (note.lang !== lang) note.lang = lang;
+    const hidden = credit === "" || this.bodies === "plain" || this.getAttribute("bodies-credit") === "off";
+    if (note.hidden !== hidden) note.hidden = hidden;
   }
 
   /**

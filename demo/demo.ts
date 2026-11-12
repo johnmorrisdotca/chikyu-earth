@@ -15,6 +15,7 @@ import type { ChikyuEarth } from "../src/element.ts";
 import type { ChikyuEarthRealistic } from "../src/realistic/element.ts";
 import { WORDS } from "./words.js";
 import type { BodyInfo, BodyName, ChikyuSpace, SpacePreset } from "../src/space/element.ts";
+import type { BodyPainter } from "../src/space/index.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 import { catalogueEntry, findInCatalogue, SATELLITE_GROUPS, type SatelliteGroupInfo } from "../src/satellites/catalogue.ts";
@@ -714,7 +715,8 @@ if (flat && controls && stage) {
     // the Sun, the planets, Pluto and their moons are wakusei-planets' (an optional peer): the real ones, or plain spheres where it is not there
     if (!planetsTried) {
       planetsTried = true;
-      const planets = await planetPainter();
+      // a browser test may hand the page a painter of its own (`window.__bodyPainter`) to watch how the view reads the painter's credit
+      const planets = (Reflect.get(window, "__bodyPainter") as BodyPainter | undefined) ?? (await planetPainter());
       if (planets) setBodyPainter(planets);
       planetsHere = planets !== null;
     }
