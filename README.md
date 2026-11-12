@@ -547,6 +547,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../realistic`, `.../realistic/element` | The Earth from space; `three` for the element. |
 | `.../markers` | `attachMarkers` and the pure projection, clusters and labels. |
 | `.../space`, `.../space/element` | The Sun, the Moon and the planets; `astronomy-engine` and `three`. |
+| `.../space/no-cultures`, `.../realistic/no-cultures` | The same two elements with no sky culture but the IAU's: nothing under `hoshi-stars/cultures` is in the build ([guide](docs/guides/sky-names.md)). |
 | `.../satellites` | SGP4 for a group of satellites; `satellite.js`. |
 | `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
 | `.../door` | The data door: sources of your own maps and orbit data with their licence and credit, `creditLine`, the package's own sources. No DOM, no dependency. |

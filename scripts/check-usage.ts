@@ -405,6 +405,21 @@ await step("earth-only", async () => {
   }
 });
 
+await step("no-cultures", async () => {
+  // The entries without sky cultures bundle with every `hoshi-stars/cultures/*` import refused, so nothing of the Chinese, Japanese or Western sky is in a build that uses them; the default entries do import all three (the control: the refusal would be vacuous otherwise).
+  const external = ["three", "astronomy-engine", "satellite.js", "@johnmorrisdotca/kazoku-ui", "@johnmorrisdotca/kazoku-ui/*", "three/*", "@johnmorrisdotca/hoshi-stars", "@johnmorrisdotca/hoshi-stars/*"];
+  for (const [entry, bare] of [["space/no-cultures.js", "space/element.js"], ["realistic/no-cultures.js", "realistic/element.js"]] as const) {
+    const refused: string[] = [];
+    const refuse = { name: "no-cultures", setup: (build: import("esbuild").PluginBuild) => build.onResolve({ filter: /hoshi-stars\/cultures\// }, (args) => (refused.push(args.path), { errors: [{ text: `${args.importer} imports ${args.path}` }] })) };
+    await esbuild({ entryPoints: [modules(entry)], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [refuse], external });
+    if (refused.length > 0) throw new Error(`${entry} imports ${refused.join(", ")}`);
+    const seen: string[] = [];
+    const watch = { name: "watch-cultures", setup: (build: import("esbuild").PluginBuild) => build.onResolve({ filter: /hoshi-stars\/cultures\// }, (args) => (seen.push(args.path), { path: args.path, external: true })) };
+    await esbuild({ entryPoints: [modules(bare)], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [watch], external });
+    if (new Set(seen).size !== 3) throw new Error(`${bare} should import the three cultures, it imports ${[...new Set(seen)].join(", ") || "none"}`);
+  }
+});
+
 await step("react-ssr", async () => {
   const script = join(usage, "ssr-react.tsx");
   writeFileSync(script, `import { renderToString } from "react-dom/server";\nimport { ChikyuEarth } from "./examples/react/ChikyuEarth";\nconst html = renderToString(<ChikyuEarth />);\nif (!html.includes("<chikyu-earth")) throw new Error("no element in " + html);\nconsole.log(html);\n`);

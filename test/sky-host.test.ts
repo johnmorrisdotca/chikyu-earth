@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SkyFrame } from "../src/sky/frame.ts";
 import { pathOutside, touches } from "../src/sky/cover.ts";
+import "../src/sky/cultures.ts";
+import { setCultureLoaders } from "../src/sky/culture-source.ts";
 import { createSkyHost } from "../src/sky/host.ts";
 import { inKeep, keepBox, touchesKeep } from "../src/sky/keep-clear.ts";
 
@@ -319,4 +321,31 @@ test("C and Shift+C pick the next and the previous figure and send chikyu-sky-pi
   press("x");
   assert.equal(picks().length, 3, "another key sends nothing");
   host.dispose();
+});
+
+test("in a build without cultures a culture a page asks for is the IAU's, with one warning that names only the IAU", async () => {
+  measure = undefined;
+  made = 0;
+  const warnings: string[] = [];
+  const warn = console.warn;
+  console.warn = (message: unknown) => warnings.push(String(message));
+  setCultureLoaders({});
+  try {
+    const host = createSkyHost({ root, attribute: (name) => (name === "constellation-lines" ? "0.3" : name === "constellation-culture" ? "japanese" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+    host.frame({ ...frame, discs: [] });
+    await wait(100);
+    host.refresh();
+    await wait(50);
+    assert.equal(host.stats.culture, "iau");
+    assert.equal(warnings.length, 1, `one warning: ${warnings.join(" | ")}`);
+    assert.match(warnings[0]!, /not a sky culture here \(iau\)/);
+    host.dispose();
+  } finally {
+    console.warn = warn;
+    setCultureLoaders({
+      western: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/western")).western,
+      japanese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/japanese")).japanese,
+      chinese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/chinese")).chinese,
+    });
+  }
 });

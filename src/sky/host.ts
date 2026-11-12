@@ -4,6 +4,7 @@ import type { Culture } from "@johnmorrisdotca/hoshi-stars/culture";
 import type { CoverMask, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
 import { boxCovered, pathOutside, touches } from "./cover.ts";
+import { cultureLoaders } from "./culture-source.ts";
 import { createCultureLines, type CultureFigureLines, type Lines } from "./culture-lines.ts";
 import { areaInHull, hullOf, nearestSegment, placeBox, visibleCentre } from "./figure-pick.ts";
 import { inKeep, keepBox, touchesKeep, type KeepBox, type SkyKeepClear } from "./keep-clear.ts";
@@ -64,14 +65,6 @@ interface FigureInfo {
   names?: Readonly<Partial<Record<string, string>>>;
   reading?: string;
 }
-/**
- * The sky cultures besides the IAU's, each loaded by a dynamic import of its own, only when a page asks for it: a page that never sets `chinese` never downloads it. (The imports are written out, one for each, so that a bundler makes a file of each.)
- */
-const CULTURES: Readonly<Record<string, () => Promise<Culture>>> = {
-  western: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/western")).western,
-  japanese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/japanese")).japanese,
-  chinese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/chinese")).chinese,
-};
 const warnedCultures = new Set<string>();
 const NAME_POOL = 40;
 /** What other layers of the element draw as labels over the sky (bodies, satellites, places, cities): a constellation's name keeps off them. */
@@ -827,17 +820,17 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     const raw = options.attribute("constellation-culture");
     const id = raw === null || raw.trim() === "" ? "iau" : raw.trim().toLowerCase();
     if (id === "iau") return id;
-    if (Object.hasOwn(CULTURES, id) && !cultureFailed.has(id)) return id;
+    if (Object.hasOwn(cultureLoaders(), id) && !cultureFailed.has(id)) return id;
     if (!warnedCultures.has(id)) {
       warnedCultures.add(id);
-      console.warn(`chikyu-earth: constellation-culture="${id}" is not a sky culture here (iau, ${Object.keys(CULTURES).join(", ")}): the IAU's constellations are used.`);
+      console.warn(`chikyu-earth: constellation-culture="${id}" is not a sky culture here (${["iau", ...Object.keys(cultureLoaders())].join(", ")}): the IAU's constellations are used.`);
     }
     return "iau";
   };
   const requestCulture = (id: string): void => {
     if (cultureLoading.has(id)) return;
     cultureLoading.add(id);
-    void Promise.all([(options.cultures ?? ((name: string) => CULTURES[name]!()))(id), import("@johnmorrisdotca/hoshi-stars/lines")])
+    void Promise.all([(options.cultures ?? ((name: string) => cultureLoaders()[name]!()))(id), import("@johnmorrisdotca/hoshi-stars/lines")])
       .then(([loaded, library]) => {
         const info = new Map<string, FigureInfo>();
         const figures: CultureFigureLines[] = [];
