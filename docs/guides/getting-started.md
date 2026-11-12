@@ -26,7 +26,7 @@ Save this as `globe.html` and open it. The `<chikyu-earth>` tag is the globe; th
 </html>
 ```
 
-The globe is an SVG drawn from Natural Earth country outlines. It is centred where you tell it: the `center` attribute is `"longitude,latitude"`. Leave `center` out and the page asks the browser where the reader is, and centres there; until the reader answers, and if they decline, it starts on the Greenwich meridian.
+The globe is an SVG drawn from Natural Earth country outlines. It is centred where you tell it: the `center` attribute is `"longitude,latitude"`. Leave `center` out and it opens on 0,0, the Greenwich meridian on the equator. The globe never asks the browser where the reader is: a page that wants the reader's place asks for it itself, on a press, and sets `center` (see [You are here, and places on the Earth](places.md)); the iframe embed's `center=me` asks once.
 
 `look` is `line` (thin outlines, the default) or `thick`. `graticule` adds the lines of longitude and latitude. `size` is the width and height in pixels.
 

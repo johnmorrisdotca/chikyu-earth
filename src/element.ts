@@ -56,7 +56,7 @@ export class ChikyuEarth extends HTMLElement {
     return this.#hands?.controller;
   }
 
-  /** Where the view is centred now: the `center` attribute, else the reader's place once the browser has answered. */
+  /** Where the view is centred now: the `center` attribute, else 0,0. The element never asks the browser where the reader is. */
   get centre(): GeoPoint {
     return { ...this.#centre };
   }

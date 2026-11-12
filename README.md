@@ -41,7 +41,7 @@ Chikyu Earth works on a phone or a tablet as well as on a computer, in the brows
 ## Features
 
 - A line-drawn globe as one SVG: country outlines on an orthographic disc, in two looks (`line`, `thick`), with an optional graticule.
-- It opens centred on where the reader is, or where you say. Auto-turn runs at the Earth's own rate: one sidereal day a turn, and the family's speed buttons (0.5×, 1×, 2×) are multiples of it.
+- It opens centred where you say, or on 0,0 when you say nothing; it never asks the browser where the reader is. Auto-turn runs at the Earth's own rate: one sidereal day a turn, and the family's speed buttons (0.5×, 1×, 2×) are multiples of it.
 - The Earth from space (`/realistic`): day and night by the real Sun, city lights, sun glint, clouds and the atmosphere, drawn with three.js through one shared WebGL context.
 - The Sun, the Moon and the planets where they are on a date and time (`/space`), and satellites at the places SGP4 puts them (`/satellites`), with a camera that rides along.
 - When you can see the ISS (`/passes`): the next passes of the ISS, Tiangong and Hubble over any place, with direction, height, brightness and whether the satellite is lit while the sky is dark, a sky dome that draws each, and `<chikyu-passes>`.
@@ -77,7 +77,7 @@ One script tag from [jsDelivr](https://www.jsdelivr.com/package/npm/@johnmorrisd
 </html>
 ```
 
-The globe appears centred where you say; with no `center` it centres on the reader (the browser asks for their location; until they answer, and if they decline, it starts on the Greenwich meridian). `look` is `line` or `thick`. It also zooms and turns: drag, pinch, Ctrl and the wheel, the arrow keys (`controls="none"` takes that off).
+The globe appears centred where you say; with no `center` it opens on 0,0, the Greenwich meridian on the equator. The globe never asks the browser where the reader is: a page that wants the reader's place asks for it itself, on a press, and sets `center`. `look` is `line` or `thick`. It also zooms and turns: drag, pinch, Ctrl and the wheel, the arrow keys (`controls="none"` takes that off).
 
 ### With the shared controls
 

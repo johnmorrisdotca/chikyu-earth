@@ -2,7 +2,7 @@
 title: Troubleshooting and questions
 section: troubleshooting
 order: 11
-description: Why nothing appears, why the browser asks for the location, and the errors people meet in frameworks and on servers.
+description: Why nothing appears, what to do when the browser asks for the location or the globe does not open on the reader, and the errors people meet in frameworks and on servers.
 ---
 
 ## Nothing appears
@@ -12,9 +12,9 @@ description: Why nothing appears, why the browser asks for the location, and the
 - **The script is not a module.** Use `<script type="module">`.
 - **The console says the tag is not defined.** The import has not run, or a framework removed an unknown tag before the element was registered: see [frameworks](frameworks.md).
 
-## The browser asks to know my location
+## The browser asks to know my location, or the globe does not open on me
 
-With no `center`, the element centres on the reader, so the browser asks. Set `center="lon,lat"` and it never asks. The iframe embed never asks unless you write `center=me`.
+The globe never asks the browser where the reader is. With no `center`, it opens on 0,0. If a prompt appears, the page asked for it, or the iframe embed was given `center=me`, which asks once. To open on the reader, have the page ask on a press and set `center="lon,lat"` from the answer (see [You are here, and places on the Earth](places.md)).
 
 ## "HTMLElement is not defined", or a server render fails
 
