@@ -103,6 +103,8 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
   const pool: HTMLElement[] = [];
   let max = readCountryNames(options.attribute("country-names"));
   let usedLang: "en" | "ja" | undefined;
+  // set by `dispose`: an outline load that finishes after it is ignored, so it makes no box and tells no one
+  let disposed = false;
 
   const attach = (): void => {
     if (box) return;
@@ -165,10 +167,12 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
     }
     loading.then(
       (shapes) => {
+        if (disposed) return;
         spots = countrySpots(shapes);
         compute();
       },
       (error: unknown) => {
+        if (disposed) return;
         failed = true;
         options.onError(error);
       },
@@ -260,6 +264,7 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
       return { on: max !== null, max: max ?? 0, countries: spots?.countries.length ?? 0, names: shown.length, renders, failed };
     },
     dispose() {
+      disposed = true;
       doc.removeEventListener("kazoku-languagechange", onLanguage);
       doc.fonts?.removeEventListener?.("loadingdone", onFonts);
       box?.remove();

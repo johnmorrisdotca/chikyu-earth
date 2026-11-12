@@ -382,6 +382,7 @@ export class ChikyuSpace extends HTMLElement {
       onSky: (sky) => this.#sky?.frame(sky),
       onPlaces: (view) => this.#drawPlaces(view),
       placeSprites: () => this.#placeLayer?.sprites ?? null,
+      onCities: (frame) => this.#nameFrame(frame),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onSatelliteMarks: (marks) => this.#showMarks(marks),
       onSelected: (place) => this.#placeChosen(place),

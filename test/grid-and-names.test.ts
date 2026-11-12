@@ -205,3 +205,32 @@ test("the layer: nothing loaded or added until asked for, and when the outlines 
   assert.equal(added.length, 0, "nothing shown");
   host.dispose();
 });
+
+test("the layer: an outline load that finishes after dispose is ignored, whether it arrives or fails", async () => {
+  const { createCountryHost } = await import("../src/country-names/host.ts");
+  for (const outcome of ["arrives", "fails"] as const) {
+    const added: unknown[] = [];
+    const style = { setProperty() {}, removeProperty() {} };
+    const doc = { addEventListener() {}, removeEventListener() {}, createElement: () => ({ style, setAttribute() {}, remove() {} }) };
+    const root = { ownerDocument: doc, host: null, getElementById: () => null, append: (...nodes: unknown[]) => added.push(...nodes), insertBefore: (node: unknown) => added.push(node) } as unknown as ShadowRoot;
+    const errors: unknown[] = [];
+    let settle: () => void = () => {};
+    const host = createCountryHost({
+      root,
+      attribute: () => "",
+      language: () => "en",
+      onError: (error) => errors.push(error),
+      load: () =>
+        new Promise((resolve, reject) => {
+          settle = outcome === "arrives" ? () => resolve({ features: [] }) : () => reject(new Error("late"));
+        }),
+    });
+    host.frame({ width: 400, height: 400, radius: 180, project: () => 1 });
+    host.dispose();
+    settle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(added.length, 0, `${outcome}: no box is made after dispose`);
+    assert.equal(errors.length, 0, `${outcome}: nobody is told after dispose`);
+    assert.deepEqual(host.stats, { on: true, max: 40, countries: 0, names: 0, renders: 0, failed: false }, `${outcome}: nothing changed`);
+  }
+});
