@@ -20,7 +20,7 @@ export async function planetPainter(): Promise<BodyPainter | null> {
     const { createPainter } = await import("@johnmorrisdotca/wakusei-planets/painter");
     const painter = createPainter({ textureBase: "planets/", tiles: PLANET_TILES }) as unknown as BodyPainter;
     // The demo serves wakusei-planets' npm pictures, which stop at 1024 wide; asking for 2048 got a 404 for each big body (the finer tiles cover a body that is big in the view).
-    const make: BodyPainter["make"] = (three, name, context) => painter.make(three, name, { ...context, maxTexture: Math.min(context.maxTexture ?? DEMO_MAX_TEXTURE, DEMO_MAX_TEXTURE) });
+    const make: BodyPainter["make"] = (three, name, context = { look: "", invalidate: () => undefined, ratio: 1, maxTexture: DEMO_MAX_TEXTURE }) => painter.make(three, name, { ...context, maxTexture: Math.min(context.maxTexture, DEMO_MAX_TEXTURE) });
     return { ...painter, make, credit: PLANET_CREDIT };
   } catch {
     return null;
