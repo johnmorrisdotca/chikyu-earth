@@ -355,3 +355,48 @@ test("painting the ISS at an hour a second grows the trail, rest stops it, and C
   await expect.poll(() => paintPixels(page), { timeout: 20_000 }).toBeGreaterThan(0);
   expect(moving).toBeGreaterThan(filled);
 });
+
+test("a view that paints nothing holds no picture of the trail: the first paint makes it, rest sends nothing, and Clear gives it back (MODULES-1188)", async ({ page }) => {
+  // the pictures sent to the graphics card at the trail's size (1024 by 512), counted in the page
+  await page.addInitScript(() => {
+    const seen = window as unknown as { __paintUploads: number };
+    seen.__paintUploads = 0;
+    for (const Context of [WebGL2RenderingContext, WebGLRenderingContext]) {
+      const proto = Context.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
+      for (const name of ["texImage2D", "texSubImage2D"]) {
+        const original = proto[name]!;
+        proto[name] = function (this: unknown, ...args: unknown[]) {
+          if (args.some((value, i) => value === 1024 && args[i + 1] === 512)) seen.__paintUploads += 1;
+          return original.apply(this, args);
+        };
+      }
+    }
+  });
+  const sent = (): Promise<number> => page.evaluate(() => (window as unknown as { __paintUploads: number }).__paintUploads);
+  await open(page, "", "stations");
+  await settle(page, 1000);
+  expect(await sent(), "no trail picture is sent by a view that paints nothing").toBe(0);
+  const base = alive(await counts(page), "Texture");
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "paint", { id: "25544", length: "1d" }));
+  await expect.poll(() => paintPixels(page), { timeout: 20_000 }).toBeGreaterThan(10);
+  await settle(page, 1000);
+  expect(await sent(), "the picture is made and sent when the first satellite is painted").toBeGreaterThan(0);
+  expect(alive(await counts(page), "Texture")).toBe(base + 1);
+  const rest = await sent();
+  await page.waitForTimeout(2500);
+  expect(await sent(), "nothing is sent at rest").toBe(rest);
+  await setSpeed(page, 3600);
+  await settle(page, 1000);
+  const run0 = { draws: (await statsOf(page)).draws, sent: await sent() };
+  await page.waitForTimeout(3000);
+  const run1 = { draws: (await statsOf(page)).draws, sent: await sent() };
+  expect(run1.sent - run0.sent, "at most one picture a frame while time runs").toBeLessThanOrEqual(run1.draws - run0.draws + 1);
+  await setSpeed(page, 0);
+  await settle(page, 1500);
+  const stopped = await sent();
+  await page.waitForTimeout(2000);
+  expect(await sent(), "nothing is sent once time stops").toBe(stopped);
+  await page.locator(SPACE).evaluate((el) => (el as unknown as { clearPaint(): void }).clearPaint());
+  await settle(page, 1500);
+  expect(alive(await counts(page), "Texture"), "Clear gives the picture back").toBe(base);
+});

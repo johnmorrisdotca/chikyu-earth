@@ -43,8 +43,9 @@ export interface PaintState {
   /**
    * Stamp the ground crossed since the last call. `sample` is the satellite at a moment, or null when it cannot be placed.
    * Returns true when `data` changed and the picture should upload it. At rest, or with painting off, it returns false.
+   * `periodMs` is one trip of the satellite round the Earth: samples are taken often enough that the line between two follows the orbit, however fast the clock. A clock run backwards lays down the older end of the length that it uncovers.
    */
-  step(ms: number, sample: (ms: number) => (LonLat & { heightKm: number }) | null): boolean;
+  step(ms: number, sample: (ms: number) => (LonLat & { heightKm: number }) | null, periodMs?: number): boolean;
 }
 
 const write = (data: Uint8Array, x: number, y: number, minute: number): boolean => {
@@ -99,64 +100,116 @@ const stampLine = (data: Uint8Array, a: LonLat, b: LonLat, minute: number): numb
   return added;
 };
 
-const angular = (a: LonLat, b: LonLat): number => {
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
-  const dLat = lat2 - lat1;
-  const dLon = (b.lon - a.lon) * Math.PI / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
-};
+const RAD = Math.PI / 180;
 
+/** Every pixel within `theta` radians of `point`, row by row: each row's half-width in longitude is worked out, and a cap over the date line wraps to the other edge. */
 const stampCap = (data: Uint8Array, point: LonLat, theta: number, minute: number): number => {
   if (!(theta > 0)) return stampDot(data, point, minute, 1);
-  const deg = theta * 180 / Math.PI;
-  const cosLat = Math.max(0.15, Math.cos(point.lat * Math.PI / 180));
-  const dLon = Math.min(180, deg / cosLat);
-  const pole = Math.abs(point.lat) + deg >= 90;
-  const west = pole ? -180 : point.lon - dLon;
-  const east = pole ? 180 : point.lon + dLon;
-  const south = Math.max(-90, point.lat - deg);
-  const north = Math.min(90, point.lat + deg);
-  const a = paintPixel(west, north);
-  const b = paintPixel(east, south);
+  const deg = theta / RAD;
+  const sin1 = Math.sin(point.lat * RAD);
+  const cos1 = Math.cos(point.lat * RAD);
+  const cosTheta = Math.cos(theta);
+  const y0 = paintPixel(0, Math.min(90, point.lat + deg)).y;
+  const y1 = paintPixel(0, Math.max(-90, point.lat - deg)).y;
   let added = 0;
-  const x0 = pole ? 0 : Math.max(0, Math.min(a.x, b.x));
-  const x1 = pole ? PAINT_W - 1 : Math.min(PAINT_W - 1, Math.max(a.x, b.x));
-  const y0 = Math.max(0, Math.min(a.y, b.y));
-  const y1 = Math.min(PAINT_H - 1, Math.max(a.y, b.y));
   for (let y = y0; y <= y1; y += 1) {
-    const lat = 90 - (y + 0.5) / PAINT_H * 180;
-    for (let x = x0; x <= x1; x += 1) {
-      let lon = (x + 0.5) / PAINT_W * 360 - 180;
-      if (!pole && west < -180) lon = lon > 0 ? lon - 360 : lon;
-      if (angular(point, { lon, lat }) <= theta && write(data, x, y, minute)) added += 1;
+    const lat = (90 - ((y + 0.5) / PAINT_H) * 180) * RAD;
+    const denominator = cos1 * Math.cos(lat);
+    const need = cosTheta - sin1 * Math.sin(lat);
+    let half: number;
+    if (denominator < 1e-9) {
+      if (need > 0) continue;
+      half = 180;
+    } else {
+      const ratio = need / denominator;
+      if (ratio > 1) continue;
+      half = ratio <= -1 ? 180 : Math.acos(ratio) / RAD;
+    }
+    const first = Math.floor(((point.lon - half + 180) / 360) * PAINT_W);
+    const last = Math.floor(((point.lon + half + 180) / 360) * PAINT_W);
+    if (last - first >= PAINT_W - 1) {
+      for (let x = 0; x < PAINT_W; x += 1) if (write(data, x, y, minute)) added += 1;
+    } else {
+      for (let x = first; x <= last; x += 1) if (write(data, ((x % PAINT_W) + PAINT_W) % PAINT_W, y, minute)) added += 1;
     }
   }
   return added;
 };
 
 const stampGround = (data: Uint8Array, swath: PaintSwath, ground: LonLat & { heightKm: number }, previous: LonLat | null, minute: number): { added: number; at: LonLat } => {
-  if (swath === "coverage") return { added: stampCap(data, ground, coverageAngleRad(ground.heightKm), minute), at: ground };
-  if (!previous) return { added: stampDot(data, ground, minute, 1), at: ground };
+  const theta = swath === "coverage" ? coverageAngleRad(ground.heightKm) : 0;
+  if (swath === "coverage" && previous === null) return { added: stampCap(data, ground, theta, minute), at: ground };
+  if (swath === "track" && previous === null) return { added: stampDot(data, ground, minute, 1), at: ground };
+  // a line is made of steps 0.4 of a degree long; a swath of caps that overlap, a step of about seven tenths of the cap's radius
+  const points = trackSteps(previous!, ground, swath === "coverage" ? Math.max(1, (theta / RAD) * 0.7) : 0.4);
   let added = 0;
-  let cursor = previous;
-  for (const point of trackSteps(previous, ground, 0.4)) {
-    for (const [from, to] of splitDateLine(cursor, point)) added += stampLine(data, from, to, minute);
+  let cursor: LonLat = previous!;
+  for (const point of points) {
+    if (swath === "coverage") added += stampCap(data, point, theta, minute);
+    else for (const [from, to] of splitDateLine(cursor, point)) added += stampLine(data, from, to, minute);
     cursor = point;
   }
   return { added, at: cursor };
 };
 
+/** A stamp's age in minutes, from the 16 bits it holds. */
+const ageOf = (then: number, now: number): number => {
+  let age = now - then;
+  if (age < -32768) age += 65536;
+  if (age > 32767) age -= 65536;
+  return age;
+};
+
+/** The longest gap between two samples that a line may leap: a twentieth of a trip, and between 30 seconds and four minutes. The samples are never more than a third of a trip apart, however many that takes. */
+const MAX_GAP = 240_000;
+const MIN_GAP = 30_000;
+const FRAME_SAMPLES = 600;
+const REBUILD_SAMPLES = { track: 4000, coverage: 1500 };
+const gapOf = (periodMs: number | undefined): number => (periodMs !== undefined && periodMs > 0 ? Math.max(MIN_GAP, Math.min(MAX_GAP, periodMs / 20)) : 20_000);
+
 export function createPaintState(): PaintState {
-  const data = new Uint8Array(PAINT_W * PAINT_H * 4);
+  // the two megabytes are taken when the first satellite is painted and given back by `clear`, not made with the view
+  let buffer: Uint8Array | null = null;
+  const grab = (): Uint8Array => (buffer ??= new Uint8Array(PAINT_W * PAINT_H * 4));
   let spec: { id: string; length: PaintLength; swath: PaintSwath } | null = null;
   let pixels = 0;
   let lastMs = Number.NaN;
+  /** The last point stamped and the way the clock was going then, so a line carries on from it. */
   let previous: LonLat | null = null;
-  let uploadClear = false;
+  let heading = 0;
+  /** The buffer was emptied since the last step: the picture must be sent even if nothing new was stamped. */
+  let stale = false;
+  const reset = (): void => {
+    buffer?.fill(0);
+    pixels = 0;
+    lastMs = Number.NaN;
+    previous = null;
+    heading = 0;
+    stale = true;
+  };
+  /** Take out what has fallen out of the length (or is later than the clock now says). */
+  const dropOld = (data: Uint8Array, now: number, span: number): boolean => {
+    let dropped = false;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] === 0) continue;
+      const then = ((data[i] ?? 0) << 8) | (data[i + 1] ?? 0);
+      const age = ageOf(then, now);
+      // a minute of slack at each end, for the rounding of the stamp's minute
+      if (age > span + 1 || age < -1) {
+        data[i] = 0;
+        data[i + 1] = 0;
+        data[i + 2] = 0;
+        data[i + 3] = 0;
+        pixels -= 1;
+        dropped = true;
+      }
+    }
+    return dropped;
+  };
   const self = {
-    data,
+    get data() {
+      return grab();
+    },
     width: PAINT_W,
     height: PAINT_H,
     get pixels() {
@@ -186,49 +239,66 @@ export function createPaintState(): PaintState {
       const length = paintLengthOf(next.length);
       const swath = paintSwathOf(next.swath);
       if (spec && spec.id === id && spec.length === length && spec.swath === swath) return;
-      data.fill(0);
-      pixels = 0;
-      lastMs = Number.NaN;
-      previous = null;
+      reset();
       spec = { id, length, swath };
     },
     clear() {
-      data.fill(0);
-      pixels = 0;
-      lastMs = Number.NaN;
-      previous = null;
+      reset();
       spec = null;
-      uploadClear = true;
+      buffer = null;
     },
-    step(ms: number, sample: (ms: number) => (LonLat & { heightKm: number }) | null) {
+    step(ms: number, sample: (ms: number) => (LonLat & { heightKm: number }) | null, periodMs?: number) {
       if (!spec) {
-        const upload = uploadClear;
-        uploadClear = false;
+        const upload = stale;
+        stale = false;
         return upload;
       }
       if (!Number.isFinite(ms)) return false;
-      if (Number.isFinite(lastMs) && ms === lastMs) return false;
+      if (Number.isFinite(lastMs) && ms === lastMs) {
+        const upload = stale;
+        stale = false;
+        return upload;
+      }
+      const data = grab();
       const length = LENGTH_MS[spec.length];
-      let dirty = false;
-      const put = (at: number): void => {
-        const ground = sample(at);
-        if (!ground) return;
-        const stamped = stampGround(data, spec!.swath, ground, previous, paintMinute(at));
-        pixels += stamped.added;
-        previous = stamped.at;
-        dirty = true;
+      const gap = gapOf(periodMs);
+      let dirty = stale;
+      stale = false;
+      /** Stamp the satellite's place at each of `times`, one line from the one before. */
+      const lay = (times: number[], way: number): void => {
+        if (way !== heading) previous = null;
+        heading = way;
+        for (const at of times) {
+          const ground = sample(at);
+          if (!ground) {
+            previous = null;
+            continue;
+          }
+          const stamped = stampGround(data, spec!.swath, ground, previous, paintMinute(at));
+          pixels += stamped.added;
+          previous = stamped.at;
+          dirty = true;
+        }
+      };
+      const between = (from: number, to: number, cap: number): number[] => {
+        const span = Math.abs(to - from);
+        const count = Math.max(Math.min(cap, Math.max(1, Math.ceil(span / gap))), periodMs === undefined ? 1 : Math.ceil(span / (periodMs / 3)));
+        return Array.from({ length: count + 1 }, (_, i) => from + ((to - from) * i) / count);
       };
       if (!Number.isFinite(lastMs) || Math.abs(ms - lastMs) > length) {
+        // the first moment, or a jump: the whole length is laid down again, oldest first
         data.fill(0);
         pixels = 0;
         previous = null;
-        const steps = Math.min(240, Math.max(1, Math.ceil(length / 60_000)));
-        for (let i = steps; i >= 0; i -= 1) put(ms - (length * i) / steps);
+        heading = 1;
+        lay(between(ms - length, ms, REBUILD_SAMPLES[spec.swath]), 1);
+      } else if (ms > lastMs) {
+        lay(between(lastMs, ms, FRAME_SAMPLES), 1);
       } else {
-        const span = ms - lastMs;
-        const steps = Math.min(96, Math.max(1, Math.ceil(Math.abs(span) / 20_000)));
-        for (let i = 1; i <= steps; i += 1) put(lastMs + (span * i) / steps);
+        // backwards: the newer end falls away below, and the older end, which the clock has just uncovered, is laid down
+        lay(between(lastMs - length, ms - length, FRAME_SAMPLES), -1);
       }
+      if (dropOld(data, paintMinute(ms), length / MINUTE)) dirty = true;
       lastMs = ms;
       return dirty;
     },
@@ -261,4 +331,11 @@ export function paintedGround(groups: Iterable<[string, { satellites: Satellites
   const found = findPainted(groups, id);
   if (!found || !found.satellites.exact(found.index, ms, scratch)) return null;
   return groundUnder(scratch[0]!, scratch[1]!, scratch[2]!, ms);
+}
+
+/** One trip of the painted satellite round the Earth, in milliseconds, from its mean motion; undefined when it is not found. */
+export function paintedPeriod(groups: Iterable<[string, { satellites: Satellites }]>, id: string): number | undefined {
+  const found = findPainted(groups, id);
+  const motion = found?.satellites.sets[found.index]?.MEAN_MOTION;
+  return motion !== undefined && motion > 0 ? DAY / motion : undefined;
 }

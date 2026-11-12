@@ -10,7 +10,7 @@ import { IMMERSIVE_STYLE, immersiveWheel } from "./immersive.ts";
 import { NOTES_STYLE, setAirNote } from "./air-note.ts";
 import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, newModel, type EarthModel, type LightMode, type ThreeParts } from "./earth.ts";
 
-import { createPaintState, paintedGround, type PaintSpec } from "../paint/buffer.ts";
+import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
@@ -364,10 +364,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       onPlaceRings: (drawn) => this.#ringsDrawn(drawn),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       paint: {
-        data: this.#paint.data,
+        data: () => this.#paint.data,
         width: this.#paint.width,
         height: this.#paint.height,
-        step: (ms) => this.#paint.step(ms, (at) => paintedGround(this.#model.satellites.groups, this.#paint.id, at)),
+        step: (ms) => this.#paint.step(ms, (at) => paintedGround(this.#model.satellites.groups, this.#paint.id, at), paintedPeriod(this.#model.satellites.groups, this.#paint.id)),
         span: () => this.#paint.spanMinutes,
         on: () => this.#paint.on,
       },
