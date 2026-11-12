@@ -12,8 +12,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       '@johnmorrisdotca/kazoku-ui':
-        specifier: ^0.38.1
-        version: 0.38.1(three@0.186.1)
+        specifier: ^0.41.0
+        version: 0.41.0(three@0.186.1)
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1
@@ -420,8 +420,8 @@ packages:
       three:
         optional: true
 
-  '@johnmorrisdotca/kazoku-ui@0.38.1':
-    resolution: {integrity: sha512-ruxpr6F9+BRnJsf9YZlqAeO5UcUS5edC39olyGffO8M4r0Xpah4eLwY5mWXyhDiLbZAWftrGVg37B5URAeW/Qw==}
+  '@johnmorrisdotca/kazoku-ui@0.41.0':
+    resolution: {integrity: sha512-Zp/iTun5jgsXMPAJ9qCoIpr6Oc6O/kBSwAeEw4MdNRwwmALHtAwAuALXewecxhQ2j5HUEXamu5HKTA8OFOz+HA==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -1880,7 +1880,7 @@ snapshots:
     optionalDependencies:
       three: 0.186.1
 
-  '@johnmorrisdotca/kazoku-ui@0.38.1(three@0.186.1)':
+  '@johnmorrisdotca/kazoku-ui@0.41.0(three@0.186.1)':
     optionalDependencies:
       three: 0.186.1
 
