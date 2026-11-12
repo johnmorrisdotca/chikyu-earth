@@ -107,6 +107,26 @@ test("a satellite that goes behind the Earth is not ringed, and the page is told
   expect((await names(page)).length === before, "a different view, a different set of names").toBe(false);
 });
 
+test("a font that finishes loading does not tell the page again about satellites already in view", async ({ page }) => {
+  await open(page);
+  await labelOn(page);
+  await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
+  const view = { yaw: 0, tilt: 0, zoom: 1, panX: 0, panY: 0 };
+  const draw = async (): Promise<void> => {
+    const before = await placesStats(page);
+    await page.locator(SPACE).evaluate((el, v) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView(v, true), view);
+    await expect.poll(async () => (await placesStats(page)).renders, { timeout: 10_000 }).toBeGreaterThan(before.renders);
+  };
+  await draw();
+  await page.locator(SPACE).evaluate((el) => {
+    Reflect.set(window, "__seen", [] as unknown[]);
+    el.addEventListener("chikyu-satellite-visibility", (event) => (Reflect.get(window, "__seen") as unknown[]).push((event as CustomEvent).detail));
+  });
+  await page.evaluate(() => document.fonts?.dispatchEvent(new Event("loadingdone")));
+  await draw();
+  expect(await page.evaluate(() => Reflect.get(window, "__seen")), "satellites already announced as in view are not announced again").toEqual([]);
+});
+
 test("nothing is drawn at rest: the places layer is not drawn again while the view and the clock hold", async ({ page }) => {
   await open(page);
   await labelOn(page);

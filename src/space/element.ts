@@ -266,10 +266,8 @@ export class ChikyuSpace extends HTMLElement {
   #placeLayer: PlaceLayer | undefined;
   #placeList: Place[] = [];
   #nameBoxes = new Map<string, { width: number; height: number }>();
-  /** A font that arrives after the names were measured: the boxes are read again on the next layout. */
+  /** A font that arrives after the names were measured: the boxes are read again on the next layout. The satellites' marks are not touched, or the page would be told again about each one already in view. */
   #onFonts = (): void => {
-    this.#marks = [];
-    this.#markSeen.clear();
     this.#nameBoxes.clear();
   };
 
