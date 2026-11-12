@@ -114,9 +114,13 @@ test("a font that finishes loading does not tell the page again about satellites
   await open(page);
   await labelOn(page);
   await expect.poll(async () => (await names(page)).length, { timeout: 30_000 }).toBeGreaterThan(0);
-  const view = { yaw: 0, tilt: 0, zoom: 1, panX: 0, panY: 0 };
+  // each draw sets the view a hundredth of a degree further round: setView ignores a view equal to the one it has (the page may open on yaw 0, tilt 0, zoom 1), and a hundredth of a
+  // degree moves no satellite in or out of view
+  let step = 0;
   const draw = async (): Promise<void> => {
     const before = await placesStats(page);
+    step += 1;
+    const view = { yaw: step * 0.01, tilt: 0, zoom: 1, panX: 0, panY: 0 };
     await page.locator(SPACE).evaluate((el, v) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView(v, true), view);
     await expect.poll(async () => (await placesStats(page)).renders, { timeout: 10_000 }).toBeGreaterThan(before.renders);
   };
