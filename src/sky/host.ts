@@ -434,6 +434,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     const at = inView.findIndex((f) => f.abbreviation === pickAbbr);
     const next = inView[(at < 0 ? (step > 0 ? 0 : inView.length - 1) : (at + step + inView.length) % inView.length)]!;
     setPick(next.abbreviation, true);
+    // the key picks as Enter on a figure's button does, so the page hears every pick of the reader's the same way
+    emitFigure(next.abbreviation);
   }
 
   const takenAbbr: (string | null)[] = [];

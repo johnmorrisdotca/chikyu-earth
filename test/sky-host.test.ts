@@ -280,3 +280,41 @@ test("a figure picked while its culture is on its way is picked when it has come
     console.warn = warn;
   }
 });
+
+test("C and Shift+C pick the next and the previous figure and send chikyu-sky-pick, as Enter on a figure's button does", async () => {
+  measure = undefined;
+  made = 0;
+  const handlers = new Map<string, ((event: unknown) => void)[]>();
+  const sent: { type: string; detail: { kind?: string; abbreviation?: string } | null }[] = [];
+  const stage = {
+    ownerDocument: doc,
+    append() {},
+    host: {
+      addEventListener: (name: string, fn: (event: unknown) => void) => handlers.set(name, [...(handlers.get(name) ?? []), fn]),
+      dispatchEvent: (event: CustomEvent) => (sent.push({ type: event.type, detail: event.detail }), true),
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    },
+  } as unknown as ShadowRoot;
+  const host = createSkyHost({ root: stage, attribute: (name) => (name === "constellation-lines" ? "0.3" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+  host.frame({ ...frame, discs: [] });
+  for (let waited = 0; waited < 20_000 && host.stats.figures === 0; waited += 20) await wait(20);
+  assert.ok(host.stats.figures > 1, "figures are in view");
+  const press = (key: string, shiftKey = false): void => {
+    for (const fn of handlers.get("keydown") ?? []) fn({ key, shiftKey, altKey: false, ctrlKey: false, metaKey: false });
+  };
+  const picks = (): { kind?: string; abbreviation?: string }[] => sent.filter((one) => one.type === "chikyu-sky-pick").map((one) => one.detail!);
+  press("c");
+  assert.equal(picks().length, 1, "C sends chikyu-sky-pick");
+  assert.equal(picks()[0]!.kind, "constellation");
+  assert.deepEqual(Object.keys(picks()[0]!).sort(), ["abbreviation", "kind"], "the figure's detail is {kind, abbreviation}");
+  assert.equal(host.picked, picks()[0]!.abbreviation, "it is the figure that was picked");
+  const first = picks()[0]!.abbreviation;
+  press("c");
+  assert.notEqual(picks()[1]!.abbreviation, first, "C again picks the next");
+  press("C", true);
+  assert.equal(picks()[2]!.abbreviation, first, "Shift+C goes back");
+  assert.equal(sent.filter((one) => one.type === "chikyu-constellation-pick").length, 3, "the figure pick event is sent as before");
+  press("x");
+  assert.equal(picks().length, 3, "another key sends nothing");
+  host.dispose();
+});
