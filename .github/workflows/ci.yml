@@ -21,7 +21,7 @@ permissions:
 jobs:
   already-green:
     # A release runs this workflow on the release branch (by hand), then the fast-forward to main runs it again on the identical commit. On a push to main, ask GitHub whether a run
-    # of this workflow already succeeded on this commit; if one did, the heavy jobs are skipped and the run is green. A failed, cancelled or unfinished run does not count, and
+    # of this workflow already succeeded on this commit; if one did, the heavy jobs are skipped and the run is green. A failed, cancelled, unfinished, skipped or dry run does not count (the run's own jobs are read), and
     # any other event (a pull request, a branch, a run by hand) always runs everything.
     name: A green run of this commit already exists?
     runs-on: ubuntu-latest
@@ -47,21 +47,31 @@ jobs:
           sha="$GITHUB_SHA"
           dry=false
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$LOOKUP_SHA" ]; then sha="$LOOKUP_SHA"; dry=true; fi
-          # Completed and successful, for this commit, other than this very run. Any other answer, or a failed question, means everything runs.
-          if ! found="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$sha&status=completed&per_page=100" \
-            --jq "[.workflow_runs[] | select(.conclusion == \"success\" and .id != $GITHUB_RUN_ID and ((.display_title // \"\") | startswith(\"CI (dry run\") | not))] | length")"; then
+          # A run vouches for the commit only if its real jobs ran and passed: the `check` job succeeded (not skipped), a browser job (a demo or freeze job) succeeded, and no job failed or was cancelled.
+          # A run that skipped its heavy jobs and ended green (a dry run, or a push that skipped) is never enough. Only the 5 newest completed runs of the commit are looked at, one jobs call for each; the first that qualifies ends the search.
+          # Any failed question means everything runs.
+          found=0
+          if ! candidates="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$sha&status=completed&per_page=5" --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | select(.conclusion == \"success\") | .id")"; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "Could not read the runs of $WORKFLOW_FILE: everything runs."
             exit 0
           fi
+          for id in $candidates; do
+            if ok="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '([.jobs[] | select(.name | test("^check( |$)")) | select(.conclusion == "success")] | length >= 1) and ([.jobs[] | select(.name | test("^(demo|freeze)( |$)")) | select(.conclusion == "success")] | length >= 1) and ([.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled")] | length == 0)')" && [ "$ok" = true ]; then
+              found=1
+              echo "Run $id ran its checks and browser jobs and passed."
+              break
+            fi
+            echo "Run $id does not vouch for the commit (its real jobs did not all run and pass)."
+          done
           echo "Runs of $WORKFLOW_FILE on $sha:"
           gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$sha&per_page=100" --jq '.workflow_runs[] | "  \(.event) \(.status) \(.conclusion) \(.html_url)"' || true
           skip=false
           if [ "$found" -ge 1 ]; then
-            echo "A successful run of $WORKFLOW_FILE exists for $sha."
+            echo "A full green run of $WORKFLOW_FILE exists for $sha."
             skip=true
           else
-            echo "No successful run of $WORKFLOW_FILE for $sha."
+            echo "No full green run of $WORKFLOW_FILE for $sha (a skipped or dry run does not count)."
           fi
           if [ "$dry" = true ]; then
             echo "A dry run (lookup_sha): a push to main with that commit would $([ "$skip" = true ] && echo 'skip the heavy jobs' || echo 'run everything'). The heavy jobs are skipped here whatever the answer."
