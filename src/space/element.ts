@@ -836,7 +836,9 @@ export class ChikyuSpace extends HTMLElement {
       const asked = options.view ?? "from";
       // above a body is meant for a satellite: a body is followed
       const view = typeof target === "string" && (target === "Earth" || asked === "above") ? "follow" : asked;
-      const face = options.face && RIDE_FACES.includes(options.face) ? options.face : null;
+      // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
+      const faceable = !(view === "follow" && typeof target === "string");
+      const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
       model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000) };
       if (face) {
         model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
@@ -863,12 +865,18 @@ export class ChikyuSpace extends HTMLElement {
    * The facing stays pressed until the view is turned or tipped. `chikyu-ride-face` is sent with `{ face }` (`null` when it is let go). Keys, while the element is focused: W ahead, S behind, A left, D right, R up, F down. The arrow keys stay with the view controls.
    *
    * @param face - The way to face.
-   * @returns Whether the camera turned to it.
+   * Following a body (a planet, the Moon) there is no way to face: it returns `false`. Held keys do not repeat, and keys typed in a field or in editable text are left to it.
+   *
+   * @returns Whether the camera faces that way now (`true` too when it already did, and nothing moves).
    */
   face(face: RideFace): boolean {
     const model = this.#model;
     const ride = model.ride;
     if (!ride || !RIDE_FACES.includes(face)) return false;
+    // following a body there is no way to face: only from a body or a satellite, following a satellite, or above it
+    if (ride.view === "follow" && typeof ride.target === "string") return false;
+    // already facing that way: nothing to turn, and no glide started again
+    if (this.facing === face) return true;
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const pose = model.pose;
     const zoom = model.view.zoom;
@@ -902,9 +910,11 @@ export class ChikyuSpace extends HTMLElement {
 
   /** W ahead, S behind, A left, D right, R up, F down, while this element is focused and a ride is on. */
   #faceKey = (event: KeyboardEvent): void => {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
-    const target = event.target;
-    if (target instanceof HTMLElement && target.closest("input, textarea, select")) return;
+    // a held key repeats: the first press turns, the repeats would only start the glide again and again
+    if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented || event.repeat) return;
+    // typing in a field anywhere on the way to this element (its own shadow root and slots included), or in editable text, is typing, not facing
+    const typing = event.composedPath().some((node) => node instanceof HTMLElement && (node.matches("input, textarea, select") || node.isContentEditable));
+    if (typing) return;
     const face = FACE_KEYS[event.key.toLowerCase()];
     if (face && this.face(face)) event.preventDefault();
   };

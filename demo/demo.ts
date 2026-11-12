@@ -628,7 +628,8 @@ if (flat && controls && stage) {
       if (!space || !FACES.includes(face as (typeof FACES)[number])) return;
       rideFace = face as (typeof FACES)[number];
       if (!rideKey) void startRide("iss");
-      else if (space.facing !== rideFace) space.face(rideFace);
+      // following a planet or the Moon there is no way to face: the button stays up and the address keeps nothing
+      else if (space.facing !== rideFace && !space.face(rideFace)) rideFace = null;
       address.set("face", rideFace);
       markRide();
     });

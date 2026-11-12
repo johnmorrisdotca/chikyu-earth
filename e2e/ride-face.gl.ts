@@ -84,3 +84,39 @@ test("less motion turns at once, and nothing is drawn at rest afterwards", async
   await page.waitForTimeout(700);
   expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws), "nothing is drawn at rest").toBe(draws);
 });
+
+test("following the Moon there is no way to face; a held key does not repeat; a key typed in a field is left to the field", async ({ page }) => {
+  await open(page);
+  const told: unknown[] = [];
+  await page.exposeFunction("toldFace", (detail: unknown) => told.push(detail));
+  await page.locator(SPACE).evaluate((el) => el.addEventListener("chikyu-ride-face", (event) => (window as unknown as { toldFace(d: unknown): void }).toldFace((event as CustomEvent).detail)));
+  // following a body: face() says no, nothing is told, and nothing is held
+  const moon = await page.locator(SPACE).evaluate((el) => {
+    const space = el as unknown as { ride(target: unknown, options: unknown): void; face(face: string): boolean; facing: string | null; riding: { face: string | null } | null };
+    space.ride("Moon", { view: "follow", face: "ahead", smooth: false });
+    return { opened: space.riding?.face ?? null, faced: space.face("down"), facing: space.facing };
+  });
+  expect(moon).toEqual({ opened: null, faced: false, facing: null });
+  // riding the ISS: W faces ahead once; the repeats of a held W are left alone
+  await rideIss(page, "from");
+  await page.locator(SPACE).focus();
+  await page.keyboard.press("w");
+  await expect.poll(() => page.locator(SPACE).evaluate((el) => Reflect.get(el, "facing"))).toBe("ahead");
+  const repeated = await page.locator(SPACE).evaluate((el) => {
+    const event = new KeyboardEvent("keydown", { key: "s", repeat: true, bubbles: true, cancelable: true });
+    el.dispatchEvent(event);
+    return { facing: Reflect.get(el, "facing"), taken: event.defaultPrevented };
+  });
+  expect(repeated, "a repeat of S does not face behind").toEqual({ facing: "ahead", taken: false });
+  // a field inside the element: typing a D there is typing
+  const typed = await page.locator(SPACE).evaluate((el) => {
+    const field = document.createElement("input");
+    el.append(field);
+    const event = new KeyboardEvent("keydown", { key: "d", bubbles: true, cancelable: true, composed: true });
+    field.dispatchEvent(event);
+    field.remove();
+    return { facing: Reflect.get(el, "facing"), taken: event.defaultPrevented };
+  });
+  expect(typed).toEqual({ facing: "ahead", taken: false });
+  expect(told.at(-1)).toEqual({ face: "ahead" });
+});
