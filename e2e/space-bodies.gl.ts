@@ -82,10 +82,10 @@ test("going to Jupiter makes Jupiter and credits it, coming back lets it go, the
     await body(page, "Earth");
     // let go once it has been out of the view for a while
     await expect.poll(() => mapped(page), { timeout: 30_000, message: "Jupiter is let go" }).toBe(home);
-    await expect(page.locator(NOTE)).not.toContainText("Nestaeric", { timeout: 30_000 });
     await still(page);
     counts.push((await gpu(page)).objects);
     expect((await readCounts(page)).contexts).toBe(1);
+    await expect(page.locator(NOTE)).not.toContainText("Nestaeric", { timeout: 30_000 });
   }
   console.log(`live GPU objects after each round to Jupiter and back: ${counts.join(", ")} (${await pictures.bytes()} picture bytes in all)`);
   expect(Math.max(...counts.slice(1)), "no more GPU objects after four rounds than after the first, give or take three.js's own").toBeLessThanOrEqual(counts[0]! + 8);
