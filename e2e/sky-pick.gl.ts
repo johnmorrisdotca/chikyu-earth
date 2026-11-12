@@ -130,6 +130,24 @@ test("a press, a tap and Enter pick a named star or a figure, and rest draws not
   expect(hitLabel.label.length).toBeGreaterThan(0);
   expect(hitLabel.live.length).toBeGreaterThan(0);
 
+  // the keys C and Shift+C pick the next and the previous figure, and the page hears them the same way: chikyu-sky-pick with the figure's abbreviation
+  await page.locator(SPACE).evaluate((el) => {
+    el.setAttribute("tabindex", "0");
+    (el as HTMLElement).focus();
+  });
+  const beforeKeys = (await picks(page)).length;
+  await page.keyboard.press("c");
+  await expect.poll(async () => (await picks(page)).length, { message: "C sends chikyu-sky-pick" }).toBe(beforeKeys + 1);
+  const forward = (await picks(page)).at(-1)!;
+  expect(forward.kind).toBe("constellation");
+  expect(Object.keys(forward).sort()).toEqual(["abbreviation", "kind"]);
+  await page.keyboard.press("c");
+  await expect.poll(async () => (await picks(page)).length).toBe(beforeKeys + 2);
+  expect((await picks(page)).at(-1)!.abbreviation, "C again is the next figure").not.toBe(forward.abbreviation);
+  await page.keyboard.press("Shift+C");
+  await expect.poll(async () => (await picks(page)).length).toBe(beforeKeys + 3);
+  expect((await picks(page)).at(-1)!.abbreviation, "Shift+C goes back").toBe(forward.abbreviation);
+
   const drawn = await draws(page);
   const laid = await renders(page);
   await page.waitForTimeout(1000);
