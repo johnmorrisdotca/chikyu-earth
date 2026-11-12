@@ -697,6 +697,7 @@ if (flat && controls && stage) {
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
       if (address.get("star-names")) element.setAttribute("star-names", address.get("star-names")!);
       if (address.get("constellation-lines")) element.setAttribute("constellation-lines", address.get("constellation-lines")!);
+      for (const name of ["constellation-names", "constellation-culture"] as const) if (address.get(name) !== null) element.setAttribute(name, address.get(name)!);
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
@@ -775,6 +776,7 @@ if (flat && controls && stage) {
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
       if (address.get("star-names")) element.setAttribute("star-names", address.get("star-names")!);
       if (address.get("constellation-lines")) element.setAttribute("constellation-lines", address.get("constellation-lines")!);
+      for (const name of ["constellation-names", "constellation-culture"] as const) if (address.get(name) !== null) element.setAttribute(name, address.get(name)!);
       if (address.get("body-label") !== null) element.setAttribute("body-label", address.get("body-label")!);
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);

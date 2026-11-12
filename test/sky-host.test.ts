@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { SkyFrame } from "../src/sky/frame.ts";
 import { pathOutside, touches } from "../src/sky/cover.ts";
 import { createSkyHost } from "../src/sky/host.ts";
+import { inKeep, keepBox, touchesKeep } from "../src/sky/keep-clear.ts";
 
 interface FakeNode {
   style: { setProperty(): void; removeProperty(): void };
@@ -210,4 +211,72 @@ test("a line stops at the edge of a body and never runs over it: the pieces are 
   assert.equal(touches(disc, 20, 150, 60, 170, label), false);
   assert.equal(touches(disc, 20, 150, 130, 220, label), true, "its box reaches the body");
   assert.equal(touches(disc, 300, 0, 340, 20, { ...label, x: 200, y: 125, ring: 6 }), true, "the star's ring reaches the body");
+});
+
+test("a place kept clear: no star is named in it, a list of places is read once, and clearing the list names the stars again", async () => {
+  measure = undefined;
+  made = 0;
+  const host = createSkyHost({ root, attribute: (name) => (name === "star-names" ? "12" : null), language: () => "en", onError: (error) => assert.fail(String(error)), loadFont: async () => undefined });
+  const open: SkyFrame = { ...frame, discs: [] };
+  host.frame(open);
+  await until(host);
+  const named = host.stats.names;
+  assert.ok(named > 0);
+  const drawn = host.stats.renders;
+  host.setKeepClear([{ x: 0, y: 0, width: 400, height: 400 }]);
+  assert.equal(host.stats.names, 0, "the whole picture kept clear: no name");
+  assert.equal(host.stats.renders, drawn + 1, "one draw for the new list");
+  await wait(100);
+  assert.equal(host.stats.renders, drawn + 1, "and none after it");
+  host.setKeepClear(null);
+  assert.equal(host.stats.names, named, "the list cleared: the stars are named again");
+  host.dispose();
+  // the helpers: a box and a point against the areas, from a rectangle and from an element
+  const areas = [keepBox({ x: 10, y: 10, width: 20, height: 20 }, { left: 0, top: 0 }), keepBox({ getBoundingClientRect: () => ({ left: 105, top: 205, right: 145, bottom: 225 }) }, { left: 100, top: 200 })];
+  assert.deepEqual(areas, [{ l: 10, t: 10, r: 30, b: 30 }, { l: 5, t: 5, r: 45, b: 25 }]);
+  assert.equal(touchesKeep(areas, 25, 25, 60, 60), true);
+  assert.equal(touchesKeep(areas, 50, 50, 60, 60), false);
+  assert.equal(inKeep(areas, 40, 10), true);
+  assert.equal(inKeep(areas, 60, 10), false);
+});
+
+test("a figure picked while its culture is on its way is picked when it has come, and a culture that cannot be loaded says so once and leaves the IAU's figures", async () => {
+  measure = undefined;
+  made = 0;
+  const attribute = (culture: string) => (name: string): string | null => (name === "constellation-lines" ? "0.3" : name === "constellation-culture" ? culture : null);
+  // the page sets the property at once: the culture's figures are not here yet
+  const host = createSkyHost({
+    root,
+    attribute: attribute("japanese"),
+    language: () => "en",
+    onError: (error) => assert.fail(String(error)),
+    loadFont: async () => undefined,
+    cultures: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/japanese")).japanese,
+  });
+  host.frame({ ...frame, discs: [] });
+  host.pick("subaru");
+  for (let waited = 0; waited < 20_000 && host.picked !== "subaru"; waited += 20) await wait(20);
+  assert.equal(host.picked, "subaru", "the pick was kept until the culture was here");
+  assert.equal(host.stats.culture, "japanese");
+  host.dispose();
+  // a culture that cannot be had
+  const warnings: string[] = [];
+  const warn = console.warn;
+  console.warn = (message: unknown) => warnings.push(String(message));
+  const errors: unknown[] = [];
+  try {
+    const failing = createSkyHost({ root, attribute: attribute("chinese"), language: () => "en", onError: (error) => errors.push(error), loadFont: async () => undefined, cultures: async () => Promise.reject(new Error("offline")) });
+    failing.frame({ ...frame, discs: [] });
+    for (let waited = 0; waited < 10_000 && warnings.length === 0; waited += 20) await wait(20);
+    await wait(100);
+    failing.refresh();
+    await wait(50);
+    assert.equal(warnings.length, 1, `one warning: ${warnings.join(" | ")}`);
+    assert.match(warnings[0]!, /could not be loaded/);
+    assert.equal(errors.length, 1, "the page is told");
+    assert.equal(failing.stats.culture, "iau", "the IAU's figures are shown instead");
+    failing.dispose();
+  } finally {
+    console.warn = warn;
+  }
 });

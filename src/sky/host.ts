@@ -1,26 +1,36 @@
 // The names of the brightest stars and the constellations as faint lines, over the sky an element's page draws (hoshi-stars' `sky-labels`, loaded only when an attribute asks for it). The element tells this where the camera looks and what covers the sky at each draw
 // (`frame`); it draws the names and lines on a canvas and a few labels over the picture, never redraws at rest, and lights the figure under the pointer. Stars are directions, so only the camera's turn matters, never its distance.
-import type { CoverMask, FigureLines, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
+import type { Culture } from "@johnmorrisdotca/hoshi-stars/culture";
+import type { CoverMask, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
 import { boxCovered, pathOutside, touches } from "./cover.ts";
+import { createCultureLines, type CultureFigureLines, type Lines } from "./culture-lines.ts";
+import { areaInHull, hullOf, nearestSegment, placeBox, visibleCentre } from "./figure-pick.ts";
+import { inKeep, keepBox, touchesKeep, type KeepBox, type SkyKeepClear } from "./keep-clear.ts";
 import type { SkyFrame } from "./frame.ts";
 import type { SkyLabelStyle } from "./style.ts";
 
 /** The styles of the layer, for an element to add to its own (`#sk-canvas`, `#sk-names` and the labels in its shadow root). */
 export const SKY_STYLE =
   "#sk-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#sk-names{position:absolute;inset:0;overflow:hidden;pointer-events:none}" +
-  ".sk-name,.sk-figure,.sk-designation{position:absolute;left:0;top:0;margin:0;white-space:nowrap;pointer-events:none;font-family:var(--hoshi-label-font,Michroma,system-ui,sans-serif);font-size:calc(var(--hoshi-label-size,11) * 1px);font-weight:var(--hoshi-label-weight,400);color:var(--hoshi-label-colour,#e9f1ff);letter-spacing:calc(var(--hoshi-label-letter-spacing,.14) * 1em);font-variant:var(--hoshi-label-case-variant,small-caps);text-transform:var(--hoshi-label-case-transform,none);text-shadow:0 0 calc(var(--hoshi-label-halo-width,3) * 1px) var(--hoshi-label-halo,#0a1230)}" +
+  ".sk-name,.sk-figure,.sk-constellation,.sk-designation{position:absolute;left:0;top:0;margin:0;white-space:nowrap;pointer-events:none;font-family:var(--hoshi-label-font,Michroma,system-ui,sans-serif);font-size:calc(var(--hoshi-label-size,11) * 1px);font-weight:var(--hoshi-label-weight,400);color:var(--hoshi-label-colour,#e9f1ff);letter-spacing:calc(var(--hoshi-label-letter-spacing,.14) * 1em);font-variant:var(--hoshi-label-case-variant,small-caps);text-transform:var(--hoshi-label-case-transform,none);text-shadow:0 0 calc(var(--hoshi-label-halo-width,3) * 1px) var(--hoshi-label-halo,#0a1230)}" +
   ".sk-designation{font-family:var(--hoshi-label-designation-font,ui-monospace,monospace);font-size:calc(var(--hoshi-label-designation-size,9) * 1px);color:var(--hoshi-label-designation-colour,#b8c6e0);letter-spacing:0;font-variant:normal;text-transform:none}" +
-  ".sk-figure{color:var(--hoshi-label-colour,#e9f1ff)}[hidden]{display:none}";
+  ".sk-figure{color:var(--hoshi-label-colour,#e9f1ff);opacity:0;transition:opacity .15s ease-out}.sk-constellation{font-size:calc(var(--hoshi-label-size,11) * .9px);color:var(--hoshi-label-constellation-colour,#9db0d3);letter-spacing:.22em;opacity:.85}@media (prefers-reduced-motion:reduce){.sk-figure{transition:none}}.sk-ruler{visibility:hidden}.sk-live{position:absolute;left:0;top:0;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}[hidden]{display:none}";
 
 export interface SkyHost {
   /** Tells where the sky falls in the picture just drawn, or `null` when there is no picture. */
   frame(frame: SkyFrame | null): void;
   /** What the settings are now (`star-names`, `star-names-magnitude`, `constellation-lines`, the language): read again after any of them changed. */
   refresh(): void;
+  /** The places where the sky's names must not go (the property `keepClear`): rectangles in the element's pixels, or elements of the page. `null` for none. */
+  setKeepClear(areas: readonly SkyKeepClear[] | null): void;
   /** The look of the names, as a partial hoshi-stars `LabelStyle` (the property `skyStyle`). */
   setStyle(style: Partial<SkyLabelStyle>): void;
-  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
+  /** Picks a constellation by its IAU abbreviation (`Ori`), or lets it go (`null`): the property `constellation`. Sends no event. */
+  pick(abbreviation: string | null): void;
+  /** The picked constellation's IAU abbreviation, or `null`. */
+  readonly picked: string | null;
+  readonly stats: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
   dispose(): void;
 }
 
@@ -37,12 +47,37 @@ export interface SkyHostOptions {
   loadFont(): Promise<unknown>;
   /** Brings hoshi-stars' `sky-labels` in: a dynamic import of the package by default, a page's own (or a test's) where it has one. */
   importer?: () => Promise<typeof import("@johnmorrisdotca/hoshi-stars/sky-labels")>;
+  /** Brings hoshi-stars' `constellations` in, for the names of the figures: a dynamic import by default. */
+  constellations?: () => Promise<typeof import("@johnmorrisdotca/hoshi-stars/constellations")>;
+  /** Brings a sky culture of hoshi-stars in (`western`, `japanese` or `chinese`): a dynamic import of the culture by default, a page's own (or a test's) where it has one. */
+  cultures?: (id: string) => Promise<Culture>;
 }
 
+/** What a page is told of a figure, and what its name is written from. */
+interface FigureInfo {
+  abbreviation: string;
+  name: string;
+  english: string;
+  japanese: string;
+  kind: string;
+  names?: Readonly<Partial<Record<string, string>>>;
+  reading?: string;
+}
+/**
+ * The sky cultures besides the IAU's, each loaded by a dynamic import of its own, only when a page asks for it: a page that never sets `chinese` never downloads it. (The imports are written out, one for each, so that a bundler makes a file of each.)
+ */
+const CULTURES: Readonly<Record<string, () => Promise<Culture>>> = {
+  western: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/western")).western,
+  japanese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/japanese")).japanese,
+  chinese: async () => (await import("@johnmorrisdotca/hoshi-stars/cultures/chinese")).chinese,
+};
+const warnedCultures = new Set<string>();
 const NAME_POOL = 40;
+/** What other layers of the element draw as labels over the sky (bodies, satellites, places, cities): a constellation's name keeps off them. */
+const OTHER_LABELS = ".sp-label,.sp-sat,.cm-label,.pl-name:not(.pl-measure),.cn-name";
 
 /** The attributes this layer reads. */
-export const SKY_ATTRIBUTES = ["star-names", "star-names-magnitude", "constellation-lines"] as const;
+export const SKY_ATTRIBUTES = ["star-names", "star-names-magnitude", "constellation-lines", "constellation-names", "constellation-culture", "keep-clear"] as const;
 
 /**
  * Makes the layer of one element, inside its shadow root. Nothing of hoshi-stars is loaded, and nothing is added to the root, until one of the three attributes is there.
@@ -57,7 +92,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   let loading = false;
   let failed = false;
   let names: StarNames | undefined;
-  let lines: FigureLines | undefined;
+  let lines: Lines | undefined;
   let last: SkyFrame | null = null;
   let renders = 0;
   let style: Partial<SkyLabelStyle> = {};
@@ -66,15 +101,123 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   const pool: HTMLElement[] = [];
   const designations: HTMLElement[] = [];
   let figureName: HTMLElement | undefined;
+  /** The figure the pointer rests on, and the one a click or tap picked (IAU abbreviations): the lines of either are lit and the name of one is shown. */
+  let hoverAbbr: string | null = null;
+  let pickAbbr: string | null = null;
+  /** The abbreviation the name now shown (the figure name's span) is of, and the timer that hides it after it has faded. */
+  let shownAbbr: string | null = null;
+  let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The names of the constellations: the spans of the optional layer (`constellation-names`), and what is known of each figure from hoshi-stars. */
+  const figurePool: HTMLElement[] = [];
+  let shownFigures = 0;
+  /** What is known of each figure of the IAU's 88 (from hoshi-stars' `constellations`), and of each culture that has been loaded; `culture` is the culture the lines are of now. */
+  let iauInfo: Map<string, FigureInfo> | undefined;
+  const cultureData = new Map<string, { figures: CultureFigureLines[]; info: Map<string, FigureInfo> }>();
+  const cultureLoading = new Set<string>();
+  const cultureFailed = new Set<string>();
+  let culture = "iau";
+  const activeInfo = (): Map<string, FigureInfo> | undefined => (culture === "iau" ? iauInfo : cultureData.get(culture)?.info);
+  /** Whether the lines are drawn (the attribute `constellation-lines`): the names alone use the figures but draw none. */
+  let drawStrokes = false;
+  /** A pick asked for before hoshi-stars was in. */
+  let pendingPick: string | null | undefined;
+  const middle = { x: 0, y: 0 };
+  const found = { x: 0, y: 0 };
+  /** The boxes of what is on the picture already, from its top left: the pool is reused, `takenN` of it is in use. */
+  const taken: KeepBox[] = [];
+  let takenN = 0;
+  /** The star names that stayed (their boxes, noted as they were measured), the other layers' labels (read again only when they have changed) and the size of each text as drawn (measured once). */
+  const starBoxes: KeepBox[] = [];
+  let starN = 0;
+  const otherBoxes: KeepBox[] = [];
+  let otherN = 0;
+  let otherStale = true;
+  let otherWatch: MutationObserver | undefined;
+  const sizes = new Map<string, { w: number; h: number }>();
+  let ruler: HTMLElement | undefined;
+  /** The hull of each figure, made when a pointer first asks of it after a projection change. */
+  const hulls: (number[] | undefined)[] = [];
+  /** A visually hidden polite live region: a pick is read out with the figure's name. */
+  let live: HTMLElement | undefined;
+  let queuedFrame = false;
   let attached = false;
   let covered: CoverMask | undefined;
+  /** The places the page asked to keep clear, and as boxes from the picture's top left: measured when something has changed (a resize, a new list), never at each frame. */
+  let keepList: readonly SkyKeepClear[] = [];
+  const keep: KeepBox[] = [];
+  let keepStale = true;
+  let keepWatch: ResizeObserver | undefined;
+  let keepEvents = false;
+  /** Whether a point of the picture is on a body or in a place kept clear: what the names are laid out against (the lines are cut at the bodies only). */
+  const blockedAt: CoverMask = (x, y) => (covered ? covered(x, y) : false) || inKeep(keep, x, y);
   /** The language the names were last laid out in: the page may change its language after the element was made, so it is read again at each draw. */
   let usedLang: "en" | "ja" | undefined;
   /** The names drawn at the last frame that were left out because they ran over another as the browser draws them (by label), and how many names are shown. */
   const culled: boolean[] = [];
   let drawnNames = 0;
 
-  const wanted = (): boolean => options.attribute("star-names") !== null || options.attribute("constellation-lines") !== null;
+  /** Lays the layer out once more at the next frame (one for any number of calls), where something it avoids has moved without the picture drawing: a place the page keeps clear that was scrolled, another layer's label. */
+  const later = (): void => {
+    if (queuedFrame) return;
+    queuedFrame = true;
+    const run = (): void => {
+      queuedFrame = false;
+      if (module && last && (keep.length > 0 || options.attribute("constellation-names") !== null || shownAbbr !== null)) compute();
+    };
+    if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(run);
+    else setTimeout(run, 16);
+  };
+  const wanted = (): boolean => options.attribute("star-names") !== null || options.attribute("constellation-lines") !== null || options.attribute("constellation-names") !== null;
+
+  /** The places to keep clear now: the property's and the elements the attribute's selector matches. */
+  const keepItems = (): SkyKeepClear[] => {
+    const items = [...keepList];
+    const selector = options.attribute("keep-clear");
+    if (selector) {
+      try {
+        items.push(...Array.from(doc.querySelectorAll(selector)));
+      } catch {
+        // not a selector: nothing is kept clear by it
+      }
+    }
+    return items;
+  };
+  /** Reads the boxes of the places to keep clear: when the list, the selector or a box has changed, and not at each frame. */
+  const measureKeep = (rewatch: boolean): void => {
+    keepStale = false;
+    const items = keepItems();
+    keep.length = 0;
+    if (items.length === 0) {
+      keepWatch?.disconnect();
+      return;
+    }
+    const host = root.host as HTMLElement;
+    const own = host.getBoundingClientRect();
+    for (const item of items) keep.push(keepBox(item, own));
+    if (!rewatch) return;
+    // a box that grows or shrinks is read again and the layer laid out again; the observer is set again only when the list has changed
+    if (typeof ResizeObserver === "undefined") return;
+    keepWatch ??= new ResizeObserver(() => {
+      keepStale = true;
+      if (module && last) compute();
+    });
+    keepWatch.disconnect();
+    for (const item of items) if ("getBoundingClientRect" in item && item instanceof Element) keepWatch.observe(item);
+    keepWatch.observe(host);
+    const view = doc.defaultView;
+    if (!keepEvents && view && items.length > 0) {
+      keepEvents = true;
+      view.addEventListener("resize", markStale);
+      view.addEventListener("scroll", markStale, { capture: true, passive: true });
+    }
+  };
+  function markStale(): void {
+    keepStale = true;
+    // scrolled or resized while something is kept clear: the names are laid out again at the next frame, once however many events
+    if (keep.length > 0) later();
+  }
+  let keepRewatch = true;
+
 
   const attach = (): void => {
     if (attached) return;
@@ -89,27 +232,65 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     figureName.className = "sk-figure";
     figureName.hidden = true;
     box.append(figureName);
-    root.append(canvas, box);
+    ruler = doc.createElement("span");
+    ruler.className = "sk-ruler";
+    ruler.setAttribute("aria-hidden", "true");
+    ruler.hidden = false;
+    box.append(ruler);
+    live = doc.createElement("div");
+    live.id = "sk-live";
+    live.className = "sk-live";
+    live.setAttribute("role", "status");
+    live.setAttribute("aria-live", "polite");
+    root.append(canvas, box, live);
     const host = root.host as HTMLElement;
+    const at = { x: 0, y: 0 };
     const place = (event: PointerEvent): { x: number; y: number } => {
       const rect = host.getBoundingClientRect();
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      at.x = event.clientX - rect.left;
+      at.y = event.clientY - rect.top;
+      return at;
     };
-    // a mouse lights the figure it rests on and lets go when it leaves; a finger lights what it touches and the pick stays until the next touch
+    // a mouse lights the figure it rests on, shows its name and lets go when it leaves (the hit test runs once a frame at most, and only when the pointer has moved); a click or a tap picks the figure it is on, or lets the pick go on empty sky
+    const rest = { x: 0, y: 0 };
+    let queued = false;
+    let down: { id: number; x: number; y: number; at: number } | undefined;
     host.addEventListener("pointermove", (event) => {
-      if (!lines || event.pointerType === "touch") return;
-      const at = place(event);
-      // the lines on the Earth are not drawn, so none is lit there
-      if ((covered?.(at.x, at.y) ? lines.point() : lines.point(at.x, at.y))) drawLines();
+      // a button held is a drag, a turn of the view: nothing is hit then
+      if (!lines || !drawStrokes || event.pointerType === "touch" || event.buttons !== 0) return;
+      const here = place(event);
+      rest.x = here.x;
+      rest.y = here.y;
+      if (queued) return;
+      queued = true;
+      const run = (): void => {
+        queued = false;
+        setHover(figureAt(rest.x, rest.y));
+      };
+      if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(run);
+      else setTimeout(run, 16);
     });
     host.addEventListener("pointerleave", (event) => {
-      if (!lines || event.pointerType === "touch") return;
-      if (lines.point()) drawLines();
+      if (event.pointerType === "touch") return;
+      setHover(null);
     });
     host.addEventListener("pointerdown", (event) => {
-      if (!lines || event.pointerType !== "touch") return;
-      const at = place(event);
-      if ((covered?.(at.x, at.y) ? lines.point() : lines.point(at.x, at.y))) drawLines();
+      const here = place(event);
+      down = { id: event.pointerId, x: here.x, y: here.y, at: event.timeStamp };
+    });
+    host.addEventListener("pointerup", (event) => {
+      const start = down;
+      down = undefined;
+      if (!start || start.id !== event.pointerId || !lines || !drawStrokes) return;
+      const here = place(event);
+      // a press that did not move, and was not held: a click or a tap, not the start of a turn
+      if (Math.hypot(here.x - start.x, here.y - start.y) > 6 || event.timeStamp - start.at > 600) return;
+      setPick(figureAt(here.x, here.y), true);
+    });
+    host.addEventListener("keydown", (event) => {
+      if (!lines || !drawStrokes || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === "Escape" && pickAbbr !== null) setPick(null, true);
+      else if (event.key === "c" || event.key === "C") cycle(event.shiftKey ? -1 : 1);
     });
   };
 
@@ -126,33 +307,233 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     return context;
   };
 
-  const spot = { x: 0, y: 0 };
-  /**
-   * Where the picked figure's name goes: where hoshi-stars put it, or, where a body covers that, the nearest place round it that is clear of every body and inside the picture. Answers `null` where there is none. The name's box is set from its middle, the way it is drawn (up from its point, centred).
-   */
-  function placeFigureName(x: number, y: number, frame: SkyFrame): { x: number; y: number } | null {
-    if (!covered) {
-      spot.x = x;
-      spot.y = y;
-      return spot;
+  /** What the page can be told of a constellation: its names from hoshi-stars, with the culture. */
+  const detailOf = (abbreviation: string): { abbreviation: string; id: string; name: string; english: string; japanese: string; kind: string; culture: string } => {
+    const info = activeInfo()?.get(abbreviation);
+    return { abbreviation, id: abbreviation, name: info?.name ?? abbreviation, english: info?.english ?? abbreviation, japanese: info?.japanese ?? abbreviation, kind: info?.kind ?? "constellation", culture };
+  };
+  const emit = (type: string, detail: unknown): void => {
+    (root.host as HTMLElement).dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  };
+  /** The text of a figure's name in the page's language, in the case the style asks for: for the IAU's 88 the Latin or Japanese name; for a culture's own figures its name in the page's language (a Japanese asterism by its reading in kana: すばる). */
+  const figureText = (abbreviation: string): string => {
+    const info = activeInfo()?.get(abbreviation);
+    const ja = options.language() === "ja";
+    let text = abbreviation;
+    if (info && culture === "iau") text = ja ? info.japanese : info.name;
+    else if (info) {
+      const names = info.names ?? {};
+      text = ja ? (info.kind === "asterism" && info.reading ? info.reading : (names["ja"] ?? info.name)) : info.kind === "constellation" ? (names["la"] ?? info.name) : (names["en"] ?? info.name);
     }
-    const box = typeof figureName!.getBoundingClientRect === "function" ? figureName!.getBoundingClientRect() : undefined;
-    const w = box && box.width > 0 ? box.width : 80;
-    const h = box && box.height > 0 ? box.height : 14;
-    let best = Number.POSITIVE_INFINITY;
-    for (const down of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
-      for (const across of [0, -0.5, 0.5, -1, 1, -1.5, 1.5]) {
-        const cx = Math.max(w / 2 + 2, Math.min(frame.width - w / 2 - 2, x + across * w));
-        const cy = Math.max(h + 2, Math.min(frame.height - 2, y + down * h * 1.4));
-        const away = Math.abs(cx - x) + Math.abs(cy - y);
-        if (away < best && !boxCovered(covered, cx - w / 2, cy - h, cx + w / 2, cy)) {
-          best = away;
-          spot.x = cx;
-          spot.y = cy;
-        }
+    return module && lines ? module.labelText(text, lines.style) : text;
+  };
+  /** The figure under a point of the picture: one with a line within reach of it, else the smallest one it is inside of (a pointer in a figure picks it, not only on its lines). `null` where a body covers the point, or none is there. */
+  function figureAt(x: number, y: number): string | null {
+    if (!lines || !drawStrokes || covered?.(x, y)) return null;
+    const reach = lines.settings.reach ?? 14;
+    let best = reach * reach;
+    let nearest: string | null = null;
+    for (const figure of lines.figures) {
+      if (figure.end <= figure.start) continue;
+      const d = nearestSegment(lines.segments, figure.start, figure.end, x, y);
+      if (d < best) {
+        best = d;
+        nearest = figure.abbreviation;
       }
     }
-    return best === Number.POSITIVE_INFINITY ? null : spot;
+    if (nearest) return nearest;
+    let smallest = Number.POSITIVE_INFINITY;
+    for (const figure of lines.figures) {
+      if (figure.end <= figure.start || x < figure.left || x > figure.right || y < figure.top || y > figure.bottom) continue;
+      const index = lines.figures.indexOf(figure);
+      const area = areaInHull((hulls[index] ??= hullOf(lines.segments, figure.start, figure.end)), x, y);
+      if (area >= 0 && area < smallest) {
+        smallest = area;
+        nearest = figure.abbreviation;
+      }
+    }
+    return nearest;
+  }
+  function setHover(abbreviation: string | null): void {
+    if (abbreviation === hoverAbbr) return;
+    hoverAbbr = abbreviation;
+    emit("chikyu-constellation-hover", abbreviation === null ? null : detailOf(abbreviation));
+    drawLines();
+  }
+  function setPick(abbreviation: string | null, send: boolean): void {
+    if (abbreviation === pickAbbr) return;
+    pickAbbr = abbreviation;
+    if (send) {
+      emit("chikyu-constellation-pick", abbreviation === null ? null : detailOf(abbreviation));
+      // a pick is read out, with the figure's name in the page's language; a hover is not (it would be too much to hear)
+      if (live) live.textContent = abbreviation === null ? "" : options.language() === "ja" ? `${figureText(abbreviation)}を選択` : `${figureText(abbreviation)} selected`;
+    }
+    drawLines();
+  }
+  /** Picks the next (or the previous) figure in view, from the left: the keyboard's way to pick. */
+  function cycle(step: number): void {
+    if (!lines) return;
+    const inView = lines.figures.filter((f) => f.end > f.start).sort((a, b) => a.left + a.right - (b.left + b.right));
+    if (inView.length === 0) return;
+    const at = inView.findIndex((f) => f.abbreviation === pickAbbr);
+    const next = inView[(at < 0 ? (step > 0 ? 0 : inView.length - 1) : (at + step + inView.length) % inView.length)]!;
+    setPick(next.abbreviation, true);
+  }
+
+  const takenAbbr: (string | null)[] = [];
+  /** Whether a box may stand: clear of bodies and kept-clear areas, and clear of the names already placed (those of `ignore` aside). */
+  const freeFor =
+    (ignore: string | undefined, useTaken: boolean) =>
+    (l: number, t: number, r: number, b: number): boolean => {
+      const blocked = keep.length > 0 ? blockedAt : covered;
+      if (blocked && boxCovered(blocked, l, t, r, b)) return false;
+      if (touchesKeep(keep, l, t, r, b)) return false;
+      if (!useTaken) return true;
+      for (let i = 0; i < takenN; i += 1) {
+        const a = taken[i]!;
+        if ((ignore === undefined || takenAbbr[i] !== ignore) && l < a.r + 1 && r > a.l - 1 && t < a.b + 1 && b > a.t - 1) return false;
+      }
+      return true;
+    };
+  let takenStale = true;
+  /** Notes a box among those taken, reusing the objects of the pool. */
+  const take = (l: number, t: number, r: number, b: number, abbreviation: string | null): void => {
+    const one = (taken[takenN] ??= { l: 0, t: 0, r: 0, b: 0 });
+    one.l = l;
+    one.t = t;
+    one.r = r;
+    one.b = b;
+    takenAbbr[takenN] = abbreviation;
+    takenN += 1;
+  };
+  /** The other layers' labels (bodies, places, satellites, cities) are read again only after one of them has changed (a mutation of the shadow root outside this layer), never at each frame. */
+  const readOthers = (): void => {
+    otherStale = false;
+    otherN = 0;
+    if (typeof MutationObserver !== "undefined" && !otherWatch) {
+      otherWatch = new MutationObserver((records) => {
+        for (const record of records) {
+          if (record.target === canvas || record.target === live || (box && box.contains(record.target))) continue;
+          otherStale = true;
+          later();
+          return;
+        }
+      });
+      otherWatch.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "hidden"] });
+    }
+    const own = (root.host as HTMLElement).getBoundingClientRect();
+    for (const el of Array.from(root.querySelectorAll?.(OTHER_LABELS) ?? [])) {
+      if ((el as HTMLElement).hidden) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 && rect.height <= 0) continue;
+      const one = (otherBoxes[otherN] ??= { l: 0, t: 0, r: 0, b: 0 });
+      one.l = rect.left - own.left;
+      one.t = rect.top - own.top;
+      one.r = rect.right - own.left;
+      one.b = rect.bottom - own.top;
+      otherN += 1;
+    }
+  };
+  /** The boxes of what is already on the picture: the star names that stayed (noted when they were measured), the other layers' labels and, as they are placed, the constellation names. No layout is asked for here but when another layer has changed. */
+  function gatherTaken(): void {
+    takenN = 0;
+    takenStale = false;
+    if (otherStale) readOthers();
+    for (let i = 0; i < starN; i += 1) take(starBoxes[i]!.l, starBoxes[i]!.t, starBoxes[i]!.r, starBoxes[i]!.b, null);
+    for (let i = 0; i < otherN; i += 1) take(otherBoxes[i]!.l, otherBoxes[i]!.t, otherBoxes[i]!.r, otherBoxes[i]!.b, null);
+  }
+  /**
+   * The size of a text as drawn with a class of the layer, measured once (on a hidden ruler) and kept until the style, the language or a font changes: the layout never has to be asked again to place a name.
+   */
+  const textBox = (className: string, text: string): { w: number; h: number } => {
+    const key = `${className}|${text}`;
+    let known = sizes.get(key);
+    if (!known) {
+      const rect = ruler && typeof ruler.getBoundingClientRect === "function" ? (() => {
+        ruler.className = `${className} sk-ruler`;
+        ruler.textContent = text;
+        return ruler.getBoundingClientRect();
+      })() : undefined;
+      known = { w: rect && rect.width > 0 ? rect.width : 90, h: rect && rect.height > 0 ? rect.height : 14 };
+      sizes.set(key, known);
+    }
+    return known;
+  };
+  const reduced = (): boolean => doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  /** The name of the lit figure (the one the pointer is on, else the picked one) at the middle of the part of it that is in view, clear of the star names, the Earth and the places kept clear; it fades in and out. */
+  function updateFigureName(frame: SkyFrame): void {
+    const el = figureName;
+    if (!el) return;
+    const abbreviation = hoverAbbr ?? pickAbbr;
+    const figure = abbreviation && lines ? lines.figures.find((f) => f.abbreviation === abbreviation) : undefined;
+    const blocked = keep.length > 0 ? blockedAt : covered;
+    if (!abbreviation || !lines || !figure || figure.end <= figure.start || !visibleCentre(lines.segments, figure.start, figure.end, frame.width, frame.height, blocked, middle)) {
+      fadeName();
+      return;
+    }
+    if (takenStale) gatherTaken();
+    const text = figureText(abbreviation);
+    if (el.hidden) {
+      el.style.opacity = "0";
+      el.hidden = false;
+    }
+    if (el.textContent !== text) el.textContent = text;
+    const { w, h } = textBox("sk-figure", text);
+    // the middle of the figure, or the nearest place that is clear: of the other names first, and where there is none, over them
+    if (!placeBox(middle.x, middle.y, w, h, frame.width, frame.height, freeFor(abbreviation, true), found) && !placeBox(middle.x, middle.y, w, h, frame.width, frame.height, freeFor(abbreviation, false), found)) {
+      fadeName();
+      return;
+    }
+    el.style.transform = `translate(${Math.round(found.x)}px,${Math.round(found.y)}px) translate(-50%,-50%)`;
+    if (shownAbbr !== abbreviation || el.style.opacity !== "1") {
+      clearTimeout(fadeTimer);
+      if (typeof el.getBoundingClientRect === "function") void el.offsetWidth;
+      el.style.opacity = "1";
+    }
+    shownAbbr = abbreviation;
+  }
+  function fadeName(): void {
+    const el = figureName;
+    shownAbbr = null;
+    if (!el || el.hidden || el.style.opacity === "0") return;
+    el.style.opacity = "0";
+    clearTimeout(fadeTimer);
+    fadeTimer = setTimeout(() => {
+      el.hidden = true;
+    }, reduced() ? 0 : 180);
+  }
+  /** The optional layer of the constellations' names (`constellation-names`): each figure's name at the middle of the part of it in view, quieter than the star names, and clear of them, of the bodies, of the places kept clear and of each other. */
+  function placeConstellationNames(frame: SkyFrame): void {
+    const on = options.attribute("constellation-names") !== null && lines !== undefined && module !== undefined && box !== undefined;
+    shownFigures = 0;
+    if (on) {
+      gatherTaken();
+      const inView = lines!.figures.filter((f) => f.end > f.start).sort((a, b) => (b.right - b.left) * (b.bottom - b.top) - (a.right - a.left) * (a.bottom - a.top));
+      const blocked = keep.length > 0 ? blockedAt : covered;
+      for (const figure of inView) {
+        if (figure.abbreviation === shownAbbr || !visibleCentre(lines!.segments, figure.start, figure.end, frame.width, frame.height, blocked, middle)) continue;
+        while (figurePool.length <= shownFigures) {
+          const span = doc.createElement("span");
+          span.className = "sk-constellation";
+          box!.append(span);
+          figurePool.push(span);
+        }
+        const el = figurePool[shownFigures]!;
+        const text = figureText(figure.abbreviation);
+        if (el.textContent !== text) el.textContent = text;
+        el.hidden = false;
+        const { w, h } = textBox("sk-constellation", text);
+        // not far from the middle: a name set off to the far side of a figure names nothing
+        if (!placeBox(middle.x, middle.y, w, h, frame.width, frame.height, freeFor(undefined, true), found) || Math.abs(found.x - middle.x) > 1.6 * w || Math.abs(found.y - middle.y) > 5 * h) {
+          el.hidden = true;
+          continue;
+        }
+        el.style.transform = `translate(${Math.round(found.x)}px,${Math.round(found.y)}px) translate(-50%,-50%)`;
+        take(found.x - w / 2, found.y - h / 2, found.x + w / 2, found.y + h / 2, figure.abbreviation);
+        shownFigures += 1;
+      }
+    }
+    for (let i = shownFigures; i < figurePool.length; i += 1) figurePool[i]!.hidden = true;
   }
 
   /** The lines and the rings, and the names: drawn again from what `update` laid out. */
@@ -163,12 +544,12 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     if (!context) return;
     renders += 1;
     context.clearRect(0, 0, frame.width, frame.height);
-    if (lines && lines.count > 0) {
+    if (lines && drawStrokes && lines.count > 0) {
       context.lineWidth = 1;
       context.lineCap = "round";
       context.strokeStyle = "#cfe0ff";
       for (const figure of lines.figures) {
-        const opacity = lines.opacityOf(figure);
+        const opacity = figure.abbreviation === hoverAbbr || figure.abbreviation === pickAbbr ? 1 : lines.opacityOf(figure);
         if (opacity <= 0) continue;
         context.globalAlpha = opacity;
         context.beginPath();
@@ -198,17 +579,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         }
       }
     }
-    // the picked figure's name
-    if (figureName) {
-      const name = lines?.name;
-      if (name) {
-        figureName.hidden = false;
-        if (figureName.textContent !== name.text) figureName.textContent = name.text;
-        const at = placeFigureName(name.x, name.y, frame);
-        if (at) figureName.style.transform = `translate(${Math.round(at.x)}px,${Math.round(at.y)}px) translate(-50%,-100%)`;
-        else figureName.hidden = true;
-      } else figureName.hidden = true;
-    }
+    // the lit figure's name
+    updateFigureName(frame);
   }
 
   function placeNames(): void {
@@ -257,7 +629,9 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
    */
   function cullOverlaps(shown: number): void {
     culled.length = 0;
+    starN = 0;
     let visible = 0;
+    const own = shown > 0 ? (root.host as HTMLElement).getBoundingClientRect() : undefined;
     const kept: { l: number; t: number; r: number; b: number }[] = [];
     for (let i = 0; i < shown; i += 1) {
       const name = pool[i];
@@ -272,11 +646,11 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       }
       const rect = name.getBoundingClientRect();
       // no part of a name or of its ring is drawn over a body (the Earth, the Moon, the Sun): the sky is behind them. hoshi-stars tests the star's own point only, so a name set beside a star at the Earth's edge can run onto it, and the label (name, ring and all) is left out
-      const own = covered ? (root.host as HTMLElement).getBoundingClientRect() : undefined;
+      const blocked = keep.length > 0 ? blockedAt : covered;
       // the catalogue letter set under the name is part of the label
       const under = designations[i]!.hidden || typeof designations[i]!.getBoundingClientRect !== "function" ? undefined : designations[i]!.getBoundingClientRect();
       const bottom = under ? Math.max(rect.bottom, under.bottom) : rect.bottom;
-      if (covered && own && touches(covered, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top, names!.labels[i]!)) {
+      if (blocked && own && (touches(blocked, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top, names!.labels[i]!) || touchesKeep(keep, rect.left - own.left, rect.top - own.top, rect.right - own.left, bottom - own.top))) {
         name.hidden = true;
         designations[i]!.hidden = true;
         culled.push(true);
@@ -290,10 +664,36 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         continue;
       }
       kept.push({ l: rect.left, t: rect.top, r: rect.right, b: rect.bottom });
+      // the boxes of the names that stayed, from the picture's top left, for the constellations' names to keep off
+      if (own) {
+        const one = (starBoxes[starN] ??= { l: 0, t: 0, r: 0, b: 0 });
+        one.l = rect.left - own.left;
+        one.t = rect.top - own.top;
+        one.r = rect.right - own.left;
+        one.b = bottom - own.top;
+        starN += 1;
+      }
       culled.push(false);
       visible += 1;
     }
     drawnNames = visible;
+  }
+
+  /** Hides the lit figure's name and the constellations' names. */
+  function hideFigures(): void {
+    clearTimeout(fadeTimer);
+    if (figureName) figureName.hidden = true;
+    shownAbbr = null;
+    for (const el of figurePool) el.hidden = true;
+    shownFigures = 0;
+  }
+  /** The settings no longer ask for the lines: a figure that was picked is let go, and the page is told. */
+  function letGo(): void {
+    hoverAbbr = null;
+    if (pickAbbr !== null) {
+      pickAbbr = null;
+      emit("chikyu-constellation-pick", null);
+    }
   }
 
   const vars = (): void => {
@@ -304,22 +704,93 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     box.style.setProperty("--hoshi-label-case-variant", (style.case ?? "small-caps") === "small-caps" ? "small-caps" : "normal");
   };
 
+  /** The sky culture the page asks for, exactly as it sets it: `iau` where it sets none. A value that is not a culture is `iau`, with one warning in the console. */
+  const readCulture = (): string => {
+    const raw = options.attribute("constellation-culture");
+    const id = raw === null || raw.trim() === "" ? "iau" : raw.trim().toLowerCase();
+    if (id === "iau") return id;
+    if (Object.hasOwn(CULTURES, id) && !cultureFailed.has(id)) return id;
+    if (!warnedCultures.has(id)) {
+      warnedCultures.add(id);
+      console.warn(`chikyu-earth: constellation-culture="${id}" is not a sky culture here (iau, ${Object.keys(CULTURES).join(", ")}): the IAU's constellations are used.`);
+    }
+    return "iau";
+  };
+  const requestCulture = (id: string): void => {
+    if (cultureLoading.has(id)) return;
+    cultureLoading.add(id);
+    void Promise.all([(options.cultures ?? ((name: string) => CULTURES[name]!()))(id), import("@johnmorrisdotca/hoshi-stars/lines")])
+      .then(([loaded, library]) => {
+        const info = new Map<string, FigureInfo>();
+        const figures: CultureFigureLines[] = [];
+        for (const figure of library.figures(loaded)) {
+          const a = figure.asterism;
+          figures.push({ id: a.id, segments: figure.segments });
+          info.set(a.id, { abbreviation: a.id, name: a.name, english: a.names.en ?? a.name, japanese: a.names.ja ?? a.readings.ja ?? a.name, kind: a.kind, names: a.names, ...(a.readings.ja ? { reading: a.readings.ja } : {}) });
+        }
+        cultureData.set(id, { figures, info });
+        cultureLoading.delete(id);
+        if (module) {
+          configure();
+          // a figure the page picked while the culture was on its way
+          if (pendingPick !== undefined && lines?.figures.some((f) => f.abbreviation === pendingPick)) {
+            setPick(pendingPick, false);
+            pendingPick = undefined;
+          }
+          compute();
+        }
+      })
+      .catch((error: unknown) => {
+        cultureLoading.delete(id);
+        cultureFailed.add(id);
+        // not "not a culture": it is one, and could not be had; the IAU's figures are shown in its place
+        warnedCultures.add(id);
+        console.warn(`chikyu-earth: the sky culture "${id}" could not be loaded, so the IAU's constellations are shown.`);
+        options.onError(error);
+        if (module) {
+          configure();
+          compute();
+        }
+      });
+  };
+
   const configure = (): void => {
     if (!module) return;
+    // the texts may be written in another language or look: their sizes are measured again
+    sizes.clear();
     const count = options.attribute("star-names");
     const magnitude = options.attribute("star-names-magnitude");
     const settings = module.starNamesFromAttributes(count, magnitude);
-    const strength = module.lineStrengthFromAttribute(options.attribute("constellation-lines"));
+    const linesAttribute = module.lineStrengthFromAttribute(options.attribute("constellation-lines"));
+    // the names alone need the figures' places but draw no line: a strength that draws nothing visible, never drawn
+    const strength = linesAttribute ?? (options.attribute("constellation-names") !== null ? 0.01 : undefined);
+    drawStrokes = linesAttribute !== undefined;
     const lang = options.language();
     usedLang = lang;
     if (settings) {
       if (!names) names = module.createStarNames({ ...settings, lang, style });
       else names.set({ ...settings, lang, style });
     } else names = undefined;
-    if (strength !== undefined) {
-      if (!lines) lines = module.createFigureLines({ strength, lang, style });
+    const wantedCulture = readCulture();
+    if (strength === undefined) lines = undefined;
+    else if (wantedCulture !== "iau" && !cultureData.has(wantedCulture)) {
+      // the culture's figures are brought in when asked for; until they are here none are drawn, never the IAU's in their place
+      requestCulture(wantedCulture);
+      if (lines) {
+        lines = undefined;
+        letGo();
+      }
+    } else {
+      if (lines && culture !== wantedCulture) {
+        lines = undefined;
+        letGo();
+      }
+      culture = wantedCulture;
+      const loaded = module;
+      if (!lines) lines = wantedCulture === "iau" ? loaded.createFigureLines({ strength, lang, style }) : createCultureLines(cultureData.get(wantedCulture)!.figures, strength, (partial) => loaded.labelStyle(partial), style);
       else lines.set({ strength, lang, style });
-    } else lines = undefined;
+    }
+    if (!lines || !drawStrokes) letGo();
     vars();
   };
 
@@ -331,8 +802,20 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       .then(async (loaded) => {
         module = loaded;
         if (!style.font) await options.loadFont().catch(() => undefined);
+        // the constellations' names (hoshi-stars' own): for the layer of names and for what a pick tells the page
+        try {
+          const all = await (options.constellations ?? (() => import("@johnmorrisdotca/hoshi-stars/constellations")))();
+          iauInfo = new Map(all.constellations().map((c) => [c.abbreviation, { abbreviation: c.abbreviation, name: c.name, english: c.english, japanese: c.japanese, kind: "constellation" }]));
+        } catch {
+          iauInfo = undefined;
+        }
         configure();
         loading = false;
+        // a pick asked for before hoshi-stars was in (kept while the figures of a culture are still on their way)
+        if (pendingPick !== undefined && lines) {
+          if (lines.figures.some((f) => f.abbreviation === pendingPick)) setPick(pendingPick, false);
+          pendingPick = undefined;
+        }
         compute();
       })
       .catch((error: unknown) => {
@@ -346,6 +829,8 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         attached = false;
         pool.length = 0;
         designations.length = 0;
+        figurePool.length = 0;
+        figureName = undefined;
         options.onError(error);
       });
   };
@@ -358,9 +843,16 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
     const discs = frame.discs;
     covered = frame.covered ?? (discs.length === 0 ? undefined : (x, y) => discs.some((d) => (x - d.x) * (x - d.x) + (y - d.y) * (y - d.y) <= d.radius * d.radius));
     const view = { width: frame.width, height: frame.height };
-    if (names) names.update(frame.project, view, covered);
+    if (keepStale || keepRewatch) {
+      measureKeep(keepRewatch);
+      keepRewatch = false;
+    }
+    takenStale = true;
+    hulls.length = 0;
+    if (names) names.update(frame.project, view, keep.length > 0 ? blockedAt : covered);
     if (lines) lines.update(frame.project, view, names ? names.labels : undefined);
     placeNames();
+    placeConstellationNames(frame);
     drawLines();
   }
 
@@ -383,6 +875,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
   doc.addEventListener("kazoku-languagechange", onLanguage);
   // a font arrives (Michroma, or the one a Japanese name falls back to): the names are measured as they are drawn, so they are laid out again
   const onFonts = (): void => {
+    sizes.clear();
     if (module && wanted() && last) compute();
   };
   doc.fonts?.addEventListener?.("loadingdone", onFonts);
@@ -399,19 +892,21 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
         if (canvas) canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
         for (const name of pool) name.hidden = true;
         for (const designation of designations) designation.hidden = true;
-        if (figureName) figureName.hidden = true;
+        hideFigures();
         return;
       }
       compute();
     },
     refresh() {
+      keepRewatch = true;
       if (!wanted()) {
         names = undefined;
         lines = undefined;
         if (attached && canvas) canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
         for (const name of pool) name.hidden = true;
         for (const designation of designations) designation.hidden = true;
-        if (figureName) figureName.hidden = true;
+        hideFigures();
+        letGo();
         return;
       }
       if (!module) {
@@ -421,23 +916,53 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       configure();
       compute();
     },
+    setKeepClear(areas) {
+      keepList = areas ? [...areas] : [];
+      keepRewatch = true;
+      keepStale = true;
+      if (module && wanted() && last) compute();
+    },
+    pick(abbreviation) {
+      if (!lines) {
+        pendingPick = abbreviation;
+        return;
+      }
+      const known = abbreviation === null || lines?.figures.some((f) => f.abbreviation === abbreviation);
+      if (known) setPick(abbreviation, false);
+    },
+    get picked() {
+      return pickAbbr;
+    },
     setStyle(next) {
       style = next;
+      sizes.clear();
       if (module) {
         configure();
         compute();
       }
     },
     get stats() {
-      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: lines?.picked?.abbreviation ?? null, renders, lang: usedLang ?? "", stars: starPoints() };
+      return { on: wanted(), loaded: module !== undefined, names: names ? drawnNames : 0, figures: lines?.count ?? 0, picked: hoverAbbr ?? pickAbbr, pick: pickAbbr, hover: hoverAbbr, constellations: shownFigures, culture, renders, lang: usedLang ?? "", stars: starPoints() };
     },
     dispose() {
+      clearTimeout(fadeTimer);
+      otherWatch?.disconnect();
+      otherWatch = undefined;
+      live?.remove();
+      keepWatch?.disconnect();
+      keepWatch = undefined;
+      if (keepEvents) {
+        doc.defaultView?.removeEventListener("resize", markStale);
+        doc.defaultView?.removeEventListener("scroll", markStale, { capture: true });
+        keepEvents = false;
+      }
       doc.removeEventListener("kazoku-languagechange", onLanguage);
       doc.fonts?.removeEventListener?.("loadingdone", onFonts);
       canvas?.remove();
       box?.remove();
       pool.length = 0;
       designations.length = 0;
+      figurePool.length = 0;
     },
   };
 }
