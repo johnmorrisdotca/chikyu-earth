@@ -328,6 +328,11 @@ test("a ride on the night side is black with the true Sun and shows the surface 
   await open(page, "&ride=iss");
   await expect.poll(async () => (await statsOf(page)).ride.riding, { timeout: 30_000 }).toBe(true);
   await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 10_000 }).toBe(false);
+  // the picture is what is measured: the lines of text under it (the air's, and the pictures' credit, which names every body on the screen and is several lines long) are white on the dark and would count as light
+  await page.locator(SPACE).evaluate((el) => {
+    el.setAttribute("bodies-credit", "off");
+    el.setAttribute("air-label", "off");
+  });
   // an orbit of the ISS spends a third of its 93 minutes in the Earth's shadow: look for a moment of it
   const start = Date.parse(T);
   let night: number | undefined;
