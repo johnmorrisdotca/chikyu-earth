@@ -29,17 +29,13 @@ Call `setBodyPainter` before the first `<chikyu-space>` connects. Then choose th
 
 **The Moon** is the painter's too when there is one, so it is drawn like the planets and gets its tiles; until it arrives, with `bodies="plain"`, and with no painter, it is the view's own Moon from its NASA map.
 
-**The credit.** Some of the pictures are CC BY 4.0, so they must be credited where they are seen. A painter may carry `credit: { en, ja }`, and the view writes it under the picture while the painter draws the bodies, in the element's or the page's language; `bodies-credit="off"` takes the line away for a page that writes the credit itself. wakusei-planets' painter has no `credit` of its own yet, so add it as the demo does (its sources are the ones wakusei-planets' NOTICE.md names):
+**The credit.** Some of the pictures are CC BY 4.0, so they must be credited where they are seen. A painter may carry `credit: { en, ja }`, and the view writes it under the picture while the painter draws the bodies, in the element's or the page's language; `bodies-credit="off"` takes the line away for a page that writes the credit itself. wakusei-planets' painter (0.39 and later) carries `credit` itself, for exactly the pictures on the screen now, so pass it as it is. The view reads it again whenever a body it drew asks for a redraw (a picture arrived, a window of finer tiles changed) and writes the line under the picture only when its text changed, never at every frame, so the line follows the bodies drawn: Jupiter shows Nestaeric's credit, and a view with no CC BY picture shows none. Spreading the painter into a new object (`{ ...painter }`) would read `credit` once, so give the view the painter itself. A page that writes the credit itself (`bodies-credit="off"`) hears `chikyu-bodies-credit` when the painter's credit changed, with `detail` `{ en, ja }` or `null`, and writes it where it likes:
 
 ```ts no-run
 import { setBodyPainter } from "@johnmorrisdotca/chikyu-earth/space/element";
 import { createPainter } from "@johnmorrisdotca/wakusei-planets/painter";
 
-const credit = {
-  en: "Planet and Moon pictures: NASA, USGS and JPL (public domain); Solar System Scope, Shady Tex and Nestaeric (CC BY 4.0), by way of Wakusei Planets.",
-  ja: "惑星と月の画像：NASA・USGS・JPL（パブリックドメイン）、Solar System Scope・Shady Tex・Nestaeric（CC BY 4.0）。Wakusei Planets 経由。",
-};
-setBodyPainter({ ...createPainter({ textureBase: "/planets/" }), credit });
+setBodyPainter(createPainter({ textureBase: "/planets/" }));
 ```
 
 The moons appear round a planet once it is a few pixels across and leave when the camera goes away. `element.zoomFor("Jupiter-moons")` is the zoom that shows a planet with its nearer moons (also `Saturn-moons`, `Mars-moons`, `Uranus-moons`, `Neptune-moons`, `Pluto-moons`); set `element.body = "Jupiter"` first. Riding along a planet or the Moon shows the same bodies.

@@ -106,9 +106,8 @@ test("in the default look the planets, the Sun and the Moon are drawn from their
   expect((await statsOf(page)).bodies.look).toBe("realistic");
   await expect.poll(async () => (await statsOf(page)).bodies.moon, { timeout: 30_000, message: "the Moon is the painter's" }).toBe(true);
   for (const body of ["sun", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "moon"]) await expect.poll(() => pictures.has(body), { timeout: 30_000, message: `${body}'s picture` }).toBe(true);
-  await expect(page.locator(`${SPACE} #bodies-note`)).toBeVisible();
-  await expect(page.locator(`${SPACE} #bodies-note`)).toContainText("CC BY 4.0");
-  // the plain spheres take the credit away
+  // the credit line is the painter's own (wakusei-planets 0.39 and later): e2e/space-credit.gl.ts watches it
+  // the plain spheres have no credit
   await page.getByRole("group", { name: "Planets", exact: true }).getByRole("button", { name: "Plain", exact: true }).dispatchEvent("click");
   await expect(page.locator(`${SPACE} #bodies-note`)).toBeHidden();
   await expect.poll(async () => (await statsOf(page)).bodies.moon, { timeout: 15_000, message: "the view's own Moon again" }).toBe(false);
@@ -118,7 +117,6 @@ test("in the default look the planets, the Sun and the Moon are drawn from their
 test("close to Mars its finer map tiles are laid on it, and far away none are held", async ({ page }) => {
   const tiles = await routePlanetTiles(page);
   await open(page);
-  await expect(page.locator("#credit-line")).toContainText("CC BY 4.0");
   await page.locator(SPACE).evaluate((el) => Reflect.set(el, "body", "Mars"));
   await page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { set(view: { zoom: number }): void }).set({ zoom: 2.5 }));
   await expect.poll(async () => (await statsOf(page)).bodies.tiles, { timeout: 30_000 }).toBeGreaterThanOrEqual(1);

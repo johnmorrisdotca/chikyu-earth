@@ -434,6 +434,8 @@ export interface SpaceDeps {
   satellitePainter?: () => SatellitePainter | undefined;
   /** The painter could not make a body (the three.js parts handed over lack something it needs); the body is drawn plain instead. */
   onPainterError?: (error: unknown) => void;
+  /** A body the painter drew changed (a picture arrived, a window of its tiles changed, a body was made): the painter's credit, which names the pictures on the screen now, may have changed. Told before the redraw is asked for. */
+  onBodies?: () => void;
   /** The map source of each layer now (the folder of the `tiles` attribute), or none: the Earth then keeps the package's own pictures. Read at every draw. */
   sources?: () => TileSources;
   /** Told once when the tile set has been read: the width in pixels of the finest level of each of its layers. */
@@ -608,6 +610,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           slot.drawing = made;
           scene.add(made.object);
+          deps.onBodies?.();
           deps.invalidate();
         };
         const fail = (error: unknown): void => {
@@ -620,7 +623,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
         };
         try {
-          const made = (slot.plain || look === "plain" ? plainPainter : painter).make(three, slot.name, { look, invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
+          const made = (slot.plain || look === "plain" ? plainPainter : painter).make(three, slot.name, { look, invalidate: () => (deps.onBodies?.(), deps.invalidate()), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
           if (typeof (made as Promise<BodyDrawing>).then === "function") (made as Promise<BodyDrawing>).then(arrive, fail);
           else arrive(made as BodyDrawing);
         } catch (error) {

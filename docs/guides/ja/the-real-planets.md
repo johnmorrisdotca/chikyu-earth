@@ -29,17 +29,13 @@ setBodyPainter(painter);
 
 **月**も、ペインターがあるときはペインターが描きます。惑星と同じように描かれ、タイルも使えます。ペインターの月が読み込まれるまでのあいだと、`bodies="plain"` のとき、ペインターがないときは、ビュー自身の月 (NASA の地図から描いたもの) を出します。
 
-**クレジット。** 画像の一部は CC BY 4.0 なので、見える場所にクレジットが必要です。ペインターに `credit: { en, ja }` を付けると、ペインターが天体を描いているあいだ、ビューがそれを要素またはページの言語で、画像の下に表示します。クレジットをページ自身で書くときは、`bodies-credit="off"` でこの行を消せます。wakusei-planets のペインターには、まだ自分の `credit` がないので、デモのように付けてください (出典は wakusei-planets の NOTICE.md にあるものです)。
+**クレジット。** 画像の一部は CC BY 4.0 なので、見える場所にクレジットが必要です。ペインターに `credit: { en, ja }` を付けると、ペインターが天体を描いているあいだ、ビューがそれを要素またはページの言語で、画像の下に表示します。クレジットをページ自身で書くときは、`bodies-credit="off"` でこの行を消せます。wakusei-planets のペインター (0.39 以降) は、いま画面にある画像だけの `credit` を自分で持っているので、そのまま渡してください。ビューは、描いた天体が再描画を求めるたび (画像が届いたとき、細かいタイルの範囲が変わったとき) にそれを読み直し、文字が変わったときだけ画像の下の行を書き換えます (毎フレームは書きません)。そのため、この行は描かれている天体に従います。木星では Nestaeric のクレジットが出て、CC BY の画像がないビューには何も出ません。ペインターを新しいオブジェクトに展開すると (`{ ...painter }`) `credit` は 1 回しか読まれないので、ペインターそのものを渡してください。クレジットをページ自身で書く場合 (`bodies-credit="off"`) は、ペインターの `credit` が変わるたびに `chikyu-bodies-credit` が届きます (`detail` は `{ en, ja }`、なければ `null`)。好きな場所に書いてください。
 
 ```ts no-run
 import { setBodyPainter } from "@johnmorrisdotca/chikyu-earth/space/element";
 import { createPainter } from "@johnmorrisdotca/wakusei-planets/painter";
 
-const credit = {
-  en: "Planet and Moon pictures: NASA, USGS and JPL (public domain); Solar System Scope, Shady Tex and Nestaeric (CC BY 4.0), by way of Wakusei Planets.",
-  ja: "惑星と月の画像：NASA・USGS・JPL（パブリックドメイン）、Solar System Scope・Shady Tex・Nestaeric（CC BY 4.0）。Wakusei Planets 経由。",
-};
-setBodyPainter({ ...createPainter({ textureBase: "/planets/" }), credit });
+setBodyPainter(createPainter({ textureBase: "/planets/" }));
 ```
 
 衛星は、惑星が数ピクセルの大きさになると周りに出て、カメラが離れると消えます。`element.zoomFor("Jupiter-moons")` は、惑星と近くの衛星が見えるズームです (`Saturn-moons`、`Mars-moons`、`Uranus-moons`、`Neptune-moons`、`Pluto-moons` もあります)。先に `element.body = "Jupiter"` にしてください。惑星や月に「いっしょに動く」ときも、同じ天体が見えます。

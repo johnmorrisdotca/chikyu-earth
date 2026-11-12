@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The credit under the space view follows the painter's credit** (MODULES-1158). wakusei-planets' painter (0.39 and later) carries `credit: { en, ja }` for exactly the pictures on the screen now, so `<chikyu-space>` reads it again whenever a body drawing asks for a redraw (a picture arrived, a window of tiles changed, a body was made) and writes the line only when its text changed, never at every frame; no credit, no line. Pass the painter as it is: `{ ...painter }` reads `credit` once. A page that writes the credit itself (`bodies-credit="off"`) is sent `chikyu-bodies-credit` when it changed, with `detail` `{ en, ja }` or `null`. The demo drops its own `PLANET_CREDIT` and uses the painter's; its full-screen page follows the event. Tests: `e2e/space-credit.gl.ts` (a painter of the test's own, and Jupiter with wakusei-planets' once 0.39 is installed).
+
 ## 0.39.0 - 2026-11-12
 
 - **The painted trail follows the orbit at any clock, and costs nothing until it is used** (MODULES-1188). A month laid down at once, or a fast clock, took samples too far apart and drew chords across the map: samples are now at most a third of a trip apart. A clock run backwards laid down nothing for the older end, so the trail shrank: it now fills it in. A coverage swath over the date line was cut at the edge of the map: it now wraps. Switching to a satellite that paints nothing left the old picture on the globe: the cleared picture is sent. The trail's two megabytes and its picture on the graphics card were made in every view, painting or not: they are made when the first satellite is painted, and `clearPaint()` gives them back.

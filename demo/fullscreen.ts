@@ -39,8 +39,13 @@ if (space) {
   // the page writes the pictures' credit itself, under the title, where the controls at the bottom do not cover it
   earth.setAttribute("bodies-credit", "off");
   const credit = document.querySelector<HTMLElement>("#credit-line")!;
-  credit.textContent = planets?.credit?.[lang] ?? "";
-  credit.hidden = !planets?.credit;
+  // the painter's credit names the pictures on the screen now, so the line follows it
+  const writeCredit = (given: { en: string; ja: string } | null | undefined): void => {
+    credit.textContent = given?.[lang] ?? "";
+    credit.hidden = !given;
+  };
+  writeCredit(planets?.credit);
+  earth.addEventListener("chikyu-bodies-credit", (event) => writeCredit((event as CustomEvent<{ en: string; ja: string } | null>).detail));
   if (query.get("scale") === "true") earth.setAttribute("scale", "true");
 } else {
   const { setThreeLoader } = await import("../src/realistic/element.ts");
