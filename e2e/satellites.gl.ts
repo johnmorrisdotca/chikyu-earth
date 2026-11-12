@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { readFileSync } from "node:fs";
-import { COUNT_SCRIPT, alive, counts, ownClock, settle, timed } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, ownClock, settle, steppingOnly, timed } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -145,8 +145,7 @@ test("paused with 6,000 satellites on: nothing is drawn, no frame asked for, no 
 test("at real time a group on show draws once a second and runs SGP4 once a second, not once a frame", async ({ page }) => {
   await ownClock(page);
   await open(page, "", "stations,starlink");
-  await setSpeed(page, 1);
-  await settle(page, 1500);
+  await steppingOnly(page, () => setSpeed(page, 0), () => setSpeed(page, 1), async () => (await statsOf(page)).draws);
   const m = await measure(page, 6000);
   console.log(`real time with satellites: ${m.frames.toFixed(2)} frames a second, ${m.propagations.toFixed(0)} SGP4 calls a second for 2,252 satellites`);
   expect(m.frames).toBeLessThanOrEqual(1.6);
@@ -286,8 +285,7 @@ test.describe("moving", () => {
     const reduced = await context.newPage();
     await ownClock(reduced);
     await open(reduced, "&speed=60", "stations,starlink");
-    await setSpeed(reduced, 60);
-    await settle(reduced, 800);
+    await steppingOnly(reduced, () => setSpeed(reduced, 0), () => setSpeed(reduced, 60), async () => (await statsOf(reduced)).draws);
     const stepping = await measure(reduced, 4000);
     console.log(`60x, reduced motion: ${stepping.frames.toFixed(2)} frames a second`);
     expect(stepping.frames).toBeLessThanOrEqual(1.6);

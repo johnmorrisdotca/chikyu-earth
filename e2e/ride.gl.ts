@@ -3,7 +3,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createSatellites, type ElementSet } from "../src/satellites/index.ts";
-import { COUNT_SCRIPT, alive, counts, drainGpu, freezeClock, ownClock, settle, timed, untilStill } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, drainGpu, freezeClock, ownClock, passTime, settle, steppingOnly, timed, untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -70,13 +70,6 @@ const issAt = (ms: number): [number, number, number] => {
   return [out[0]!, out[1]!, out[2]!];
 };
 const angle = (a: number[], b: number[]): number => (Math.acos((a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!) / (Math.hypot(...(a as [number, number, number])) * Math.hypot(...(b as [number, number, number])))) * 180) / Math.PI;
-
-/** On an owned clock: let `ms` of the page's time pass at once, as far as its timers and frames go (loads are the machine's, and are waited for with `untilStill`). */
-async function passTime(page: Page, ms: number): Promise<void> {
-  await freezeClock(page);
-  await page.clock.runFor(ms);
-  await page.clock.resume();
-}
 
 /** On an owned clock: let the glide to a ride's camera run its course (it takes about a second of the page's time, a little more for a far body), and check it ended. */
 async function glided(page: Page): Promise<void> {
@@ -254,8 +247,8 @@ test("a reader who asked for reduced motion gets a jump and one step a second", 
   await open(page);
   await rideButton(page, "ISS").click();
   expect((await statsOf(page)).ride.gliding, "no glide").toBe(false);
-  await setSpeed(page, 60);
-  await settle(page, 800);
+  // the ride's own draws (pictures let go, pictures arriving) are not the clock's steps: count the steps alone
+  await steppingOnly(page, () => setSpeed(page, 0), () => setSpeed(page, 60), async () => (await statsOf(page)).draws);
   const m = await measure(page, 4000);
   console.log(`riding the ISS at 60x with reduced motion: ${m.frames.toFixed(2)} frames a second`);
   expect(m.frames).toBeLessThanOrEqual(1.6);

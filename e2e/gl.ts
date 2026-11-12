@@ -1,6 +1,7 @@
 // Helpers for the realistic Earth's browser tests: open it, read it, take a pixel from it. Not a test file.
 import { COUNT_SCRIPT, readCounts, type GlCounts } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, type Locator, type Page } from "@playwright/test";
+import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
 
 export { COUNT_SCRIPT, readCounts };
 
@@ -92,6 +93,31 @@ export async function timed<T>(page: Page, ms: number, read: () => Promise<T>): 
   await page.waitForTimeout(ms);
   const after = await read();
   return { before, after, seconds: (Date.now() - t0) / 1000 };
+}
+
+/**
+ * On an owned clock: let `ms` of the page's time pass at once, as far as its timers and frames go (loads are the machine's, and are waited for with `untilStill`).
+ */
+export async function passTime(page: Page, ms: number): Promise<void> {
+  await freezeClock(page);
+  await page.clock.runFor(ms);
+  await page.clock.resume();
+}
+
+/**
+ * Get a view to the point where a count of its draws over a stretch of the page's time counts the steps of its clock and nothing else. Draws a count would otherwise take in are not steps: the Earth pictures a view no
+ * longer needs are let go `DOWNGRADE_AFTER_MS` after it needed them, and pictures arrive when the network brings them (a slow machine had them land inside the window: 1.75 frames a second against 1.6).
+ * So: `hold` stops the clock's steps (speed 0) and the page's time is run past the let-go, the arrivals are waited out (`untilStill`), `go` sets the clock going and waits for the draw that asks for, and
+ * the first steps (a frame already asked for, the step after it) are let pass. The page's clock must be an owned one, and `draws` reads the element's own count.
+ */
+export async function steppingOnly(page: Page, hold: () => Promise<void>, go: () => Promise<void>, draws: () => Promise<number>): Promise<void> {
+  await hold();
+  await passTime(page, DOWNGRADE_AFTER_MS + 1000);
+  await untilStill(page);
+  const asked = await draws();
+  await go();
+  await expect.poll(draws, { timeout: 30_000, message: "the draw that the new speed asked for" }).toBeGreaterThan(asked);
+  await passTime(page, 1500);
 }
 
 /**
