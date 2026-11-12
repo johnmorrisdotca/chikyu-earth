@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ridePose, RIDE_FOV, type RideInput } from "../src/space/ride.ts";
+import { faceOffset, ridePose, RIDE_FACES, RIDE_FOV, type RideFace, type RideInput } from "../src/space/ride.ts";
+import { aboveAxes } from "../src/space/satellite-model.ts";
 
 const dot = (a: number[], b: number[]): number => a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
 const len = (a: number[]): number => Math.hypot(a[0]!, a[1]!, a[2]!);
@@ -181,4 +182,50 @@ test("the tilt that does something is from straight down to a little above the h
   assert.equal(rideTiltLimits(1.066, "down", 1), null, "the down look has no range");
   const narrow = rideTiltLimits(1.066, "horizon", 6)!;
   assert.ok(narrow.max > range.max * 3, "at a high zoom the same tilt moves less, so the range is wider");
+});
+
+const unitOf = (a: number[]): number[] => {
+  const n = len(a) || 1;
+  return [a[0]! / n, a[1]! / n, a[2]! / n];
+};
+const angle = (a: number[], b: number[]): number => (Math.acos(Math.max(-1, Math.min(1, dot(unitOf(a), unitOf(b))))) * 180) / Math.PI;
+const level = (vector: number[], radial: number[]): number[] => {
+  const n = unitOf(radial);
+  const along = dot(vector, n);
+  return unitOf([vector[0]! - n[0]! * along, vector[1]! - n[1]! * along, vector[2]! - n[2]! * along]);
+};
+
+test("each facing from the body is within a degree of its direction, and reduced motion is not this file's clock", () => {
+  const radial = unitOf(iss.position);
+  const way = level(iss.velocity, radial);
+  const left = unitOf([radial[1]! * way[2]! - radial[2]! * way[1]!, radial[2]! * way[0]! - radial[0]! * way[2]!, radial[0]! * way[1]! - radial[1]! * way[0]!]);
+  const want: Record<RideFace, number[]> = {
+    ahead: way,
+    behind: way.map((n) => -n),
+    left,
+    right: left.map((n) => -n),
+    down: radial.map((n) => -n),
+    up: radial,
+  };
+  for (const face of RIDE_FACES) {
+    const pose = ridePose({ ...iss, look: "horizon", face, yaw: 0, tilt: 0, turn: 0 });
+    const got = face === "down" || face === "up" ? pose.forward : level(pose.forward, radial);
+    assert.ok(angle(got, want[face]) <= 1, `${face} is ${angle(got, want[face]).toFixed(2)} degrees off`);
+  }
+});
+
+test("above a satellite, down looks straight down and the other facings look along, across or away", () => {
+  const place: [number, number, number] = [1.07, 0, 0];
+  const velocity: [number, number, number] = [0, 0, -7.66];
+  const radial = unitOf(place);
+  const way = level(velocity, radial);
+  const left = unitOf([radial[1]! * way[2]! - radial[2]! * way[1]!, radial[2]! * way[0]! - radial[0]! * way[2]!, radial[0]! * way[1]! - radial[1]! * way[0]!]);
+  const want: Record<RideFace, number[]> = { ahead: way, behind: way.map((n) => -n), left, right: left.map((n) => -n), down: radial.map((n) => -n), up: radial };
+  for (const face of RIDE_FACES) {
+    const { yaw, tilt } = faceOffset(face);
+    const view = aboveAxes(place, velocity, yaw, tilt);
+    const forward = view.offset.map((n) => -n);
+    const got = face === "down" || face === "up" ? forward : level(forward, radial);
+    assert.ok(angle(got, want[face]) <= 1, `${face} is ${angle(got, want[face]).toFixed(2)} degrees off`);
+  }
 });
