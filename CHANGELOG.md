@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **City names can be taken off and put back, and a font is measured once** (MODULES-1097). Removing `<chikyu-space>` or `<chikyu-earth-realistic>` while a tier of city names is still loading no longer leaves a second canvas and a second names box when it is put back: a load that arrives after the layer is gone does nothing, and neither does its error. The font used to measure the names is read again only when the style, the size or the language changes, not on every draw. A font that finishes loading after the space view has measured its body-name boxes is measured again.
+
 ## 0.35.0 - 2026-11-12
 
 - **The figures follow a sky culture** (MODULES-1125). `constellation-culture` is `iau` (the 88, the default), `western`, `japanese` (the 88 by their Japanese names, then the traditional figures such as Subaru, the Pleiades) or `chinese`; the lines, the hovered and picked figure and its name follow it, and the events carry `id`, `kind` and `culture`. The value is exactly what the page sets (a Japanese page keeps the IAU's figures unless it says `japanese`); an unknown value is `iau` with one warning. Each culture's data is a dynamic import of its own, fetched only when asked for. hoshi-stars' `createFigureLines` takes no culture yet, so the lines of a culture are laid out here from `figures(culture)`.
