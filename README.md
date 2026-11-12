@@ -240,6 +240,14 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 <chikyu-earth-realistic borders="countries"></chikyu-earth-realistic>
 ```
 
+## The grid and country names
+
+`grid` on `<chikyu-earth-realistic>` and `<chikyu-space>` draws the meridians and parallels on the Earth (every 30 degrees while it is small on the screen, every 15 once it is large), with the equator, the tropics, the polar circles and the prime meridian picked out, light by day and dim by night. `country-names` names the countries in sight at the middle of the part of each you can see, in the page's language (chizu's English and Japanese names), never over another name and never on the far side. Both are off unless set; the grid is one batch of lines and nothing is drawn at rest: [guide](docs/guides/grid-and-country-names.md).
+
+```html
+<chikyu-earth-realistic grid country-names></chikyu-earth-realistic>
+```
+
 ## You are here, and places on the Earth
 
 `places` on `<chikyu-space>` and `<chikyu-earth-realistic>` marks places on the Earth, each a beam, a pin or a ring (`places-look`) standing out of the ground, turning with the Earth and hidden on its far side: `kind: "here"` for the reader's own place (brighter, with a quiet pulse) and favourites, quieter. Names never overlap; nothing is drawn at rest. The package never asks for the reader's place and stores or sends nothing: the page asks on a press and rounds the place with `nearby` first: [guide](docs/guides/places.md).
@@ -566,6 +574,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |
 | [City names on the Earth](docs/guides/city-names.md) | Cities named from kuni's list, more as the Earth grows on the screen, in the page's language |
 | [Borders on the Earth](docs/guides/borders.md) | The borders between countries, and a page's own regions once the Earth is large enough |
+| [The grid and country names on the Earth](docs/guides/grid-and-country-names.md) | Meridians and parallels with the special lines picked out, and the countries in sight named in the page's language |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
 | [You are here, and places on the Earth](docs/guides/places.md) | The reader's place and favourite places as markers standing out of the Earth, asked for only on a press, kept on the device |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
