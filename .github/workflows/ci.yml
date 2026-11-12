@@ -13,6 +13,8 @@ on:
         description: "With simulate_main_push: look for a green run on this commit instead (a dry run: the heavy jobs are skipped and the summary says what a push would do). Empty: this commit, and the heavy jobs follow the answer."
         type: string
         default: ""
+# A dry run of the lookup (lookup_sha) is named so, and the lookup never counts it: it skips the heavy jobs and ends green, which is not a green run of the commit.
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.lookup_sha != '' && 'CI (dry run of the skip lookup)' || '' }}
 permissions:
   contents: read
   actions: read
@@ -47,7 +49,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$LOOKUP_SHA" ]; then sha="$LOOKUP_SHA"; dry=true; fi
           # Completed and successful, for this commit, other than this very run. Any other answer, or a failed question, means everything runs.
           if ! found="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$sha&status=completed&per_page=100" \
-            --jq "[.workflow_runs[] | select(.conclusion == \"success\" and .id != $GITHUB_RUN_ID)] | length")"; then
+            --jq "[.workflow_runs[] | select(.conclusion == \"success\" and .id != $GITHUB_RUN_ID and ((.display_title // \"\") | startswith(\"CI (dry run\") | not))] | length")"; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "Could not read the runs of $WORKFLOW_FILE: everything runs."
             exit 0
