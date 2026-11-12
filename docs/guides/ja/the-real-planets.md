@@ -44,7 +44,7 @@ setBodyPainter({ ...createPainter({ textureBase: "/planets/" }), credit });
 
 衛星は、惑星が数ピクセルの大きさになると周りに出て、カメラが離れると消えます。`element.zoomFor("Jupiter-moons")` は、惑星と近くの衛星が見えるズームです (`Saturn-moons`、`Mars-moons`、`Uranus-moons`、`Neptune-moons`、`Pluto-moons` もあります)。先に `element.body = "Jupiter"` にしてください。惑星や月に「いっしょに動く」ときも、同じ天体が見えます。
 
-負荷は抑えています。ペインターは、ページがすでに渡した three.js (共有レンダラー、WebGL は1つ) で描き、描くのはビューが頼んだときだけです。画面で大きいときだけ細かい画像を取り、小さくなったら手放します。衛星は視野から出て4秒で手放し、要素が消えるときはすべて解放します。`element.stats.bodies` には、ペインターが作った天体の数 (`painted`)、出ている衛星の数 (`moons`)、持っている衛星の数 (`held`。出ているか、視野から出て4秒たっていないもの)、月をペインターが描いているかどうか (`moon`)、タイルを重ねている天体の数 (`tiles`) が入ります。`setThreeLoader` で渡す three.js の一部には、wakusei-planets が使う部品 (`AdditiveBlending`、`DataTexture`、`NoColorSpace`、`PlaneGeometry`、`RGBAFormat`、`RingGeometry`、`SphereGeometry`、`TextureLoader`、`Vector2`) も必要です。デモの `three-subset.ts` に一覧があります。
+負荷は抑えています。ペインターは、ページがすでに渡した three.js (共有レンダラー、WebGL は1つ) で描き、描くのはビューが頼んだときだけです。画面で大きいときだけ細かい画像を取り、小さくなったら手放します。衛星は視野から出て4秒で手放し、要素が消えるときはすべて解放します。`element.stats.bodies` には、ペインターが作った天体の数 (`painted`)、出ている衛星の数 (`moons`)、まだ手放していない衛星の数 (`held`。表示中か、視野から出てまだ4秒たっていないもの)、月をペインターが描いているかどうか (`moon`)、タイルを重ねている天体の数 (`tiles`) が入ります。`setThreeLoader` で渡す three.js の一部には、wakusei-planets が使う部品 (`AdditiveBlending`、`DataTexture`、`NoColorSpace`、`PlaneGeometry`、`RGBAFormat`、`RingGeometry`、`SphereGeometry`、`TextureLoader`、`Vector2`) も必要です。デモの `three-subset.ts` に一覧があります。
 
 ## 自分のペインター
 
