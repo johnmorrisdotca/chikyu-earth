@@ -15,7 +15,9 @@ import { ridePose, type RideLook } from "./ride.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
+import { createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import type { CityFrame } from "../cities/geometry.ts";
+import type { GeoPoint } from "../types.ts";
 import { MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
@@ -182,6 +184,8 @@ export interface SpaceModel {
   transition: { start: number; duration: number; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
   /** The shared controls' view as the last draw used it, and how tall the view was (CSS pixels): `setView` skips a draw for a turn that moves nothing by half a pixel. */
   drawnView: { yaw: number; tilt: number; zoom: number } | null;
+  /** The point of the ground the view would look at with yaw and tilt 0, as of the last draw (the middle of the view is this less the yaw and tilt), or null while the camera rides or looks at another body. */
+  lookBase: GeoPoint | null;
   heightPx: number;
   pose: Pose;
   /** Pixels a second that riding makes things move on the screen at 1x clock speed (0 when not riding): the draw rate follows it. */
@@ -224,6 +228,7 @@ export const newSpaceModel = (): SpaceModel => ({
   rideLost: false,
   transition: null,
   drawnView: null,
+  lookBase: null,
   heightPx: 420,
   pose: { p: [0, 0, 0], q: [0, 0, 0, 1], fov: FOV, valid: false },
   rideMotion: 0,
@@ -360,6 +365,8 @@ export interface SpaceDeps {
   onSky?: (frame: SkyFrame) => void;
   /** Where points of the Earth's surface fall on the screen at this draw, for the places drawn on it. Called at each draw. */
   onPlaces?: (view: PlaceView) => void;
+  /** The rings the places' layer wants drawn in one draw call, read right after `onPlaces`. */
+  placeSprites?: () => PlaceSpriteData | null;
   /** Where the Earth is on the screen and how to find a place on it, for the names of cities. Called at each draw, with `null` while no Earth is shown. */
   onCities?: (frame: CityFrame | null) => void;
   /** The name written on the Earth could not be made. */
@@ -576,6 +583,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let meteors: MeteorLayer | null = null;
       let meteorTimer: ReturnType<typeof setTimeout> | undefined;
       let nameOn: BodyLabelLayer | null = null;
+      let placeSprites: PlaceSprites | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number } = { key: "", drawing: null, turn: 0 };
@@ -705,6 +713,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let rideFrom: { position: Vec3; velocity: Vec3; hidden: BodyName | null; gameSeconds: number } | null = null;
           let followed: { place: Vec3; velocity: Vec3; ref: SatelliteRef } | null = null;
           model.rideLost = false;
+          model.lookBase = null;
           model.rideMotion = 0;
           model.rideDistance = null;
           const ride = model.ride;
@@ -767,6 +776,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const lon = model.centre.lon - way * model.view.yaw;
             const lat = Math.max(-90, Math.min(90, baseLat - way * model.view.tilt));
             const aim = direction(spin + lon, lat);
+            if (way === 1 && focus === "Earth") model.lookBase = { lon: model.centre.lon + spin - frame.spin, lat: baseLat };
             distance = Math.max(1.05 * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
             target.set(focusPos[0], focusPos[1], focusPos[2]);
             camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
@@ -962,6 +972,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             deps.onPlaces({
               width: size.width,
               height: size.height,
+              radius: hidden === "Earth" || rideFrom ? 0 : Math.min(px.Earth, 1e5),
               at(lon, lat, out) {
                 const la = lat * RAD;
                 const lo = lon * RAD;
@@ -987,6 +998,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               },
             });
           }
+          const spriteData = deps.placeSprites?.() ?? null;
+          if (spriteData && !placeSprites) placeSprites = createPlaceSprites(three, earth, sunEarth);
+          placeSprites?.sync(spriteData, model.ratio(), size.width, size.height, model.light === "lit");
           // the name written on the Earth: made the first time the settings ask for it; none while a ride along a body hides the Earth
           if (model.bodyLabel.settings && !nameOn) nameOn = createBodyLabelLayer(three, earth, model.bodyLabel, { invalidate: () => deps.invalidate(), ...(deps.onLabelError ? { onError: deps.onLabelError } : {}) });
           nameOn?.sync(camera, rideFrom ? 0 : Math.min(px.Earth, 1e5));
@@ -1082,6 +1096,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
+          placeSprites?.dispose();
           modelSlot.turn += 1;
           dropModel();
           layer?.dispose();

@@ -10,6 +10,8 @@ import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/h
 import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
 import { createPlaceLayer, PLACE_STYLE, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
+import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
+import { subsolarPoint } from "../realistic/sun.ts";
 import { SHORT_NAMES } from "../satellites/names.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
 
@@ -262,6 +264,8 @@ export class ChikyuSpace extends HTMLElement {
   #ridden: Partial<Record<keyof typeof RIDE_ZOOM, string>> = {};
   #placeLayer: PlaceLayer | undefined;
   #placeList: Place[] = [];
+  /** Counts the turns to a place, so a new one stops the one before. */
+  #placeGlide = 0;
   #nameBoxes = new Map<string, { width: number; height: number }>();
 
   /** The controller behind the element's own hands (`set`, `fit`, `state`), while it is in a page. */
@@ -346,6 +350,7 @@ export class ChikyuSpace extends HTMLElement {
       onLabels: (places) => this.#placeLabels(places),
       onSky: (sky) => this.#sky?.frame(sky),
       onPlaces: (view) => this.#drawPlaces(view),
+      placeSprites: () => this.#placeLayer?.sprites ?? null,
       onCities: (frame) => this.#cities?.frame(frame),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onSatelliteMarks: (marks) => this.#showMarks(marks),
@@ -513,10 +518,12 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
-   * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
-   * (the default: quieter). Each stands up out of the ground, turns with the Earth, is hidden on its far side and keeps its size in pixels at any zoom. Names go at the top, `here` first, and never overlap
-   * one another or the bodies' names; one with no room is left out. The element stores nothing and sends nothing: the page hands the places over and keeps them where it likes. Setting the property writes
-   * the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight and for a reader who asked for less motion.
+   * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind, color }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
+   * (the default: quieter), and `color` an optional CSS colour of its own. The first `PLACE_MARKS` in sight (`here` first, then in the order given) stand up out of the ground with their names; every other place
+   * is a ring on the ground, all of them one draw call, and places that crowd are gathered into one ring with their count. They turn with the Earth, are hidden on its far side, are dimmer on its night side
+   * and keep their size in pixels at any zoom. Names never overlap one another or the bodies' names; one with no room is left out. The element stores nothing and sends nothing: the page hands the places
+   * over and keeps them where it likes. Setting the property writes the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight
+   * and for a reader who asked for less motion.
    */
   get places(): Place[] {
     return this.#placeList.map((place) => ({ ...place }));
@@ -525,6 +532,31 @@ export class ChikyuSpace extends HTMLElement {
     const clean = cleanPlaces(value);
     if (clean.length === 0) this.removeAttribute("places");
     else this.setAttribute("places", JSON.stringify(clean));
+  }
+
+  /**
+   * Turn the view so a place of `places` is in the middle, at a pace a reader can follow (at once with `smooth: false`, for a reader who asked for less motion, or before the picture is live); the zoom stays.
+   * The place is named by its `id`, or by its label in any case. The camera must be looking at the Earth: while it rides along or looks at another body nothing moves. The tilt is held to 90 degrees either
+   * way, so a place more than 90 degrees of latitude from `center` comes as near the middle as that allows.
+   *
+   * @param text - The place's id or label.
+   * @param options - `smooth` (true by default).
+   * @returns The place, once the turn has started; `undefined` when there is no such place or the camera is not looking at the Earth.
+   */
+  async goToPlace(text: string, options: { smooth?: boolean } = {}): Promise<Place | undefined> {
+    const place = findPlace(this.#placeList, text);
+    const base = this.#model.lookBase;
+    if (!place || !base || this.#model.ride) return undefined;
+    const controls = this.#controls();
+    const from = { yaw: this.#model.view.yaw, tilt: this.#model.view.tilt };
+    const to = aimAt(base, place, from);
+    const glide = (this.#placeGlide += 1);
+    const set = (yaw: number, tilt: number, final: boolean): void => {
+      if (controls) controls.set({ yaw, tilt, zoom: this.#model.view.zoom }, final, "place");
+      else this.setView({ yaw, tilt, zoom: this.#model.view.zoom }, final);
+    };
+    glideView(set, from, to, options.smooth !== false && !prefersLessMotion() && this.#view?.live === true, () => glide === this.#placeGlide && this.isConnected);
+    return { ...place };
   }
 
   /** How the places are drawn (the attribute `places-look`): `beam` (a light rising out of the ground with a ring at its foot, the default), `pin` (a thin stick with a round head) or `ring` (only the ring on the ground). */
@@ -555,7 +587,7 @@ export class ChikyuSpace extends HTMLElement {
         taken.push({ left: at.x + Math.max(4, Math.min(at.r, 40)), top: at.y - 8, ...box });
       }
     }
-    layer.frame(view, taken, this.#marks);
+    layer.frame(view, taken, this.#marks, this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
   }
 
   /**
@@ -1068,8 +1100,11 @@ export class ChikyuSpace extends HTMLElement {
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
     followModel: { x: number; y: number; shown: boolean } | null;
-    /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
-    places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
+    /**
+     * The places: how many were handed over, how many are in sight at the last draw (`shown`, those gathered into groups included), how many stand up as markers of their own (`marks`) and are named (`labels`),
+     * how many rings the one draw call draws (`sprites`) and how many of those are groups (`groups`), the satellites ringed and named, and how many times they were laid out.
+     */
+    places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
   } {
@@ -1092,7 +1127,7 @@ export class ChikyuSpace extends HTMLElement {
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, renders: 0, lang: "", stars: [] },
       followModel: this.#model.followModel,
-      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0 }) },
+      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
     };
   }
