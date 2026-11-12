@@ -22,7 +22,7 @@ const LIVE_MS = 1000 / 30;
 const AUTO_MS = 1000;
 /** Tilt to the poles; zoom from a tenth of Fit, which leaves the whole globe small in the view, to 20 times: the outlines are Natural Earth 1:110m, and past about 20 times their straight segments are longer than the view is wide. */
 const LIMITS = { tiltMax: 90, zoomMin: 0.1, zoomMax: 20 };
-const STYLE = ":host{display:block;position:relative}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}";
+const STYLE = ":host{display:block;position:relative;isolation:isolate}.holder svg{display:block;width:100%;height:auto}.overlay{position:absolute;inset:0;pointer-events:none;transform-origin:50% 50%}";
 
 /**
  * The `<chikyu-earth>` custom element: the line globe, drawn as SVG in its shadow root. Importing this entry point registers the tag once. It takes the attributes `size` (pixels, 320 by default), `center` (`"lon,lat"`; wins over the browser's location), `look` (`line` or `thick`; `style` is the older name for it, and a framework that reads `style` as CSS cannot use it) and `graticule`, and a shared view controller's camera through `setView`.
