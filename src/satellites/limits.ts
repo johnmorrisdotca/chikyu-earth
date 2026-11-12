@@ -25,7 +25,7 @@ export const DEFAULT_MAX_AGE_DAYS = 30;
 export const DEFAULT_DIM_AFTER_DAYS = 14;
 
 /**
- * The fastest clock, in game seconds a second, at which the space view still places a group of satellites: above it the two moments SGP4 is run at would be too far apart to interpolate, so the group is hidden rather than drawn wrongly. A satellite that was chosen with `selectSatellite` or ridden along is still placed exactly, one SGP4 call a frame.
+ * The fastest clock, in game seconds a second, at which a group of satellites is still placed by interpolating two SGP4 samples. Above it those two moments would be too far apart, so each satellite is drawn as a short streak along its orbit instead: one SGP4 sample about once a second, turned along the orbit by its mean motion, covering the stretch one frame spans. Nothing is hidden. A satellite chosen with `selectSatellite` or ridden along is still placed exactly, one SGP4 call a frame.
  *
  * @example
  * ```ts

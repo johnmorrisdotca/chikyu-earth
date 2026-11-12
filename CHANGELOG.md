@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Satellites stay on the picture when the clock runs faster than a minute a second** (MODULES-860). Above 60 times real time they were hidden, because two SGP4 samples would be too far apart to interpolate. Each satellite is now a short streak along its orbit for the stretch one frame spans: one SGP4 sample about once a second, then turned by its mean motion, on `<chikyu-space>` and `<chikyu-earth-realistic>`. `satellite-tint="orbit"` (off by default) colours them by orbit class. Dots grow as the Earth is drawn larger and shrink as it is drawn smaller, and a dark rim keeps a pale dot readable on the bright ground. `stats.satellites.placed` is how many are drawn, `segments` how many streaks, and `epochMs` the newest element set's moment.
+
 ## 0.35.0 - 2026-11-12
 
 - **The figures follow a sky culture** (MODULES-1125). `constellation-culture` is `iau` (the 88, the default), `western`, `japanese` (the 88 by their Japanese names, then the traditional figures such as Subaru, the Pleiades) or `chinese`; the lines, the hovered and picked figure and its name follow it, and the events carry `id`, `kind` and `culture`. The value is exactly what the page sets (a Japanese page keeps the IAU's figures unless it says `japanese`); an unknown value is `iau` with one warning. Each culture's data is a dynamic import of its own, fetched only when asked for. hoshi-stars' `createFigureLines` takes no culture yet, so the lines of a culture are laid out here from `figures(culture)`.

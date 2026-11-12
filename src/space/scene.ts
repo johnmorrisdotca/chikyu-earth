@@ -694,7 +694,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               deps.onSatellitesError?.(error);
             }
           }
-          layer?.update(model.time, model.speed);
+          layer?.update(model.time, model.speed, model.drawn?.radiusPx ?? 0);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
 
           // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says; or, riding along, sits at the
@@ -840,6 +840,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const px = {} as Record<BodyName, number>;
           for (const name of BODY_NAMES) px[name] = radiusPxOf(name);
           model.drawn = { frame, distance, radiusPx: px.Earth };
+          layer?.resize(px.Earth);
           let paintedBodies = sunSlot.drawing ? 1 : 0;
           for (const p of planets.values()) if (p.slot.drawing) paintedBodies += 1;
           let paintedMoons = 0;
