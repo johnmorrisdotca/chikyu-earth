@@ -2,7 +2,10 @@
 
 ## Unreleased
 
+## 0.40.0 - 2026-11-12
+
 - **Names of different layers never overlap** (MODULES-1072). On `<chikyu-space>` and `<chikyu-earth-realistic>` each layer placed its names alone: city names ignored the places, the markers' labels ignored the places' names, and star names ignored every layer's names and rings, so a name could sit over another layer's. The layers now lay out in a fixed order, each keeping clear of the boxes of those before it: the places' names, rings and marks with the ringed satellites, then the markers' labels, then the cities' names, then the stars' and constellations' names (the countries' names, which already kept clear of the others, come after the cities'). A star whose name box or ring touches an earlier box is left out and the next star is named. The order is the draw's: the realistic Earth's places are laid out before its markers and the sky after the cities, as the space view's sky is after its cities. `OverlayHost` has an optional `taken()` (the places' boxes, which `attachMarkers` reads), `CityLayoutOptions` has `taken`, and a satellite's ring is among the boxes the places take. Boxes are handed over when names are laid out, which is when the view changes; nothing is laid out or drawn at rest. Tests: `test/label-overlap.test.ts` and `e2e/label-overlap.gl.ts`.
+- **A glide is counted on the page, not polled** (MODULES-1190). `e2e/ride-above.gl.ts` watched for the camera's glide into the above view by polling `stats.ride.gliding`, and a short glide could be missed (seen in CI on 2026-11-12). The page now counts each glide at every animation frame and the test reads the count; it fails when a view change never glides. A test change only; the package is unchanged.
 
 ## 0.39.0 - 2026-11-12
 
