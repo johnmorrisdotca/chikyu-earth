@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createSatelliteLayer, newSatelliteState } from "../src/space/satellite-layer.ts";
 import { createSatellites, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
+import { madeUp } from "./madeup-elements.ts";
 
 interface Snapshot {
   fields: string[];
@@ -112,8 +113,32 @@ test("a jump in the time above 60 times real time pins the satellites again at o
   const pinned = group.propagations;
   layer.update(time + speed * 33, speed, 300);
   const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= 0.02).length;
-  assert.equal(group.propagations - pinned, eccentric * 2, "the next frame does not pin again");
+  assert.ok(group.propagations - pinned <= eccentric * 2 + 1, "the next frame pins a slice of the group at most (a frame that came a moment after the last one: one satellite), not the whole of it");
   const before = group.propagations;
   layer.update(time + 5 * 86_400_000, speed, 300);
   assert.ok(group.propagations - before >= group.count, "five days on, the whole group is pinned again in that frame");
+});
+
+test("above 60 times real time a big group is pinned whole once, then a slice a frame: no frame runs SGP4 for the whole group", () => {
+  const state = newSatelliteState();
+  const group = createSatellites(madeUp("starlink", 3000, "2026-11-02T12:00:00") as unknown as ElementSet[]);
+  state.groups.set("many", { satellites: group, color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  const speed = MAX_SATELLITE_SPEED * 10;
+  const first = group.propagations;
+  layer.update(time, speed, 300);
+  assert.equal(group.propagations - first, group.count, "the first frame pins every satellite, so none is left without a place");
+  let widest = 0;
+  let total = 0;
+  for (let frame = 1; frame <= 40; frame += 1) {
+    const before = group.propagations;
+    layer.update(time + speed * 16 * frame, speed, 300);
+    const used = group.propagations - before;
+    widest = Math.max(widest, used);
+    total += used;
+  }
+  assert.ok(widest < group.count / 10, `a frame pinned ${widest} of ${group.count} satellites`);
+  assert.ok(total > 0, "slices are pinned: the places do not go stale");
+  assert.equal(state.drawn.placed, group.count, "every satellite is still drawn");
 });

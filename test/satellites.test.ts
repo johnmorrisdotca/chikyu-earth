@@ -5,6 +5,7 @@ import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { frameAt } from "../src/space/ephemeris.ts";
 import { createSatellites, DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
 import { ECCENTRIC_FROM } from "../src/satellites/track.ts";
+import { PIN_PERIOD_MS, pinPlan, pinSliceSize } from "../src/space/satellite-layer.ts";
 import { madeUp } from "./madeup-elements.ts";
 
 interface Snapshot {
@@ -169,7 +170,7 @@ test("above the interpolation limit each satellite is a streak along its orbit, 
   assert.equal(drawn, group.count, "every station is drawn, not hidden");
   assert.equal(drawn, group.placed);
   const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
-  assert.equal(group.propagations - before, group.count + eccentric * 2, "one SGP4 call each to pin the place, and two more for each eccentric orbit, which SGP4 places itself");
+  assert.equal(group.propagations - before, group.count - eccentric + eccentric * 2, "one SGP4 call each to pin the place, but for an eccentric orbit, which SGP4 places itself with two calls");
   const pinned = group.propagations;
   group.arc(ms + 1000, 120_000, positions, segments);
   assert.equal(group.propagations - pinned, eccentric * 2, "the next frame turns the pinned place and calls SGP4 only for the eccentric ones");
@@ -258,4 +259,96 @@ test("an old element set mixed with fresh ones is the only one dimmed", () => {
   assert.equal(group.placed, 3);
   const names = group.sets.map((set) => set.NORAD_CAT_ID);
   assert.deepEqual(names.map((id, i) => (group.dimmed[i] === 1 ? id : 0)).filter(Boolean), [806_000]);
+});
+
+test("a slice of the group is pinned at a time, each satellite from its own pin, and the places are as good as pinning the whole group at once", () => {
+  const group = createSatellites([...stations, ...starlink]);
+  const km = 6371;
+  const t0 = Date.parse("2026-11-02T18:00:00Z");
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  const here = new Float64Array(6);
+  // a clock at 3,600 times real time, about 60 frames a second: a slice of the group at every frame, each at its own moment
+  const speed = 3600;
+  const frame = 1000 / 60;
+  let next = 0;
+  let ms = t0;
+  group.pin(ms);
+  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
+  let widest = 0;
+  for (let i = 0; i < 90; i += 1) {
+    ms += speed * frame;
+    const plan = pinPlan(group.count, next, frame);
+    const before = group.propagations;
+    for (const [first, count] of plan.runs) group.pin(ms, first, count);
+    widest = Math.max(widest, group.propagations - before);
+    next = plan.next;
+  }
+  assert.ok(widest <= Math.ceil(group.count / 30), `at most a thirtieth of the group (${group.count}) in one frame, ${widest} were`);
+  assert.ok(widest < group.count - eccentric, "never the whole group at once");
+  // the same clock with the whole group pinned once a second, as it was: the same kind of error, since a pin is up to a second old either way (an hour of orbit at 3,600 times)
+  const whole = createSatellites([...stations, ...starlink]);
+  const wholeOut = new Float32Array(group.count * 3);
+  let at = t0;
+  for (let i = 0; i < 90; i += 1) {
+    at += speed * frame;
+    if (i % 60 === 0) whole.pin(at);
+  }
+  ms += speed * frame;
+  at += speed * frame;
+  group.arc(ms, speed * frame, positions, segments);
+  whole.arc(at, speed * frame, wholeOut, segments);
+  let worst = 0;
+  let worstWhole = 0;
+  for (let i = 0; i < group.count; i += 1) {
+    assert.ok(group.exact(i, ms, here), `satellite ${i} can be placed`);
+    worst = Math.max(worst, Math.hypot(positions[i * 3]! - here[0]!, positions[i * 3 + 1]! - here[1]!, positions[i * 3 + 2]! - here[2]!) * km);
+    whole.exact(i, at, here);
+    worstWhole = Math.max(worstWhole, Math.hypot(wholeOut[i * 3]! - here[0]!, wholeOut[i * 3 + 1]! - here[1]!, wholeOut[i * 3 + 2]! - here[2]!) * km);
+  }
+  assert.ok(worst <= worstWhole * 1.25 + 5, `the slices put the worst satellite ${worst.toFixed(0)} km off, the whole group pinned once a second ${worstWhole.toFixed(0)} km`);
+  assert.equal(group.placed, group.count);
+});
+
+test("pin takes a range, ignores one outside the group, and a satellite never pinned is pinned by the first arc", () => {
+  const group = createSatellites(stations);
+  const ms = Date.parse("2026-11-02T18:00:00Z");
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  const none = group.propagations;
+  group.pin(ms, group.count, 5);
+  group.pin(ms, 0, 0);
+  assert.equal(group.propagations, none, "nothing in the range, nothing placed");
+  group.pin(ms, 1, 2);
+  assert.ok(group.propagations - none <= 2);
+  // the others have no pin yet: arc pins them rather than leaving them out
+  assert.equal(group.arc(ms, 60_000, positions, segments), group.count);
+});
+
+test("the slice of a frame is its share of a second, from one to the whole group, and the slices go round the group", () => {
+  assert.equal(PIN_PERIOD_MS, 1000);
+  assert.equal(pinSliceSize(0, 16), 0);
+  assert.equal(pinSliceSize(17_000, 1000 / 60), 284, "a 60 Hz frame pins about a sixtieth");
+  assert.equal(pinSliceSize(17_000, 1000 / 30), 567, "a 30 Hz frame about a thirtieth");
+  assert.equal(pinSliceSize(17_000, 250), 4250, "four frames a second pin a quarter each");
+  assert.equal(pinSliceSize(17_000, 5000), 17_000, "a second or more between frames pins the whole group, as it always did");
+  assert.equal(pinSliceSize(10, 0), 1, "at least one");
+  assert.equal(pinSliceSize(3, 100), 1, "a tenth of three is one");
+  assert.equal(pinSliceSize(2, 100_000), 2, "never more than the group, however long the pause");
+  // round the group: at 60 Hz every satellite is pinned within a second, in runs that wrap
+  const count = 2251;
+  const pinned = new Uint32Array(count);
+  let next = 0;
+  let frames = 0;
+  while (frames < 61) {
+    const plan = pinPlan(count, next, 1000 / 60);
+    for (const [first, n] of plan.runs) for (let i = first; i < first + n; i += 1) pinned[i]! += 1;
+    next = plan.next;
+    frames += 1;
+  }
+  assert.ok([...pinned].every((n) => n >= 1), "every satellite pinned within a second");
+  assert.ok([...pinned].every((n) => n <= 2), "and not more than twice in 61 frames");
+  assert.deepEqual(pinPlan(10, 8, 300), { runs: [[8, 2], [0, 1]], next: 1 }, "a slice that reaches the end goes on from the start");
+  assert.deepEqual(pinPlan(10, 99, 300), { runs: [[0, 3]], next: 3 }, "a place beyond the end starts again");
+  assert.deepEqual(pinPlan(0, 0, 16), { runs: [], next: 0 });
 });
