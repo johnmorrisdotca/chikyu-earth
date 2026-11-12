@@ -41,7 +41,7 @@ earth.borders = { countries: true, regions: true };
 
 | | サイズ |
 |---|---|
-| 各要素に入る境界線のコード | 最小化 5.2 kB、gzip 1.8 kB |
+| 各要素に入る境界線のコード | 最小化 5.5 kB、gzip 1.9 kB |
 | chizu の `world-geo` (国か地域の境界線を初めてオンにしたときに読み込みます) | 最小化 166 kB、gzip 44.3 kB |
 | GPU 上の国の境界線 | 3,012 本の線分。72 kB の頂点バッファ1つ |
 

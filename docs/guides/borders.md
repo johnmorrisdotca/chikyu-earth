@@ -41,7 +41,7 @@ Measured on 2026-11-11 with esbuild (minified, gzip level 9) and in Chromium:
 
 | | Size |
 |---|---|
-| The borders' code in each element | 5.2 kB minified, 1.8 kB gzipped |
+| The borders' code in each element | 5.5 kB minified, 1.9 kB gzipped |
 | chizu's `world-geo`, loaded when a set is first switched on | 166 kB minified, 44.3 kB gzipped |
 | The countries' lines on the GPU | 3,012 segments: one vertex buffer of 72 kB |
 
