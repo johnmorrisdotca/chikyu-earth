@@ -121,7 +121,8 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
 
 /**
  * How a ride along is done: `view` `from` (the default) puts the camera at the body looking at the Earth, `follow` keeps it a fixed distance from the body looking at it (`distanceKm`, 3000 by default,
- * for a satellite; a planet or the Moon is kept at the distance the zoom says); `look` `down` (the default) or `horizon` is where a camera at the body points; `smooth` (the default) glides
+ * for a satellite; a planet or the Moon is kept at the distance the zoom says); `above` (a satellite only; a body is followed) puts it on the line from the Earth's centre through the satellite, `distanceKm` (divided by the zoom) above it, looking straight down at it with the way it is going at the top
+ * of the picture, the satellite held in the middle while the Earth turns beneath (a drag turns the picture about the satellite and tips the camera back or ahead of it); `look` `down` (the default) or `horizon` is where a camera at the body points; `smooth` (the default) glides
  * from the old camera to the new one in about a second and a bit, and jumps instead for a reader who asked for reduced motion.
  *
  * @example
@@ -133,7 +134,7 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
  * ```
  */
 export interface RideOptions {
-  view?: "from" | "follow";
+  view?: "from" | "follow" | "above";
   look?: RideLook;
   distanceKm?: number;
   smooth?: boolean;
@@ -152,7 +153,7 @@ export interface RideOptions {
  */
 export interface Riding {
   target: RideTarget;
-  view: "from" | "follow";
+  view: "from" | "follow" | "above";
   look: RideLook;
   distanceKm: number;
 }
@@ -822,7 +823,9 @@ export class ChikyuSpace extends HTMLElement {
       if (!wasRiding) this.#focusBeforeRide = model.focus;
       // the heading starts from the yaw the controls already hold (an address that carries `yaw` is read before the ride begins), so a ride opened from the address looks where the one that was dragged there looked
       model.rideTurn = rideTurnDegrees(model.view.yaw, model.view.zoom);
-      const view = typeof target === "string" && target === "Earth" ? "follow" : (options.view ?? "from");
+      const asked = options.view ?? "from";
+      // above a body is meant for a satellite: a body is followed
+      const view = typeof target === "string" && (target === "Earth" || asked === "above") ? "follow" : asked;
       model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: options.look ?? "down", distanceKm: Math.max(100, options.distanceKm ?? 3000) };
       if (typeof target === "string" && view === "follow") model.focus = target;
       else if (wasRiding) model.focus = this.#focusBeforeRide;
@@ -1095,7 +1098,7 @@ export class ChikyuSpace extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
-    followModel: { x: number; y: number; shown: boolean } | null;
+    followModel: { x: number; y: number; shown: boolean; parts: number } | null;
     /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. */
     places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */

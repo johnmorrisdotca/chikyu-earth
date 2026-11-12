@@ -500,7 +500,7 @@ if (flat && controls && stage) {
 
   // --- riding along: the camera at the ISS, a Starlink satellite, the Moon or Mars, looking at the Earth -------------------------------------------------------------------------
   let rideKey = address.get("ride");
-  let rideView: "from" | "follow" = address.get("rview") === "follow" ? "follow" : "from";
+  let rideView: "from" | "follow" | "above" = address.get("rview") === "follow" ? "follow" : address.get("rview") === "above" ? "above" : "from";
   let rideLook: "down" | "horizon" = address.get("rlook") === "horizon" ? "horizon" : "down";
   const rideButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride]")];
   const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-view]")];
@@ -574,6 +574,8 @@ if (flat && controls && stage) {
       if (index < 0 || !space) return;
       target = { group, index };
     }
+    // above is for a satellite: a body is followed, and the button and the address say so
+    if (typeof target === "string" && rideView === "above") rideView = "follow";
     rideKey = key;
     markRide();
     if (key === "chosen") {
@@ -584,7 +586,7 @@ if (flat && controls && stage) {
     setRideZoom(keepTurn);
     speakRide();
     address.set("ride", key);
-    address.set("rview", rideView === "follow" ? "follow" : null);
+    address.set("rview", rideView === "from" ? null : rideView);
     address.set("rlook", rideLook === "horizon" ? "horizon" : null);
   }
   // riding along is for watching it go by: a ride starts the clock (Play), and the date box moves with it
@@ -596,7 +598,7 @@ if (flat && controls && stage) {
   }
   for (const button of viewButtons) {
     button.addEventListener("click", () => {
-      rideView = button.dataset["rideView"] === "follow" ? "follow" : "from";
+      rideView = button.dataset["rideView"] === "follow" ? "follow" : button.dataset["rideView"] === "above" ? "above" : "from";
       if (rideKey) void startRide(rideKey);
       else markRide();
     });

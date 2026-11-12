@@ -5,4 +5,4 @@ export { compress, MOON_COMPRESSED, placeAround, placeMoon, placeSun, RADIUS, SU
 export { fitDistance, plainPainter, type BodyDrawing, type BodyMoon, type BodyPainter, type PaintContext, type SatellitePainter } from "./scene.ts";
 export { RIDE_FOV, rideFov, ridePose, rideTiltLimits, rideTurnDegrees, type RideInput, type RideLook, type RidePose } from "./ride.ts";
 export type { SatelliteScreen } from "./satellite-layer.ts";
-export { MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
+export { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";

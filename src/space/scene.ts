@@ -16,7 +16,7 @@ import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
 import type { CityFrame } from "../cities/geometry.ts";
-import { MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
+import { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type BodyLabelState } from "../realistic/body-label.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
@@ -115,8 +115,8 @@ export type RideTarget = BodyName | SatelliteRef;
 
 export interface RideState {
   target: RideTarget;
-  /** `from`: the camera is at the body, looking at the Earth. `follow`: the camera keeps a fixed distance from it, looking at it. */
-  view: "from" | "follow";
+  /** `from`: the camera is at the body, looking at the Earth. `follow`: the camera keeps a fixed distance from it, looking at it. `above` (a satellite): the camera is on the line from the Earth's centre through the satellite, looking straight down. */
+  view: "from" | "follow" | "above";
   look: RideLook;
   /** For `follow` a satellite: how far the camera keeps, in kilometres. */
   distanceKm: number;
@@ -193,7 +193,7 @@ export interface SpaceModel {
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
-  followModel: { x: number; y: number; shown: boolean } | null;
+  followModel: { x: number; y: number; shown: boolean; parts: number } | null;
   /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
   placeSatellite: ((ref: SatelliteRef) => SatelliteScreen | null) | null;
   ratio(): number;
@@ -578,7 +578,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let nameOn: BodyLabelLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
-      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number } = { key: "", drawing: null, turn: 0 };
+      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number } = { key: "", drawing: null, turn: 0, parts: 0 };
       const dropModel = (): void => {
         if (!modelSlot.drawing) return;
         scene.remove(modelSlot.drawing.object);
@@ -723,7 +723,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               }
             } else if (layer?.exact(ride.target, model.time, rideState)) {
               const place: Vec3 = [rideState[0]!, rideState[1]!, rideState[2]!];
-              if (ride.view === "follow") {
+              if (ride.view === "follow" || ride.view === "above") {
                 focusPos = place;
                 focusRadius = Math.max(1e-4, ride.distanceKm / 6371 / fit);
                 followed = { place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], ref: ride.target };
@@ -767,14 +767,27 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const lon = model.centre.lon - way * model.view.yaw;
             const lat = Math.max(-90, Math.min(90, baseLat - way * model.view.tilt));
             const aim = direction(spin + lon, lat);
-            distance = Math.max(1.05 * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
-            target.set(focusPos[0], focusPos[1], focusPos[2]);
-            camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
-            camera.up.set(0, 1, 0);
-            camera.lookAt(target);
-            camera.near = Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01);
-            camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
-            if (ride && ride.view === "follow" && typeof ride.target !== "string") {
+            if (followed && ride && ride.view === "above") {
+              // above the satellite: on the line from the Earth's centre through it, looking straight down at it, the way it is going at the top of the picture; the satellite stays in the middle and the Earth turns beneath.
+              // A drag turns the picture about the satellite (yaw) and tips the camera back or ahead of it (tilt).
+              distance = Math.max(1e-4, ride.distanceKm / 6371 / Math.max(1e-9, model.view.zoom));
+              const up = aboveAxes(followed.place, followed.velocity, model.view.yaw * RAD, Math.max(-80, Math.min(80, model.view.tilt)) * RAD);
+              target.set(focusPos[0], focusPos[1], focusPos[2]);
+              camera.position.set(target.x + up.offset[0] * distance, target.y + up.offset[1] * distance, target.z + up.offset[2] * distance);
+              camera.up.set(up.up[0], up.up[1], up.up[2]);
+              camera.lookAt(target);
+              camera.near = Math.max(1e-4, distance * 0.02);
+              camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
+            } else {
+              distance = Math.max(1.05 * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
+              target.set(focusPos[0], focusPos[1], focusPos[2]);
+              camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
+              camera.up.set(0, 1, 0);
+              camera.lookAt(target);
+              camera.near = Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01);
+              camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
+            }
+            if (ride && (ride.view === "follow" || ride.view === "above") && typeof ride.target !== "string") {
               const focal = (size.height / 2) / Math.tan((fovNow / 2) * RAD);
               model.rideMotion = (Math.hypot(rideState[3]!, rideState[4]!, rideState[5]!) / Math.max(50, ride.distanceKm / Math.max(1e-9, model.view.zoom))) * focal;
             }
@@ -794,9 +807,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           camera.fov = fovNow;
           camera.aspect = size.width / Math.max(1, size.height);
-          // the Earth's place in the view: the picture is moved, not the camera (a camera riding from a body keeps the middle)
-          const shiftX = rideFrom ? 0 : (model.earth.x - 0.5) * size.width;
-          const shiftY = rideFrom ? 0 : (model.earth.y - 0.5) * size.height;
+          // the Earth's place in the view: the picture is moved, not the camera (a camera riding from a body, or above a satellite, keeps the middle)
+          const centred = rideFrom !== null || (ride?.view === "above" && followed !== null);
+          const shiftX = centred ? 0 : (model.earth.x - 0.5) * size.width;
+          const shiftY = centred ? 0 : (model.earth.y - 0.5) * size.height;
           if (shiftX !== 0 || shiftY !== 0) camera.setViewOffset(size.width, size.height, -shiftX, -shiftY, size.width, size.height);
           else if (camera.view) camera.clearViewOffset();
           camera.updateProjectionMatrix();
@@ -852,6 +866,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                   made.object.visible = false;
                   scene.add(made.object);
                   modelSlot.drawing = made;
+                  // how many meshes the model is made of: a draw call each, which a test of the draw budget adds to the scene's own
+                  modelSlot.parts = 0;
+                  made.object.traverse((part) => {
+                    if ((part as THREE.Mesh).isMesh) modelSlot.parts += 1;
+                  });
                   deps.invalidate();
                 })
                 .catch((error: unknown) => deps.onPainterError?.(error));
@@ -868,7 +887,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             modelSlot.drawing.light?.(toSunNow);
             modelSlot.drawing.update?.({ toSun: toSunNow, ms: model.time, radiusPx: size.height * MODEL_RADIUS_SHARE });
             projected.set(followed.place[0], followed.place[1], followed.place[2]).project(camera);
-            model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true };
+            model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true, parts: modelSlot.parts };
           } else {
             if (modelSlot.drawing) modelSlot.drawing.object.visible = false;
             model.followModel = null;
