@@ -48,6 +48,14 @@ The element reads `manifest.json` once, and nothing more is fetched until the zo
 - **Draws on demand.** A tile that arrives asks for one draw, batched with the others of that moment and held to 30 frames a second; at most eight new tiles go onto the sphere in a frame, and nothing is drawn at rest, out of sight, or in a hidden tab. A lost WebGL context is recovered with the tiles that were held, with no new fetch.
 - **Falls back silently.** Without the option, with a manifest that cannot be read, or for a tile that cannot be fetched (it is asked for again after half a minute), the Earth is drawn as before from the package's pictures, and nothing is reported to the reader. `earth.stats.tiles` says what it is doing (`ready`, `level`, `held`, `shown`, `loading`, `failed`, `requested`), and the element fires `chikyu-tiles` once when a set has been read.
 
+### In the space view
+
+`<chikyu-space>` takes the same `tiles` attribute (and property) and lays the same tiles over its Earth. Its camera is in perspective and can be a few kilometres above the ground, so the level is chosen from the pixels a unit of ground takes at the nearest point under the camera, not from a disc's radius: from 3,000 km above the ISS a pixel of a 600 pixel high view is about 3 km of ground, which wants level 3 (8192), and from 150 km it is a few hundred metres, which wants the finest level, 4. A view of the whole Earth needs no tile, and none is asked for. Only the tiles under the camera are loaded, the same limit of 48 and the same four seconds apply, they turn with the Earth and are lit by the same Sun, and nothing is drawn at rest. The camera is described to the tile maths as a `TilePerspective` (its place in the Earth's own axes, where a point of the ground falls in the box, and which ground is under a place in the box), which `tilesInView` and `pointOnEarth` take in a `TileCamera`'s `perspective`. `space.stats.tiles` says what the view is doing, and the element sends `chikyu-tiles` once when a set has been read.
+
+```html
+<chikyu-space texture-base="/textures/" tiles="/tiles/"></chikyu-space>
+```
+
 ### How far to zoom
 
 The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. The finest tile level is 16384 across, four times the widest picture, so the realistic Earth goes **four times further: 20 times**. At 20 times a 420 pixel globe has a disc 3,900 pixels in radius, and a texel is up to 1.5 CSS pixels wide on an ordinary screen, so there is still detail in it, but nothing finer than the source has (the Blue Marble is 500 m a pixel). The element raises its own zoom limit from 5 to 20 when the tiles are found, and leaves it at 5 when they are not (it sets its `zoom-max` attribute, which a bar for the element reads; a `zoom-max` you set yourself is left alone). Nothing else is needed:

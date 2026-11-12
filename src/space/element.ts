@@ -23,6 +23,8 @@ import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/ge
 import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
+import { folderSource } from "../door/map.ts";
+import type { TileSources, TileStats } from "../realistic/tile-set.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import type { LightMode } from "../realistic/earth.ts";
@@ -250,7 +252,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "bodies-credit", "satellite-tint"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "bodies-credit", "satellite-tint", "tiles"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -429,6 +431,8 @@ export class ChikyuSpace extends HTMLElement {
       ...(painter ? { painter } : {}),
       satellitePainter: () => satellitePainter,
       onPainterError: (error) => this.dispatchEvent(new CustomEvent("chikyu-bodies-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      sources: () => this.#tileSources(),
+      onTiles: (layers) => this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } })),
     });
     this.#view = taken.renderer.view(this.#stage, item, { still: null });
     this.#set("loading");
@@ -537,12 +541,29 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-tint") {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.request();
-    }
+    } else if (name === "tiles") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
   }
 
   #wheel = (event: WheelEvent): void => immersiveWheel(this, event);
+
+  /** The map source of each layer now: the folder of the `tiles` attribute, or none. */
+  #tileSources(): TileSources {
+    const folder = this.tiles === null ? undefined : folderSource(this.tiles);
+    return folder ? { day: folder, night: folder } : {};
+  }
+
+  /** Where the finer map tiles are served from (a folder with `manifest.json`), or `null` for none; the attribute `tiles`. The Earth lays only the tiles in view over its own picture, at the level the camera's height needs, so a ride a few hundred kilometres above the ground sees sharp ground. */
+  get tiles(): string | null {
+    const given = this.getAttribute("tiles");
+    if (!given) return null;
+    return given.endsWith("/") ? given : `${given}/`;
+  }
+  set tiles(value: string | null) {
+    if (value === null || value === "") this.removeAttribute("tiles");
+    else this.setAttribute("tiles", value);
+  }
 
   /** The body painter's credit under the picture, in the element's or the page's language: shown while the painter draws the bodies (not `plain`), unless `bodies-credit` is `off`. */
   #showBodiesCredit(): void {
@@ -1481,6 +1502,8 @@ export class ChikyuSpace extends HTMLElement {
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
     followModel: { x: number; y: number; shown: boolean; parts: number } | null;
+    /** The finer map tiles (`tiles`): the level wanted now (`null` while the package's own pictures are sharp enough), the tiles held and shown, and the fetches made. */
+    tiles: TileStats;
     /**
      * The places: how many were handed over, how many are in sight at the last draw (`shown`, those gathered into groups included), how many stand up as markers of their own (`marks`) and are named (`labels`),
      * how many rings the one draw call draws (`sprites`; 0 when the picture cannot draw them), how many circles the page draws instead (`dots`) and how many of the rings are groups (`groups`), the satellites ringed and named, and how many times they were laid out.
@@ -1514,6 +1537,7 @@ export class ChikyuSpace extends HTMLElement {
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },
       followModel: this.#model.followModel,
+      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {} },
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 }) },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },

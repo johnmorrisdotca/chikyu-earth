@@ -124,3 +124,56 @@ test("a manifest the loader reads must follow the pyramid's rule", () => {
   const mixed = { tileSize: 512, layers: { day: good.layers.day, night: { levels: [] }, junk: 5 } };
   assert.deepEqual(Object.keys(parseManifest(mixed)!.layers), ["day"]);
 });
+
+/** A pinhole camera over the point where longitude 0 meets the equator, `height` of the Earth's radius above it, looking straight down, 800 by 600, 35 degrees from top to bottom. */
+const overhead = (height: number): TileCamera => {
+  const eye = [0, 0, 1 + height] as const;
+  const focal = 300 / Math.tan((35 / 2) * (Math.PI / 180));
+  return {
+    lon: 0,
+    lat: 0,
+    width: 800,
+    height: 600,
+    panX: 0,
+    panY: 0,
+    radius: focal / height,
+    perspective: {
+      eye,
+      project: (p) => {
+        const depth = eye[2] - p[2];
+        return depth <= 0 ? null : { x: 400 + (p[0] / depth) * focal, y: 300 - (p[1] / depth) * focal };
+      },
+      ground: (x, y) => {
+        const d = [(x - 400) / focal, -(y - 300) / focal, -1];
+        const length = Math.hypot(...d);
+        const u = [d[0]! / length, d[1]! / length, d[2]! / length];
+        // the nearer root of |eye + t u| = 1
+        const b = eye[2] * u[2]!;
+        const c = eye[2] * eye[2] - 1;
+        const rest = b * b - c;
+        if (rest < 0) return null;
+        const t = -b - Math.sqrt(rest);
+        return [t * u[0]!, t * u[1]!, eye[2] + t * u[2]!];
+      },
+    },
+  };
+};
+
+test("a camera 150 km above the ground sees the few tiles under it, at the level it asks for, and none from the far side", () => {
+  const near = overhead(150 / 6371);
+  assert.equal(tileLevel(near.radius, day, 4096), 4, "the finest level is what that height needs");
+  const tiles = tilesInView(4, near);
+  assert.ok(tiles.length >= 1 && tiles.length <= 4, `got ${tiles.length}`);
+  for (const tile of tiles) assert.ok([15, 16].includes(tile.col) && [7, 8].includes(tile.row), `${tile.col},${tile.row} is not one of the tiles round (0, 0)`);
+  assert.ok(!ids(tilesInView(4, near)).includes("0,8"), "the far side is not asked for");
+  const under = pointOnEarth(near, 400, 300)!;
+  assert.ok(Math.abs(under.lon) < 1e-9 && Math.abs(under.lat) < 1e-9, "the middle of the box is the point under the camera");
+  assert.equal(pointOnEarth({ ...near, perspective: { ...near.perspective!, ground: () => null } }, 400, 300), undefined, "the sky is not the Earth");
+});
+
+test("a camera high up in perspective sees the front of the Earth at level 3, as a disc does", () => {
+  const high = overhead(2);
+  const all = ids(tilesInView(3, high));
+  assert.ok(all.includes("7,3") && all.includes("8,4"), "the tiles round the middle");
+  assert.ok(!all.includes("0,3"), "the far side is not asked for");
+});

@@ -724,6 +724,7 @@ if (flat && controls && stage) {
       const centre = flat!.centre;
       element.setAttribute("center", `${centre.lon},${centre.lat}`);
       element.setAttribute("texture-base", "textures/");
+      element.setAttribute("tiles", "tiles/");
       element.setAttribute("bodies", bodiesLook);
       element.setAttribute("camera", cameraMode);
       turnFor(true);

@@ -55,6 +55,28 @@ export interface TileCamera {
   panX: number;
   panY: number;
   radius: number;
+  /** A camera of the space view, which has a real place and a perspective, in place of the disc: when given, `lon`, `lat`, `panX`, `panY` are not read and `radius` is the disc's radius at the nearest ground. */
+  perspective?: TilePerspective;
+}
+
+/**
+ * A camera that sees the Earth in perspective, from a place that can be a few kilometres above the ground, in the Earth's own axes (x toward longitude 90, y north, z toward longitude 0; the Earth's radius is 1).
+ *
+ * @example
+ * ```ts
+ * import type { TilePerspective } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const look: TilePerspective = { eye: [0, 0, 1.0235], project: (p) => ({ x: 400 + p[0] * 5000, y: 300 - p[1] * 5000 }), ground: () => [0, 0, 1] };
+ * console.log(look.eye);
+ * ```
+ */
+export interface TilePerspective {
+  /** Where the camera is. */
+  eye: readonly [number, number, number];
+  /** Where a point of the Earth's surface falls in the box (CSS pixels), or `null` where it is behind the camera. */
+  project(point: readonly [number, number, number]): { x: number; y: number } | null;
+  /** The point of the Earth's surface under a place in the box (a unit vector), or `null` where the box shows the sky. */
+  ground(x: number, y: number): readonly [number, number, number] | null;
 }
 
 /**
@@ -208,6 +230,10 @@ const turned = (lon: number, lat: number, lonRad: number, latRad: number): [numb
  * ```
  */
 export function pointOnEarth(camera: TileCamera, x: number, y: number): { lon: number; lat: number } | undefined {
+  if (camera.perspective) {
+    const g = camera.perspective.ground(x, y);
+    return g ? { lon: Math.atan2(g[0], g[2]) / RAD, lat: Math.asin(Math.max(-1, Math.min(1, g[1]))) / RAD } : undefined;
+  }
   const px = (x - camera.width / 2 - camera.panX) / camera.radius;
   const py = (camera.height / 2 + camera.panY - y) / camera.radius;
   const rest = 1 - px * px - py * py;
@@ -253,31 +279,45 @@ export function tilesInView(level: number, camera: TileCamera, sun?: readonly [n
   const rows = tileRows(level);
   const lonRad = camera.lon * RAD;
   const latRad = camera.lat * RAD;
+  const look = camera.perspective;
   const margin = Math.min(160, Math.min(camera.width, camera.height) / 4);
   const cx = camera.width / 2 + camera.panX;
   const cy = camera.height / 2 + camera.panY;
   const found = new Map<number, { d: number; ndl: number }>();
-  const ndlOf = (z: [number, number, number]): number => (sun ? z[0] * sun[0] + z[1] * sun[1] + z[2] * sun[2] : 1);
+  const ndlOf = (z: readonly [number, number, number]): number => (sun ? z[0] * sun[0] + z[1] * sun[1] + z[2] * sun[2] : 1);
+  const eyeLength = look ? Math.hypot(...look.eye) : 1;
+  /** A point of the map as the camera has it: the vector to light it by, and where it is in the box when it faces the camera. */
+  const sample = (lon: number, lat: number): { n: [number, number, number]; screen: { x: number; y: number } | null; flat: { x: number; y: number } | null; toward: number } => {
+    if (!look) {
+      const n = turned(lon, lat, lonRad, latRad);
+      const at = { x: cx + n[0] * camera.radius, y: cy - n[1] * camera.radius };
+      return { n, screen: n[2] < 0 ? null : at, flat: at, toward: n[2] };
+    }
+    const cl = Math.cos(lat);
+    const n: [number, number, number] = [cl * Math.sin(lon), Math.sin(lat), cl * Math.cos(lon)];
+    const along = n[0] * look.eye[0] + n[1] * look.eye[1] + n[2] * look.eye[2];
+    // a point is in sight when it is on the camera's side of the horizon (the plane through the points where its sight lines graze the Earth)
+    const screen = along < 1 ? null : look.project(n);
+    return { n, screen, flat: screen, toward: along / eyeLength };
+  };
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < columns; col += 1) {
       const [west, north, east, south] = tileRect({ level, col, row });
-      const middle = turned((west + east) / 2, (north + south) / 2, lonRad, latRad);
-      if (middle[2] < -0.4) continue;
+      const middle = sample((west + east) / 2, (north + south) / 2);
+      if (middle.toward < -0.4) continue;
       let inside = false;
       let darkest = 1;
       for (let j = 0; j <= 2; j += 1) {
         for (let i = 0; i <= 2; i += 1) {
-          const p = turned(west + ((east - west) * i) / 2, north + ((south - north) * j) / 2, lonRad, latRad);
-          darkest = Math.min(darkest, ndlOf(p));
-          if (p[2] < 0) continue;
-          const sx = cx + p[0] * camera.radius;
-          const sy = cy - p[1] * camera.radius;
-          if (sx >= -margin && sx <= camera.width + margin && sy >= -margin && sy <= camera.height + margin) inside = true;
+          const p = sample(west + ((east - west) * i) / 2, north + ((south - north) * j) / 2);
+          darkest = Math.min(darkest, ndlOf(p.n));
+          if (!p.screen) continue;
+          if (p.screen.x >= -margin && p.screen.x <= camera.width + margin && p.screen.y >= -margin && p.screen.y <= camera.height + margin) inside = true;
         }
       }
       if (inside) {
-        const d = Math.hypot(cx + middle[0] * camera.radius - camera.width / 2, cy - middle[1] * camera.radius - camera.height / 2);
+        const d = middle.flat ? Math.hypot(middle.flat.x - camera.width / 2, middle.flat.y - camera.height / 2) : Math.hypot(camera.width, camera.height);
         found.set(row * columns + col, { d, ndl: darkest });
       }
     }
@@ -293,9 +333,9 @@ export function tilesInView(level: number, camera: TileCamera, sun?: readonly [n
       const key = tile.row * columns + tile.col;
       if (found.has(key)) continue;
       const [west, north, east, south] = tileRect(tile);
-      const p = turned((west + east) / 2, (north + south) / 2, lonRad, latRad);
-      const dark = [turned(west, north, lonRad, latRad), turned(east, north, lonRad, latRad), turned(west, south, lonRad, latRad), turned(east, south, lonRad, latRad), p].reduce((least, q) => Math.min(least, ndlOf(q)), 1);
-      found.set(key, { d: Math.hypot(cx + p[0] * camera.radius - camera.width / 2, cy - p[1] * camera.radius - camera.height / 2), ndl: dark });
+      const p = sample((west + east) / 2, (north + south) / 2);
+      const dark = [sample(west, north), sample(east, north), sample(west, south), sample(east, south), p].reduce((least, q) => Math.min(least, ndlOf(q.n)), 1);
+      found.set(key, { d: p.flat ? Math.hypot(p.flat.x - camera.width / 2, p.flat.y - camera.height / 2) : Math.hypot(camera.width, camera.height), ndl: dark });
     }
   }
 
