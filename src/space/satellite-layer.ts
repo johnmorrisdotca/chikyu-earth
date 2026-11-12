@@ -85,7 +85,8 @@ interface Drawn {
   linesAt: number;
   linesWall: number;
   style: string;
-  streak: THREE.LineSegments;
+  /** The streak drawn above the interpolation limit; none when the three.js parts handed over lack `LineSegments`, and the dots alone are drawn then. */
+  streak: THREE.LineSegments | null;
   streakPositions: Float32Array;
   streakColours: Float32Array;
   streakAttribute: THREE.BufferAttribute;
@@ -130,9 +131,15 @@ export interface SatelliteLayer {
 
 export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state: SatelliteState, ratio: () => number): SatelliteLayer {
   if (!three.Points) throw new Error("Satellites need `Points` from three.js: add it to the parts the three loader hands over (see setThreeLoader)");
-  if (!three.LineSegments) throw new Error("Satellites need `LineSegments` from three.js: add it to the parts the three loader hands over (see setThreeLoader)");
   const Points = three.Points;
   const LineSegments = three.LineSegments;
+  let warned = false;
+  /** Without `LineSegments` the streaks cannot be drawn, so above the interpolation limit the dots alone are shown. Said once, in the console, and nothing else is lost. */
+  const warnNoStreaks = (): void => {
+    if (warned) return;
+    warned = true;
+    console.warn("chikyu-earth: the three.js parts handed over lack `LineSegments`, so above 60 times real time the satellites are dots without streaks. Add `LineSegments` to the parts the three loader hands over (see setThreeLoader).");
+  };
   const drawn = new Map<string, Drawn>();
   const tmp = new Float64Array(6);
   const projected = new three.Vector3();
@@ -165,11 +172,13 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
 
   const drop = (entry: Drawn): void => {
     scene.remove(entry.points);
-    scene.remove(entry.streak);
     entry.geometry.dispose();
     entry.material.dispose();
-    entry.streak.geometry.dispose();
-    (entry.streak.material as THREE.Material).dispose();
+    if (entry.streak) {
+      scene.remove(entry.streak);
+      entry.streak.geometry.dispose();
+      (entry.streak.material as THREE.Material).dispose();
+    }
     for (const line of entry.lines) {
       scene.remove(line.loop);
       line.geometry.dispose();
@@ -252,11 +261,14 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           const streakAttribute = new three.BufferAttribute(streakPositions, 3);
           streakGeometry.setAttribute("position", streakAttribute);
           streakGeometry.setAttribute("color", new three.BufferAttribute(streakColours, 3));
-          const streak = new LineSegments(streakGeometry, new three.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 }));
-          streak.frustumCulled = false;
-          streak.renderOrder = 4;
-          streak.visible = false;
-          scene.add(streak);
+          let streak: THREE.LineSegments | null = null;
+          if (LineSegments) {
+            streak = new LineSegments(streakGeometry, new three.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 }));
+            streak.frustumCulled = false;
+            streak.renderOrder = 4;
+            streak.visible = false;
+            scene.add(streak);
+          }
           entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0 };
           drawn.set(name, entry);
         }
@@ -279,12 +291,12 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
               entry.streakColours[c + 2] = b;
             }
           }
-          (entry.streak.geometry.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
+          if (entry.streak) (entry.streak.geometry.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
         }
         const show = group.visible;
         entry.points.visible = show;
         if (!show) {
-          entry.streak.visible = false;
+          if (entry.streak) entry.streak.visible = false;
           for (const line of entry.lines) line.loop.visible = false;
           continue;
         }
@@ -295,17 +307,19 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           }
           const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions);
           entry.attribute.needsUpdate = true;
-          entry.streakAttribute.needsUpdate = true;
-          entry.streak.visible = n > 0 && Math.abs(span) > 0;
+          if (entry.streak) {
+            entry.streakAttribute.needsUpdate = true;
+            entry.streak.visible = n > 0 && Math.abs(span) > 0;
+          } else warnNoStreaks();
           if (entry.dimVersion !== group.satellites.dimVersion) {
             entry.dimVersion = group.satellites.dimVersion;
             entry.dim.needsUpdate = true;
           }
           for (const line of entry.lines) line.loop.visible = false;
           placed += n;
-          segments += n;
+          if (entry.streak) segments += n;
         } else {
-          entry.streak.visible = false;
+          if (entry.streak) entry.streak.visible = false;
           entry.pinWall = 0;
           group.satellites.setStep(step);
           group.satellites.at(time, entry.positions);
