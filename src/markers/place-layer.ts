@@ -570,6 +570,8 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       boxes = busy.slice(taken.length);
       for (const spot of placed) boxes.push({ left: spot.left, top: spot.top, width: items[spot.item]!.w, height: items[spot.item]!.h });
       for (const shape of layout.shapes) boxes.push({ left: shape.tipX - 5, top: shape.tipY - 5, width: 10, height: 10 });
+      // the ring round each satellite that can be seen: other layers' names keep off it as they keep off its name
+      for (const mark of seen) boxes.push({ left: mark.x - SATELLITE_RING, top: mark.y - SATELLITE_RING, width: SATELLITE_RING * 2, height: SATELLITE_RING * 2 });
       stats.shown = shown;
       stats.marks = order.length;
       stats.labels = layout.labels.length;

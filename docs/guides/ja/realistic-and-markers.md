@@ -67,4 +67,4 @@ earth.addEventListener("chikyu-marker-click", (event) => {
 });
 ```
 
-目印は、何千か所でも描画1回で済み、ラベルは最大 24 個のボタンを使い回します。リファレンスの [attachMarkers](api:attachMarkers) と、[docs/markers.md](../../markers.md) (英語) を見てください。
+目印は、何千か所でも描画1回で済み、ラベルは最大 24 個のボタンを使い回します。リアルな地球では、目印のラベルは要素自身の場所の名前と目印を避け、都市、星、星座の名前は目印のラベルを避けます。リファレンスの [attachMarkers](api:attachMarkers) と、[docs/markers.md](../../markers.md) (英語) を見てください。

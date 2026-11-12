@@ -355,6 +355,7 @@ export class ChikyuSpace extends HTMLElement {
       language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-sky-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       loadFont: loadMichroma,
+      taken: () => this.#boxesBeforeSky(),
     });
     this.#sky.setStyle(this.#skyStyle);
     this.#sky.setKeepClear(this.#keepClear);
@@ -368,7 +369,7 @@ export class ChikyuSpace extends HTMLElement {
       attribute: (name) => this.getAttribute(name),
       language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-city-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
-      onLayout: () => this.#countryFrame(),
+      onLayout: () => this.#relayNames(false, true),
     });
     this.#cities.setStyle(this.#citiesStyle);
     Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
@@ -785,9 +786,37 @@ export class ChikyuSpace extends HTMLElement {
 
   /** Tells the names of cities, then of countries, where the Earth is in the picture just drawn; the countries' names keep clear of the bodies', the places' and the cities'. */
   #nameFrame(frame: CountryFrame | null): void {
-    this.#cities?.frame(frame);
     this.#lastNameFrame = frame;
+    this.#relayNames(true, false);
+  }
+
+  /**
+   * Lays the names that come after the places out on the last frame, in the order of the layers: the cities' names clear of the bodies' names and the places' names, rings and marks; the countries' names clear of those and the cities'; the stars' and constellations' names
+   * clear of all of them. `cities` says whether the cities are laid out again (a new frame), or only what follows them (the cities told that they changed); `sky` says whether the stars' names are laid out again, which a draw does itself after the names.
+   */
+  #relayNames(cities: boolean, sky: boolean): void {
+    if (cities) this.#cities?.frame(this.#lastNameFrame, this.#boxesBeforeCities());
     this.#countryFrame();
+    if (sky) this.#sky?.relayout();
+  }
+
+  /** What the cities' names keep off: the bodies' names and what the places layer takes (names, rings, marks). The list is refilled, not made again. */
+  #beforeCities: { left: number; top: number; width: number; height: number }[] = [];
+  #boxesBeforeCities(): readonly { left: number; top: number; width: number; height: number }[] {
+    const out = this.#beforeCities;
+    out.length = 0;
+    out.push(...this.#bodyNameBoxes(), ...(this.#placeLayer?.boxes ?? []));
+    return out;
+  }
+
+  /** What the stars' and constellations' names keep off: everything before them, the cities' names last. The list is refilled, not made again. */
+  #beforeSky: { left: number; top: number; width: number; height: number }[] = [];
+  #boxesBeforeSky(): readonly { left: number; top: number; width: number; height: number }[] {
+    const out = this.#beforeSky;
+    out.length = 0;
+    if (!this.#lastNameFrame) return out;
+    out.push(...this.#bodyNameBoxes(), ...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []));
+    return out;
   }
 
   /** The frame the names were last laid out on. */

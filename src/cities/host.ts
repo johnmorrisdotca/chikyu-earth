@@ -49,8 +49,11 @@ export interface CityHostOptions {
 }
 
 export interface CityHost {
-  /** Tells where the Earth is in the picture just drawn, or `null` when there is no Earth to name. */
-  frame(frame: CityFrame | null): void;
+  /**
+   * Tells where the Earth is in the picture just drawn, or `null` when there is no Earth to name. `taken` is the boxes the layers placed before this one (the places', the markers', the bodies' names) take: no name goes over one.
+   * The list is read again whenever the names are laid out between draws, so the element refills the same array.
+   */
+  frame(frame: CityFrame | null, taken?: readonly { left: number; top: number; width: number; height: number }[]): void;
   /** Reads the attribute and the language again after either changed. */
   refresh(): void;
   /** The look of the names (the property `cityNamesStyle`). */
@@ -92,6 +95,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
   let version = 0;
   let cache: { key: string; version: number; cities: readonly NamedCity[] } | undefined;
   let last: CityFrame | null = null;
+  let lastTaken: readonly { left: number; top: number; width: number; height: number }[] | undefined;
   let shown: CityName[] = [];
   let renders = 0;
   let style: CityNamesStyle = {};
@@ -206,7 +210,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
     const size = style.size ?? DEFAULTS.size;
     const dot = style.dotSize ?? DEFAULTS.dot;
     usedLang = options.language();
-    shown = layoutCities(citiesFor(tiers), frame, usedLang, { max, size, dot, measure: measurer(size) });
+    shown = layoutCities(citiesFor(tiers), frame, usedLang, { max, size, dot, measure: measurer(size), ...(lastTaken ? { taken: lastTaken } : {}) });
     place(frame, dot);
   }
 
@@ -274,9 +278,10 @@ export function createCityHost(options: CityHostOptions): CityHost {
   doc.fonts?.addEventListener?.("loadingdone", onFonts);
 
   return {
-    frame(next) {
+    frame(next, taken) {
       if (gone) return;
       last = next;
+      lastTaken = taken;
       if (max === null) return;
       if (!next) {
         clear();
