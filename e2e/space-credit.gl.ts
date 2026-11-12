@@ -88,8 +88,8 @@ test("the credit follows the painter's credit at each redraw a body asks for, is
 test.describe("with wakusei-planets' own painter", () => {
   test.skip(!HAS_CREDIT, `wakusei-planets ${WAKUSEI} has no painter credit yet (0.39 and later)`);
 
-  // the view makes every body it holds (the Sun, the Moon and each planet) in every view, so the painter's credit names all their pictures, in an Earth view as in a Jupiter view: the credit is for what the view holds, not only for what is big on the screen
-  test("the credit names the pictures of the bodies the view holds, is read after the bodies are made, and the Sun's and Jupiter's CC BY 4.0 credits are in it", async ({ page }) => {
+  // the painter is asked only for the bodies in the view and big enough to show their map, so the credit names those pictures: an Earth view with no CC BY body in it shows no CC BY line (MODULES-1192)
+  test("the credit names the pictures of the bodies in the view: none CC BY in an Earth view, Nestaeric's with Jupiter, Solar System Scope's with the Sun; and it is read after the bodies are made", async ({ page }) => {
     await page.addInitScript(() => {
       const w = window as unknown as { __made: string[]; __readsAfterMake: number; __wrapBodyPainter: (real: object) => object; __real: { credit: { en: string } } };
       w.__made = [];
@@ -114,18 +114,21 @@ test.describe("with wakusei-planets' own painter", () => {
     await page.goto("/chikyu-earth/?look=space&time=2026-11-10T04:00Z&speed=0&center=-100,40");
     await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
     const made = (): Promise<string[]> => page.evaluate(() => [...new Set((window as unknown as { __made: string[] }).__made)].sort());
-    // the probe: the bodies made in an Earth view, then in a Jupiter view
-    await expect.poll(async () => (await made()).length, { timeout: 60_000, message: "the bodies are made" }).toBeGreaterThanOrEqual(10);
-    const inEarthView = await made();
-    console.log(`bodies made in an Earth view: ${inEarthView.join(", ")}`);
-    expect(inEarthView, "every body is made in an Earth view").toEqual(expect.arrayContaining(["Sun", "Moon", "Jupiter", "Neptune"]));
-    await expect(note(page)).toContainText("Solar System Scope", { timeout: 60_000 });
-    await expect(note(page)).toContainText("CC BY 4.0");
+    await expect.poll(async () => (await made()).length, { timeout: 60_000, message: "a body is made" }).toBeGreaterThan(0);
+    await page.waitForTimeout(1500);
+    // an Earth view: the Moon is in it, and no other body is big enough
+    console.log(`bodies the painter made in an Earth view: ${(await made()).join(", ")}`);
+    expect(await made(), "the Moon is made, no planet and not the Sun").toEqual(["Moon"]);
+    await expect(note(page)).not.toContainText("CC BY");
+    await expect(note(page)).not.toContainText("Nestaeric");
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "body", "Jupiter"));
     await expect(note(page)).toContainText("Nestaeric", { timeout: 60_000 });
     await expect(note(page)).toContainText("CC BY 4.0");
-    console.log(`bodies made in a Jupiter view: ${(await made()).join(", ")}`);
-    expect(await made(), "every body is made in a Jupiter view too").toEqual(expect.arrayContaining(["Sun", "Moon", "Jupiter", "Neptune"]));
+    expect(await made()).toContain("Jupiter");
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "body", "Sun"));
+    await expect(note(page)).toContainText("Solar System Scope", { timeout: 60_000 });
+    await expect(note(page)).toContainText("CC BY 4.0");
+    console.log(`bodies the painter made by then: ${(await made()).join(", ")}`);
     // the line is the painter's credit as it is now, and the view read it after the bodies were made (not only when it was set up)
     expect(await page.evaluate(() => (window as unknown as { __readsAfterMake: number }).__readsAfterMake), "the credit is read after a body is made").toBeGreaterThan(0);
     const real = await page.evaluate(() => (window as unknown as { __real: { credit: { en: string } } }).__real.credit.en);

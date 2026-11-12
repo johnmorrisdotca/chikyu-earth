@@ -105,7 +105,14 @@ test("in the default look the planets, the Sun and the Moon are drawn from their
   await expect.poll(async () => (await statsOf(page)).bodies.painted, { timeout: 30_000 }).toBe(9);
   expect((await statsOf(page)).bodies.look).toBe("realistic");
   await expect.poll(async () => (await statsOf(page)).bodies.moon, { timeout: 30_000, message: "the Moon is the painter's" }).toBe(true);
-  for (const body of ["sun", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "moon"]) await expect.poll(() => pictures.has(body), { timeout: 30_000, message: `${body}'s picture` }).toBe(true);
+  // the painter is asked only for the bodies in the view and big enough to show their map: in this view the Moon; each of the others when the view is on it (MODULES-1192)
+  await expect.poll(() => pictures.has("moon"), { timeout: 30_000, message: "the Moon's picture" }).toBe(true);
+  expect(pictures.has("neptune"), "a planet far out of the view is not loaded").toBe(false);
+  for (const body of ["Sun", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"]) {
+    await page.locator(SPACE).evaluate((el, name) => Reflect.set(el, "body", name), body);
+    await expect.poll(() => pictures.has(body.toLowerCase()), { timeout: 30_000, message: `${body}'s picture, once the view is on it` }).toBe(true);
+  }
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "body", "Earth"));
   // the credit line is the painter's own (wakusei-planets 0.39 and later): e2e/space-credit.gl.ts watches it
   // the plain spheres have no credit
   await page.getByRole("group", { name: "Planets", exact: true }).getByRole("button", { name: "Plain", exact: true }).dispatchEvent("click");
