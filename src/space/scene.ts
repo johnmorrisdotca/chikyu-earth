@@ -788,7 +788,13 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number; axes: { x: Vec3; y: Vec3; z: Vec3 } | null } = { key: "", drawing: null, turn: 0, parts: 0, axes: null };
+      // The Sun's light for a generic satellite drawing, in the scene for good and dark (intensity 0) while no drawing is shown. Three counts the lights in the scene into the key of every program, so a light that came and went with a ride
+      // made a second program of the same code for each shader that was drawn while it was there (the Moon's, MODULES-1293): with the light always in the scene there is one.
+      const SunLight = (three as unknown as { DirectionalLight?: typeof THREE.DirectionalLight }).DirectionalLight;
+      const sceneSun = SunLight ? new SunLight(0xfff4e0, 0) : undefined;
+      if (sceneSun) scene.add(sceneSun);
       const dropModel = (): void => {
+        if (sceneSun) sceneSun.intensity = 0;
         if (!modelSlot.drawing) return;
         scene.remove(modelSlot.drawing.object);
         modelSlot.drawing.dispose();
@@ -1223,7 +1229,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               });
               deps.invalidate();
             };
-            if (modelKey.startsWith("generic:")) adopt(genericSatellite(three as unknown as typeof THREE, modelKey.slice(8) as ReturnType<typeof satelliteKind>));
+            if (modelKey.startsWith("generic:")) adopt(genericSatellite(three as unknown as typeof THREE, modelKey.slice(8) as ReturnType<typeof satelliteKind>, sceneSun ? { sun: sceneSun } : undefined));
             else if (modelKey && satellitePainter && norad !== undefined) {
               void Promise.resolve(satellitePainter.make(three, norad, { look: "", invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap() }))
                 .then((made) => {
@@ -1265,6 +1271,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             model.followModel = { x: sx, y: sy, shown: true, parts: modelSlot.parts, share, seat: sy / size.height, weight, radiusPx, box: { left: sx - radiusPx, top: sy - radiusPx, right: sx + radiusPx, bottom: sy + radiusPx }, axes };
           } else {
             if (modelSlot.drawing) modelSlot.drawing.object.visible = false;
+            if (sceneSun) sceneSun.intensity = 0;
             model.followModel = null;
           }
           const sunToSun = unit([-frame.sun[0], -frame.sun[1], -frame.sun[2]]);
@@ -1561,6 +1568,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           routeLayer?.dispose();
           modelSlot.turn += 1;
           dropModel();
+          if (sceneSun) {
+            scene.remove(sceneSun);
+            sceneSun.dispose?.();
+          }
           layer?.dispose();
           model.pick = null;
           model.pathAt = null;

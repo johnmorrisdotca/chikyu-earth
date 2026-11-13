@@ -39,11 +39,15 @@ export function satelliteKind(name: string): SatelliteKind {
   return "bus";
 }
 
+/** How bright the Sun is on a generic drawing. */
+export const SUN_INTENSITY = 3.2;
+
 /**
  * A generic satellite as a drawing of radius 1 about the origin, its long axis along +x (the way it flies), its top along +z and its left along +y, the family's convention for a model, with its own light that `light(toSun)` turns to the Sun. One group of a few meshes, made once and disposed with `dispose`.
  *
  * @param three - three.js (the parts the demo's subset holds: `Group`, `Mesh`, `BoxGeometry`, `CylinderGeometry`, `MeshLambertMaterial`, `DirectionalLight`, `AmbientLight`).
  * @param kind - What to draw.
+ * @param shared - A Sun light the scene owns (`{ sun }`), in the scene's own axes: the drawing then makes none of its own and `light` points that one. A scene with the light always in it keeps the same number of lights whether or not a drawing is shown, so three keeps one program for each material, not one for each state of the lights.
  * @returns The drawing, with `light` and `dispose`.
  *
  * @example
@@ -56,7 +60,7 @@ export function satelliteKind(name: string): SatelliteKind {
  * drawing.dispose();
  * ```
  */
-export function genericSatellite(three: typeof THREE, kind: SatelliteKind): BodyDrawing {
+export function genericSatellite(three: typeof THREE, kind: SatelliteKind, shared?: { sun: THREE.DirectionalLight }): BodyDrawing {
   const group = new three.Group();
   const materials: THREE.MeshLambertMaterial[] = [];
   const geometries: THREE.BufferGeometry[] = [];
@@ -128,11 +132,19 @@ export function genericSatellite(three: typeof THREE, kind: SatelliteKind): Body
       add(box(0.06, 0.06, 0.1), 0xb4b9c2, [-0.2, 0, -0.26]);
     }
   }
-  const sun = new three.DirectionalLight(0xfff4e0, 3.2);
-  group.add(sun, new three.AmbientLight(0x6f86a8, 0.9));
+  const own = shared ? null : new three.DirectionalLight(0xfff4e0, SUN_INTENSITY);
+  const sun = shared?.sun ?? own!;
+  group.add(new three.AmbientLight(0x6f86a8, 0.9));
+  if (own) group.add(own);
   return {
     object: group,
     light(toSun) {
+      if (shared) {
+        // the scene's light lives in the scene's axes, where the Sun's direction is already: point it and switch it on (the scene switches it off when no drawing is shown)
+        sun.position.set(toSun[0], toSun[1], toSun[2]);
+        sun.intensity = SUN_INTENSITY;
+        return;
+      }
       // the model's axes are the columns of the matrix the view set: the direction to the Sun in them is the dot with each
       const m = group.matrix.elements;
       const length = Math.hypot(m[0]!, m[1]!, m[2]!) || 1;
@@ -141,7 +153,7 @@ export function genericSatellite(three: typeof THREE, kind: SatelliteKind): Body
     dispose() {
       for (const material of materials) material.dispose();
       for (const geometry of geometries) geometry.dispose();
-      sun.dispose?.();
+      own?.dispose?.();
     },
   };
 }
