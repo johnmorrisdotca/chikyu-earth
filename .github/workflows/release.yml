@@ -10,7 +10,7 @@ permissions:
   id-token: write
 jobs:
   release:
-    uses: johnmorrisdotca/kazoku-ui/.github/workflows/reusable-release.yml@v0.43.0
+    uses: johnmorrisdotca/kazoku-ui/.github/workflows/reusable-release.yml@v0.44.0
     with:
       check-command: pnpm check && pnpm test:package
       freeze-command: pnpm test:freeze
