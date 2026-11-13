@@ -772,3 +772,38 @@ test("paths of a page's own: nothing drawn at rest with them shown, and adding a
   expect(empty.draws, "no path, nothing drawn").toBe(0);
   expect(empty.frames).toBe(0);
 });
+
+test("satellites far from their elements as an estimate: nothing drawn at rest with them shown, and switching estimate-far on and off over and over keeps the GPU objects flat", async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, "satellites");
+  await untilStill(page);
+  const space = (source: string): Promise<unknown> => page.locator("chikyu-space").evaluate((el, code) => (new Function("el", code)(el) as unknown), source);
+  const placed = async (): Promise<number> => (await space("return el.stats.satellites.estimated")) as number;
+  // 36 days after the recorded elements: past the limit, so nothing is placed until the estimate is asked for
+  await space(`el.time = Date.parse("2026-12-08T12:00:00Z")`);
+  await untilStill(page);
+  // one pass first, so what the lighter look needs exists before the count is taken
+  await space(`el.setAttribute("estimate-far", "")`);
+  await expect.poll(placed, { timeout: 20_000 }).toBeGreaterThan(0);
+  await untilStill(page);
+  await space(`el.removeAttribute("estimate-far")`);
+  await expect.poll(placed, { timeout: 20_000 }).toBe(0);
+  await untilStill(page);
+  const cold = gpuObjects(await readCounts(page));
+
+  await space(`el.setAttribute("estimate-far", "")`);
+  await expect.poll(placed, { timeout: 20_000 }).toBeGreaterThan(0);
+  await untilStill(page);
+  const rest = await bounded(page, 3000, "satellites");
+  expect(rest.draws, "nothing drawn at rest with the estimates shown").toBe(0);
+  expect(rest.frames).toBe(0);
+  expect(rest.requests).toBeLessThanOrEqual(2);
+  expect(gpuObjects(await readCounts(page)) - cold, "the estimate adds no object").toBe(0);
+
+  for (let round = 0; round < 10; round += 1) {
+    await space(round % 2 === 0 ? `el.removeAttribute("estimate-far")` : `el.setAttribute("estimate-far", "")`);
+    await expect.poll(async () => ((await placed()) > 0) === (round % 2 === 1), { timeout: 20_000 }).toBe(true);
+  }
+  await untilStill(page);
+  expect(gpuObjects(await readCounts(page)), "switching it over and over leaves no trail of objects").toBeLessThanOrEqual(cold + 0);
+});
