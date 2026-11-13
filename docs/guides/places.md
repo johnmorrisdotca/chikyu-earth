@@ -19,6 +19,7 @@ description: "Mark the reader's own place and any number of favourite places on 
 |---|---|---|
 | `places` | `places` | A JSON array of places, each `{ id, lon, lat, label, kind, color }`. Setting the property writes the attribute; an empty list takes the attribute away. |
 | `places-look` | `placesLook` | `beam` (the default): a light rising out of the ground with a ring at its foot. `pin`: a thin stick with a round head. `ring`: only the ring on the ground. |
+| `here-city` | `hereCity` | Off by default (`false`). Set the attribute, or `on`, to name each `here` place with the nearest city within 100 km. A number is that limit in kilometres. `false` on the property turns it off. |
 
 - **Kinds.** `kind: "here"` is the reader's own place: taller, brighter and with a quiet pulse round its foot. Any other place is a `favourite`: shorter, thinner and still. Colours come from `--chikyu-place-here` and `--chikyu-place-favourite` on the element or the page.
 - **A colour of its own.** `color` gives one place its own colour: a hex colour (`#e8475f`), `rgb()` or `hsl()` with numbers, or a colour's name. Anything else is left out and the kind's colour is used.
@@ -75,6 +76,20 @@ document.querySelector("#here").addEventListener("click", () => {
 - **Round it.** `nearby(point, km)` puts a place on a grid about `km` kilometres across (10 by default), so the marker never shows a street. Round before you draw it or keep it.
 - **Keep it on the device.** The element stores nothing and sends nothing. Do not put the reader's place in the page's address or send it to a server unless they choose to share it. The demo keeps it only in the open page: it is gone when the page is closed.
 
+## The nearest city's name
+
+`here-city` names each `kind: "here"` marker with the nearest city, in the page's language. It is off by default, and nothing of kuni is loaded until it is on and a `here` place is set.
+
+```html
+<chikyu-earth-realistic here-city places='[{"id":"me","lon":139.69,"lat":35.69,"kind":"here","label":"You are here"}]'></chikyu-earth-realistic>
+```
+
+- **Off unless asked.** The default is off (`hereCity` is `false`). A favourite is never renamed.
+- **How far.** A bare attribute, or `on`, uses 100 km (`HERE_CITY_KM`). `here-city="40"` looks only within 40 km. The furthest it accepts is 20,000 km (`HERE_CITY_MAX_KM`). A city further than the limit is not used, and the place's own `label` stays.
+- **Whose cities.** kuni's `loadCities("capitals", "1m", "100k")`, an optional peer. A city of fewer than 100,000 people is not in that list, so a smaller town keeps the page's label. The name is English, or on a Japanese page the short Japanese name when kuni gives one, otherwise the Japanese name. kuni 1.6.1 gives no short form, so Tokyo is written `東京都` and Osaka `大阪市`.
+- **The page's list is unchanged.** `places` still has the label the page set. Only the drawn name changes. `goToPlace` still finds the place by that label or by its id.
+- **Nothing at rest.** The name is worked out when the places, the language or the limit changes, and once when the cities arrive. It is not worked out again while the picture is still.
+
 ## Favourite places
 
 A favourite is any place without `kind: "here"`. The package has no list of its own and no picker: the page builds the reader's list (from a search of its own, or kuni's cities) and keeps it wherever it likes, then hands the whole list over each time it changes:
@@ -89,4 +104,4 @@ space.places = [...(here ? [here] : []), ...saved];
 
 ## The parts without a browser
 
-`@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box), `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`, and with `sun` how far into the night each is), and `groupPlaces` with `groupCell` (crowded places gathered, for an Earth so many pixels across).
+`@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box), `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`, and with `sun` how far into the night each is), `groupPlaces` with `groupCell` (crowded places gathered, for an Earth so many pixels across), and `readHereCity` with `hereCityLabels` (the nearest city's name for a `here` place, from a list that has `nearest`, within a kilometre limit).

@@ -10,6 +10,8 @@ import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/h
 import type { SkyKeepClear } from "../sky/keep-clear.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, readPlaceGroups, readPlaces, type Place, type PlaceLook, type PlaceView } from "../markers/places.ts";
+import { readHereCity } from "../markers/here-city.ts";
+import { createHereCity, type HereCityHost } from "../markers/here-city-host.ts";
 import { createPlaceLayer, PLACE_STYLE, placesLostNotice, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
 import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "../realistic/sun.ts";
@@ -257,7 +259,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "bodies-credit", "satellite-tint", "tiles"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "bodies-credit", "satellite-tint", "tiles"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -306,6 +308,8 @@ export class ChikyuSpace extends HTMLElement {
   #ridden: Partial<Record<keyof typeof RIDE_ZOOM, string>> = {};
   #toldFacing: RideFace | null = null;
   #placeLayer: PlaceLayer | undefined;
+  /** The nearest city's name on a `here` marker (`here-city`), loaded only when that is on. */
+  #here: HereCityHost | undefined;
   /** Whether the page has been told that places in sight were left undrawn. */
   #placesLost = { told: false };
   #placeList: Place[] = [];
@@ -360,8 +364,9 @@ export class ChikyuSpace extends HTMLElement {
     this.#sky.setStyle(this.#skyStyle);
     this.#sky.setKeepClear(this.#keepClear);
     this.#placeLayer = createPlaceLayer(root.getElementById("places")!);
+    this.#here = this.#openHereCity();
     this.#placeList = readPlaces(this.getAttribute("places"));
-    this.#placeLayer.set(this.#placeList);
+    this.#placeLayer.set(this.#here.named(this.#placeList));
     this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
     this.#placeLayer.grouping = readPlaceGroups(this.getAttribute("place-groups"));
     this.#cities = createCityHost({
@@ -482,6 +487,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#taken = undefined;
     this.#sky?.dispose();
     this.#sky = undefined;
+    this.#here?.dispose();
+    this.#here = undefined;
     this.#placeLayer?.dispose();
     this.#placeLayer = undefined;
     this.#cities?.dispose();
@@ -523,13 +530,16 @@ export class ChikyuSpace extends HTMLElement {
         this.#sky?.refresh();
         this.#cities?.refresh();
         this.#countries?.refresh();
+        this.#here?.refresh();
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
     else if (name === "places") {
       this.#placeList = readPlaces(value);
-      this.#placeLayer?.set(this.#placeList);
-      this.#gate?.request();
+      this.#applyPlaces();
+    } else if (name === "here-city") {
+      this.#here?.setLimit(readHereCity(value));
+      this.#applyPlaces();
     } else if (name === "places-look" && this.#placeLayer) {
       this.#placeLayer.look = readPlaceLook(value);
       this.#gate?.request();
@@ -718,6 +728,56 @@ export class ChikyuSpace extends HTMLElement {
     const clean = cleanPlaces(value);
     if (clean.length === 0) this.removeAttribute("places");
     else this.setAttribute("places", JSON.stringify(clean));
+  }
+
+  /**
+   * Name each `here` place with the nearest city (the attribute `here-city`). `false` (the default) leaves the page's label and loads nothing.
+   * `true` looks within 100 km (`HERE_CITY_KM`). A number is that limit in kilometres, at most 20,000 (`HERE_CITY_MAX_KM`); a city further away is not used, and the page's label stays.
+   * The cities are kuni's capitals, the other cities of a million and the others of 100,000, an optional peer loaded only when this is on and a `here` place is set. The name follows the page's language
+   * (the short Japanese name, then the Japanese name, else English). `places` is not changed: only the drawn name is. Nothing is drawn again at rest.
+   *
+   * @example
+   * ```ts no-run
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.querySelector("chikyu-space") as ChikyuSpace;
+   * space.hereCity = true;
+   * console.log(space.hereCity); // 100
+   * space.hereCity = false;
+   * ```
+   */
+  get hereCity(): false | number {
+    return readHereCity(this.getAttribute("here-city"));
+  }
+  set hereCity(value: false | true | number) {
+    if (value === true) this.setAttribute("here-city", "");
+    else if (value === false) this.removeAttribute("here-city");
+    else {
+      const km = readHereCity(String(value));
+      if (km === false) this.removeAttribute("here-city");
+      else this.setAttribute("here-city", String(km));
+    }
+  }
+
+  /** The cities for `here-city`, asked for only when the attribute is on. */
+  #openHereCity(): HereCityHost {
+    const host = createHereCity({
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+      onChange: () => {
+        if (this.isConnected) this.#applyPlaces();
+      },
+      onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-here-city-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+    });
+    host.setLimit(readHereCity(this.getAttribute("here-city")));
+    return host;
+  }
+
+  /** Hand the places to the layer, with a here marker's city name when one is known, and draw once. */
+  #applyPlaces(): void {
+    const layer = this.#placeLayer;
+    if (!layer) return;
+    layer.set(this.#here?.named(this.#placeList) ?? this.#placeList);
+    this.#gate?.request();
   }
 
   /**
@@ -1557,6 +1617,8 @@ export class ChikyuSpace extends HTMLElement {
      * how many rings the one draw call draws (`sprites`; 0 when the picture cannot draw them), how many circles the page draws instead (`dots`) and how many of the rings are groups (`groups`), the satellites ringed and named, and how many times they were laid out.
      */
     places: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
+    /** The nearest city on a `here` marker (`here-city`): whether it is on, the kilometre limit (0 when off), whether kuni's cities have arrived, and whether that load is still going. */
+    hereCity: { on: boolean; maxKm: number; loaded: boolean; pending: boolean };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
     cityNames: { on: boolean; max: number; radius: number; tiers: string[]; cities: number; names: number; renders: number };
     /** The borders: the segments of each set, whether each was drawn at the last draw, the countries whose regions have arrived, how many times a set's lines were made, and whether a set could not be loaded. */
@@ -1587,6 +1649,7 @@ export class ChikyuSpace extends HTMLElement {
       followModel: this.#model.followModel,
       tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {} },
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 }) },
+      hereCity: this.#here?.stats ?? { on: false, maxKm: 0, loaded: false, pending: false },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
       grid: { ...this.#model.grid.stats },
