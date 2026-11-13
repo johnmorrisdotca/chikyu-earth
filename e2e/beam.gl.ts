@@ -188,15 +188,31 @@ test("toggling the beam and its cells leaves the GPU's objects where they were",
   expect(await held(), "no object stays behind a round later").toBe(first);
 });
 
-test("pictures: the beam seen from outside, with and without spot cells", async ({ page }) => {
-  test.skip(!PICTURES, "SPX_PICTURES names the folder");
-  test.setTimeout(180_000);
-  await open(page);
-  await beamOn(page, "stations", ISS, { "beam-cells": "19" });
-  await page.locator(SPACE).evaluate((el, i) => (el as unknown as { ride(t: unknown, o: unknown): void }).ride({ group: "stations", index: i }, { view: "follow", distanceKm: 3000, smooth: false }), ISS);
-  await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 30_000 }).toBe(false);
-  await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, f: boolean): void }).setView({ yaw: 40, tilt: 70, zoom: 1 }, true));
-  await settle(page, 4000);
-  await untilStill(page);
-  await picture(page, "beam-outside-cells");
-});
+// The pictures for the docs and the release notes: outside and in a ride, on the night side and the day side, at the desk and on a phone. The day side is seen from further off than the night side: the closest
+// views of the Earth's day side need the finer tiles, which the tests do not serve (WITHOUT_TILES), so the base map is what shows.
+const SHOTS = [
+  { name: "beam-outside-night", time: "2026-11-02T06:00Z", view: "follow", distanceKm: 1800, yaw: -30, tilt: 72, cells: 37 },
+  { name: "beam-outside-day", time: "2026-11-02T18:00Z", view: "follow", distanceKm: 2500, yaw: 40, tilt: 70, cells: 19 },
+  { name: "beam-ride-above-night", time: "2026-11-02T06:00Z", view: "above", distanceKm: 0, yaw: 0, tilt: 0, cells: 19 },
+  { name: "beam-ride-along-day", time: "2026-11-02T18:00Z", view: "from", distanceKm: 0, yaw: 0, tilt: 0, cells: 19, look: "down" },
+] as const;
+for (const size of [{ label: "desk", width: 1280, height: 900 }, { label: "phone", width: 390, height: 844 }]) {
+  for (const shot of SHOTS) {
+    test(`picture: ${shot.name}, ${size.label}`, async ({ page }) => {
+      test.skip(!PICTURES, "SPX_PICTURES names the folder");
+      test.setTimeout(180_000);
+      await page.setViewportSize({ width: size.width, height: size.height });
+      await page.goto(`/chikyu-earth/?look=space&time=${shot.time}&speed=0&center=-100,40&sats=stations`);
+      await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+      await expect.poll(async () => (await statsOf(page)).satellites.placed, { timeout: 30_000 }).toBeGreaterThan(0);
+      await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
+      await beamOn(page, "stations", ISS, { "beam-cells": String(shot.cells) });
+      await page.locator(SPACE).evaluate((el, [i, v, d, look]) => (el as unknown as { ride(t: unknown, o: unknown): void }).ride({ group: "stations", index: i }, { view: v, ...(d ? { distanceKm: d } : { viewpoint: "inside", look }), smooth: false }), [ISS, shot.view, shot.distanceKm, "look" in shot ? shot.look : "horizon"] as const);
+      await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 30_000 }).toBe(false);
+      if (shot.view === "follow") await page.locator(SPACE).evaluate((el, [y, t]) => (el as unknown as { setView(v: unknown, f: boolean): void }).setView({ yaw: y, tilt: t, zoom: 1 }, true), [shot.yaw, shot.tilt] as const);
+      await settle(page, 4000);
+      await untilStill(page);
+      await picture(page, `${shot.name}-${size.label}`);
+    });
+  }
+}
