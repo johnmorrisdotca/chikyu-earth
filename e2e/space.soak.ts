@@ -16,6 +16,7 @@ interface SpaceStats {
   contexts: number;
   canvas: { pixels: number };
   tiers: Record<string, number>;
+  bodies: { painted: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number };
 }
 const statsOf = (page: Page): Promise<SpaceStats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as SpaceStats);
 
@@ -38,7 +39,7 @@ async function sample(page: Page, t0: number) {
   const c = await counts(page);
   const s = await statsOf(page);
   const sum = (k: Record<string, number>): number => Object.values(k).reduce((a, b) => a + b, 0);
-  return { at: Math.round((Date.now() - t0) / 1000), heapMB: Math.round((heap / 1048576) * 100) / 100, textures: alive(c, "Texture"), buffers: alive(c, "Buffer"), programs: alive(c, "Program"), all: sum(c.created) - sum(c.deleted), draws: s.draws, canvasMP: s.canvas.pixels / 1e6 };
+  return { at: Math.round((Date.now() - t0) / 1000), heapMB: Math.round((heap / 1048576) * 100) / 100, textures: alive(c, "Texture"), buffers: alive(c, "Buffer"), programs: alive(c, "Program"), all: sum(c.created) - sum(c.deleted), draws: s.draws, canvasMP: s.canvas.pixels / 1e6, bodies: s.bodies };
 }
 
 /** Back to the opening state: paused at the Earth, the larger pictures freed. */
@@ -60,20 +61,23 @@ async function rest(page: Page): Promise<void> {
   await expect.poll(async () => Object.values((await statsOf(page)).tiers).every((w) => w === 1024), { timeout: 15_000 }).toBe(true);
   // the moons and the sharper body pictures are let go four seconds after they leave the view
   await settle(page, 6000);
-  // and what is let go stays let go: the count of shader programs has not moved for five seconds (a body that has just been let go would otherwise be counted as growth)
-  let seen = -1;
+  // and what is let go stays let go, and what is made stays made: the element's own count of the bodies it holds (`stats.bodies`) and the counts of programs, buffers and textures have not moved for five seconds. Bodies are made when big enough
+  // and let go four seconds after they leave the view (MODULES-1192), so the same view only returns the same count once that has settled; a body that has just been let go would otherwise be counted as growth.
+  let seen = "";
   let since = Date.now();
   const giveUp = Date.now() + 40_000;
   while (Date.now() - since < 5000 && Date.now() < giveUp) {
-    // a view at rest draws nothing, and what is let go is let go at a draw: ask for one
+    // a view at rest draws nothing, and what is let go or made is so at a draw: ask for one
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "time", (Reflect.get(el, "time") as number) + 1));
-    const now = alive(await counts(page), "Program");
+    const c = await counts(page);
+    const now = `${JSON.stringify((await statsOf(page)).bodies)} ${alive(c, "Program")} ${alive(c, "Buffer")} ${alive(c, "Texture")}`;
     if (now !== seen) {
       seen = now;
       since = Date.now();
     }
     await page.waitForTimeout(500);
   }
+  expect(Date.now() - since, `the bodies and the GPU objects settled in 40 s (last: ${seen})`).toBeGreaterThanOrEqual(5000);
 }
 
 test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
@@ -170,10 +174,12 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   const drawsPerSecond = (last.draws - warm!.draws) / (last.at - warm!.at);
   console.log(`space soak ${MINUTES} min: ${step} steps, heap ${warm!.heapMB} -> ${last.heapMB} MB, GPU objects ${warm!.all} -> ${last.all}, ${drawsPerSecond.toFixed(2)} frames a second after warm-up`);
   expect(last.heapMB - warm!.heapMB, "JS heap grew").toBeLessThanOrEqual(4);
-  expect(last.textures, "textures").toBe(warm!.textures);
-  expect(last.buffers, "buffers").toBe(warm!.buffers);
-  expect(last.programs, "programs").toBe(warm!.programs);
-  expect(last.all, "GPU objects").toBe(warm!.all);
+  // The same view, settled, holds no more than it did at the start. Not exactly the same: a body made and let go (MODULES-1192) leaves the count in the view where its history put it, and the walk's last stop is not the
+  // walk's first (the counts at the opening view settled at 63, 66 and 69 buffers in different runs, every one steady for five seconds), so a count that came out lower than at the start is not a fault; one that grew is.
+  expect(last.textures, "textures").toBeLessThanOrEqual(warm!.textures);
+  expect(last.buffers, "buffers").toBeLessThanOrEqual(warm!.buffers);
+  expect(last.programs, "programs").toBeLessThanOrEqual(warm!.programs);
+  expect(last.all, "GPU objects").toBeLessThanOrEqual(warm!.all);
   expect(Math.max(...samples.map((s) => s.canvasMP)), "canvas megapixels").toBeLessThanOrEqual(6);
   expect(drawsPerSecond, "frames a second").toBeLessThanOrEqual(30);
   expect((await statsOf(page)).contexts, "WebGL contexts made").toBe(1);
