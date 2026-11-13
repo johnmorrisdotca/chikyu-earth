@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.50.0 - 2026-11-13
 
 - **The catalogue search folds kana** (MODULES-1268). `findInCatalogue` folds hiragana to katakana and small kana to full-size on both sides of the comparison (and half-width katakana by NFKC), so `はっぶる` finds `ハッブル`, in satellite names and group labels; the long-vowel mark is left alone. `foldKana(text)` is the same fold, exported from `@johnmorrisdotca/chikyu-earth/satellites` for a page's own search box.
 - **A painter's model no longer adds a program to every lit material** (MODULES-1293). The scene now owns one Sun light, always there, and a satellite model made by `setSatellitePainter` is lit by it: a light the model carries (directional, point, spot, hemisphere, area) is switched off when the model is added, and its colour and strength are worn by the scene's Sun while the model is shown (an ambient light is left). Before, a model with its own light changed the number of lights in the scene the first time a ride showed it, and three kept a second program of the same code for each lit material (the clouds, the plain bodies) until it was let go: one more program at the end of a long run than at the start. The ride-along guide says a painter must not add lights and what to do to keep its look. The soak's warm-up now rides the ISS outside until its model is drawn, runs a clock past the satellites' speed limit and shows the package's own drawing once.
