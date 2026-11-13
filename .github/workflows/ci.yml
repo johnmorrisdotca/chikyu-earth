@@ -4,8 +4,86 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      simulate_main_push:
+        description: "Act as a push to main would: look for a green run of this workflow on the commit and skip the heavy jobs if there is one. For trying the lookup without touching main."
+        type: boolean
+        default: false
+      lookup_sha:
+        description: "With simulate_main_push: look for a green run on this commit instead (a dry run: the heavy jobs are skipped and the summary says what a push would do). Empty: this commit, and the heavy jobs follow the answer."
+        type: string
+        default: ""
+# A dry run of the lookup (lookup_sha) is named so, and the lookup never counts it: it skips the heavy jobs and ends green, which is not a green run of the commit.
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.lookup_sha != '' && 'CI (dry run of the skip lookup)' || '' }}
+permissions:
+  contents: read
+  actions: read
 jobs:
+  already-green:
+    # A release runs this workflow on the release branch (by hand), then the fast-forward to main runs it again on the identical commit. On a push to main, ask GitHub whether a run
+    # of this workflow already succeeded on this commit; if one did, the heavy jobs are skipped and the run is green. A failed, cancelled, unfinished, skipped or dry run does not count (the run's own jobs are read), and
+    # any other event (a pull request, a branch, a run by hand) always runs everything.
+    name: A green run of this commit already exists?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      skip: ${{ steps.ask.outputs.skip }}
+    steps:
+      - id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIMULATE: ${{ inputs.simulate_main_push }}
+          LOOKUP_SHA: ${{ inputs.lookup_sha }}
+          WORKFLOW_FILE: ci.yml
+        run: |
+          ask="no"
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then ask="yes"; fi
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$SIMULATE" = true ]; then ask="yes"; echo "Simulating a push to main."; fi
+          if [ "$ask" = no ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Not a push to main ($GITHUB_EVENT_NAME on $GITHUB_REF): everything runs."
+            exit 0
+          fi
+          sha="$GITHUB_SHA"
+          dry=false
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$LOOKUP_SHA" ]; then sha="$LOOKUP_SHA"; dry=true; fi
+          # A run vouches for the commit only if its real jobs ran and passed: the `check` job succeeded (not skipped), a browser job (a demo or freeze job) succeeded, and no job failed or was cancelled.
+          # A run that skipped its heavy jobs and ended green (a dry run, or a push that skipped) is never enough. Only the 5 newest completed runs of the commit are looked at, one jobs call for each; the first that qualifies ends the search.
+          # Any failed question means everything runs.
+          found=0
+          if ! candidates="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$sha&status=completed&per_page=5" --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | select(.conclusion == \"success\") | .id")"; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Could not read the runs of $WORKFLOW_FILE: everything runs."
+            exit 0
+          fi
+          for id in $candidates; do
+            if ok="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '([.jobs[] | select(.name | test("^check( |$)")) | select(.conclusion == "success")] | length >= 1) and ([.jobs[] | select(.name | test("^(demo|freeze)( |$)")) | select(.conclusion == "success")] | length >= 1) and ([.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled")] | length == 0)')" && [ "$ok" = true ]; then
+              found=1
+              echo "Run $id ran its checks and browser jobs and passed."
+              break
+            fi
+            echo "Run $id does not vouch for the commit (its real jobs did not all run and pass)."
+          done
+          echo "Runs of $WORKFLOW_FILE on $sha:"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$sha&per_page=100" --jq '.workflow_runs[] | "  \(.event) \(.status) \(.conclusion) \(.html_url)"' || true
+          skip=false
+          if [ "$found" -ge 1 ]; then
+            echo "A full green run of $WORKFLOW_FILE exists for $sha."
+            skip=true
+          else
+            echo "No full green run of $WORKFLOW_FILE for $sha (a skipped or dry run does not count)."
+          fi
+          if [ "$dry" = true ]; then
+            echo "A dry run (lookup_sha): a push to main with that commit would $([ "$skip" = true ] && echo 'skip the heavy jobs' || echo 'run everything'). The heavy jobs are skipped here whatever the answer."
+            echo "A push to main with $sha would $([ "$skip" = true ] && echo 'skip the heavy jobs' || echo 'run everything')." >> "$GITHUB_STEP_SUMMARY"
+            skip=true
+          fi
+          [ "$skip" = true ] && [ "$dry" = false ] && echo "The heavy jobs are skipped."
+          [ "$skip" = false ] && echo "Everything runs."
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
   check:
+    needs: already-green
+    if: needs.already-green.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -21,6 +99,8 @@ jobs:
         run: .cache/venv/bin/python -I scripts/make-earth-tiles.py selftest
       - run: pnpm check
   package:
+    needs: already-green
+    if: needs.already-green.outputs.skip != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -38,6 +118,8 @@ jobs:
       - name: The package as npm packs it installs and imports
         run: pnpm test:package
   demo:
+    needs: already-green
+    if: needs.already-green.outputs.skip != 'true'
     # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium in two parts (one job reached its 15 minutes on 2026-11-09), then in WebKit. Each part may take 25 minutes. Every test still runs once.
     name: demo (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -70,6 +152,8 @@ jobs:
       - name: The demo, played in ${{ matrix.name }}
         run: pnpm test:demo:one ${{ matrix.projects }}
   usage:
+    needs: already-green
+    if: needs.already-green.outputs.skip != 'true'
     runs-on: ubuntu-latest
     # In the Playwright image at the lockfile's version, which has the browsers' system libraries: no apt mirror (down on 2026-11-11).
     container:
