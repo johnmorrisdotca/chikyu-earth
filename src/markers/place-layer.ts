@@ -36,6 +36,7 @@ export const PLACE_STYLE =
   ".pl-name[data-kind=group]{padding:0 5px;font-size:10px;line-height:14px;border-radius:7px;background:rgba(4,10,20,.6)}" +
   ".pl-name[data-night]{opacity:.82}" +
   ".pl-name[data-kind=satellite]{--c:#cfeaff;color:#cfeaff;font-weight:500;background:rgba(4,10,20,.5);border-color:transparent}" +
+  ".pl-name[data-occluded]{opacity:.45}" +
   ".pl-sat{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border:1.2px solid #cfeaff;border-radius:50%;opacity:.85;will-change:transform}" +
   ".pl-sat[hidden]{display:none}" +
   ".pl-dot{position:absolute;left:0;top:0;box-sizing:border-box;border:1.5px solid var(--c);border-radius:50%;opacity:.9}" +
@@ -49,6 +50,8 @@ export interface SatelliteMark {
   x: number;
   y: number;
   visible: boolean;
+  /** The Earth hides it. The name is dimmed and the ring is left off, unless dimming is off. */
+  occluded?: boolean;
 }
 
 /** The ring round a named satellite, in CSS pixels. */
@@ -118,6 +121,8 @@ export interface PlaceLayer {
    * fading at the Earth's edge and dimmer at night, and `stats.omitted` counts the places in sight it had no room for. `stats.sprites` counts only the rings the picture draws; `stats.dots` counts the circles.
    */
   ringsInPicture: boolean;
+  /** Dim a name the Earth hides, and leave its ring off. On by default. Off leaves that name out. */
+  dimOccluded: boolean;
   readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
   /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
   readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
@@ -152,6 +157,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 };
   let grouping = true;
   let ringsInPicture = true;
+  let dimOccluded = true;
   // the small circles that stand in for the picture's rings when it cannot draw them: the element, and what it was last written with
   const dots: { root: HTMLElement; r: number; color: string; fill: number; x: string; y: string; opacity: string }[] = [];
   // where each group fell on the screen the last time the picture could not draw the rings: x, y, facing. Grown when the groups grow, never one array a frame.
@@ -246,12 +252,15 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const hideFrom = (list: HTMLElement[], from: number): void => {
     for (let i = from; i < list.length; i += 1) if (!list[i]!.hidden) list[i]!.hidden = true;
   };
-  const showName = (name: HTMLElement, text: string, kind: string, left: number, top: number, color: string | undefined, night: boolean): void => {
+  const showName = (name: HTMLElement, text: string, kind: string, left: number, top: number, color: string | undefined, night: boolean, occluded = false): void => {
     if (name.textContent !== text) name.textContent = text;
     if (name.dataset["kind"] !== kind) name.dataset["kind"] = kind;
     if (colorOk(color)) name.style.setProperty("--c", color);
     else if (name.style.getPropertyValue("--c")) name.style.removeProperty("--c");
     name.toggleAttribute("data-night", night);
+    name.toggleAttribute("data-occluded", occluded);
+    if (occluded) name.style.opacity = "0.45";
+    else if (name.style.opacity === "0.45") name.style.opacity = "";
     if (name.hidden) name.hidden = false;
     name.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
   };
@@ -392,6 +401,12 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     },
     set ringsInPicture(value) {
       ringsInPicture = value;
+    },
+    get dimOccluded() {
+      return dimOccluded;
+    },
+    set dimOccluded(value) {
+      dimOccluded = value;
     },
     get sprites() {
       return sprites;
@@ -537,8 +552,9 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       }
       hideDots(drawnDots);
       stats.omitted = omitted;
-      // the ringed satellites: a ring round each that can be seen, and its name where it is free of the places' names and the boxes taken
+      // a ring round each satellite that can be seen. A name the Earth hides is dimmed and has no ring, unless that dimming is off, in which case the name is left out.
       const seen = satellites.filter((mark) => mark.visible);
+      const labelled = dimOccluded ? satellites.filter((mark) => mark.visible || mark.occluded) : seen;
       for (const [i, mark] of seen.entries()) {
         let ring = rings[i];
         if (!ring) {
@@ -553,17 +569,17 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       hideFrom(rings, seen.length);
       const items: { x: number; y: number; r: number; w: number; h: number; priority: number }[] = [];
       const owners: SatelliteMark[] = [];
-      measureAll(seen.filter((mark) => mark.label).map((mark) => ({ label: mark.label, kind: "satellite" as const })));
-      for (const [i, mark] of seen.entries()) {
+      measureAll(labelled.filter((mark) => mark.label).map((mark) => ({ label: mark.label, kind: "satellite" as const })));
+      for (const [i, mark] of labelled.entries()) {
         const found = mark.label ? size({ label: mark.label, kind: "satellite" }) : null;
         if (!found) continue;
-        items.push({ x: mark.x, y: mark.y, r: SATELLITE_RING + 2, w: found.width, h: found.height, priority: -i });
+        items.push({ x: mark.x, y: mark.y, r: mark.occluded ? 2 : SATELLITE_RING + 2, w: found.width, h: found.height, priority: -i });
         owners.push(mark);
       }
       const placed = placeLabels(items, view.width, view.height, 24, 64, busy);
       for (const spot of placed) {
         const mark = owners[spot.item]!;
-        showName(nameAt(used), mark.label, "satellite", spot.left, spot.top, undefined, false);
+        showName(nameAt(used), mark.label, "satellite", spot.left, spot.top, undefined, false, mark.occluded === true);
         used += 1;
       }
       hideFrom(names, used);

@@ -270,7 +270,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "ride-viewpoint", "hover-path", "names-on-hover", "follow", "follow-ease"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "ride-viewpoint", "hover-path", "names-on-hover", "follow", "follow-ease", "dim-occluded"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -387,6 +387,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#placeLayer.set(this.#here.named(this.#placeList));
     this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
     this.#placeLayer.grouping = readPlaceGroups(this.getAttribute("place-groups"));
+    this.#dimOccluded = this.getAttribute("dim-occluded") !== "off";
+    this.#placeLayer.dimOccluded = this.#dimOccluded;
     this.#cities = createCityHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -551,6 +553,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "orbits") this.orbits = value !== "off";
     else if (name === "bodies") this.bodies = value ?? "";
     else if (name === "light") this.light = readLight(value);
+    else if (name === "dim-occluded") this.dimOccluded = value !== "off";
     else if (name === "camera") this.camera = readCamera(value);
     else if (name === "cloud-drift") {
       this.#model.cloudDrift = Number.isFinite(Number(value ?? "0")) ? Number(value ?? "0") : 0;
@@ -1288,6 +1291,30 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
+  #dimOccluded = true;
+
+  /**
+   * Dim the name of a satellite the Earth hides, and leave its ring off (the attribute `dim-occluded`). On by default. `off` leaves that name out.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.dimOccluded = false;
+   * console.log(space.dimOccluded);
+   * ```
+   */
+  get dimOccluded(): boolean {
+    return this.#dimOccluded;
+  }
+  set dimOccluded(value: boolean) {
+    if (value === this.#dimOccluded) return;
+    this.#dimOccluded = value;
+    if (this.#placeLayer) this.#placeLayer.dimOccluded = value;
+    this.#gate?.request();
+  }
+
   /** How the Earth is lit: `sun` (true, the default), `lit` (always lit, as if by daylight from the camera's side, so a ride on the night side is never a black frame) or `boost` (the true terminator, with the night side raised). The Sun, the Moon and the planets keep their true places. */
   get light(): LightMode {
     return this.#model.light;
@@ -1774,7 +1801,7 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
-   * Where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm, edge, behind }` in CSS pixels from the view's top left. `visible` means it is inside the box, in front of the camera and not behind the Earth. `edge` is `top`, `right`, `bottom` or `left` when the place lies beyond that edge, and `null` when it is inside the box. `behind` is true when it is behind the camera (the picture would mirror it, so `edge` is read from the camera's own axes). `x` and `y` may lie outside the box. `null` when its group is not set or not shown, or it cannot be placed (its elements are too old). It is the picture's own camera maths and its own test for the Earth in the way, so a page that draws its own rings, or a mark on the edge, need not repeat either.
+   * Where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm, edge, behind, occluded }` in CSS pixels from the view's top left. `visible` means it is inside the box, in front of the camera and not behind the Earth. `edge` is `top`, `right`, `bottom` or `left` when the place lies beyond that edge, and `null` when it is inside the box. `behind` is true when it is behind the camera (the picture would mirror it, so `edge` is read from the camera's own axes). `occluded` is true when the Earth hides the satellite and false at the limb, in front, and when it is only behind the camera. `x` and `y` may lie outside the box. `null` when its group is not set or not shown, or it cannot be placed (its elements are too old). It is the picture's own camera maths and its own test for the Earth in the way, so a page that draws its own rings, or a mark on the edge, need not repeat either.
    */
   placeSatellite(ref: SatelliteRef): SatelliteScreen | null {
     return this.#model.placeSatellite?.(ref) ?? null;
@@ -1810,9 +1837,9 @@ export class ChikyuSpace extends HTMLElement {
   #markSeen = new Map<string, boolean>();
 
   /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
-  #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean }[]): void {
+  #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean; occluded?: boolean }[]): void {
     if (marks.length > 0) this.#prepareSatLabelLang();
-    this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible }));
+    this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible, occluded: m.occluded === true }));
     const now = new Map<string, boolean>();
     for (const m of marks) {
       const key = `${m.ref.group}:${m.ref.index}`;
