@@ -2,9 +2,12 @@
 // 2,000 Starlink and a group of 6,000 added and taken away) shown, chosen and run past their speed limit, for SOAK_MINUTES (10 by default); it must end where it began: the JS heap flat, no GPU object more than at the start, one WebGL context, the canvas in budget, draws within 30 a second.
 import { expect, test, type Page } from "@playwright/test";
 import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
+import { listPrograms, PROGRAMS_SCRIPT } from "./programs.ts";
 import { routeElements } from "./recorded.ts";
 
-const MINUTES = Number(process.env.SOAK_MINUTES ?? 10);
+const MINUTES = Number(process.env.SOAK_MINUTES ?? 1);
+// With SOAK_THROTTLE set the browser's CPU is slowed by that factor, for the repeats under load.
+const THROTTLE = Number(process.env.SOAK_THROTTLE ?? 4);
 // A reader who asked for reduced motion gets one step a second; the soak is for everyone else, at the full 30 frames a second.
 test.use({ reducedMotion: "no-preference" });
 test.beforeEach(({ page }) => routeElements(page));
@@ -16,6 +19,7 @@ interface SpaceStats {
   contexts: number;
   canvas: { pixels: number };
   tiers: Record<string, number>;
+  followModel: { shown: boolean } | null;
   bodies: { painted: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number };
 }
 const statsOf = (page: Page): Promise<SpaceStats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as SpaceStats);
@@ -41,6 +45,9 @@ async function sample(page: Page, t0: number) {
   const sum = (k: Record<string, number>): number => Object.values(k).reduce((a, b) => a + b, 0);
   return { at: Math.round((Date.now() - t0) / 1000), heapMB: Math.round((heap / 1048576) * 100) / 100, textures: alive(c, "Texture"), buffers: alive(c, "Buffer"), programs: alive(c, "Program"), all: sum(c.created) - sum(c.deleted), draws: s.draws, canvasMP: s.canvas.pixels / 1e6, bodies: s.bodies };
 }
+
+/** The programs alive now, each as a hash and a length of its vertex and fragment text, sorted: when the count at the end is above the count at the warm-up, the program that is more shows in the difference of the two lists. */
+const programList = async (page: Page): Promise<string> => JSON.stringify(await listPrograms(page));
 
 /** The view controls' Auto-turn, stopped: the Earth's view then keeps the yaw it was set to. Returns whether it was turning, to start it again once the count is taken. */
 async function stopTurning(page: Page): Promise<boolean> {
@@ -105,10 +112,12 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     if (m.type() === "error") problems.push(`console error: ${m.text()}`);
   });
   await page.addInitScript(COUNT_SCRIPT);
+  await page.addInitScript(PROGRAMS_SCRIPT);
   await page.goto("/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=10,20&sats=stations,starlink");
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
   await expect.poll(async () => (await statsOf(page)).draws, { timeout: 30_000 }).toBeGreaterThan(0);
   await expect.poll(async () => (await statsOf(page)).satellites.groups, { timeout: 20_000 }).toBe(2);
+  if (THROTTLE > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   // the large group, once, so the satellites' own shaders and the chosen satellite's ring are made before the baseline
   await addMany(page);
   await page.locator(SPACE).evaluate((el) => (el as unknown as { selectSatellite(r: unknown): void }).selectSatellite({ group: "stations", index: 0 }));
@@ -118,6 +127,30 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     await rideButton(page, name).click();
     await settle(page, 1500);
   }
+  // and each way of looking while riding, from the ISS and from a satellite of the package's own drawing: a program or an object that a way of looking needs (the camera inside the air's shell, from the satellite, above it) is made the first time it is drawn,
+  // and one first met after the baseline is one more that is not a leak
+  await rideButton(page, "ISS").click();
+  for (const way of ["From it", "Behind it", "At the horizon", "Straight down"]) {
+    await page.getByRole("button", { name: way, exact: true }).dispatchEvent("click");
+    // the ISS's model is made by the page's own kit and arrives after the ride begins; it brings a light of its own into the scene while it is drawn, and three keeps a program for each number of lights a material is drawn with (MODULES-1293),
+    // so the model must be on screen, with the Earth's clouds and the bodies drawn beside it, before the baseline and not at some moment of the walk
+    if (way === "Behind it") await expect.poll(async () => (await statsOf(page)).followModel?.shown ?? false, { timeout: 30_000, message: "the ISS's model is drawn from behind it" }).toBe(true);
+    await settle(page, 1500);
+  }
+  await rideButton(page, "Stop").click();
+  await settle(page, 1000);
+  // and from just outside a satellite that has no model of its own: the package's own drawing of it (its Lambert program, its geometries) is made the first time one is drawn and kept, so one first met after the baseline
+  // would be a program that is not a leak. The Sun's light for it is in the scene for good (MODULES-1293), so this makes the same programs whatever the walk does after.
+  await rideButton(page, "A Starlink satellite").click();
+  await page.getByRole("button", { name: "Behind it", exact: true }).dispatchEvent("click");
+  await settle(page, 2500);
+  await rideButton(page, "Stop").click();
+  await settle(page, 1500);
+  // and the satellites run past their speed limit once, so the streaks' own program is made before the baseline: the walk sets such clocks (a day a second) and a program first made after the baseline is one more that is not a leak
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "speed", 3600));
+  await settle(page, 2000);
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "speed", 0));
+  await settle(page, 1000);
   await removeMany(page);
   // look at the planets once, so three's own empty texture is made before the baseline
   await page.getByRole("group", { name: "Go to" }).getByRole("button", { name: "Solar system", exact: true }).dispatchEvent("click");
@@ -179,6 +212,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
       warm = await sample(page, t0);
       samples.push(warm);
       console.log(`warm  ${JSON.stringify(warm)}`);
+      console.log(`warm programs ${await programList(page)}`);
       // the walk goes on with the view turning, as it began
       if (turning) await startTurning(page);
     } else if (Date.now() >= nextSample) {
@@ -192,6 +226,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   await rest(page, opening);
   const last = await sample(page, t0);
   console.log(`final ${JSON.stringify(last)}`);
+  console.log(`final programs ${await programList(page)}`);
   const drawsPerSecond = (last.draws - warm!.draws) / (last.at - warm!.at);
   console.log(`space soak ${MINUTES} min: ${step} steps, heap ${warm!.heapMB} -> ${last.heapMB} MB, textures ${warm!.textures} -> ${last.textures}, buffers ${warm!.buffers} -> ${last.buffers}, programs ${warm!.programs} -> ${last.programs}, GPU objects ${warm!.all} -> ${last.all}, ${drawsPerSecond.toFixed(2)} frames a second after warm-up`);
   expect(last.heapMB - warm!.heapMB, "JS heap grew").toBeLessThanOrEqual(4);
