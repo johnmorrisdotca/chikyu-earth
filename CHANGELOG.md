@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The catalogue search folds kana** (MODULES-1268). `findInCatalogue` folds hiragana to katakana and small kana to full-size on both sides of the comparison (and half-width katakana by NFKC), so `はっぶる` finds `ハッブル`, in satellite names and group labels; the long-vowel mark is left alone. `foldKana(text)` is the same fold, exported from `@johnmorrisdotca/chikyu-earth/satellites` for a page's own search box.
+
 ## 0.49.0 - 2026-11-13
 
 - **Satellites far from today, as an estimate** (MODULES-1296). `estimate-far` (the property `estimateFar`, or `createSatellites(sets, { estimateFar: true })`; off by default) keeps placing a satellite beyond 30 days from its elements: the same elements carried forward or back by the same SGP4 code, drawn lighter than a dimmed one, with `estimated: true` and `estimatedDays` (how far the moment is from the elements', in days) in `placeSatellite`, `satelliteInfo` and the details of `chikyu-satellite-click` and `chikyu-satellite-visibility`, and `stats.satellites.estimated`. The docs say what an estimate is (where it would be had its orbit not changed) and where it is worst (low orbits, months away). Never before an element set's `LAUNCH_DATE` (else the year of its `OBJECT_ID`) or after its `DECAY_DATE`, both new optional fields that `parseElements` keeps; a satellite SGP4 cannot carry that far, or brings below about 120 km, is left out and not counted as placed.
