@@ -7,7 +7,7 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
-## To 0.46.3: a satellite seen from above shrinks as the ride rises
+## To 0.46.5: a satellite seen from above shrinks as the ride rises
 
 In a ride above a satellite (`view: "above"`) the model of the satellite was drawn at 17 per cent of the picture's height from any height, so from 6,000 km it was a block hundreds of kilometres across. It now keeps that size up to 150 km, shrinks as the camera rises and is gone by 2,000 km, where the ordinary mark (ring and name) takes over.
 

@@ -29,7 +29,7 @@ import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
-import { createFinerHolder, GIBS_CREDIT, GIBS_ID } from "../door/gibs.ts";
+import { createFinerHolder, GIBS_ID } from "../door/gibs.ts";
 import { folderSource } from "../door/map.ts";
 import type { TileSources, TileStats } from "../realistic/tile-set.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -273,7 +273,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "ride-viewpoint", "ride-model-size"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -601,7 +601,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-streak-max") {
       this.#model.satellites.streakMax = readStreakMax(value);
       this.#gate?.request();
-    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date") this.#gate?.request();
+    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
     if (name === "lang") this.#showFinerCredit();
@@ -615,7 +615,8 @@ export class ChikyuSpace extends HTMLElement {
     if (!note) return;
     const count = this.#model.tiles?.stats.used[GIBS_ID] ?? 0;
     const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
-    const text = count > 0 ? GIBS_CREDIT[lang] : "";
+    const finer = this.#finerHold.source((attr) => this.getAttribute(attr), false);
+    const text = count > 0 && finer ? finer.info.credit[lang] : "";
     if (note.textContent !== text) note.textContent = text;
     if (note.lang !== lang) note.lang = lang;
     if (note.hidden !== (text === "")) note.hidden = text === "";

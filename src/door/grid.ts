@@ -257,7 +257,7 @@ export function gridKeys(grid: MapGrid, place: MapPlace, detail: number, prefix 
  * The Geographic (EPSG:4326) tile matrix NASA's imagery service publishes, read from its capabilities on 2026-11-13.
  * A pixel is `0.5625 / 2^level` degrees. Tiles are 512 pixels, the corner of column 0 and row 0 is longitude -180 and latitude 90, and a level has as many tiles as it takes to cover the Earth, so levels 0, 1 and 2 run past it.
  *
- * @param matrix - `250m` (levels 0 to 8) or `500m` (levels 0 to 7).
+ * @param matrix - `250m` (levels 0 to 8), `500m` (levels 0 to 7) or `31.25m` (levels 0 to 11, the Landsat and shaded-relief layers).
  * @returns The grid.
  *
  * @example
@@ -267,8 +267,8 @@ export function gridKeys(grid: MapGrid, place: MapPlace, detail: number, prefix 
  * console.log(gibsGrid("250m").levels[3]);
  * ```
  */
-export function gibsGrid(matrix: "250m" | "500m"): MapGrid {
-  const max = matrix === "250m" ? 8 : 7;
+export function gibsGrid(matrix: "31.25m" | "250m" | "500m"): MapGrid {
+  const max = matrix === "31.25m" ? 11 : matrix === "250m" ? 8 : 7;
   const levels: MapGridLevel[] = [];
   for (let level = 0; level <= max; level += 1) {
     const pixel = 0.5625 / 2 ** level;
