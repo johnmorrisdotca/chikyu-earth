@@ -154,6 +154,8 @@ test.describe("gliding", () => {
     await open(page);
     await freezeClock(page);
     await ride(page, "from", "horizon", true);
+    // the first glide, from the Earth view to the satellite, is run through before the rides are switched: a model is drawn by its distance from the camera, and the camera that is still far off is a long way from it
+    await page.clock.runFor(1500);
     const frames: string[] = [];
     let seen = (await statsOf(page)).draws;
     for (let i = 0; i < 40; i += 1) {

@@ -131,6 +131,8 @@ test("no part of the model is drawn outside its box, in either size mode: the fr
     expect(hidden.followModel, `${km} km: no model from inside`).toBeNull();
     const b = await shot();
     await page.locator(SPACE).evaluate((el) => el.setAttribute("ride-viewpoint", "outside"));
+    await test.info().attach(`${mode}-${km}-with-model.png`, { body: Buffer.from(a, "base64"), contentType: "image/png" });
+    await test.info().attach(`${mode}-${km}-model-hidden.png`, { body: Buffer.from(b, "base64"), contentType: "image/png" });
     const box = withModel.followModel!.box;
     const outside = await page.evaluate(
       async ([one, two, left, top, right, bottom]) => {
