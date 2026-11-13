@@ -125,14 +125,64 @@ export function modelRadius(away: number, half: number, share: number, real: num
   return Math.max(real, away * half * share * 2);
 }
 
-/** The lowest height of a ride above a satellite, in kilometres: the model keeps its full size from here down (MODULES-1306). */
+/**
+ * The lowest height of a ride above a satellite, in kilometres: the model keeps its full size from here down (MODULES-1306).
+ *
+ * @example
+ * ```ts
+ * import { ABOVE_MODEL_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(ABOVE_MODEL_KM);
+ * ```
+ */
 export const ABOVE_MODEL_KM = 150;
-/** The share of the view's height the model's radius takes at the lowest height of a ride above a satellite (0.17): the size every page has seen since 0.46.1, and the size `ride-model-size="fixed"` keeps at every height. */
+
+/**
+ * The share of the view's height the model's radius takes at the lowest height of a ride above a satellite (0.17): the size every page has seen since 0.46.1, and the size `ride-model-size="fixed"` keeps at every height.
+ *
+ * @example
+ * ```ts
+ * import { ABOVE_MODEL_SHARE } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(ABOVE_MODEL_SHARE);
+ * ```
+ */
 export const ABOVE_MODEL_SHARE = 0.17;
-/** The height, in kilometres, from which the model is let shrink to nothing, and the height by which it has: between them the satellite is handed over to its ordinary mark. */
+
+/**
+ * The height, in kilometres, from which the model is let shrink to nothing: below it the model follows one over the height, from it a smooth step takes the model down to nothing at `MODEL_FADE_TO_KM`.
+ *
+ * @example
+ * ```ts
+ * import { MODEL_FADE_FROM_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MODEL_FADE_FROM_KM);
+ * ```
+ */
 export const MODEL_FADE_FROM_KM = 1000;
+
+/**
+ * The height, in kilometres, by which the model has shrunk to nothing and the satellite is its ordinary mark (ring and name) again.
+ *
+ * @example
+ * ```ts
+ * import { MODEL_FADE_TO_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MODEL_FADE_TO_KM);
+ * ```
+ */
 export const MODEL_FADE_TO_KM = 2000;
-/** The model's drawn radius, in CSS pixels, below which the satellite's ring and name come back (the ring is about this big, so the two are not drawn over each other). */
+
+/**
+ * The model's drawn radius, in CSS pixels, below which the satellite's ring and name come back (the ring is about this big, so the two are not drawn over each other).
+ *
+ * @example
+ * ```ts
+ * import { MODEL_HANDOVER_PX } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MODEL_HANDOVER_PX);
+ * ```
+ */
 export const MODEL_HANDOVER_PX = 10;
 
 /**
