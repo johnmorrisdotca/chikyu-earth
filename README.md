@@ -176,7 +176,7 @@ atmosphere at the rim, drawn with three.js through kazoku-ui's shared renderer. 
 
 Needs `three` and `@johnmorrisdotca/kazoku-ui` (both optional peers) and the pictures (1.6 MB, from NASA, in `dist/textures/`). It draws nothing while nothing changes,
 at most 30 times a second while it does, in one WebGL context, with textures that grow as you zoom and are freed after. With `tiles="/tiles/"` (a folder of NASA map
-tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view, so you can zoom in to 20 times and stay sharp. With `speed="86400"` (a day a second; the name `<chikyu-space>` uses) its clock runs on from the date shown and the Sun, the night side and the clouds follow it ([guide](docs/guides/time-and-play.md)). `immersive` fills the window, `camera="space"` holds the camera in the stars so the Earth turns beneath it, and it draws every satellite group at once ([guide](docs/guides/full-screen-and-camera.md)). All of it, the budget and the tests:
+tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view, so you can zoom in to 40 times and stay sharp. With `speed="86400"` (a day a second; the name `<chikyu-space>` uses) its clock runs on from the date shown and the Sun, the night side and the clouds follow it ([guide](docs/guides/time-and-play.md)). `immersive` fills the window, `camera="space"` holds the camera in the stars so the Earth turns beneath it, and it draws every satellite group at once ([guide](docs/guides/full-screen-and-camera.md)). All of it, the budget and the tests:
 [docs/realistic.md](docs/realistic.md).
 
 ## The Sun, the Moon and the planets

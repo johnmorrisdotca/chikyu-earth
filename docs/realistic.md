@@ -61,9 +61,9 @@ when it is ready, and the smaller one let go. When the zoom drops, the larger on
 lowers that, and a device that reports 2 GB of memory or less stops at 2048.
 
 **Finer tiles for a close zoom.** Past a zoom of about 5 the 4096 picture blurs. With `tiles="/tiles/"` (a folder URL, with a `manifest.json`) the element loads only
-the 512 pixel map tiles in view, from level 3 (8192 across) to level 4 (16384), over these pictures, holds at most 48 of them (about 70 MB of graphics memory), frees the
+the 512 pixel map tiles in view, from level 3 (8192 across) to level 5 (32768), over these pictures, holds at most 48 of them (about 70 MB of graphics memory), frees the
 rest after 4 seconds, and keeps the pictures above as the far view and the fallback when the option is missing or a tile fails. The page's zoom limit can then go from
-5 to 20. How the level is chosen, the memory budget, what is not tiled, and how to make and serve a set: [Sharp Earth maps, cut into tiles](guides/earth-tiles.md).
+5 to 40 (the tiles say how far: 20 for a set that stops at level 4). How the level is chosen, the memory budget, what is not tiled, and how to make and serve a set: [Sharp Earth maps, cut into tiles](guides/earth-tiles.md).
 
 ## Attributes and properties
 

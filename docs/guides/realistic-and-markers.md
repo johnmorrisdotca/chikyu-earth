@@ -27,7 +27,7 @@ document.body.append(earth);
 
 `texture-base` is the folder holding the package's pictures: copy `node_modules/@johnmorrisdotca/chikyu-earth/dist/textures/` to your site (1.6 MB in all; each picture is loaded at the size the zoom needs and freed when it does not). From a CDN: [in a plain HTML page](html-and-cdn.md#the-realistic-earth).
 
-To zoom in past about 5 times without blur, add `tiles` (a folder of map tiles, see [Sharp Earth maps, cut into tiles](earth-tiles.md)): the element then loads only the tiles in view and the page may allow a zoom of 20.
+To zoom in past about 5 times without blur, add `tiles` (a folder of map tiles, see [Sharp Earth maps, cut into tiles](earth-tiles.md)): the element then loads only the tiles in view and the page may allow a zoom of 40.
 
 To ship less JavaScript, give the element only the parts of three.js it uses:
 
