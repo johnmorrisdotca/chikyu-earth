@@ -578,6 +578,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [City names on the Earth](docs/guides/city-names.md) | Cities named from kuni's list, more as the Earth grows on the screen, in the page's language |
 | [Borders on the Earth](docs/guides/borders.md) | The borders between countries, and a page's own regions once the Earth is large enough |
 | [The grid and country names on the Earth](docs/guides/grid-and-country-names.md) | Meridians and parallels with the special lines picked out, and the countries in sight named in the page's language |
+| [A beam from a satellite to the ground](docs/guides/beam.md) | A soft cone of light from the chosen satellite to a lit footprint, true to its height, with optional spot cells, in a ride too |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |
 | [You are here, and places on the Earth](docs/guides/places.md) | The reader's place and favourite places as markers standing out of the Earth, asked for only on a press, kept on the device |
 | [Meteors seen from space](docs/guides/meteors.md) | Streaks over the night side, the shower table, what is real and what is illustration |
