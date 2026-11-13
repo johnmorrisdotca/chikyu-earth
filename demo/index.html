@@ -104,6 +104,13 @@
                     <button type="button" data-light="boost" data-say="light_boost">Night boost</button>
                   </div>
                   <button type="button" class="fam-button" id="meteors" aria-pressed="false" data-say="meteors">Meteors</button>
+                  <button type="button" class="fam-button" id="beam" aria-pressed="false" data-say="beam" data-help-en="A soft beam of light from the chosen satellite (press one, or ride one) down to its footprint on the ground: the circle it is 25 degrees above, true to its height." data-help-ja="選んだ衛星（押すか、乗ってください）から地面へ向かう光のビームと、その真下の光の輪です。輪は仰角 25 度より上に衛星が見える円で、衛星の高さに合わせた本当の大きさです。">Satellite beam</button>
+                  <div class="group fam-seg" id="beam-cells" role="group" aria-label="Spot cells" data-say-label="beamCells" data-help-en="Spot cells drawn inside the footprint, a hexagonal pack: an illustration of a satellite that serves the ground in cells, not any operator's plan." data-help-ja="光の輪の中に六角形に詰めて描くスポットセルです。地面をセルで受け持つ衛星のようすを描いたイラストで、どの運用会社の配置でもありません。">
+                    <button type="button" data-beam-cells="0" class="on" data-say="cells_none">No cells</button>
+                    <button type="button" data-beam-cells="7">7</button>
+                    <button type="button" data-beam-cells="19">19</button>
+                    <button type="button" data-beam-cells="37">37</button>
+                  </div>
                   <div class="group fam-seg" id="meteor-strength" role="group" aria-label="Meteor strength" data-say-label="meteorStrength" data-help-en="How strongly the meteors are drawn: Subtle shows few, faint streaks, Medium about half, Full is the whole look. Only the drawing changes; the rates and showers behind it are the same." data-help-ja="流星をどのくらい強く描くかです。「控えめ」は少なくて淡い筋、「中間」は半分ほど、「最大」はいつもの見た目です。変わるのは描き方だけで、元になる出現数や流星群は同じです。">
                     <button type="button" data-meteor-strength="0.3" data-say="strength_subtle">Subtle</button>
                     <button type="button" data-meteor-strength="0.5" data-say="strength_medium">Medium</button>
