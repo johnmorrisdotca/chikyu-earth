@@ -1,6 +1,6 @@
 // Finer map tiles read straight from NASA's Global Imagery Browse Services, in the browser, and only when a page asks. The service's terms and the date they were read are in NOTICE.md. Nothing here is fetched until `load` is called.
 import type { BitmapLike, ImageTile, SourceInfo } from "../data-door.ts";
-import { tileKeyParts, type EarthMapSource, type EarthTilesOptions } from "./map.ts";
+import { tileKeyParts, type EarthMapPlace, type EarthMapSource, type EarthTilesOptions } from "./map.ts";
 import { gibsGrid, gridKeys, gridLevelFor, gridOnEarth, type MapGrid } from "./grid.ts";
 
 /** The day this service's tile matrix, layers and terms were read. */
@@ -111,7 +111,12 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
   BlueMarble_ShadedRelief_Bathymetry: { id: "BlueMarble_ShadedRelief_Bathymetry", matrix: "500m", clouds: false, ranges: [] },
 };
 
-const DEFAULT_LAYER = "VIIRS_SNPP_CorrectedReflectance_TrueColor";
+/** The layer a page gets without naming one: MODIS Terra true colour, whose days run to the present (the VIIRS layer's lagged days behind by ten days or more when this was read). */
+export const GIBS_DEFAULT_LAYER = "MODIS_Terra_CorrectedReflectance_TrueColor";
+const DEFAULT_LAYER = GIBS_DEFAULT_LAYER;
+
+/** How many days, counting the first, the default rule looks back for a day with imagery. */
+export const GIBS_LOOKBACK_DAYS = 10;
 
 /**
  * True when every sampled pixel is black, which is the picture the service returns for a day it has no swath for (a 200, not a 404).
@@ -168,11 +173,56 @@ export function previousUtcDay(ms: number): string {
   return day.toISOString().slice(0, 10);
 }
 
-/** A day the layer can serve, or `undefined` when the rule lands outside the layer's range (nothing is requested). */
+/**
+ * Whether the layer may have imagery for a day: inside one of the ranges listed on 2026-11-13, or after the last of them (a daily layer goes on growing, and the list does not). A day before the layer's first day, or in a gap the list shows, has none, and is not asked for.
+ */
+export function gibsHasDay(layer: GibsLayer, day: string): boolean {
+  if (layer.ranges.length === 0) return true;
+  const first = layer.ranges[0]!;
+  const last = layer.ranges[layer.ranges.length - 1]!;
+  if (day < first.start) return false;
+  if (day > last.end) return true;
+  return layer.ranges.some((range) => day >= range.start && day <= range.end);
+}
+
+/** The day a fixed rule names (`previous-day`, `shown`, or one `yyyy-mm-dd`), or `undefined` for `latest`, which has to be looked for. */
+function fixedDay(rule: string, ms: number): string | undefined {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rule)) return rule;
+  if (rule === "shown") return utcDay(ms);
+  if (rule === "previous-day") return previousUtcDay(ms);
+  return undefined;
+}
+
+/** A day the layer can serve for a fixed rule (`latest`, the default, starts at the day before `ms`), or `undefined` when it lands where the layer has no imagery (nothing is requested). */
 export function gibsDay(layer: GibsLayer, rule: string, ms: number): string | undefined {
   if (layer.ranges.length === 0) return "default";
-  const named = /^\d{4}-\d{2}-\d{2}$/.test(rule) ? rule : rule === "shown" ? utcDay(ms) : previousUtcDay(ms);
-  return layer.ranges.some((range) => named >= range.start && named <= range.end) ? named : undefined;
+  const named = fixedDay(rule, ms) ?? previousUtcDay(ms);
+  return gibsHasDay(layer, named) ? named : undefined;
+}
+
+/** The day before `day`. */
+const dayBefore = (day: string): string => previousUtcDay(Date.parse(`${day}T12:00:00Z`));
+
+/** The days the default rule looks at, newest first: from `start`, back, skipping days the layer is known to lack, until the layer's first day or `GIBS_LOOKBACK_DAYS` days have been counted. */
+export function gibsCandidates(layer: GibsLayer, start: string): string[] {
+  const found: string[] = [];
+  let day = start;
+  for (let count = 0; count < GIBS_LOOKBACK_DAYS; count += 1) {
+    if (layer.ranges.length > 0 && day < layer.ranges[0]!.start) break;
+    if (gibsHasDay(layer, day)) found.push(day);
+    day = dayBefore(day);
+  }
+  return found;
+}
+
+/** The days the default rule has settled, by layer and starting day: a day with imagery, or `null` for none. Kept for the session, so a view that moves asks nothing again. */
+const settled = new Map<string, string | null>();
+const probing = new Set<string>();
+
+/** Forget what the default rule has settled (for a page that wants to look again, and for the tests). */
+export function forgetGibsDays(): void {
+  settled.clear();
+  probing.clear();
 }
 
 /**
@@ -189,10 +239,14 @@ export function gibsDay(layer: GibsLayer, rule: string, ms: number): string | un
 export interface GibsTilesOptions extends EarthTilesOptions {
   /** The moment the view is showing. The default day is the UTC day before this. */
   time: () => Date;
-  /** A layer id (see `GIBS_LAYERS`). Left out, the VIIRS daily true-colour layer. */
+  /** A layer id (see `GIBS_LAYERS`). Left out, the MODIS Terra daily true-colour layer. */
   layer?: string;
-  /** `previous-day` (the default), `shown` (the UTC day of `time`), or one day `yyyy-mm-dd`. */
+  /**
+   * `latest` (the default): the most recent day with imagery, looked for from the day before `time` back, one tile under the middle of the view a day. `previous-day` (that day alone), `shown` (the UTC day of `time`), or one day `yyyy-mm-dd`.
+   */
   date?: string;
+  /** Called when the default rule has found its day, so the view draws again and asks for the tiles. */
+  changed?: () => void;
 }
 
 const anySignal = (signals: AbortSignal[]): AbortSignal => (typeof AbortSignal.any === "function" ? AbortSignal.any(signals) : signals[0]!);
@@ -230,47 +284,80 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
   const known = GIBS_LAYERS[options.layer ?? DEFAULT_LAYER];
   const layer = known ?? { id: options.layer ?? DEFAULT_LAYER, matrix: "250m" as const, clouds: true, ranges: [] as readonly DayRange[] };
   const grid: MapGrid = gibsGrid(layer.matrix);
-  const rule = options.date ?? "previous-day";
+  const rule = options.date ?? "latest";
   const get = options.fetch ?? ((url: string, init?: RequestInit) => globalThis.fetch(url, init));
   const decode = options.decode ?? ((blob: Blob): Promise<BitmapLike> => createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" }));
+  /** One tile of one day, as `load` reads it: nothing for a 404, a blank picture, a slow answer or a failure. */
+  const fetchTile = async (key: string, signal: AbortSignal): Promise<ImageTile> => {
+    const parts = tileKeyParts(key);
+    const day = key.split("/")[0];
+    const level = parts ? grid.levels.find((one) => one.level === parts.level) : undefined;
+    if (!parts || !day || !level) throw new RangeError(`"${key}" is not the key of a tile`);
+    if (!gridOnEarth(level, parts.col, parts.row, grid.extent)) throw new RangeError(`"${key}" is off the Earth`);
+    const url = `${TILE_URL}/${layer.id}/default/${day}/${layer.matrix}/${parts.level}/${parts.row}/${parts.col}.jpg`;
+    const timer = AbortSignal.timeout(GIBS_SLOW_MS);
+    let response: Response;
+    try {
+      response = await get(url, { mode: "cors", signal: anySignal([signal, timer]) });
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    if (!response.ok) throw new Error(`The tile ${key} could not be fetched (${response.status})`);
+    const image = await decode(await response.blob());
+    if (await pictureIsBlank(image)) {
+      image.close?.();
+      throw new Error(`The tile ${key} has no imagery`);
+    }
+    return { width: image.width > 0 ? image.width : 512, height: image.height > 0 ? image.height : 512, image } satisfies ImageTile;
+  };
+  /** Look for the most recent day with imagery: the tile under the middle of the view, one day at a time, newest first, each given the usual two seconds. The answer, a day or none, is kept. */
+  const lookFor = (settledKey: string, start: string, place: EarthMapPlace, detail: number): void => {
+    probing.add(settledKey);
+    void (async () => {
+      let found: string | null = null;
+      for (const day of gibsCandidates(layer, start)) {
+        const keys = gridKeys(grid, place, detail, `${day}/`);
+        if (keys.length === 0) break;
+        try {
+          const tile = await fetchTile(keys[0]!, new AbortController().signal);
+          tile.image.close?.();
+          found = day;
+          break;
+        } catch {
+          // no picture for this day here: the day before
+        }
+      }
+      settled.set(settledKey, found);
+      probing.delete(settledKey);
+      if (found !== null) options.changed?.();
+    })();
+  };
   // an unknown layer has no published range, so no day is inside it and nothing is requested
-  const dayOf = (): string | undefined => (known ? gibsDay(layer, rule, options.time().getTime()) : undefined);
+  const dayOf = (place: EarthMapPlace, detail: number): string | undefined => {
+    if (!known) return undefined;
+    const ms = options.time().getTime();
+    if (fixedDay(rule, ms) !== undefined || layer.ranges.length === 0) return gibsDay(layer, rule, ms);
+    const start = previousUtcDay(ms);
+    const settledKey = `${layer.id}|${start}`;
+    if (settled.has(settledKey)) return settled.get(settledKey) ?? undefined;
+    if (!probing.has(settledKey)) lookFor(settledKey, start, place, detail);
+    return undefined;
+  };
   const source: EarthMapSource = {
     kind: "tiles",
     layer: "day",
     info: INFO,
     grid,
     need(place, detail) {
-      const day = dayOf();
-      if (day === undefined) return [];
       if (gridLevelFor(grid, detail, 0) === undefined) return [];
+      const day = dayOf(place, detail);
+      if (day === undefined) return [];
       return gridKeys(grid, place, detail, `${day}/`);
     },
     levels() {
       return { tileSize: grid.tileSize, levels: grid.levels.map((level) => ({ level: level.level, width: level.width })) };
     },
-    async load(key, signal) {
-      const parts = tileKeyParts(key);
-      const day = key.split("/")[0];
-      const level = parts ? grid.levels.find((one) => one.level === parts.level) : undefined;
-      if (!parts || !day || !level) throw new RangeError(`"${key}" is not the key of a tile`);
-      if (!gridOnEarth(level, parts.col, parts.row, grid.extent)) throw new RangeError(`"${key}" is off the Earth`);
-      const url = `${TILE_URL}/${layer.id}/default/${day}/${layer.matrix}/${parts.level}/${parts.row}/${parts.col}.jpg`;
-      const timer = AbortSignal.timeout(GIBS_SLOW_MS);
-      let response: Response;
-      try {
-        response = await get(url, { mode: "cors", signal: anySignal([signal, timer]) });
-      } catch (error) {
-        throw error instanceof Error ? error : new Error(String(error));
-      }
-      if (!response.ok) throw new Error(`The tile ${key} could not be fetched (${response.status})`);
-      const image = await decode(await response.blob());
-      if (await pictureIsBlank(image)) {
-        image.close?.();
-        throw new Error(`The tile ${key} has no imagery`);
-      }
-      return { width: image.width > 0 ? image.width : 512, height: image.height > 0 ? image.height : 512, image } satisfies ImageTile;
-    },
+    load: (key, signal) => fetchTile(key, signal),
     bytes: (tile) => Math.ceil(tile.width * tile.height * 4 * (4 / 3)),
   };
   return source;
@@ -280,6 +367,7 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
  * The finer source an element makes from its attributes, the same object while the attributes are unchanged, or `undefined` when finer tiles are off or the view is limited to the package's own data.
  *
  * @param time - The moment the element is showing.
+ * @param changed - Called when the source has found the day it will read, so the element draws again.
  * @returns A reader of the element's attributes.
  *
  * @example
@@ -290,7 +378,7 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
  * console.log(hold.source(() => null, false));
  * ```
  */
-export function createFinerHolder(time: () => Date): { source(read: (name: string) => string | null, ownOnly: boolean): EarthMapSource | undefined } {
+export function createFinerHolder(time: () => Date, changed?: () => void): { source(read: (name: string) => string | null, ownOnly: boolean): EarthMapSource | undefined } {
   let key = "";
   let held: EarthMapSource | undefined;
   return {
@@ -301,7 +389,7 @@ export function createFinerHolder(time: () => Date): { source(read: (name: strin
       key = next;
       const layer = read("tiles-finer-layer");
       const date = read("tiles-finer-date");
-      held = gibsTiles({ time, ...(layer ? { layer } : {}), ...(date ? { date } : {}) });
+      held = gibsTiles({ time, ...(changed ? { changed } : {}), ...(layer ? { layer } : {}), ...(date ? { date } : {}) });
       return held;
     },
   };

@@ -273,7 +273,7 @@ export class ChikyuSpace extends HTMLElement {
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
-  #finerHold = createFinerHolder(() => new Date(this.#model.time));
+  #finerHold = createFinerHolder(() => new Date(this.#model.time), () => this.#gate?.request());
   #finerNote: HTMLElement | undefined;
   #paint = createPaintState();
   #mode: number | "now" = "now";

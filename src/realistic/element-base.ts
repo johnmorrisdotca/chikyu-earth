@@ -209,7 +209,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #last = 0;
   #announced = -Infinity;
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
-  #finerHold = createFinerHolder(() => new Date(this.#model.time));
+  #finerHold = createFinerHolder(() => new Date(this.#model.time), () => this.#gate?.soon());
   #finerNote: HTMLElement | undefined;
   /** The clock is running (a `running: false` is owed when it holds). */
   #running = false;
@@ -1042,8 +1042,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
-   * Finer imagery than the package's own tiles, read by the browser from NASA's imagery service. `gibs` turns it on; anything else, or leaving it out, leaves it off. The daily picture is the day before the moment on show, with the clouds left in, and only when the view is closer than the package's own tiles. A tile that is slow or missing leaves the coarser picture in place.
-   * `tiles-finer-layer` names another layer (`MODIS_Terra_CorrectedReflectance_TrueColor` or `BlueMarble_ShadedRelief_Bathymetry`), and `tiles-finer-date` is `previous-day`, `shown` or one day `yyyy-mm-dd`.
+   * Finer imagery than the package's own tiles, read by the browser from NASA's imagery service. `gibs` turns it on; anything else, or leaving it out, leaves it off. The daily picture is the MODIS Terra true-colour layer for the most recent day that has one (looked for from the day before the moment on show back at most 10 days, one tile a day, and kept for the session), with the clouds left in and black gaps between satellite passes, and only when the view is closer than the package's own tiles. A tile that is slow or missing leaves the coarser picture in place.
+   * `tiles-finer-layer` names another layer (`MODIS_Terra_CorrectedReflectance_TrueColor` or `BlueMarble_ShadedRelief_Bathymetry`), and `tiles-finer-date` is `latest` (the default), `previous-day`, `shown` or one day `yyyy-mm-dd`.
    */
   get tilesFiner(): string | null {
     return this.getAttribute("tiles-finer") === "gibs" ? "gibs" : null;

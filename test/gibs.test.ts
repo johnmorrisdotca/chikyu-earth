@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAssetCache } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { GIBS_CREDIT, gibsGrid, gibsTiles, gridKey, gridKeys, gridPastExtent, gridTileAt, previousUtcDay, samplesAreBlank, utcDay } from "../src/door/index.ts";
-import { GIBS_LAYERS, gibsDay } from "../src/door/gibs.ts";
+import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
 import { createTileSet, type TileSources } from "../src/realistic/tile-set.ts";
 import type { ThreeParts } from "../src/realistic/textures.ts";
 import type { TileCamera } from "../src/realistic/tiles.ts";
@@ -62,16 +62,19 @@ test("a point's tile is stable at every level, and the antimeridian and the pole
 test("a day outside the layer's range names no tile, and a tile that fails or is blank is not a picture", async () => {
   const vii = GIBS_LAYERS["VIIRS_SNPP_CorrectedReflectance_TrueColor"]!;
   assert.equal(gibsDay(vii, "previous-day", Date.UTC(2026, 5, 21, 12)), "2026-06-20");
-  assert.equal(gibsDay(vii, "previous-day", Date.UTC(2026, 10, 13, 12)), undefined);
+  assert.equal(gibsDay(vii, "previous-day", Date.UTC(2026, 10, 13, 12)), "2026-11-12", "a day after the last listed one may have imagery: the list is of 2026-11-13 and the layer goes on");
+  assert.equal(gibsDay(vii, "2022-08-01", Date.UTC(2026, 5, 21)), undefined, "a day in a gap the list shows");
+  assert.equal(gibsDay(vii, "2015-11-23", Date.UTC(2026, 5, 21)), undefined, "a day before the first");
   assert.equal(gibsDay(vii, "2001-01-01", Date.UTC(2026, 5, 21)), undefined);
   const modis = GIBS_LAYERS["MODIS_Terra_CorrectedReflectance_TrueColor"]!;
   assert.equal(gibsDay(modis, "2001-06-20", Date.UTC(2026, 5, 21)), undefined);
   assert.equal(gibsDay(GIBS_LAYERS["BlueMarble_ShadedRelief_Bathymetry"]!, "previous-day", Date.UTC(2026, 10, 13)), "default");
-  const quiet = gibsTiles({ time: () => new Date("2026-11-13T12:00:00Z") });
-  assert.deepEqual(quiet.need({ lonMin: -1, lonMax: 1, latMin: -1, latMax: 1, layer: "day" }, 50000), []);
+  const quiet = gibsTiles({ time: () => new Date("2000-02-24T12:00:00Z"), fetch: () => Promise.reject(new Error("no request expected")) });
+  assert.deepEqual(quiet.need({ lonMin: -1, lonMax: 1, latMin: -1, latMax: 1, layer: "day" }, 50000), [], "the day before the first day of the layer: nothing is asked");
   const urls: string[] = [];
   const source = gibsTiles({
     time: () => new Date("2026-06-21T12:00:00Z"),
+    date: "previous-day",
     fetch: (url) => {
       urls.push(url);
       return Promise.resolve(new Response("no", { status: 404 }));
@@ -81,7 +84,7 @@ test("a day outside the layer's range names no tile, and a tile that fails or is
   const keys = source.need({ lonMin: -1, lonMax: 1, latMin: -1, latMax: 1, layer: "day" }, 50000);
   assert.equal(keys[0]?.startsWith("2026-06-20/"), true);
   await assert.rejects(() => source.load(keys[0]!, new AbortController().signal));
-  assert.match(urls[0]!, /^https:\/\/gibs\.earthdata\.nasa\.gov\/wmts\/epsg4326\/best\/VIIRS_SNPP_CorrectedReflectance_TrueColor\/default\/2026-06-20\/250m\/\d+\/\d+\/\d+\.jpg$/);
+  assert.match(urls[0]!, /^https:\/\/gibs\.earthdata\.nasa\.gov\/wmts\/epsg4326\/best\/MODIS_Terra_CorrectedReflectance_TrueColor\/default\/2026-06-20\/250m\/\d+\/\d+\/\d+\.jpg$/);
   const parts = urls[0]!.split("/");
   const z = parts[parts.length - 3];
   const row = parts[parts.length - 2];
@@ -93,6 +96,7 @@ test("a day outside the layer's range names no tile, and a tile that fails or is
 });
 
 test("finer tiles are asked for only closer than the package's own, then fade in and stop", async () => {
+  forgetGibsDays();
   const urls: string[] = [];
   const source = gibsTiles({
     time: () => new Date("2026-06-21T12:00:00Z"),
@@ -154,11 +158,12 @@ test("finer tiles are asked for only closer than the package's own, then fade in
   assert.equal(set.stats.finer, null);
   for (let turn = 0; turn < 20; turn += 1) {
     set.sync(near, [0, 0, 1], true, 1);
+    await new Promise((resolve) => setImmediate(resolve));
     for (let wait = 0; wait < 20 && set.stats.loading > 0; wait += 1) await new Promise((resolve) => setImmediate(resolve));
     if (set.stats.loading === 0 && set.stats.held > 0 && set.stats.shown === set.stats.held) break;
   }
   assert.ok(urls.length > 0 && urls.length <= 48, `${urls.length} tiles`);
-  assert.ok(urls.every((url) => url.includes("/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/2026-06-20/250m/")));
+  assert.ok(urls.every((url) => url.includes("/MODIS_Terra_CorrectedReflectance_TrueColor/default/2026-06-20/250m/")));
   assert.equal(set.stats.finer !== null, true);
   assert.equal(set.stats.loading, 0);
   assert.equal(set.stats.shown, set.stats.held);
@@ -174,4 +179,97 @@ test("finer tiles are asked for only closer than the package's own, then fade in
   assert.equal(set.stats.heldBytes <= 72 * 1024 * 1024, true);
   set.dispose();
   assets.clear();
+});
+
+/** A source whose `fetch` is answered here: `has` says which days have a picture (a 200 with a JPEG body) and the others are a 404. */
+const answering = (shown: string, has: (day: string) => boolean, extra: Partial<Parameters<typeof gibsTiles>[0]> = {}) => {
+  const urls: string[] = [];
+  let changed = 0;
+  const source = gibsTiles({
+    time: () => new Date(`${shown}T12:00:00Z`),
+    changed: () => {
+      changed += 1;
+    },
+    fetch: (url) => {
+      urls.push(url);
+      const day = /\/default\/(\d{4}-\d{2}-\d{2})\//.exec(url)![1]!;
+      return Promise.resolve(has(day) ? new Response(new Uint8Array([1]), { status: 200 }) : new Response("no", { status: 404 }));
+    },
+    decode: () => Promise.resolve({ width: 512, height: 512, close() {} }),
+    ...extra,
+  });
+  return { source, urls, changed: () => changed };
+};
+const place = { lonMin: -123.2, lonMax: -123.0, latMin: 49.2, latMax: 49.3, layer: "day" } as const;
+const settleAll = async (): Promise<void> => {
+  for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+};
+
+test("the default is the Terra layer, and a day is looked for from the day before the shown one, one tile a day, newest first", () => {
+  assert.equal(GIBS_DEFAULT_LAYER, "MODIS_Terra_CorrectedReflectance_TrueColor");
+  const terra = GIBS_LAYERS[GIBS_DEFAULT_LAYER]!;
+  assert.deepEqual(gibsCandidates(terra, "2026-11-12").slice(0, 3), ["2026-11-12", "2026-11-11", "2026-11-10"]);
+  assert.equal(gibsCandidates(terra, "2026-11-12").length, GIBS_LOOKBACK_DAYS, "at most ten days");
+  assert.deepEqual(gibsCandidates(terra, "2000-02-25"), ["2000-02-25", "2000-02-24"], "stops at the layer's first day");
+  assert.deepEqual(gibsCandidates(terra, "2000-02-23"), [], "a start before the first day names none");
+  assert.equal(gibsHasDay(terra, "2022-10-15"), false, "a day inside a gap of the list");
+  assert.deepEqual(gibsCandidates(terra, "2022-10-24").slice(0, 3), ["2022-10-24", "2022-10-23"], "the gap below 2022-10-23 is stepped over with no request, and the ten days end inside it");
+});
+
+test("today has no picture and two days back does: two single-tile asks, then the tiles are from that day, and a later move asks nothing again", async () => {
+  forgetGibsDays();
+  const day = (d: string) => d === "2026-11-11";
+  const { source, urls, changed } = answering("2026-11-13", day);
+  assert.deepEqual(source.need(place, 50000), [], "the first look starts the search and names no tile yet");
+  assert.deepEqual(source.need(place, 50000), [], "a second look while it runs starts no other ask");
+  await settleAll();
+  assert.equal(urls.length, 2, "2026-11-12 had none, 2026-11-11 had one: two asks, one tile each, one at a time");
+  assert.match(urls[0]!, /\/default\/2026-11-12\/250m\//);
+  assert.match(urls[1]!, /\/default\/2026-11-11\/250m\//);
+  assert.equal(changed(), 1, "the view is told to draw again");
+  const keys = source.need(place, 50000);
+  assert.ok(keys.length > 0 && keys.every((key) => key.startsWith("2026-11-11/")), "the tiles are from two days back");
+  const asked = urls.length;
+  source.need({ ...place, lonMin: -122.9, lonMax: -122.8 }, 50000);
+  source.need(place, 50000);
+  await settleAll();
+  assert.equal(urls.length, asked, "the answer is kept: no ask for the next move");
+  const other = answering("2026-11-13", day);
+  assert.ok(other.source.need(place, 50000).every((key) => key.startsWith("2026-11-11/")), "another view of the same layer and day uses the kept answer");
+  assert.equal(other.urls.length, 0, "and asks nothing");
+});
+
+test("nothing in ten days: ten asks, then no further request and the package's own tiles stay", async () => {
+  forgetGibsDays();
+  const { source, urls, changed } = answering("2026-11-13", () => false);
+  source.need(place, 50000);
+  await settleAll();
+  assert.equal(urls.length, GIBS_LOOKBACK_DAYS);
+  assert.equal(changed(), 0, "nothing to draw again for");
+  for (let move = 0; move < 5; move += 1) assert.deepEqual(source.need({ ...place, lonMin: -122 + move, lonMax: -121 + move }, 50000), []);
+  await settleAll();
+  assert.equal(urls.length, GIBS_LOOKBACK_DAYS, "no ask after the answer is none");
+});
+
+test("a picture that is all black is no picture for the day, one that is partly black is one", async () => {
+  forgetGibsDays();
+  const black = new Uint8ClampedArray(8 * 8 * 4);
+  for (let i = 3; i < black.length; i += 4) black[i] = 255;
+  const partly = new Uint8ClampedArray(black);
+  for (let i = 0; i < partly.length / 2; i += 4) partly[i] = partly[i + 1] = partly[i + 2] = 200;
+  const { samplesAreBlank } = await import("../src/door/gibs.ts");
+  assert.equal(samplesAreBlank(black), true);
+  assert.equal(samplesAreBlank(partly), false, "a swath gap across part of a tile leaves the rest shown");
+});
+
+test("a fixed rule asks for no search: the day before, the shown day or a day named, each as it is", () => {
+  forgetGibsDays();
+  for (const [date, want] of [["previous-day", "2026-11-12/"], ["shown", "2026-11-13/"], ["2026-11-01", "2026-11-01/"]] as const) {
+    const { source, urls } = answering("2026-11-13", () => false, { date });
+    const keys = source.need(place, 50000);
+    assert.ok(keys.length > 0 && keys[0]!.startsWith(want), `${date}: ${keys[0]}`);
+    assert.equal(urls.length, 0, "and no search");
+  }
+  const before = answering("2026-11-13", () => false, { date: "1999-12-31" });
+  assert.deepEqual(before.source.need(place, 50000), [], "a date before the layer's first day asks nothing");
 });
