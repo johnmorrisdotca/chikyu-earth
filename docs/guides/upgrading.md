@@ -7,6 +7,10 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.51: the ridden orbit grows out of the camera
+
+- In a ride, the ridden satellite's path is faint at the camera and full by 300 km, and the group's own orbit line for that satellite (and for objects on the same orbit) is no longer drawn while it is ridden. A page that drew over that line, or counted on it, sets `selected-path` and `setPathStyles({ selected: ... })` instead. Nothing else changes.
+
 ## To 0.50: a painter's model must not add lights
 
 - **If you use `setSatellitePainter`**, a light your model carries (directional, point, spot, hemisphere or area) is now switched off when the model is added, and its colour and strength are worn by the scene's own Sun light while the model is shown, aimed at the Sun. A model with one directional light, as the demo's are, looks the same. A model that lit itself from two lights, from a light not aimed at the Sun, or that relied on a point light near a part, will not: light its materials by the Sun and the ambient light, give a glowing part its own `emissive`, and see the ride-along guide. The reason: three keeps one program of each lit material for each number and kind of lights, so a model that added a light changed the program of every lit material (the clouds, the plain bodies) the first time a ride showed it.
