@@ -142,3 +142,38 @@ test("above 60 times real time a big group is pinned whole once, then a slice a 
   assert.ok(total > 0, "slices are pinned: the places do not go stale");
   assert.equal(state.drawn.placed, group.count, "every satellite is still drawn");
 });
+
+test("focusing one group dims the other through the dim uniform, hiding draws it not at all, and clearing puts both back", () => {
+  const state = newSatelliteState();
+  const low = createSatellites(madeUp("stations", 4, "2026-11-02T12:00:00") as unknown as ElementSet[]);
+  const high = createSatellites(madeUp("gps", 3, "2026-11-02T12:00:00") as unknown as ElementSet[]);
+  state.groups.set("stations", { satellites: low, color: "#fff", size: 4, orbits: false, visible: true });
+  state.groups.set("gps", { satellites: high, color: "#9cf", size: 3, orbits: false, visible: false });
+  const local = { children: [] as { visible: boolean; material?: { uniforms?: Record<string, { value: unknown }> }; geometry?: { getAttribute(name: string): { array: Float32Array } | undefined } }[], add(item: unknown) { this.children.push(item as never); }, remove(item: unknown) { this.children = this.children.filter((child) => child !== item); } };
+  const layer = createSatelliteLayer(parts(true), local as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  state.focus = { name: "gps", others: "dim" };
+  layer.update(time, 1, 300);
+  const dots = local.children.filter((child) => (child.geometry?.getAttribute("position")?.array.length ?? 0) > 3);
+  const of = (count: number) => dots.find((child) => child.geometry!.getAttribute("position")!.array.length === count * 3);
+  const stations = of(4);
+  const gps = of(3);
+  assert.equal(stations?.visible, true, "a shown group stays drawn while another is focused");
+  assert.equal(stations?.material?.uniforms?.["groupDim"]?.value, 1, "the other group uses the dim term");
+  assert.equal(gps?.visible, true, "the focused group is drawn even when the page had hidden it");
+  assert.equal(gps?.material?.uniforms?.["groupDim"]?.value, 0, "the focused group is not dimmed");
+  assert.equal(state.groups.get("stations")?.placed, 4);
+  assert.equal(state.groups.get("gps")?.placed, 3);
+  const made = local.children.length;
+  state.focus = { name: "gps", others: "hide" };
+  layer.update(time, 1, 300);
+  assert.equal(stations?.visible, false, "hide does not draw the other group");
+  assert.equal(state.groups.get("stations")?.placed, 0);
+  assert.equal(gps?.visible, true);
+  state.focus = null;
+  layer.update(time, 1, 300);
+  assert.equal(stations?.visible, true, "clearing the focus draws a group the page had shown");
+  assert.equal(stations?.material?.uniforms?.["groupDim"]?.value, 0);
+  assert.equal(gps?.visible, false, "clearing the focus hides a group the page had hidden");
+  assert.equal(local.children.length, made, "dimming and hiding add no object");
+});

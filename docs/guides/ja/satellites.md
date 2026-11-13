@@ -78,6 +78,24 @@ space.addEventListener("chikyu-satellite-click", (event) => console.log((event a
 
 グループは、何機入っていても**描画の呼び出しは1回**です。グループには名前を付けます (`"stations"`、`"starlink"`)。`showSatellites(name, false)` で隠し、`setSatellites(name, null)` で取り除いて、持っていたものを解放します。`orbits: true` を付けると、40機以下のグループで、すべての軌道を描きます。
 
+## 1つのグループだけを見る
+
+`<chikyu-space>` と `<chikyu-earth-realistic>` の `focusSatelliteGroup(name, options)` は、`setSatellites` で載せたグループを1つ見せ、ほかの扱いを決めます。`options.others` は `"dim"` (既定: ほかは描いたまま、軌道要素が古い衛星と同じうすさなので、一目でうすく見えます) か `"hide"` (描きません) です。`options.frame` は既定で真です。視点は、そのグループの軌道が画面に入るところまで、表示自身のズームで引きます。距離は、各衛星の平均運動と離心率から出した遠地点です (1日に1周は地球半径の6.62倍)。8地球半径で止めます。遠くへ振れる衛星が1機あっても、地球が小さくなりすぎないようにするためです。`frame: false` では視点はそのままです。`null` にすると、各グループは元の表示か非表示に戻り、焦点が動かした視点も戻ります。いっしょに移動しているときは、それをやめます。殻を見るには、カメラが地球を向いている必要があるためです。焦点を外しても、いっしょに移動は再開しません。ズームは戻します。
+
+`focusedSatelliteGroup` は名前、または `null` です。`satelliteGroups` は `count` を保ち、`emphasis` (`"focus"`、`"dim"`、`"hidden"`、`"plain"`) と `placed` (直前の描画で、そのグループのうち何機を置いたか) が加わります。載っていないグループは拒否します。呼び出しは `{ ok: false, reason: "not-set" }` を返し、何も変えません。例外は投げません。載っているグループは `{ ok: true, group, count }` を返します。選択が変わったときは、`chikyu-satellite-focus` が `{ group, count }` と一緒に送られます。
+
+選んだグループは、`showSatellites` で隠してあっても描き、この選択ではうすくしません (軌道要素が古い衛星は、これまでどおりうすく描きます)。うすくするのに新しいものは作りません。点にもとからある dim の値です。止まっているときは何も描き直しません。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+
+const space = document.querySelector("chikyu-space")!;
+space.addEventListener("chikyu-satellite-focus", (event) => console.log((event as CustomEvent).detail.group, (event as CustomEvent).detail.count));
+const answer = space.focusSatelliteGroup("gps", { others: "dim" });
+console.log(answer.ok, space.focusedSatelliteGroup);
+space.focusSatelliteGroup(null);
+```
+
 ## 群の全部に輪と名前をつける
 
 `space.labelSatellites("stations")` は、群のすべての衛星に輪をつけ、横に名前を書きます。宇宙ステーションのような小さな群のためのものです。名前はページの言語で出ます (`ISS`、`Tiangong` または `天宮`、`Hubble` または `ハッブル`。ほかの衛星は軌道要素にある名前で、`space.satelliteNames = { 25544: "Space Station" }` と指定すればその名前で出ます)。衛星の名前は `places` の場所の名前のあとから置き、場所の名前、天体の名前、ほかの衛星の名前とは重なりません。輪の右に入ればそこに、入らなければ左、上、下の順に置き、置く場所がない名前は出しません。輪をつけるのは、画面に入っていて地球の裏にない衛星だけで、すべての群をあわせて最大80機までです。止まっているときは何も描き直しません。`space.labelSatellites("stations", false)` で止め、`space.labelledSatellites` でその群の一覧が分かります。

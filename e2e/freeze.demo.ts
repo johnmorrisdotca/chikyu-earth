@@ -217,7 +217,7 @@ test("changing the look over and over gives back what it took: GPU objects stay 
     await look("Space");
     await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
     for (const name of ["Stations", "Starlink"]) {
-      const button = page.getByRole("button", { name, exact: true });
+      const button = page.locator("#sat-groups").getByRole("button", { name, exact: true });
       if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
     }
     await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);

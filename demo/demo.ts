@@ -270,8 +270,32 @@ if (flat && controls && stage) {
     satBox?.append(button);
     return button;
   });
+  const FOCUS_IDS = ["stations", "gps", "weather", "geostationary", "starlink"];
+  const focusBox = document.querySelector<HTMLElement>("#sat-focus");
+  const focusButtons: HTMLButtonElement[] = [];
+  const addFocusButton = (id: string, text: () => string): HTMLButtonElement => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset["satFocus"] = id;
+    button.setAttribute("aria-pressed", "false");
+    button.textContent = text();
+    focusBox?.append(button);
+    focusButtons.push(button);
+    return button;
+  };
+  addFocusButton("", () => say("satFocusAll"));
+  for (const id of FOCUS_IDS) addFocusButton(id, () => groupLabel(SATELLITE_GROUPS.find((info) => info.id === id)!));
   const relabelSatellites = (): void => {
     for (const button of satButtons) button.textContent = button.dataset["satGroup"] === "yours" ? say("satYours") : groupLabel(SATELLITE_GROUPS.find((info) => info.id === button.dataset["satGroup"])!);
+    for (const button of focusButtons) button.textContent = button.dataset["satFocus"] ? groupLabel(SATELLITE_GROUPS.find((info) => info.id === button.dataset["satFocus"])!) : say("satFocusAll");
+  };
+  const markFocus = (name: string | null): void => {
+    for (const button of focusButtons) button.setAttribute("aria-pressed", String((button.dataset["satFocus"] || null) === name));
+  };
+  markFocus(null);
+  const othersChoice = (): "dim" | "hide" => (document.querySelector<HTMLButtonElement>("#sat-others [data-sat-others][aria-pressed=true]")?.dataset["satOthers"] === "hide" ? "hide" : "dim");
+  const markOthers = (others: "dim" | "hide"): void => {
+    for (const button of document.querySelectorAll<HTMLButtonElement>("#sat-others [data-sat-others]")) button.setAttribute("aria-pressed", String(button.dataset["satOthers"] === others));
   };
   document.addEventListener("kazoku-languagechange", () => queueMicrotask(relabelSatellites));
   relabelSatellites();
@@ -404,6 +428,32 @@ if (flat && controls && stage) {
     }
   }
   for (const button of satButtons) button.addEventListener("click", () => void toggleGroup(button.dataset["satGroup"]!, button.getAttribute("aria-pressed") !== "true", true));
+  /** Show one group on its own (dim or hide the others, and pull the view out to its orbits), or all of them again. The address keeps the group. */
+  async function focusOne(name: string | null): Promise<void> {
+    const host = satHost();
+    if (!host) return;
+    const others = othersChoice();
+    if (name) await toggleGroup(name, true, false);
+    const answer = host.focusSatelliteGroup(name, { others, frame: true });
+    if (!answer.ok) return;
+    markFocus(name);
+    address.set("focus", name);
+    address.set("others", name && others === "hide" ? "hide" : null);
+  }
+  for (const button of focusButtons) button.addEventListener("click", () => void focusOne(button.dataset["satFocus"] || null));
+  for (const button of document.querySelectorAll<HTMLButtonElement>("#sat-others [data-sat-others]")) {
+    button.addEventListener("click", () => {
+      markOthers(button.dataset["satOthers"] === "hide" ? "hide" : "dim");
+      const current = focusButtons.find((one) => one.getAttribute("aria-pressed") === "true")?.dataset["satFocus"] || null;
+      if (current) void focusOne(current);
+    });
+  }
+  const applyAddressFocus = (): void => {
+    const name = address.get("focus");
+    if (!name) return;
+    markOthers(address.get("others") === "hide" ? "hide" : "dim");
+    void focusOne(name);
+  };
 
   /** Every name in every file, for Find: [number, name, group]. */
   const loadIndex = (): Promise<{ rows: [number, string, string][] }> => loadManifest().then((manifest) => once<{ rows: [number, string, string][] }>(manifest.index));
@@ -869,7 +919,8 @@ if (flat && controls && stage) {
     markRide();
     if (scaleNote) scaleNote.hidden = space!.scale !== "compressed";
     for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
-    for (const name of shownGroups) void toggleGroup(name, true);
+    const restoredGroups = Promise.all([...shownGroups].map((name) => toggleGroup(name, true)));
+    void restoredGroups.then(() => applyAddressFocus());
     const wanted = Number(address.get("sat"));
     const restored = wanted ? chooseSatellite(wanted) : Promise.resolve(true);
     if (rideKey) void restored.then(() => startRide(rideKey!, true));
@@ -953,7 +1004,7 @@ if (flat && controls && stage) {
     for (const box of [spaceControls, scaleNote, rideControls]) if (box) box.hidden = true;
     // the satellites are on the realistic Earth too: the groups shown stay shown
     for (const b of satButtons) b.setAttribute("aria-pressed", String(shownGroups.has(b.dataset["satGroup"] ?? "")));
-    for (const name of shownGroups) void toggleGroup(name, true);
+    void Promise.all([...shownGroups].map((name) => toggleGroup(name, true))).then(() => applyAddressFocus());
     const wanted = Number(address.get("sat"));
     if (wanted) void chooseSatellite(wanted);
     return true;

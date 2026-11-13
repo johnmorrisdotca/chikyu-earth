@@ -78,6 +78,24 @@ space.addEventListener("chikyu-satellite-click", (event) => console.log((event a
 
 A group is **one draw call** however many satellites it holds. Name each group (`"stations"`, `"starlink"`): `showSatellites(name, false)` hides one, `setSatellites(name, null)` takes it away and frees what it held. `orbits: true` draws every orbit of a group of 40 or fewer.
 
+## One group at a time
+
+`focusSatelliteGroup(name, options)` on `<chikyu-space>` and `<chikyu-earth-realistic>` shows one group that `setSatellites` has already set, and deals with the others. `options.others` is `"dim"` (the default: the others stay drawn, through the same dimming an old element set already uses, so they read as dimmer at a glance) or `"hide"` (they are not drawn). `options.frame` is true by default: the camera pulls back, by the view's own zoom, until the group's orbits fit. The distance is the greatest apogee of the group, from each satellite's mean motion and eccentricity (one revolution a day is 6.62 Earth radii), and it stops at 8 Earth radii so one satellite that swings far out does not shrink the Earth. `frame: false` leaves the camera where it is. `null` puts each group back to the shown or hidden state it had, and puts the camera back when the focus had moved it. A ride is left, because the camera has to look at the Earth to see the shell; clearing the focus restores the zoom and does not start the ride again.
+
+`focusedSatelliteGroup` is the name, or `null`. `satelliteGroups` keeps `count` and adds `emphasis` (`"focus"`, `"dim"`, `"hidden"` or `"plain"`) and `placed` (how many of that group the last draw placed). A group that has not been set is refused: the call returns `{ ok: false, reason: "not-set" }` and changes nothing. It does not throw. A group that is set returns `{ ok: true, group, count }`. When the choice changes, `chikyu-satellite-focus` is sent with `{ group, count }`.
+
+The focused group is drawn even if `showSatellites` had hidden it, and the choice never dims it (a satellite whose elements are old is still drawn dimmer, as before). Dimming adds nothing: it is the dim value the dots already carry. Nothing is drawn at rest.
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+
+const space = document.querySelector("chikyu-space")!;
+space.addEventListener("chikyu-satellite-focus", (event) => console.log((event as CustomEvent).detail.group, (event as CustomEvent).detail.count));
+const answer = space.focusSatelliteGroup("gps", { others: "dim" });
+console.log(answer.ok, space.focusedSatelliteGroup);
+space.focusSatelliteGroup(null);
+```
+
 ## Ring and name a whole group
 
 `space.labelSatellites("stations")` rings every member of a group and writes its name beside it, for a small group such as the stations. The names are in the page's language (`ISS`, `Tiangong` or `天宮`, `Hubble` or `ハッブル`; any other satellite under the name in its elements, or as `space.satelliteNames = { 25544: "Space Station" }` says). They are laid out after the names of `places` and never over them, a body's name or one another: each name goes to the right of its ring if it fits, else left, above, below, and one with no free place is left out. Only satellites that are in the picture and not behind the Earth are ringed, at most 80 over all the groups, and nothing is drawn at rest. `space.labelSatellites("stations", false)` stops; `space.labelledSatellites` lists the groups.
