@@ -40,8 +40,8 @@ importers:
         specifier: ^0.30.0
         version: 0.30.0
       '@johnmorrisdotca/kuni':
-        specifier: ^1.6.1
-        version: 1.6.1
+        specifier: ^1.8.0
+        version: 1.8.0
       '@johnmorrisdotca/wakusei-planets':
         specifier: ^0.39.0
         version: 0.39.0(three@0.186.1)
@@ -421,8 +421,8 @@ packages:
       three:
         optional: true
 
-  '@johnmorrisdotca/kuni@1.6.1':
-    resolution: {integrity: sha512-/t4bkx/VSHD0qSw58DhLb7FLycnst6SWgf22UTq65aZVnT3JHCg3WztOM3QcmenBzvpViy28SwcebDiXoDP3uw==}
+  '@johnmorrisdotca/kuni@1.8.0':
+    resolution: {integrity: sha512-jgf2iVjUnDq+rZmkbBijpC2rC0+qkpojfmhNfjZRFR1CrL3hkujtXTZ+Jaj4kGNY9s6C1Vdwftnfs97Di2lKDQ==}
     engines: {node: '>=24'}
 
   '@johnmorrisdotca/wakusei-planets@0.39.0':
@@ -1871,7 +1871,7 @@ snapshots:
     optionalDependencies:
       three: 0.186.1
 
-  '@johnmorrisdotca/kuni@1.6.1': {}
+  '@johnmorrisdotca/kuni@1.8.0': {}
 
   '@johnmorrisdotca/wakusei-planets@0.39.0(three@0.186.1)':
     dependencies:

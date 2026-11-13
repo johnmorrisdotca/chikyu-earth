@@ -220,7 +220,7 @@
   },
   "peerDependencies": {
     "@johnmorrisdotca/hoshi-stars": ">=0.30.0",
-    "@johnmorrisdotca/kuni": ">=1.6.1",
+    "@johnmorrisdotca/kuni": ">=1.8.0",
     "@johnmorrisdotca/wakusei-planets": ">=0.5.0",
     "astronomy-engine": ">=2.1.0",
     "satellite.js": ">=6.0.0",
@@ -254,7 +254,7 @@
     "@eslint/js": "^9.0.0",
     "@johnmorrisdotca/hata": "^1.8.0",
     "@johnmorrisdotca/hoshi-stars": "^0.30.0",
-    "@johnmorrisdotca/kuni": "^1.6.1",
+    "@johnmorrisdotca/kuni": "^1.8.0",
     "@johnmorrisdotca/wakusei-planets": "^0.39.0",
     "@playwright/test": "1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

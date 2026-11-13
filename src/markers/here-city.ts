@@ -1,4 +1,5 @@
 // The nearest city's name on a "you are here" marker. Pure: kuni does the lookup (`CitySet.nearest`); this only decides which places are named, in which language, and how far is too far.
+import { greatCircleKm } from "../route.ts";
 import type { Place } from "./places.ts";
 
 /**
@@ -26,7 +27,7 @@ export const HERE_CITY_KM = 100;
 export const HERE_CITY_MAX_KM = 20_000;
 
 /**
- * The kuni tiers a `here` marker's city is chosen from. A city of fewer than 100,000 people is in none of them.
+ * The kuni tiers a `here` marker looks through first. A smaller town is read afterwards from that city's country, one country file at a time.
  *
  * @example
  * ```ts
@@ -52,7 +53,28 @@ export interface HereCitySource {
   nearest(
     point: { lat: number; lon: number },
     options?: { maxKm?: number },
-  ): { city: { id: string; name: { en: string; ja?: string; jaShort?: string } }; km: number } | null;
+  ): { city: { id: string; name: { en: string; ja?: string; jaShort?: string }; country?: string }; km: number } | null;
+  /** Cities of the three tiers within `maxKm`, nearest first. Used to notice a second country across a border. */
+  within?(point: { lat: number; lon: number }, maxKm: number): readonly { city: { country?: string }; km: number }[];
+}
+
+/**
+ * A city from one country's file, including towns under 100,000.
+ *
+ * @example
+ * ```ts
+ * import type { HereTown } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const town: HereTown = { id: "ne:1", name: { en: "Smallville" }, lat: 1, lon: 2 };
+ * console.log(town.name.en);
+ * ```
+ */
+export interface HereTown {
+  id: string;
+  name: { en: string; ja?: string; jaShort?: string };
+  lat: number;
+  lon: number;
+  country?: string;
 }
 
 /**
@@ -144,4 +166,77 @@ export function hereCityLabels(places: readonly Pick<Place, "lon" | "lat" | "kin
     out.push({ index, id: found.city.id, label, km: found.km });
   }
   return out;
+}
+
+/**
+ * At most two countries to read for a place. The first is the country of the nearest city in the three tiers, however far.
+ * The second is added only when a city of another country is also inside the limit: a place near a border. `src/countries.ts` has no point-in-country test, so the country comes from those cities.
+ *
+ * @param point - The place.
+ * @param source - The three tiers.
+ * @param maxKm - The limit, in kilometres.
+ * @returns ISO codes, upper case, at most two.
+ *
+ * @example
+ * ```ts
+ * import { hereCountries } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const source = {
+ *   nearest: () => ({ city: { id: "a", name: { en: "A" }, country: "fr" }, km: 30 }),
+ *   within: () => [{ city: { country: "fr" }, km: 30 }, { city: { country: "de" }, km: 40 }],
+ * };
+ * console.log(hereCountries({ lat: 49, lon: 8 }, source, 100).join(" "));
+ * ```
+ */
+export function hereCountries(
+  point: { lat: number; lon: number },
+  source: HereCitySource,
+  maxKm: number,
+): string[] {
+  const nearest = source.nearest(point);
+  const first = nearest?.city.country?.trim().toUpperCase();
+  if (!first) return [];
+  const out = [first];
+  for (const hit of source.within?.(point, maxKm) ?? []) {
+    const code = hit.city.country?.trim().toUpperCase();
+    if (code && code !== first) {
+      out.push(code);
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * The city to draw: the nearest of the coarse hit and the towns, and only when it is within `maxKm`. A town closer than the big city wins.
+ *
+ * @param point - The place.
+ * @param coarse - The nearest city of the three tiers inside the limit, or null.
+ * @param towns - The cities of the one or two countries read for this place.
+ * @param maxKm - The limit, in kilometres.
+ * @returns The city and its distance, or null when none is close enough.
+ *
+ * @example
+ * ```ts
+ * import { chooseHereCity } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const town = { id: "v", name: { en: "Village" }, lat: 0.05, lon: 0 };
+ * const chosen = chooseHereCity({ lat: 0, lon: 0 }, { city: { id: "c", name: { en: "City" } }, km: 40 }, [town], 100);
+ * console.log(chosen?.id);
+ * ```
+ */
+export function chooseHereCity(
+  point: { lat: number; lon: number },
+  coarse: { city: { id: string; name: { en: string; ja?: string; jaShort?: string } }; km: number } | null,
+  towns: readonly HereTown[],
+  maxKm: number,
+): { id: string; name: HereTown["name"]; km: number } | null {
+  if (!(maxKm > 0)) return null;
+  let best: { id: string; name: HereTown["name"]; km: number } | null = coarse && coarse.km <= maxKm ? { id: coarse.city.id, name: coarse.city.name, km: coarse.km } : null;
+  for (const town of towns) {
+    const km = greatCircleKm({ lon: point.lon, lat: point.lat }, { lon: town.lon, lat: town.lat });
+    if (km === null || km > maxKm) continue;
+    if (!best || km < best.km - 1e-6) best = { id: town.id, name: town.name, km };
+  }
+  return best;
 }
