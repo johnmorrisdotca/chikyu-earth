@@ -1,0 +1,82 @@
+{
+ "day": {
+  "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x10800.jpg",
+  "sha256": "863036b622ba3dab4eb4ffb7149730b02cfa433ce49672e9b7267022051e04a2",
+  "quality": 80,
+  "maxLevel": 5,
+  "panels": {
+   "A1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.A1.jpg",
+    "sha256": "e24f100fd7764fb583f5aac730c9d9048090da496f561a715abbab967a1139e0"
+   },
+   "B1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.B1.jpg",
+    "sha256": "2205fb90951a434af7f2b7d76dc7c8c969abc032ac15c5f3a70070054ea92989"
+   },
+   "C1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.C1.jpg",
+    "sha256": "ed137497d3ad9a2bbb8a9fd44153349d41d234095432ac01768ab7c5b9d960da"
+   },
+   "D1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.D1.jpg",
+    "sha256": "3405997c8a9ed7c152c8504670034cb8de8fdbd3ab4c90080f99f029a52bcb30"
+   },
+   "A2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.A2.jpg",
+    "sha256": "a642194e47ccf8cd301333e200f33773bb5c4891ebd0a19e327fada316c25b60"
+   },
+   "B2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.B2.jpg",
+    "sha256": "2c687580799ec3a56279d339261ad3eef3b280feccb2544c54404e5bd4f7a1d9"
+   },
+   "C2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.C2.jpg",
+    "sha256": "95688b3e6f997c442e0f3eb80318eee9343a14a017ba772dd751551bed64f87b"
+   },
+   "D2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-topography-bathymetry/september/world.topo.bathy.200409.3x21600x21600.D2.jpg",
+    "sha256": "8a342e1b15b025f903a4c4cbd79cb0cd813cfb5f191ac10d725a334659a0a24d"
+   }
+  }
+ },
+ "night": {
+  "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_3km.jpg",
+  "sha256": "230aac448ae68c358be433dd518888cccb3a85ccf66f7b44326441c324ad6725",
+  "quality": 80,
+  "maxLevel": 4,
+  "panels": {
+   "A1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_A1.jpg",
+    "sha256": "f9e9a0fc1c6227bfb174639e5ff70d4f081810b4c72834a1ccdb9687150436f2"
+   },
+   "B1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_B1.jpg",
+    "sha256": "d0ef6a0b15032d277235d59c336e82c6fbe9693cfa26aaa72fec92962574d11e"
+   },
+   "C1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_C1.jpg",
+    "sha256": "446fcc72755ebc3625f96d39f2bcb247016038b74c90c655a65991e6de71b3b5"
+   },
+   "D1": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_D1.jpg",
+    "sha256": "449fdd6b2f6eec087f56b5a0dcee5ab3213ea0ade75ec746f38cea76f3acd442"
+   },
+   "A2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_A2.jpg",
+    "sha256": "ed5c047b606caca73a829c912c8388db07ecfa6670baf1358fd9e538ef773428"
+   },
+   "B2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_B2.jpg",
+    "sha256": "f56f36e2b76993b34dcf83163d8c8a23255251031597337833c9eb2400c5aa9b"
+   },
+   "C2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_C2.jpg",
+    "sha256": "f52cb69c0eadb2efa0868472cca59ac5461df5c4a0ce27846bff1e60cbafbe44"
+   },
+   "D2": {
+    "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144898/BlackMarble_2016_D2.jpg",
+    "sha256": "295a0b58aefc581ee3bcc8e513ce4e1a475057ab3de9dc94ccf5c0fe39be9972"
+   }
+  }
+ }
+}
