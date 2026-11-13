@@ -1709,6 +1709,10 @@ export class ChikyuSpace extends HTMLElement {
   /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
   #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean }[]): void {
     if (marks.length > 0) this.#prepareSatLabelLang();
+    // a satellite ridden from outside is drawn as its model: a ring and a name on it would cover the model (MODULES-1303)
+    const ride = this.#model.ride;
+    const ridden = ride && ride.viewpoint === "outside" && typeof ride.target !== "string" ? ride.target : null;
+    if (ridden) marks = marks.filter((m) => !(m.ref.group === ridden.group && m.ref.index === ridden.index));
     this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible }));
     const now = new Map<string, boolean>();
     for (const m of marks) {
@@ -1802,7 +1806,7 @@ export class ChikyuSpace extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
-    followModel: { x: number; y: number; shown: boolean; parts: number } | null;
+    followModel: { x: number; y: number; shown: boolean; parts: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: readonly number[]; y: readonly number[]; z: readonly number[] } } | null;
     /** The finer map tiles (`tiles`): the level wanted now (`null` while the package's own pictures are sharp enough), the tiles held and shown, and the fetches made. */
     tiles: TileStats;
     /**

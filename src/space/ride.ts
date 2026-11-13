@@ -231,8 +231,8 @@ export type RideViewpoint = "outside" | "inside";
  */
 export const OUTSIDE_KM = 25;
 
-/** How far below the middle of the picture the satellite is drawn in an outside ride that looks along the way it goes, as a share of half the picture's height (0.56: about a fifth of the height below the middle). */
-const OUTSIDE_LOW = 0.56;
+/** How far below the middle of the picture the satellite's middle is drawn in an outside ride that looks along the way it goes, as a share of half the picture's height (0.8: at 90 per cent of the height, so with the model drawn 17 per cent of the height in radius it crosses the bottom edge). */
+const OUTSIDE_LOW = 0.8;
 
 /**
  * The camera of an outside ride: the pose `ridePose` works out for a camera at the satellite, moved to `OUTSIDE_KM` back along its own line of sight so the satellite is in front of it. Looking along the way it goes (`look: "horizon"`) the satellite sits a little below the middle of the picture, so the camera is behind and above it; looking

@@ -63,7 +63,7 @@ async function where(page: Page) {
   return { s, there, offset, away: len(offset), shareX: model ? model.x / box.width : null, shareY: model ? model.y / box.height : null };
 }
 
-test("ride along, outside by default: the camera is 25 km behind and above the ISS and the model is below the middle of the picture", async ({ page }) => {
+test("ride along, outside by default: the camera is 25 km behind and above the ISS and the model is at the bottom of the picture", async ({ page }) => {
   await open(page, null, "horizon");
   const w = await where(page);
   expect(w.away, "kilometres from the ISS").toBeGreaterThan(20);
@@ -72,8 +72,8 @@ test("ride along, outside by default: the camera is 25 km behind and above the I
   expect(dot(w.offset, w.there.place), "above: further from the Earth's centre").toBeGreaterThan(0);
   expect(w.s.followModel?.shown, "the model is drawn").toBe(true);
   expect(Math.abs(w.shareX! - 0.5), "near the middle sideways").toBeLessThan(0.08);
-  expect(w.shareY!, "below the middle").toBeGreaterThan(0.58);
-  expect(w.shareY!, "and in the picture").toBeLessThan(0.9);
+  expect(w.shareY!, "in the bottom third (MODULES-1303)").toBeGreaterThan(2 / 3);
+  expect(w.shareY!, "at the bottom, its middle still in the picture").toBeLessThan(1);
 });
 
 test("ride above, outside by default: the camera is straight above the ISS and the model is at the middle of the picture", async ({ page }) => {
