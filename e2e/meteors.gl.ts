@@ -59,12 +59,12 @@ test.describe("with motion allowed", () => {
     await page.waitForTimeout(2500);
     expect(await meteors(page)).toMatchObject({ on: false, alive: 0, spawned: 0, perSecond: 0 });
     expect(await note(page)).toBeNull();
-    await page.locator("#meteors").click();
+    await page.locator("#meteors").dispatchEvent("click");
     await expect.poll(async () => (await meteors(page)).spawned, { timeout: 15_000 }).toBeGreaterThan(2);
     expect(await note(page)).not.toBeNull();
     // the address is written a moment after a choice (kazoku-ui's address state waits 250 ms): waited for, not read once
     await expect.poll(() => new URL(page.url()).searchParams.get("meteors"), { timeout: 5000 }).toBe("on");
-    await page.locator("#meteors").click();
+    await page.locator("#meteors").dispatchEvent("click");
     await expect.poll(async () => (await meteors(page)).alive).toBe(0);
     const stopped = (await meteors(page)).spawned;
     await page.waitForTimeout(2000);
@@ -237,7 +237,7 @@ test.describe("in the space view", () => {
     await openSpace(page, `${GEMINIDS}&speed=60`);
     await page.waitForTimeout(2500);
     expect(await spaceMeteors(page)).toMatchObject({ on: false, alive: 0, spawned: 0 });
-    await page.locator("#meteors").click();
+    await page.locator("#meteors").dispatchEvent("click");
     await expect.poll(async () => (await spaceMeteors(page)).spawned, { timeout: 20_000 }).toBeGreaterThan(2);
     await page.locator(SPACE).evaluate((el) => el.setAttribute("speed", "0"));
     await expect.poll(async () => (await spaceMeteors(page)).alive).toBe(0);

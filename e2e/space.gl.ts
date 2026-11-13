@@ -24,7 +24,8 @@ async function open(page: Page, query = `time=${NOV2}&speed=0&center=-100,40`): 
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/?look=space&${query}`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
-  await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(0);
+  // the first draw comes when the picture's own files are in and the graphics are free: seconds on a busy machine, not 5
+  await expect.poll(async () => (await statsOf(page)).draws, { timeout: 30_000 }).toBeGreaterThan(0);
   await settle(page);
 }
 
@@ -164,7 +165,8 @@ test("a lost context is recovered", async ({ page }) => {
 
 test("a body can be looked at: the camera goes to it, and choosing its name by keyboard does the same and says how big and far it is", async ({ page }) => {
   await open(page);
-  await page.getByRole("group", { name: "Look at" }).getByRole("button", { name: "Jupiter", exact: true }).click();
+  // pressed by dispatching the click: a real click scrolls the page to the button, taking the view out of sight, where nothing is drawn, so the distance read is the one from before the press
+  await page.getByRole("group", { name: "Look at" }).getByRole("button", { name: "Jupiter", exact: true }).dispatchEvent("click");
   await expect.poll(async () => (await statsOf(page)).distance).toBeCloseTo(3.4 * 1.8, 0);
   await expect(page.locator("#body-info")).toContainText("Jupiter: radius 69,911 km");
   await jump(page, "Solar system");

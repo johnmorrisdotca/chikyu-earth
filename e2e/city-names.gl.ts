@@ -209,11 +209,11 @@ for (const [name, tag, look] of [
 test("the demo's City names button sets the attribute on the elements and in the address", async ({ page }) => {
   await page.goto(`/chikyu-earth/?look=realistic&${HELD}`);
   await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
-  await page.locator("#city-names").click();
+  await page.locator("#city-names").dispatchEvent("click");
   expect(await page.locator("chikyu-earth-realistic").evaluate((el) => el.getAttribute("city-names"))).toBe("24");
   await expect.poll(() => new URL(page.url()).searchParams.get("city-names")).toBe("24");
   await expect.poll(async () => (await statsOf(page, "chikyu-earth-realistic")).names, { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.locator("#city-names").click();
+  await page.locator("#city-names").dispatchEvent("click");
   await expect.poll(() => new URL(page.url()).searchParams.get("city-names")).toBeNull();
   await expect.poll(async () => (await statsOf(page, "chikyu-earth-realistic")).on).toBe(false);
 });

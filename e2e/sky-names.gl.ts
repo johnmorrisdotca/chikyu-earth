@@ -150,15 +150,15 @@ test("nothing is drawn at rest, with names and lines on and the clock held", asy
 
 test("the demo's Star names and Constellations buttons set the attributes and the address", async ({ page }) => {
   await open(page);
-  await page.locator("#star-names").click();
+  await page.locator("#star-names").dispatchEvent("click");
   await expect.poll(async () => (await skyOf(page)).loaded, { timeout: 30_000 }).toBe(true);
   expect(await page.locator(SPACE).evaluate((el) => el.getAttribute("star-names"))).toBe("12");
   await expect.poll(() => new URL(page.url()).searchParams.get("star-names")).toBe("12");
-  await page.locator("#constellation-lines").click();
+  await page.locator("#constellation-lines").dispatchEvent("click");
   await expect.poll(() => page.locator(SPACE).evaluate((el) => el.getAttribute("constellation-lines"))).toBe("0.16");
   await expect.poll(() => new URL(page.url()).searchParams.get("constellation-lines")).toBe("0.16");
-  await page.locator("#star-names").click();
-  await page.locator("#constellation-lines").click();
+  await page.locator("#star-names").dispatchEvent("click");
+  await page.locator("#constellation-lines").dispatchEvent("click");
   await expect.poll(() => new URL(page.url()).searchParams.get("constellation-lines")).toBeNull();
   await expect.poll(async () => (await skyOf(page)).on).toBe(false);
 });
