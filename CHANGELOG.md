@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **One satellite group at a time** (MODULES-1215). `focusSatelliteGroup(name, options)` on `<chikyu-space>` and `<chikyu-earth-realistic>` shows one group that has been set and deals with the others: `others` is `"dim"` (the default; the same dimming an old element set uses, so no new object) or `"hide"`. `frame` (true by default) pulls the camera back with the view's own zoom until the group's orbits fit. The distance is the greatest apogee, from mean motion and eccentricity, and it stops at 8 Earth radii. `null` restores each group's own shown state and the camera. A group that has not been set returns `{ ok: false, reason: "not-set" }` and changes nothing. `focusedSatelliteGroup` is the name or `null`. `satelliteGroups` adds `emphasis` and `placed`, and keeps `count`. `chikyu-satellite-focus` is sent with `{ group, count }` when the choice changes. Nothing is drawn at rest.
+- **A ring appears when the satellite comes into the picture** (MODULES-1213). `ringSatellites` keeps the satellites it was asked to ring. One that is outside the picture gets its ring on the first later draw that shows it, and nothing is drawn at rest just to wait. `placeSatellite` adds `edge` (`"top"`, `"right"`, `"bottom"`, `"left"` or `null`) and `behind` (true when the satellite is behind the camera), and no longer answers `null` for a satellite that is merely out of the picture.
 
 ## 0.42.0 - 2026-11-13
 
