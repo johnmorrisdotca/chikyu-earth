@@ -9,7 +9,7 @@ export { COUNT_SCRIPT, readCounts };
 export interface EarthStats {
   state: string;
   tiers: Record<"day" | "night" | "clouds" | "water", number>;
-  tiles: { ready: boolean; level: number | null; held: number; shown: number; loading: number; failed: number; requested: number; heldBytes: number; refused: number; used: Record<string, number> };
+  tiles: { ready: boolean; level: number | null; held: number; shown: number; loading: number; failed: number; requested: number; heldBytes: number; refused: number; used: Record<string, number>; finer: number | null; fading: boolean };
   draws: number;
   contexts: number;
   canvas: { width: number; height: number; pixels: number };

@@ -458,6 +458,8 @@ export interface SpaceDeps {
   sources?: () => TileSources;
   /** Told once when the tile set has been read: the width in pixels of the finest level of each of its layers. */
   onTiles?: (layers: Record<string, number>) => void;
+  /** Told at the end of a draw, after the map tiles are placed, so a credit line can follow which tiles are on screen. */
+  onTilesDrawn?: () => void;
 }
 
 /** An inertial direction from the Earth's centre, in scene axes, for right ascension and declination in degrees. */
@@ -1092,6 +1094,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               },
             };
             tiles.sync({ lon: 0, lat: 0, width: size.width, height: size.height, panX: 0, panY: 0, radius: focal / away, perspective: look }, [sunLocal.value.x, sunLocal.value.y, sunLocal.value.z], true, model.ratio());
+            deps.onTilesDrawn?.();
           }
           let paintedBodies = sunSlot.drawing ? 1 : 0;
           for (const p of planets.values()) if (p.slot.drawing) paintedBodies += 1;

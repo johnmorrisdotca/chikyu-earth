@@ -6,6 +6,8 @@
 export { createTileStore, creditLine, loadRecords, MAX_IN_FLIGHT, MAX_RECORDS, TILE_BUDGET_BYTES, validateSource } from "../data-door.ts";
 export type { BitmapLike, Credit, DataSource, ImageTile, Licence, MapPlace, RecordsRead, RecordSource, SourceInfo, TileLoader, TileSource, TileStats, TileStore, TileStoreOptions } from "../data-door.ts";
 export { DEFAULT_LEVELS, earthTiles, imageBytes, mapKeys, tileKeyParts, tilePlace, type EarthMapPlace, type EarthMapSource, type EarthTilesOptions, type MapLayer } from "./map.ts";
+export { gibsGrid, gridKey, gridKeys, gridLevelFor, gridOnEarth, gridPastExtent, gridSpan, gridTileAt, wrapLon, type MapGrid, type MapGridLevel } from "./grid.ts";
+export { GIBS_CREDIT, GIBS_ID, GIBS_SLOW_MS, gibsTiles, previousUtcDay, samplesAreBlank, utcDay, type GibsTilesOptions } from "./gibs.ts";
 export { elementsFrom, mergeElementSets, readElementSets, type ElementRecordSource, type ElementSetsRead } from "./elements.ts";
 export { OWN_SOURCES, ownCredit } from "./own.ts";
 export { createSourceBook, creditsOf, type SourceBook, type SourceBookOptions, type SourceStats } from "./book.ts";

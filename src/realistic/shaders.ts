@@ -37,7 +37,7 @@ uniform sampler2D paintMap;
 uniform float paintNow;
 uniform float paintSpan;
 uniform float paintOn;
-${tile ? "uniform vec4 nightRect;\nvarying vec2 vUvG;" : ""}
+${tile ? "uniform vec4 nightRect;\nuniform float tileAlpha;\nvarying vec2 vUvG;" : ""}
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorld;
@@ -98,7 +98,7 @@ void main() {
     col = mix(col, vec3(1.0, 0.55, 0.12), clamp(show, 0.0, 0.92));
   }
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, ${tile ? "tileAlpha" : "1.0"});
 }`;
 
 export const SURFACE_FRAG = surfaceFrag(false);

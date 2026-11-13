@@ -18,6 +18,7 @@ import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import type { Credit, DataSource } from "../data-door.ts";
 import { createDoorHost, type DoorHost } from "../door/host.ts";
+import { createFinerHolder, GIBS_CREDIT, GIBS_ID } from "../door/gibs.ts";
 import { folderSource } from "../door/map.ts";
 import { ownCredit } from "../door/own.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
@@ -194,7 +195,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -207,6 +208,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
   /** The page's own clock, in milliseconds, at the last step. */
   #last = 0;
   #announced = -Infinity;
+  /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
+  #finerHold = createFinerHolder(() => new Date(this.#model.time));
+  #finerNote: HTMLElement | undefined;
   /** The clock is running (a `running: false` is owed when it holds). */
   #running = false;
   #state: EarthState = "loading";
@@ -279,12 +283,13 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="finer-credit" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#overlay = root.getElementById("overlay")!;
     this.#note = root.getElementById("meteor-note")!;
     this.#airNote = root.getElementById("air-note")!;
+    this.#finerNote = root.getElementById("finer-credit")!;
     this.#sky = createSkyHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -366,7 +371,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       air: () => airFor(this.getAttribute("air")),
       invalidate: () => this.#gate?.soon(),
       onDraw: () => this.#gate?.drawn(),
-      onTiled: () => this.#door.announce(),
+      onTiled: () => {
+        this.#showFinerCredit();
+        this.#door.announce();
+      },
       onSky: (sky) => this.#sky?.frame(sky),
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       placeSprites: () => this.#placeLayer?.sprites ?? null,
@@ -461,8 +469,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "lights") this.lights = value !== "off";
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
-    else if (name === "tiles") this.#gate?.soon();
-    else if (name === "data") this.#door.book.ownOnly(value === "own");
+    else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date") this.#gate?.soon();
+    else if (name === "data") {
+      this.#door.book.ownOnly(value === "own");
+      this.#gate?.soon();
+    }
     else if (name === "camera") this.camera = readCamera(value);
     else if (name === "cloud-drift") {
       this.#model.cloudDrift = readDrift(value);
@@ -486,6 +497,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#seas?.refresh();
         this.#countries?.refresh();
         this.#here?.refresh();
+        this.#showFinerCredit();
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
     else if ((SKY_ATTRIBUTES as readonly string[]).includes(name)) this.#sky?.refresh();
@@ -953,7 +965,20 @@ export class ChikyuEarthRealistic extends HTMLElement {
     const folder = this.tiles === null ? undefined : folderSource(this.tiles);
     const day = this.#door.book.mapSources("day")[0] ?? folder;
     const night = this.#door.book.mapSources("night")[0] ?? folder;
-    return { ...(day ? { day } : {}), ...(night ? { night } : {}) };
+    const finer = this.#finerHold.source((attr) => this.getAttribute(attr), this.getAttribute("data") === "own");
+    return { ...(day ? { day } : {}), ...(night ? { night } : {}), ...(finer ? { finer } : {}) };
+  }
+
+  /** The acknowledgement for the finer imagery, shown only while those tiles are on the screen. */
+  #showFinerCredit(): void {
+    const note = this.#finerNote;
+    if (!note) return;
+    const count = this.#model.tiles?.stats.used[GIBS_ID] ?? 0;
+    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+    const text = count > 0 ? GIBS_CREDIT[lang] : "";
+    if (note.textContent !== text) note.textContent = text;
+    if (note.lang !== lang) note.lang = lang;
+    if (note.hidden !== (text === "")) note.hidden = text === "";
   }
 
   /** The package's own credits for the last drawn frame: its pictures while it is drawn, and its finer tiles when a window of them is in view (unless a page added the folder itself, which the door counts). */
@@ -961,6 +986,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
     const used = this.#model.tiles?.stats.used ?? {};
     const own: Credit[] = [ownCredit("chikyu-pictures", this.#state === "live" ? 1 : 0)];
     if (this.#door.book.get("chikyu-tiles") === undefined) own.push(ownCredit("chikyu-tiles", used["chikyu-tiles"] ?? 0));
+    const finer = this.#finerHold.source((attr) => this.getAttribute(attr), this.getAttribute("data") === "own");
+    const finerUsed = used[GIBS_ID] ?? 0;
+    if (finer && finerUsed > 0) own.push({ source: finer.info, own: false, used: finerUsed });
     return own;
   }
 
@@ -1007,6 +1035,18 @@ export class ChikyuEarthRealistic extends HTMLElement {
   set tiles(value: string | null) {
     if (value === null || value === "") this.removeAttribute("tiles");
     else this.setAttribute("tiles", value);
+  }
+
+  /**
+   * Finer imagery than the package's own tiles, read by the browser from NASA's imagery service. `gibs` turns it on; anything else, or leaving it out, leaves it off. The daily picture is the day before the moment on show, with the clouds left in, and only when the view is closer than the package's own tiles. A tile that is slow or missing leaves the coarser picture in place.
+   * `tiles-finer-layer` names another layer (`MODIS_Terra_CorrectedReflectance_TrueColor` or `BlueMarble_ShadedRelief_Bathymetry`), and `tiles-finer-date` is `previous-day`, `shown` or one day `yyyy-mm-dd`.
+   */
+  get tilesFiner(): string | null {
+    return this.getAttribute("tiles-finer") === "gibs" ? "gibs" : null;
+  }
+  set tilesFiner(value: string | null) {
+    if (value === "gibs") this.setAttribute("tiles-finer", "gibs");
+    else this.removeAttribute("tiles-finer");
   }
 
   /** A box laid over the Earth for markers (see `@johnmorrisdotca/chikyu-earth/markers`): where it is, the pose of the last draw, and a way to hear the next. */
@@ -1173,7 +1213,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       state: this.#state,
       tiers: { ...this.#tiers },
       satellites: this.#satelliteStats(),
-      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {} },
+      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false },
       draws: stats?.draws ?? 0,
       contexts: stats?.contexts ?? 0,
       canvas: stats?.canvas ?? { width: 0, height: 0, pixels: 0 },

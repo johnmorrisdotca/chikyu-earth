@@ -29,6 +29,7 @@ import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
+import { createFinerHolder, GIBS_CREDIT, GIBS_ID } from "../door/gibs.ts";
 import { folderSource } from "../door/map.ts";
 import type { TileSources, TileStats } from "../realistic/tile-set.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -268,9 +269,12 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "ride-viewpoint"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "ride-viewpoint"];
 
   #model: SpaceModel = newSpaceModel();
+  /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
+  #finerHold = createFinerHolder(() => new Date(this.#model.time));
+  #finerNote: HTMLElement | undefined;
   #paint = createPaintState();
   #mode: number | "now" = "now";
   #speed = 1;
@@ -358,13 +362,14 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="bodies-note" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="bodies-note" hidden></p><p id="finer-credit" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#note = root.getElementById("meteor-note")!;
     this.#airNote = root.getElementById("air-note")!;
     this.#bodiesNote = root.getElementById("bodies-note")!;
+    this.#finerNote = root.getElementById("finer-credit")!;
     this.#sky = createSkyHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -462,6 +467,7 @@ export class ChikyuSpace extends HTMLElement {
       onPainterError: (error) => this.dispatchEvent(new CustomEvent("chikyu-bodies-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       sources: () => this.#tileSources(),
       onTiles: (layers) => this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } })),
+      onTilesDrawn: () => this.#showFinerCredit(),
     });
     this.#view = taken.renderer.view(this.#stage, item, { still: null });
     this.#set("loading");
@@ -586,17 +592,30 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-tint") {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.request();
-    } else if (name === "tiles") this.#gate?.request();
+    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
+    if (name === "lang") this.#showFinerCredit();
   }
 
   #wheel = (event: WheelEvent): void => immersiveWheel(this, event);
 
   /** The map source of each layer now: the folder of the `tiles` attribute, or none. */
+  #showFinerCredit(): void {
+    const note = this.#finerNote;
+    if (!note) return;
+    const count = this.#model.tiles?.stats.used[GIBS_ID] ?? 0;
+    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+    const text = count > 0 ? GIBS_CREDIT[lang] : "";
+    if (note.textContent !== text) note.textContent = text;
+    if (note.lang !== lang) note.lang = lang;
+    if (note.hidden !== (text === "")) note.hidden = text === "";
+  }
+
   #tileSources(): TileSources {
     const folder = this.tiles === null ? undefined : folderSource(this.tiles);
-    return folder ? { day: folder, night: folder } : {};
+    const finer = this.#finerHold.source((attr) => this.getAttribute(attr), false);
+    return { ...(folder ? { day: folder, night: folder } : {}), ...(finer ? { finer } : {}) };
   }
 
   /** Where the finer map tiles are served from (a folder with `manifest.json`), or `null` for none; the attribute `tiles`. The Earth lays only the tiles in view over its own picture, at the level the camera's height needs, so a ride a few hundred kilometres above the ground sees sharp ground. */
@@ -608,6 +627,17 @@ export class ChikyuSpace extends HTMLElement {
   set tiles(value: string | null) {
     if (value === null || value === "") this.removeAttribute("tiles");
     else this.setAttribute("tiles", value);
+  }
+
+  /**
+   * Finer imagery than the package's own tiles, read by the browser from NASA's imagery service. `gibs` turns it on. See `<chikyu-earth-realistic>` for the layer and the day.
+   */
+  get tilesFiner(): string | null {
+    return this.getAttribute("tiles-finer") === "gibs" ? "gibs" : null;
+  }
+  set tilesFiner(value: string | null) {
+    if (value === "gibs") this.setAttribute("tiles-finer", "gibs");
+    else this.removeAttribute("tiles-finer");
   }
 
   /** The body painter's credit under the picture, in the element's or the page's language: shown while the painter draws the bodies (not `plain`), unless `bodies-credit` is `off`. */
@@ -1820,7 +1850,7 @@ export class ChikyuSpace extends HTMLElement {
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },
       followModel: this.#model.followModel,
-      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {} },
+      tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false },
       places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 }) },
       hereCity: this.#here?.stats ?? { on: false, maxKm: 0, loaded: false, pending: false },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
