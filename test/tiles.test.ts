@@ -177,3 +177,39 @@ test("a camera high up in perspective sees the front of the Earth at level 3, as
   assert.ok(all.includes("7,3") && all.includes("8,4"), "the tiles round the middle");
   assert.ok(!all.includes("0,3"), "the far side is not asked for");
 });
+
+const day5: TileLayer = { tileSize: 512, levels: [0, 1, 2, 3, 4, 5].map((level) => ({ level, width: 1024 * 2 ** level })) };
+
+test("level 5 is 64 columns by 32 rows, and its last tile ends at 180 degrees and -90", () => {
+  assert.equal(tileColumns(5), 64);
+  assert.equal(tileRows(5), 32);
+  const [west, north] = tileRect({ level: 5, col: 0, row: 0 });
+  assert.equal(west, -Math.PI);
+  assert.equal(north, Math.PI / 2);
+  const last = tileRect({ level: 5, col: 63, row: 31 });
+  assert.ok(Math.abs(last[2] - Math.PI) < 1e-12 && Math.abs(last[3] + Math.PI / 2) < 1e-12);
+  assert.equal(tileLevel(8000, day5, 4096), 5, "a disc of 8000 pixels wants the finest level, 32768 across");
+  assert.equal(tileLevel(8000, day, 4096), 4, "a set that stops at level 4 is as before");
+});
+
+test("level 5 across the antimeridian: the first and the last of its 64 columns are in view, and a longitude of 180 is the last", () => {
+  const tiles = tilesInView(5, camera(180, 0, 9000));
+  const columns = new Set(tiles.map((tile) => tile.col));
+  assert.ok(columns.has(0) && columns.has(63), `columns ${[...columns].sort((a, b) => a - b).join(",")}`);
+  assert.deepEqual(ids(tilesInView(5, camera(-180, 0, 9000))), ids(tiles));
+  assert.deepEqual(ids(tilesInView(5, camera(540, 0, 9000))), ids(tiles));
+  const edge = tilesInView(5, camera(180, 0, 200, 400));
+  assert.ok(edge.length > 0 && edge.every((tile) => tile.col >= 0 && tile.col < 64));
+  assert.ok(edge.some((tile) => tile.col === 63) && edge.some((tile) => tile.col === 0), "both sides of the line");
+});
+
+test("level 5 at a pole: the top row and the bottom row are found, and no row is out of range", () => {
+  const north = tilesInView(5, camera(0, 90, 9000));
+  assert.ok(north.every((tile) => tile.row >= 0 && tile.row < 32 && tile.col >= 0 && tile.col < 64));
+  assert.ok(north.some((tile) => tile.row === 0), "the pole's row is in view");
+  assert.ok(new Set(north.filter((tile) => tile.row === 0).map((tile) => tile.col)).size >= 16, "all the way round the pole");
+  const south = tilesInView(5, camera(0, -90, 9000));
+  assert.ok(south.some((tile) => tile.row === 31));
+  assert.ok(south.every((tile) => tile.row >= 16));
+  for (const lat of [89.99, -89.99]) assert.ok(tilesInView(5, camera(77, lat, 9000)).length > 0);
+});

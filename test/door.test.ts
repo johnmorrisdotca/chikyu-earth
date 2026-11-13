@@ -558,6 +558,27 @@ test("a folder's keys follow the levels of its manifest: level 5 where the manif
   assert.deepEqual(empty.need(top, 32768), ["day/4/20/3"], "a folder with no manifest keeps the package's levels");
 });
 
+test("keys at level 5 wrap the antimeridian and reach the poles, a detail of 4096 or less names levels 0 to 2, and a manifest that lacks a level skips it", () => {
+  const five = { tileSize: 512, levels: [0, 1, 2, 3, 4, 5].map(level) };
+  // across the antimeridian: -180 to -179.9 is column 0, 179.9 to 180 the last of 64, and a place that straddles it names both
+  assert.deepEqual(mapKeys({ lonMin: -180, lonMax: -179.9, latMin: 0, latMax: 0.1 }, 32768, five, "day/"), ["day/5/0/15"]);
+  assert.deepEqual(mapKeys({ lonMin: 179.9, lonMax: 180, latMin: 0, latMax: 0.1 }, 32768, five, "day/"), ["day/5/63/15"]);
+  assert.deepEqual(mapKeys({ lonMin: 179.9, lonMax: 180.1, latMin: 0, latMax: 0.1 }, 32768, five, "day/"), ["day/5/63/15", "day/5/0/15"]);
+  // the poles: the top row is 0 and the bottom row 31 at level 5
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 89.9, latMax: 90 }, 32768, five, "day/"), ["day/5/32/0"]);
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: -90, latMax: -89.9 }, 32768, five, "day/"), ["day/5/32/31"]);
+  // a detail of 4096 or less names a level from 0 to 2 where the package's levels 3 and 4 named level 3
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 0, latMax: 0.1 }, 4096, five, "day/"), ["day/2/4/1"]);
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 0, latMax: 0.1 }, 1024, five, "day/"), ["day/0/1/0"]);
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 0, latMax: 0.1 }, 4096), ["3/8/3"], "the package's own levels, where none are given");
+  // a manifest that lacks level 4 names the next one up for a detail of 16384, and the last one there is for a finer detail
+  const gap = { tileSize: 512, levels: [0, 1, 2, 3, 5].map(level) };
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 0, latMax: 0.1 }, 16384, gap, "day/"), ["day/5/32/15"]);
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 0, latMax: 0.1 }, 65536, gap, "day/"), ["day/5/32/15"]);
+  const short = { tileSize: 512, levels: [0, 1, 2].map(level) };
+  assert.deepEqual(mapKeys({ lonMin: 0, lonMax: 0.1, latMin: 0, latMax: 0.1 }, 16384, short, "day/"), ["day/2/4/1"], "never a level the manifest does not have");
+});
+
 function element(id: number, epoch: string): ElementSet {
   return { OBJECT_NAME: `SAT ${id}`, OBJECT_ID: "1998-067A", EPOCH: epoch, MEAN_MOTION: 15.49, ECCENTRICITY: 0.0007, INCLINATION: 51.6, RA_OF_ASC_NODE: 335.9, ARG_OF_PERICENTER: 339.3, MEAN_ANOMALY: 20.6, NORAD_CAT_ID: id, BSTAR: 0.0001, MEAN_MOTION_DOT: 0.0001, MEAN_MOTION_DDOT: 0 };
 }
