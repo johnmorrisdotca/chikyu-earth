@@ -41,7 +41,7 @@ import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/type
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
-import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
+import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook, type RideViewpoint } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
@@ -154,6 +154,8 @@ export interface RideOptions {
   look?: RideLook;
   /** Face this way as the ride opens (`face`). */
   face?: RideFace;
+  /** `outside` (the default, or the element's `ride-viewpoint`) shows the satellite: with `view: "from"` the camera is a little behind and above it (straight above it with `look: "down"`), and a satellite the page has no model for is drawn small from the package's own sketch of its kind. `inside` is the camera at the satellite, as before, and no sketch. A body is always ridden from inside. */
+  viewpoint?: RideViewpoint;
   distanceKm?: number;
   smooth?: boolean;
 }
@@ -175,6 +177,8 @@ export interface Riding {
   look: RideLook;
   face: RideFace | null;
   distanceKm: number;
+  /** `outside` or `inside` (see `RideOptions`). */
+  viewpoint: RideViewpoint;
 }
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
@@ -262,7 +266,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "ride-viewpoint"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -503,7 +507,8 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
-    if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
+    if (name === "ride-viewpoint") this.#applyViewpoint();
+    else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
     else if (name === "time") this.time = readTime(value);
     else if (name === "speed") this.speed = this.#readSpeed();
     else if (name === "scale") this.scale = value === "true" ? "true" : "compressed";
@@ -1239,7 +1244,7 @@ export class ChikyuSpace extends HTMLElement {
       // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
       const faceable = !(view === "follow" && typeof target === "string");
       const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000) };
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint };
       if (face) {
         model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
         model.rideTurn = 0;
@@ -1363,6 +1368,32 @@ export class ChikyuSpace extends HTMLElement {
     const next = list[(((current < 0 ? (step > 0 ? -1 : 0) : current) + step) % list.length + list.length) % list.length]!;
     this.ride(next.ref, { view: "follow" });
     return next;
+  }
+
+  /**
+   * Where a ride puts the camera: `outside` (the default; the attribute `ride-viewpoint`) shows the satellite, `inside` puts the camera at it. It is the default for the next `ride` and, set while riding, moves the ride there in one eased glide (a jump for a reader who asked for reduced motion), keeping the ride and the clock.
+   * See `RideOptions.viewpoint`.
+   */
+  get rideViewpoint(): RideViewpoint {
+    return this.getAttribute("ride-viewpoint") === "inside" ? "inside" : "outside";
+  }
+  set rideViewpoint(value: RideViewpoint) {
+    this.setAttribute("ride-viewpoint", value === "inside" ? "inside" : "outside");
+  }
+
+  #applyViewpoint(): void {
+    const model = this.#model;
+    const ride = model.ride;
+    const next = this.rideViewpoint;
+    if (!ride || ride.viewpoint === next) return;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const pose = model.pose;
+    model.ride = { ...ride, viewpoint: next };
+    model.transition = !reduced && pose.valid ? { start: performance.now(), duration: 1200, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
   }
 
   /** What the camera is riding along with now, or null. */

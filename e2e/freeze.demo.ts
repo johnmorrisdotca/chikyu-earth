@@ -106,9 +106,9 @@ for (const look of LOOKS) {
         const turning = await bounded(page, 3000, look);
         expect(turning.callbacks).toBeGreaterThan(5);
         expect(turning.frames, "frames drawn").toBeLessThanOrEqual(turning.callbacks + 3);
-        // above the ISS the demo's stand-in model is drawn beside the scene (a draw call for each mesh it is made of, as the scene says), and nothing else is allowed more
-        const parts = look === "above" ? await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: { parts: number } | null }).followModel?.parts ?? 0) : 0;
-        if (look === "above") expect(parts, "the model is drawn").toBeGreaterThan(0);
+        // above the ISS, and riding it (outside by default), the demo's stand-in model is drawn beside the scene (a draw call for each mesh it is made of, as the scene says), and nothing else is allowed more
+        const parts = look === "above" || look === "ride" ? await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: { parts: number } | null }).followModel?.parts ?? 0) : 0;
+        if (look === "above" || look === "ride") expect(parts, "the model is drawn").toBeGreaterThan(0);
         expect(turning.draws, "GL draw calls for each frame drawn").toBeLessThanOrEqual(Math.max(1, turning.frames) * (40 + parts));
         expect(turning.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(turning.callbacks + 3);
         expect(turning.outstanding, "one request waiting at a time").toBeLessThanOrEqual(3);
@@ -235,7 +235,11 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   }
   console.log(`live GPU objects after each round: ${settled.join(", ")}`);
   // The first round only warms the page up (the first shaders and the satellites' first draw come after the first count in software drawing), so the baseline is the second.
-  expect(Math.max(...settled.slice(1)), "no more GPU objects after six rounds than after the second, give or take three.js's own fixtures").toBeLessThanOrEqual(settled[1]! + 8);
+  // A round on the ISS holds the satellite's model (a ride is outside by default, MODULES-1236: the demo's stand-in is made of 16 meshes), a round on the Moon holds none, so each round is held to the round two before it
+  // (the same ride): the first, a warm-up, is not a baseline, and rounds 1 and 2 are the baselines of the Moon and the ISS.
+  for (let round = 3; round < settled.length; round += 1) {
+    expect(settled[round]!, `round ${round + 1} holds no more GPU objects than round ${round - 1}, give or take three.js's own fixtures`).toBeLessThanOrEqual(settled[round - 2]! + 8);
+  }
 
   await look("Thick");
   await expect(page.locator("chikyu-space")).toHaveCount(0);

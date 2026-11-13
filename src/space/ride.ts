@@ -207,6 +207,60 @@ const unit = (a: Vec3): Vec3 => {
 };
 
 /**
+ * Where a ride puts the camera: `outside` (the default) a little way off the satellite, behind and above it, so the satellite is in the picture; `inside` at the satellite itself, looking out of it, as a ride always was.
+ *
+ * @example
+ * ```ts
+ * import type { RideViewpoint } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const viewpoints: RideViewpoint[] = ["outside", "inside"];
+ * console.log(viewpoints.join(" or "));
+ * ```
+ */
+export type RideViewpoint = "outside" | "inside";
+
+/**
+ * How far an outside ride keeps the camera from the satellite, in kilometres. The satellite itself is a few metres across, so it is drawn far larger than life (a model about a fifth of the picture's height across): not to scale, and the page says so in its caption.
+ *
+ * @example
+ * ```ts
+ * import { OUTSIDE_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(OUTSIDE_KM);
+ * ```
+ */
+export const OUTSIDE_KM = 25;
+
+/** How far below the middle of the picture the satellite is drawn in an outside ride that looks along the way it goes, as a share of half the picture's height (0.56: about a fifth of the height below the middle). */
+const OUTSIDE_LOW = 0.56;
+
+/**
+ * The camera of an outside ride: the pose `ridePose` works out for a camera at the satellite, moved to `OUTSIDE_KM` back along its own line of sight so the satellite is in front of it. Looking along the way it goes (`look: "horizon"`) the satellite sits a little below the middle of the picture, so the camera is behind and above it; looking
+ * down (`look: "down"`) it is at the middle, with the camera straight above it. Where the satellite sits in the picture does not change with the zoom. Which way the camera looks and which way is up are the pose's own, so the look-around is the same as from the satellite itself; the camera goes round the satellite as it looks about. Pure. Never nearer the ground than half the satellite's height.
+ *
+ * @param pose - The pose from `ridePose` for the camera at the satellite.
+ * @param look - The look the pose was made with.
+ * @returns The pose moved back from the satellite, with how far the camera is from it in Earth radii and how many degrees below the middle of the picture the satellite is.
+ *
+ * @example
+ * ```ts
+ * import { outsidePose, ridePose } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const at = ridePose({ position: [1.066, 0, 0], velocity: [0, 0, -7.66], look: "horizon", yaw: 0, tilt: 0, zoom: 1 });
+ * const out = outsidePose(at, "horizon");
+ * console.log(out.distance.toFixed(4), out.below.toFixed(1), out.pose.position.map((n) => n.toFixed(4)).join(","));
+ * ```
+ */
+export function outsidePose(pose: RidePose, look: RideLook): { pose: RidePose; distance: number; below: number } {
+  const height = Math.max(0, norm(pose.position) - 1);
+  const distance = Math.max(1e-5, Math.min(OUTSIDE_KM / 6371, height * 0.5));
+  const below = look === "horizon" ? Math.atan(OUTSIDE_LOW * Math.tan((pose.fov / 2) * RAD)) : 0;
+  // the satellite is along the line of sight turned `below` down (towards the bottom of the picture): the camera is back along that line
+  const line = add(scale(pose.forward, Math.cos(below)), scale(pose.up, -Math.sin(below)));
+  return { pose: { ...pose, position: add(pose.position, scale(line, -distance)) }, distance, below: below / RAD };
+}
+
+/**
  * The camera of a body-borne view: at `position`, looking at the Earth, with the way the body is going at the top of the picture. `look: "horizon"` tips it forward until the horizon is a little above the middle. A drag looks about from there on the spot:
  * `yaw` turns the camera to its left and `tilt` tips it towards the bottom of its picture, so the ground follows the pointer (right for a drag right, up for a drag up); the angle for each pixel of the drag is the field of view's, so the pace is the same at any zoom.
  * In the `horizon` look a sideways drag turns about the local vertical (the line from the Earth's centre through the camera), all the way round, and up and down only tips the view, from straight down to 20 degrees above the horizon, so the horizon stays level and
