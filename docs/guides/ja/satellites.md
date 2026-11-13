@@ -194,6 +194,67 @@ space.addEventListener("chikyu-path-hover", (event) => console.log((event as Cus
 console.log(space.pathAt(10, 10)); // { id, ref, style, x, y, distancePx, pointer } or null
 ```
 
+## 今日から遠いとき: 推定
+
+表示する時刻が軌道要素から30日 (`maxAgeDays`) より離れると、衛星は表示から外れます。要素を取った日からそれほど離れると、SGP4 に本当のことが言えないからです。時計を来年や去年に動かすページでは、衛星が消えます。**`estimate-far`** (プロパティ `estimateFar` または `createSatellites(sets, { estimateFar: true })`。初期値はオフなので、頼まない限り何も変わりません) は、衛星を残します。同じ要素を、同じ SGP4 のコードで先へ、または後ろへ進め、各衛星は、古い要素のうすい表示より**さらに明るい色**で描かれます。
+
+**推定とは何か。** 要素を取ってから軌道が変わらなかったとしたら、衛星があるはずの場所です。それだけです。軌道が最も速く変わるところで、最もあてになりません。**低い軌道**では、空気抵抗が数日で軌道を縮め、遅くし、運用者は衛星を動かすので、数週間たつと、推定は本当の位置から軌道に沿って大きくずれることがあります。そして**長い時間**(数か月)が離れているときもそうです。高い軌道はゆっくり変わるので、数か月は近いままです。大気圏に再突入した衛星は、そこにはいません。ページには「推定」と書き、衛星がある場所の上を通る時刻のように、正しくなければならないことには推定を使わないでください。
+
+- 推定された衛星は、`placeSatellite`、`satelliteInfo` (`estimatedDays` つき)、`chikyu-satellite-click` と `chikyu-satellite-visibility` の `detail` で `estimated: true` になります。`estimatedDays` は、表示している時刻が要素の時刻から、どちら向きでも何日離れているかです。カードに「推定、最後の追跡から36日」と書けます。`stats.satellites.estimated` は、直前の描画で置いた衛星のうち、推定のものの数です。30日以内の衛星はこれまでどおり置かれ、推定ではありません。
+- 打ち上げの前、崩壊の後には置きません。要素に `LAUNCH_DATE` と `DECAY_DATE` があるとき (CelesTrak の衛星カタログが書いており、`parseElements` はそれを残します)、前者より前、後者の日の終わりより後には置きません。打ち上げ日がなければ、国際標識 (`1998-067A`) の年の初めが最も早い日です。
+- SGP4 がそこまで要素を進められないとき、または衛星が高さ約120 km より下に落ちるときは、表示から外し、置いたものとして数えません。推定が地球の中や、燃え尽きたはずの大気の中に描かれることはありません。400日先へ進めると、低い Starlink 衛星の多くは、この理由で消えます。
+- オンとオフを切り替えると、次の描画ですべての群を置き直し、静止しているときは何も描きません。ページが群をこのオプション付きで作ったかどうかにかかわらず、要素にあるすべての群に効きます。
+
+`estimate-far` をつけ、要素から43日後の時刻にしたページです。
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A satellite far from its elements, as an estimate</title>
+  </head>
+  <body>
+    <chikyu-space center="-100,40" time="2026-12-15T12:00Z" speed="0" estimate-far texture-base="/textures/" style="width: 420px"></chikyu-space>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
+```
+
+そのスクリプトです。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, type ElementSet } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+// Your page gets the elements (CelesTrak's JSON, within its usage policy) and passes them in; this is one downloaded element set.
+const iss: ElementSet = {
+  OBJECT_NAME: "ISS (ZARYA)",
+  OBJECT_ID: "1998-067A",
+  EPOCH: "2026-11-02T10:25:21.580320",
+  MEAN_MOTION: 15.49150046,
+  ECCENTRICITY: 0.0007139,
+  INCLINATION: 51.6332,
+  RA_OF_ASC_NODE: 335.9757,
+  ARG_OF_PERICENTER: 339.3739,
+  MEAN_ANOMALY: 20.6961,
+  NORAD_CAT_ID: 25544,
+  BSTAR: 0.00012,
+  MEAN_MOTION_DOT: 0.0001,
+  MEAN_MOTION_DDOT: 0,
+};
+
+const space = document.querySelector("chikyu-space")!;
+space.setSatellites("stations", createSatellites([iss]), { color: "#ffd54f", size: 6 });
+// The page's moment is 43 days after the elements, past the 30 days a satellite is placed within: `estimate-far` (in the page) keeps it on the picture, drawn lighter, as where it would be had its orbit not changed.
+space.addEventListener("chikyu-satellite-click", (event) => {
+  const { estimated, estimatedDays } = (event as CustomEvent).detail;
+  console.log(estimated ? `estimated, ${Math.round(estimatedDays)} days from its last tracking` : "placed from current elements");
+});
+console.log(space.estimateFar, space.placeSatellite({ group: "stations", index: 0 })?.estimated); // true true
+```
+
 ## カタログ
 
 GPS 衛星がどのリストにあるかをページが知らなくてすむように、パッケージには、名前、番号、軌道の種類を日本語と英語で並べた小さなカタログがあります。14のグループ (宇宙ステーション、有名な衛星、科学、地球観測、気象、静止衛星、GPS、GLONASS、ガリレオ、北斗、アマチュア無線、OneWeb、イリジウム、Starlink) と、名前を挙げる価値のある約40機があります。ISS や天宮から、いちばん古い現役の衛星バンガード1までです。各グループには、どの CelesTrak のリストにあるか (`celestrak`)、またはどの番号を1つずつ頼むか (`catnr`) が書いてあります。**軌道要素は入っていません。** 要素は、これまでどおりページが取得します。静止衛星 (`still: true`) は赤道の1点の上にあり、動かないように見えます。JWST は地球の軌道にいないので、入っていません。

@@ -194,6 +194,67 @@ space.addEventListener("chikyu-path-hover", (event) => console.log((event as Cus
 console.log(space.pathAt(10, 10)); // { id, ref, style, x, y, distancePx, pointer } or null
 ```
 
+## Far from today: an estimate
+
+A satellite is left out when the moment shown is more than 30 days (`maxAgeDays`) from its element set, because SGP4 has nothing true to say that far from the day the elements were taken. A page that scrubs the clock to next year, or back to last, sees the satellites go. **`estimate-far`** (the property `estimateFar`, or `createSatellites(sets, { estimateFar: true })`; off by default, so nothing changes unless you ask) keeps them: the same element set is carried forward or back by the same SGP4 code, and each satellite is drawn **lighter** than a dimmed one.
+
+**What the estimate is.** It is where the satellite would be if its orbit had not changed since the elements were taken. Nothing more. It is worst where orbits change fastest: **a low orbit** (air drag shortens and slows it within days, and operators move their satellites with manoeuvres, so after weeks the estimate can be a long way along the orbit from the truth), and **a long time away** (months). A high orbit changes slowly and stays close for months. A satellite that has re-entered is not there at all. Say so on the page ("estimated"), and do not use an estimate for anything that has to be right, such as when a satellite will pass over a place.
+
+- Each estimated satellite is `estimated: true` in `placeSatellite`, in `satelliteInfo` (with `estimatedDays`) and in the details of `chikyu-satellite-click` and `chikyu-satellite-visibility`, where `estimatedDays` is how far the moment shown is from its elements' own, in days, whichever way: a card can say "estimated, 36 days from its last tracking". `stats.satellites.estimated` is how many of those placed in the last draw are estimates. A satellite inside the 30 days is placed as ever and is not an estimate.
+- Never before its launch or after its decay: when an element set carries `LAUNCH_DATE` and `DECAY_DATE` (CelesTrak's satellite catalogue writes them; `parseElements` keeps them) a satellite is not placed before the first or after the last day of the second. Without a launch date, the year in the international designator (`1998-067A`) is the earliest.
+- When SGP4 cannot carry the elements that far, or brings the satellite down below about 120 km, it is left out and is not counted as placed: an estimate is never drawn inside the Earth or in the air it would have burned up in. Carried 400 days on, a low Starlink satellite is usually gone for this reason.
+- Turning it on or off places every group again at the next draw, and nothing is drawn at rest. It applies to every group on the element, whether the page made the group with the option or not.
+
+The page, with `estimate-far` set and a moment 43 days after the elements:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A satellite far from its elements, as an estimate</title>
+  </head>
+  <body>
+    <chikyu-space center="-100,40" time="2026-12-15T12:00Z" speed="0" estimate-far texture-base="/textures/" style="width: 420px"></chikyu-space>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
+```
+
+And its script:
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, type ElementSet } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+// Your page gets the elements (CelesTrak's JSON, within its usage policy) and passes them in; this is one downloaded element set.
+const iss: ElementSet = {
+  OBJECT_NAME: "ISS (ZARYA)",
+  OBJECT_ID: "1998-067A",
+  EPOCH: "2026-11-02T10:25:21.580320",
+  MEAN_MOTION: 15.49150046,
+  ECCENTRICITY: 0.0007139,
+  INCLINATION: 51.6332,
+  RA_OF_ASC_NODE: 335.9757,
+  ARG_OF_PERICENTER: 339.3739,
+  MEAN_ANOMALY: 20.6961,
+  NORAD_CAT_ID: 25544,
+  BSTAR: 0.00012,
+  MEAN_MOTION_DOT: 0.0001,
+  MEAN_MOTION_DDOT: 0,
+};
+
+const space = document.querySelector("chikyu-space")!;
+space.setSatellites("stations", createSatellites([iss]), { color: "#ffd54f", size: 6 });
+// The page's moment is 43 days after the elements, past the 30 days a satellite is placed within: `estimate-far` (in the page) keeps it on the picture, drawn lighter, as where it would be had its orbit not changed.
+space.addEventListener("chikyu-satellite-click", (event) => {
+  const { estimated, estimatedDays } = (event as CustomEvent).detail;
+  console.log(estimated ? `estimated, ${Math.round(estimatedDays)} days from its last tracking` : "placed from current elements");
+});
+console.log(space.estimateFar, space.placeSatellite({ group: "stations", index: 0 })?.estimated); // true true
+```
+
 ## The catalogue
 
 So that a page does not have to know which list holds the GPS satellites, the package carries a small catalogue of names, numbers and orbit kinds, in English and Japanese: fourteen groups (stations, famous ones, science, Earth observation, weather, geostationary, GPS, GLONASS, Galileo, BeiDou, amateur radio, OneWeb, Iridium, Starlink) and about forty satellites worth naming, from the ISS and Tiangong to Vanguard 1, the oldest satellite still in orbit. Each group says which CelesTrak list holds it (`celestrak`) or which numbers to ask for one by one (`catnr`). **It has no orbital elements**: your page still fetches those. Geostationary satellites (`still: true`) sit over one point of the equator and do not appear to move, and JWST is not in it because it is not in Earth orbit.
