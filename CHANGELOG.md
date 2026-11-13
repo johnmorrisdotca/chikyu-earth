@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.46.1 - 2026-11-13
 
 - **Ride along keeps the satellite at the bottom, large, sharp and steady** (MODULES-1303). In an outside ride along (`view: "from"`, `look: "horizon"`) the satellite's middle is at 90 per cent of the picture's height and its model is drawn 17 per cent of the height in radius, so it sits at the bottom middle with part of it below the bottom edge; the page's model is told that real size (`update({ radiusPx })`) so it can be drawn sharp. Looking down (Ride above) it is at the centre. Its attitude is the track frame (long axis along the way it goes, top straight up) at every frame; a moment with no level speed keeps the last good frame instead of dropping the model. The ridden satellite's model does not depend on the satellite layers (`showSatellites`, a focus that hides the others), and its ring and name are left off, since they would cover it. `stats.followModel` gains `radiusPx`, `box` and `axes`. The page must call `setSatellitePainter` with its models before `ride`, and `ride(ref, { view: "from", look: "horizon" })` (outside is the default); the satellite must stay in a group set with `setSatellites` (removing the group ends the ride). `e2e/ride-model.gl.ts` holds the tests.
 
