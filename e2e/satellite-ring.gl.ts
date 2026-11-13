@@ -74,3 +74,34 @@ test("a ring asked for out of view is there on the first draw that shows the sat
   }
   expect(shown, "turning the view brought the satellite into the picture").toBe(true);
 });
+
+test("every placed satellite has numbers that can be drawn, an edge only when it is outside the box, and behind the camera is an edge too", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=-100,40&sats=stations`);
+  await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+  await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "satelliteGroups") as { count: number }[])[0]?.count ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
+  const count = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "satelliteGroups") as { count: number }[])[0]!.count);
+  const box = await page.locator(SPACE).evaluate((el) => ({ width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height }));
+  let outside = 0;
+  for (const view of [{ yaw: 0, tilt: 0, zoom: 2.4 }, { yaw: 120, tilt: 40, zoom: 6 }, { yaw: -70, tilt: -30, zoom: 1.2 }]) {
+    await page.locator(SPACE).evaluate((el, v) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView(v, true), view);
+    await untilStill(page);
+    for (let i = 0; i < count; i += 1) {
+      const place = await placeOf(page, i);
+      if (!place) continue;
+      expect(Number.isFinite(place.x) && Number.isFinite(place.y) && Number.isFinite(place.heightKm), `station ${i} has finite numbers`).toBe(true);
+      if (place.visible) {
+        expect(place.edge, `station ${i} in the picture is past no edge`).toBeNull();
+        expect(place.behind).toBe(false);
+        expect(place.x >= 0 && place.x <= box.width && place.y >= 0 && place.y <= box.height, `station ${i} is inside the box`).toBe(true);
+      }
+      if (place.edge === null && !place.behind) continue;
+      outside += 1;
+      expect(place.visible, `station ${i} past an edge is not visible`).toBe(false);
+      if (place.behind) expect(place.edge, `station ${i} behind the camera still says which way`).not.toBeNull();
+      const beyond = { left: place.x < 0, right: place.x > box.width, top: place.y < 0, bottom: place.y > box.height };
+      if (place.edge) expect(beyond[place.edge], `station ${i}: ${place.edge} is the side its place lies beyond`).toBe(true);
+    }
+  }
+  expect(outside, "some station lay outside the picture in these views").toBeGreaterThan(0);
+});
