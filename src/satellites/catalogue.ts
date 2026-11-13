@@ -1,5 +1,6 @@
 // A small curated catalogue of satellites worth following: the groups the demo offers as buttons and the famous ones by name. Facts (names, NORAD numbers, orbit types) and our own words;
 // no orbital elements are here, and nothing is fetched. The elements come from the page (see docs/satellite-sources.md for the sources and their terms).
+import { foldKana } from "./kana.ts";
 import { SHORT_NAMES } from "./names.ts";
 
 /**
@@ -381,7 +382,7 @@ export function catalogueRows(lang?: "en" | "ja"): CatalogueRow[] {
 
 /**
  * Find catalogue entries by name, group name, NORAD number, Japanese name or a group's Japanese label: "hubble", "hst", "25544", "weather" or "ハッブル".
- * An English or numeric query ignores case, spaces and punctuation, as before. Kana and kanji are matched as typed: only letter case and character width are folded (NFKC), and that same width fold is applied before the English comparison.
+ * An English or numeric query ignores case, spaces and punctuation, as before. Japanese is folded on both sides: letter case, character width (NFKC) and kana (`foldKana`: hiragana to katakana, small kana to full-size, the long-vowel mark left alone), so `はっぶる` finds `ハッブル`; kanji are matched as typed. The width fold is applied before the English comparison too.
  * A name that starts with the text comes before one that only has it inside.
  *
  * @param text - What the reader typed.
@@ -398,7 +399,7 @@ export function catalogueRows(lang?: "en" | "ja"): CatalogueRow[] {
 export function findInCatalogue(text: string, limit = 8): CatalogueEntry[] {
   const source = text.normalize("NFKC");
   const wanted = squash(source);
-  const folded = source.toLowerCase().trim();
+  const folded = foldKana(source).toLowerCase().trim();
   const japanese = /[぀-ヿ一-鿿]/.test(source);
   if (!wanted && !japanese) return [];
   const starts: CatalogueEntry[] = [];
@@ -407,8 +408,8 @@ export function findInCatalogue(text: string, limit = 8): CatalogueEntry[] {
     const name = squash(entry.name);
     const englishStart = wanted !== "" && (String(entry.noradId) === wanted || name.startsWith(wanted));
     const englishInside = wanted !== "" && (name.includes(wanted) || squash(entry.group).includes(wanted) || squash(entry.about).includes(wanted));
-    const jaName = japanese ? (SHORT_NAMES[entry.noradId]?.ja ?? entry.name).normalize("NFKC").toLowerCase() : "";
-    const labelJa = japanese ? (GROUPS_BY_ID.get(entry.group)?.labelJa ?? "").normalize("NFKC").toLowerCase() : "";
+    const jaName = japanese ? foldKana(SHORT_NAMES[entry.noradId]?.ja ?? entry.name).toLowerCase() : "";
+    const labelJa = japanese ? foldKana(GROUPS_BY_ID.get(entry.group)?.labelJa ?? "").toLowerCase() : "";
     const jaStart = japanese && folded !== "" && jaName.startsWith(folded);
     const jaInside = japanese && folded !== "" && (jaName.includes(folded) || labelJa.includes(folded));
     if (englishStart || jaStart) starts.push(entry);

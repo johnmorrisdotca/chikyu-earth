@@ -4,6 +4,7 @@ export { NEAREST_COUNT, closeApproach, nearest, overheadKm, within, type Neighbo
 export { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED } from "./limits.ts";
 export type { ElementSet, RefusedElementSet, SatelliteInfo, SatelliteRef, Satellites } from "./types.ts";
 export { SHORT_NAMES } from "./names.ts";
+export { foldKana } from "./kana.ts";
 export { OWNER_COUNTRIES, ownerCountry } from "./owners.ts";
 export { CATALOGUE, SATELLITE_GROUPS, catalogueEntry, catalogueRows, findInCatalogue, type CatalogueEntry, type CatalogueRow, type OrbitKind, type SatelliteGroupInfo } from "./catalogue.ts";
 export { ElementSourceError, fetchElements, forgetElements, parseElements, type ElementFormat, type ElementSource, type FetchElementsOptions, type ParsedElements } from "./source.ts";
