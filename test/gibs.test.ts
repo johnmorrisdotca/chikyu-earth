@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAssetCache } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { GIBS_CREDIT, gibsGrid, gibsTiles, gridKey, gridKeys, gridPastExtent, gridTileAt, previousUtcDay, samplesAreBlank, utcDay } from "../src/door/index.ts";
-import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
+import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_NAMES, NODATA_BELOW, NODATA_FULL, knockOutNoData, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
 import { createTileSet, type TileSources } from "../src/realistic/tile-set.ts";
 import type { ThreeParts } from "../src/realistic/textures.ts";
 import type { TileCamera } from "../src/realistic/tiles.ts";
@@ -69,11 +69,12 @@ test("a day outside the layer's range names no tile, and a tile that fails or is
   const modis = GIBS_LAYERS["MODIS_Terra_CorrectedReflectance_TrueColor"]!;
   assert.equal(gibsDay(modis, "2001-06-20", Date.UTC(2026, 5, 21)), undefined);
   assert.equal(gibsDay(GIBS_LAYERS["BlueMarble_ShadedRelief_Bathymetry"]!, "previous-day", Date.UTC(2026, 10, 13)), "default");
-  const quiet = gibsTiles({ time: () => new Date("2000-02-24T12:00:00Z"), fetch: () => Promise.reject(new Error("no request expected")) });
+  const quiet = gibsTiles({ time: () => new Date("2000-02-24T12:00:00Z"), layer: "today", fetch: () => Promise.reject(new Error("no request expected")) });
   assert.deepEqual(quiet.need({ lonMin: -1, lonMax: 1, latMin: -1, latMax: 1, layer: "day" }, 50000), [], "the day before the first day of the layer: nothing is asked");
   const urls: string[] = [];
   const source = gibsTiles({
     time: () => new Date("2026-06-21T12:00:00Z"),
+    layer: "today",
     date: "previous-day",
     fetch: (url) => {
       urls.push(url);
@@ -100,6 +101,7 @@ test("finer tiles are asked for only closer than the package's own, then fade in
   const urls: string[] = [];
   const source = gibsTiles({
     time: () => new Date("2026-06-21T12:00:00Z"),
+    layer: "today",
     fetch: (url) => {
       urls.push(url);
       return Promise.resolve(new Response(new Uint8Array([1]), { status: 200 }));
@@ -187,6 +189,7 @@ const answering = (shown: string, has: (day: string) => boolean, extra: Partial<
   let changed = 0;
   const source = gibsTiles({
     time: () => new Date(`${shown}T12:00:00Z`),
+    layer: "today",
     changed: () => {
       changed += 1;
     },
@@ -205,9 +208,9 @@ const settleAll = async (): Promise<void> => {
   for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
 };
 
-test("the default is the Terra layer, and a day is looked for from the day before the shown one, one tile a day, newest first", () => {
-  assert.equal(GIBS_DEFAULT_LAYER, "MODIS_Terra_CorrectedReflectance_TrueColor");
-  const terra = GIBS_LAYERS[GIBS_DEFAULT_LAYER]!;
+test("the daily layer is MODIS Terra under the name today, and a day is looked for from the day before the shown one, one tile a day, newest first", () => {
+  assert.equal(GIBS_NAMES["today"], "MODIS_Terra_CorrectedReflectance_TrueColor");
+  const terra = GIBS_LAYERS[GIBS_NAMES["today"]!]!;
   assert.deepEqual(gibsCandidates(terra, "2026-11-12").slice(0, 3), ["2026-11-12", "2026-11-11", "2026-11-10"]);
   assert.equal(gibsCandidates(terra, "2026-11-12").length, GIBS_LOOKBACK_DAYS, "at most ten days");
   assert.deepEqual(gibsCandidates(terra, "2000-02-25"), ["2000-02-25", "2000-02-24"], "stops at the layer's first day");
@@ -272,4 +275,87 @@ test("a fixed rule asks for no search: the day before, the shown day or a day na
   }
   const before = answering("2026-11-13", () => false, { date: "1999-12-31" });
   assert.deepEqual(before.source.need(place, 50000), [], "a date before the layer's first day asks nothing");
+});
+
+test("the 31.25 m matrix: twelve levels, 512 pixel tiles, and the tile of a place is the one the service answered with on 2026-11-13", () => {
+  const grid = gibsGrid("31.25m");
+  assert.equal(grid.levels.length, 12);
+  assert.equal(grid.tileSize, 512);
+  const shape = [2, 3, 5, 10, 20, 40, 80, 160, 320, 640, 1280, 2560];
+  grid.levels.forEach((level, index) => {
+    assert.equal(level.columns, shape[index], `level ${index} columns`);
+    assert.equal(level.rows, [1, 2, 3, 5, 10, 20, 40, 80, 160, 320, 640, 1280][index], `level ${index} rows`);
+    assert.equal(level.width, 360 / (0.5625 / 2 ** index));
+  });
+  assert.equal(grid.levels[11]!.width, 1_310_720, "the finest level is 1.3 million pixels round the Earth, 30 m at the equator");
+  // the tiles that the service returned a picture for, the same ones this grid names (row/column in the address, column/row in a key)
+  const places: [string, number, number, number, number, number][] = [
+    ["Vancouver", -123.1, 49.25, 9, 72, 101],
+    ["Vancouver", -123.1, 49.25, 10, 144, 202],
+    ["Vancouver", -123.1, 49.25, 11, 289, 404],
+    ["Tokyo", 139.76, 35.68, 9, 96, 568],
+    ["Tokyo", 139.76, 35.68, 11, 386, 2273],
+    ["Paris", 2.35, 48.86, 10, 146, 648],
+    ["the Sahara", 10, 25, 9, 115, 337],
+  ];
+  for (const [name, lon, lat, level, row, col] of places) {
+    assert.deepEqual(gridTileAt(grid.levels[level]!, lon, lat, grid.extent), { col, row }, `${name}, level ${level}`);
+    assert.deepEqual(gridKeys(grid, { lonMin: lon - 1e-4, lonMax: lon + 1e-4, latMin: lat - 1e-4, latMax: lat + 1e-4 }, grid.levels[level]!.width), [`${level}/${col}/${row}`], `${name} key`);
+  }
+  assert.equal(gridPastExtent(grid.levels[3]!, 0, 0), false);
+  assert.equal(gridPastExtent(grid.levels[2]!, 0, 2), true);
+});
+
+test("the default is the Landsat annual mosaic: its year is not searched for, its tiles are on the 31.25 m grid, and its credit says so", () => {
+  forgetGibsDays();
+  assert.equal(GIBS_DEFAULT_LAYER, "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual");
+  assert.equal(GIBS_NAMES["landsat"], GIBS_DEFAULT_LAYER);
+  const urls: string[] = [];
+  const source = gibsTiles({ time: () => new Date("2026-11-13T12:00:00Z"), fetch: (url) => (urls.push(url), Promise.reject(new Error("offline"))) });
+  assert.equal(source.holes, true, "its tiles have holes where there is no data");
+  assert.equal(source.grid!.levels.length, 12);
+  const keys = source.need({ lonMin: -123.1001, lonMax: -123.0999, latMin: 49.2499, latMax: 49.2501, layer: "day" }, 327_680);
+  assert.deepEqual(keys, ["2000-12-01/9/101/72"], "the newest year, at the level the view needs");
+  assert.equal(urls.length, 0, "no search for a day, no probe");
+  assert.match(source.info.credit.en, /^We acknowledge the use of imagery provided by services from NASA's Global Imagery Browse Services/);
+  assert.match(source.info.credit.en, /Global Web-Enabled Landsat Data \(GWELD\)/);
+  assert.match(source.info.credit.ja, /GWELD/);
+  const named = (layer: string, date?: string) => gibsTiles({ time: () => new Date("2026-11-13T12:00:00Z"), layer, ...(date ? { date } : {}) });
+  const first = (source: ReturnType<typeof gibsTiles>) => source.need({ lonMin: -123.1001, lonMax: -123.0999, latMin: 49.2499, latMax: 49.2501, layer: "day" }, 327_680)[0];
+  assert.equal(first(named("landsat")), "2000-12-01/9/101/72");
+  assert.equal(first(named("landsat", "1990-05-05")), "1990-12-01/9/101/72", "a year the layer has, by the year of the date");
+  assert.equal(first(named("landsat", "1991-01-01")), "2000-12-01/9/101/72", "a year it has not: the newest");
+  assert.equal(first(named(GIBS_DEFAULT_LAYER, "previous-day")), "2000-12-01/9/101/72", "the day rules are for the daily layers");
+  const today = named("today");
+  assert.equal(today.grid!.levels.length, 9, "the daily layer is on the 250 m grid");
+  assert.doesNotMatch(today.info.credit.en, /GWELD/);
+});
+
+test("black is no data: a pixel is transparent at black, opaque from a dim picture, and a share between; the colours take the layer's gain", () => {
+  const pixels = new Uint8ClampedArray([0, 0, 0, 255, NODATA_BELOW, 0, 0, 255, NODATA_FULL, 0, 0, 255, 100, 120, 80, 255, 8, 8, 8, 255]);
+  const clear = knockOutNoData(pixels);
+  assert.equal(pixels[3], 0, "black");
+  assert.equal(pixels[7], 0, "at the lower limit");
+  assert.equal(pixels[11], 255, "at the upper limit");
+  assert.equal(pixels[15], 255, "a picture's own colour");
+  assert.ok(pixels[19]! > 0 && pixels[19]! < 255, "between: a share");
+  assert.equal(clear, 2 / 5);
+  assert.deepEqual([...pixels.subarray(12, 15)], [100, 120, 80], "no gain: unchanged");
+  const lit = new Uint8ClampedArray([200, 200, 200, 255, 0, 0, 0, 255]);
+  knockOutNoData(lit, [0.5, 0.25, 0]);
+  assert.deepEqual([...lit.subarray(0, 4)], [100, 50, 0, 255], "the gain of each channel");
+  assert.equal(lit[7], 0, "and black stays no data");
+  assert.equal(knockOutNoData(new Uint8ClampedArray(0)), 0);
+  // a layer with nearly black water: cleared by luminance, the sea (7, 25, 12) clear, a wooded slope (22, 54, 7) and a field (117, 126, 95) opaque
+  const land = new Uint8ClampedArray([7, 25, 12, 255, 22, 54, 7, 255, 117, 126, 95, 255, 8, 39, 6, 255]);
+  const share = knockOutNoData(land, undefined, [20, 32]);
+  assert.equal(land[3], 0, "sea");
+  assert.equal(land[7], 255, "wooded slope");
+  assert.equal(land[11], 255, "field");
+  assert.ok(land[15]! > 100 && land[15]! < 255, "a dark slope: partly clear, the picture under shows through");
+  assert.equal(share, 1 / 4);
+  assert.deepEqual(GIBS_LAYERS[GIBS_DEFAULT_LAYER]!.clear, [20, 32]);
+  const whole = new Uint8ClampedArray(64 * 4);
+  for (let i = 3; i < whole.length; i += 4) whole[i] = 255;
+  assert.equal(knockOutNoData(whole), 1, "a tile all black is all transparent");
 });

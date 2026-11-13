@@ -49,7 +49,8 @@ void main() {
   float ndv = clamp(dot(n, toEye), 0.0, 1.0);
   float day = smoothstep(-0.10, 0.22, ndl);
   vec2 g = ${tile ? "vUvG" : "vUv"};
-  vec3 albedo = texture2D(dayMap, vUv).rgb;
+  vec4 texel = texture2D(dayMap, vUv);
+  vec3 albedo = texel.rgb;
   float water = texture2D(waterMap, g).r;
   albedo = pow(albedo, vec3(0.86)) * 1.08;
   albedo *= mix(vec3(1.0), vec3(1.05, 1.22, 1.55), water);
@@ -98,7 +99,7 @@ void main() {
     col = mix(col, vec3(1.0, 0.55, 0.12), clamp(show, 0.0, 0.92));
   }
 
-  gl_FragColor = vec4(col, ${tile ? "tileAlpha" : "1.0"});
+  gl_FragColor = vec4(col, ${tile ? "tileAlpha * texel.a" : "1.0"});
 }`;
 
 export const SURFACE_FRAG = surfaceFrag(false);

@@ -480,8 +480,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
-      transparent: false,
-      depthWrite: true,
+      // a source whose tiles have holes (no data, which the source made transparent) is drawn blended, so the picture under it shows there
+      transparent: entry.source.holes === true,
+      depthWrite: entry.source.holes !== true,
     });
     entry.cover = cover;
     const mesh = new three.Mesh(geometry, material);
@@ -708,8 +709,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         entry.cover.value = t;
         const material = entry.mesh?.material as { transparent?: boolean; depthWrite?: boolean } | undefined;
         if (material) {
-          material.transparent = t < 1;
-          material.depthWrite = t >= 1;
+          const holes = entry.source.holes === true;
+          material.transparent = t < 1 || holes;
+          material.depthWrite = t >= 1 && !holes;
         }
         if (t < 1) fading = true;
       }

@@ -65,11 +65,21 @@ interface DayRange {
 
 interface GibsLayer {
   id: string;
-  matrix: "250m" | "500m";
-  /** Empty for a picture that has no day (the shaded relief). */
+  matrix: "31.25m" | "250m" | "500m";
+  /** Empty for a picture that has no day (the shaded relief, and the annual Landsat mosaics, which have `years`). */
   ranges: readonly DayRange[];
   /** True when the picture is one day of the satellite and clouds are left in. */
   clouds: boolean;
+  /** For a layer with one picture a year: the years' times, as the service names them (`yyyy-mm-dd`), oldest first. The newest is the one used unless a page names another of them. */
+  years?: readonly string[];
+  /**
+   * For a layer that shows water as nearly black (the Landsat mosaics): the luminance (0 to 255) below which a pixel is clear and from which it is opaque, so the sea is left to the package's blue ocean and the picture is a land picture. Left out, only the black of no data is cleared.
+   */
+  clear?: readonly [number, number];
+  /** Multiplies each colour, to bring the picture to the look of the package's own pictures (found by comparing them over land, see NOTICE.md). */
+  gain?: readonly [number, number, number];
+  /** A sentence about the layer's own data, added to NASA's acknowledgement while its tiles are on the screen. */
+  credit?: { en: string; ja: string };
 }
 
 /**
@@ -77,6 +87,22 @@ interface GibsLayer {
  * The two daily layers are true colour with the clouds left in. The shaded relief is the same kind of picture as the package's own level 5, and is only a stand-in.
  */
 export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
+  Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual: {
+    id: "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual",
+    matrix: "31.25m",
+    clouds: false,
+    ranges: [],
+    // as the capabilities document listed them on 2026-11-13: 1983-12-01 to 1985-12-01, 1988-12-01 to 1990-12-01, 1998-12-01 to 2000-12-01, a picture a year
+    years: ["1983-12-01", "1984-12-01", "1985-12-01", "1988-12-01", "1989-12-01", "1990-12-01", "1998-12-01", "1999-12-01", "2000-12-01"],
+    // per channel, the median over six land places of our level 5 divided by this layer's mean (NOTICE.md): the package's pictures are darker and warmer
+    gain: [0.76, 0.66, 0.55],
+    // the sea is (7, 25, 12) there and a dark wooded slope (8, 39, 6) to (22, 54, 7): clear below a luminance of 20, opaque from 32
+    clear: [20, 32],
+    credit: {
+      en: "Landsat imagery: NASA Global Web-Enabled Landsat Data (GWELD), annual 30 m mosaic, distributed by NASA's LP DAAC.",
+      ja: "Landsat画像：NASAのGlobal Web-Enabled Landsat Data（GWELD）の年間30 mモザイク。NASAのLP DAACが配布しています。",
+    },
+  },
   VIIRS_SNPP_CorrectedReflectance_TrueColor: {
     id: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
     matrix: "250m",
@@ -111,9 +137,18 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
   BlueMarble_ShadedRelief_Bathymetry: { id: "BlueMarble_ShadedRelief_Bathymetry", matrix: "500m", clouds: false, ranges: [] },
 };
 
-/** The layer a page gets without naming one: MODIS Terra true colour, whose days run to the present (the VIIRS layer's lagged days behind by ten days or more when this was read). */
-export const GIBS_DEFAULT_LAYER = "MODIS_Terra_CorrectedReflectance_TrueColor";
+/**
+ * The layer a page gets without naming one: the Landsat annual true-colour mosaic (30 m, no cloud, land only; the year 2000, the newest it has). The daily layers are a named choice: `today` for MODIS Terra.
+ * A layer id is taken as it is, and these short names stand for two of them.
+ */
+export const GIBS_DEFAULT_LAYER = "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual";
 const DEFAULT_LAYER = GIBS_DEFAULT_LAYER;
+
+/** The short names `tiles-finer-layer` takes besides a layer's own id: `landsat` (the default) and `today` (the daily picture of MODIS Terra, with its clouds). */
+export const GIBS_NAMES: Readonly<Record<string, string>> = {
+  landsat: GIBS_DEFAULT_LAYER,
+  today: "MODIS_Terra_CorrectedReflectance_TrueColor",
+};
 
 /** How many days, counting the first, the default rule looks back for a day with imagery. */
 export const GIBS_LOOKBACK_DAYS = 10;
@@ -195,6 +230,11 @@ function fixedDay(rule: string, ms: number): string | undefined {
 
 /** A day the layer can serve for a fixed rule (`latest`, the default, starts at the day before `ms`), or `undefined` when it lands where the layer has no imagery (nothing is requested). */
 export function gibsDay(layer: GibsLayer, rule: string, ms: number): string | undefined {
+  if (layer.years) {
+    // one picture a year: the year a page names if the layer has it (any day of that year), else the newest
+    const named = /^\d{4}/.test(rule) ? layer.years.find((time) => time.slice(0, 4) === rule.slice(0, 4)) : undefined;
+    return named ?? layer.years[layer.years.length - 1];
+  }
   if (layer.ranges.length === 0) return "default";
   const named = fixedDay(rule, ms) ?? previousUtcDay(ms);
   return gibsHasDay(layer, named) ? named : undefined;
@@ -249,6 +289,70 @@ export interface GibsTilesOptions extends EarthTilesOptions {
   changed?: () => void;
 }
 
+/** Where a pixel's brightest channel is at or below this, the tile has no data there (the service paints it black): the pixel is wholly transparent. */
+export const NODATA_BELOW = 3;
+/** And from this up it is the picture's own: opaque. Between the two the pixel is more or less transparent, so the edge of a gap is not a hard black line. */
+export const NODATA_FULL = 14;
+
+/**
+ * Turn a tile's black, the service's paint for a place it has no data for, into transparency, and bring the colours to the package's own look: a pixel is transparent when its brightest channel is at most `NODATA_BELOW`, opaque from
+ * `NODATA_FULL`, and in between a share of that; each colour is multiplied by `gain` (left out: not changed). Changes `pixels` in place.
+ *
+ * @param pixels - RGBA bytes.
+ * @param gain - Red, green and blue multipliers.
+ * @param clear - Luminance limits to clear by instead of the brightest channel's (a layer whose water is nearly black).
+ * @returns The share of pixels left wholly transparent, from 0 to 1.
+ *
+ * @example
+ * ```ts
+ * import { knockOutNoData } from "@johnmorrisdotca/chikyu-earth/door";
+ *
+ * const pixels = new Uint8ClampedArray([0, 0, 0, 255, 100, 120, 80, 255]);
+ * console.log(knockOutNoData(pixels), pixels[3]);
+ * ```
+ */
+export function knockOutNoData(pixels: Uint8ClampedArray, gain?: readonly [number, number, number], clear?: readonly [number, number]): number {
+  let cleared = 0;
+  const count = pixels.length / 4;
+  for (let i = 0; i < pixels.length; i += 4) {
+    // the picture's own darkness: by luminance where the layer shows water as nearly black, else by the brightest channel (the service's black for no data)
+    const level = clear ? 0.299 * pixels[i]! + 0.587 * pixels[i + 1]! + 0.114 * pixels[i + 2]! : Math.max(pixels[i]!, pixels[i + 1]!, pixels[i + 2]!);
+    const low = clear ? clear[0] : NODATA_BELOW;
+    const high = clear ? clear[1] : NODATA_FULL;
+    const alpha = level <= low ? 0 : level >= high ? 1 : (level - low) / (high - low);
+    if (alpha === 0) cleared += 1;
+    if (gain) {
+      pixels[i] = pixels[i]! * gain[0];
+      pixels[i + 1] = pixels[i + 1]! * gain[1];
+      pixels[i + 2] = pixels[i + 2]! * gain[2];
+    }
+    pixels[i + 3] = Math.round(pixels[i + 3]! * alpha);
+  }
+  return count > 0 ? cleared / count : 0;
+}
+
+/** The tile after `knockOutNoData`, as a picture; the tile itself where the page has no canvas to do it on (nothing is lost but the transparency). */
+async function finishPicture(image: BitmapLike, gain?: readonly [number, number, number], clear?: readonly [number, number]): Promise<BitmapLike> {
+  const CanvasCtor = (globalThis as { OffscreenCanvas?: typeof OffscreenCanvas }).OffscreenCanvas;
+  if (typeof CanvasCtor !== "function" || typeof globalThis.createImageBitmap !== "function") return image;
+  try {
+    const width = image.width > 0 ? image.width : 512;
+    const height = image.height > 0 ? image.height : 512;
+    const canvas = new CanvasCtor(width, height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return image;
+    ctx.drawImage(image as CanvasImageSource, 0, 0);
+    const data = ctx.getImageData(0, 0, width, height);
+    knockOutNoData(data.data, gain, clear);
+    ctx.putImageData(data, 0, 0);
+    const done = await createImageBitmap(canvas, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+    image.close?.();
+    return done;
+  } catch {
+    return image;
+  }
+}
+
 const anySignal = (signals: AbortSignal[]): AbortSignal => (typeof AbortSignal.any === "function" ? AbortSignal.any(signals) : signals[0]!);
 
 async function pictureIsBlank(image: BitmapLike): Promise<boolean> {
@@ -281,8 +385,9 @@ async function pictureIsBlank(image: BitmapLike): Promise<boolean> {
  * ```
  */
 export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
-  const known = GIBS_LAYERS[options.layer ?? DEFAULT_LAYER];
-  const layer = known ?? { id: options.layer ?? DEFAULT_LAYER, matrix: "250m" as const, clouds: true, ranges: [] as readonly DayRange[] };
+  const wanted = options.layer ? (GIBS_NAMES[options.layer] ?? options.layer) : DEFAULT_LAYER;
+  const known = GIBS_LAYERS[wanted];
+  const layer = known ?? { id: wanted, matrix: "250m" as const, clouds: true, ranges: [] as readonly DayRange[] };
   const grid: MapGrid = gibsGrid(layer.matrix);
   const rule = options.date ?? "latest";
   const get = options.fetch ?? ((url: string, init?: RequestInit) => globalThis.fetch(url, init));
@@ -308,7 +413,8 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
       image.close?.();
       throw new Error(`The tile ${key} has no imagery`);
     }
-    return { width: image.width > 0 ? image.width : 512, height: image.height > 0 ? image.height : 512, image } satisfies ImageTile;
+    const finished = await finishPicture(image, layer.gain, layer.clear);
+    return { width: finished.width > 0 ? finished.width : 512, height: finished.height > 0 ? finished.height : 512, image: finished } satisfies ImageTile;
   };
   /** Look for the most recent day with imagery: the tile under the middle of the view, one day at a time, newest first, each given the usual two seconds. The answer, a day or none, is kept. */
   const lookFor = (settledKey: string, start: string, place: EarthMapPlace, detail: number): void => {
@@ -336,7 +442,7 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
   const dayOf = (place: EarthMapPlace, detail: number): string | undefined => {
     if (!known) return undefined;
     const ms = options.time().getTime();
-    if (fixedDay(rule, ms) !== undefined || layer.ranges.length === 0) return gibsDay(layer, rule, ms);
+    if (layer.years || fixedDay(rule, ms) !== undefined || layer.ranges.length === 0) return gibsDay(layer, rule, ms);
     const start = previousUtcDay(ms);
     const settledKey = `${layer.id}|${start}`;
     if (settled.has(settledKey)) return settled.get(settledKey) ?? undefined;
@@ -346,7 +452,8 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
   const source: EarthMapSource = {
     kind: "tiles",
     layer: "day",
-    info: INFO,
+    info: layer.credit ? { ...INFO, credit: { en: `${GIBS_CREDIT.en} ${layer.credit.en}`, ja: `${GIBS_CREDIT.ja}${layer.credit.ja}` } } : INFO,
+    holes: true,
     grid,
     need(place, detail) {
       if (gridLevelFor(grid, detail, 0) === undefined) return [];

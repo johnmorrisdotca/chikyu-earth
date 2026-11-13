@@ -84,7 +84,10 @@ test("closer than the package's own tiles, the page asks the imagery service and
   const gibs = await routeGibs(page, "ok");
   await routeTiles(page);
   await openEarth(page, `time=${NOON}&center=0,23`);
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
+  });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
   expect(gibs.urls, "nothing is fetched while the view is no closer than the package's tiles").toEqual([]);
   await setView(page, await zoomFor(page, 8000));
@@ -113,6 +116,7 @@ test("a missing tile and a slow tile leave the coarser picture and are not asked
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
     el.setAttribute("tiles-finer-date", "previous-day");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -134,6 +138,7 @@ test("a tile that does not arrive within two seconds is left, and the coarser pi
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
     el.setAttribute("tiles-finer-date", "previous-day");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -153,6 +158,7 @@ test("a black tile is treated as no imagery, and the coarser picture stays", asy
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
     el.setAttribute("tiles-finer-date", "previous-day");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -171,7 +177,10 @@ test("the default rule steps back a day at a time, one tile each, to the most re
   const gibs = await routeGibs(page, "ok", (day) => day <= "2026-06-18");
   await routeTiles(page);
   await openEarth(page, `time=${NOON}&center=0,23`);
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
+  });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
   expect(gibs.urls, "nothing is asked while the view is no closer than the package's tiles").toEqual([]);
   await setView(page, await zoomFor(page, 8000));
@@ -192,7 +201,10 @@ test("with no picture in ten days the page asks ten times, then nothing, and the
   const gibs = await routeGibs(page, "ok", () => false);
   await routeTiles(page);
   await openEarth(page, `time=${NOON}&center=0,23`);
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
+  });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
   await setView(page, await zoomFor(page, 8000));
   await expect.poll(async () => gibs.urls.length, { timeout: 30_000 }).toBe(10);
@@ -209,7 +221,10 @@ test("a tile that is partly black, a gap between two passes of the satellite, is
   const gibs = await routeGibs(page, "swath");
   await routeTiles(page);
   await openEarth(page, `time=${NOON}&center=0,23`);
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-layer", "today");
+  });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
   await setView(page, await zoomFor(page, 8000));
   await expect.poll(async () => (await statsOf(page)).tiles.shown, { timeout: 30_000 }).toBeGreaterThan(0);
@@ -219,4 +234,34 @@ test("a tile that is partly black, a gap between two passes of the satellite, is
   expect(gibs.urls.length).toBeGreaterThan(1);
   await expect(page.locator(EARTH).locator("#finer-credit")).toBeVisible();
   // the all-black case is the test above: every tile blank, the coarser picture stays and nothing more is asked once the days are used up
+});
+
+test("by default the finer tiles are the Landsat mosaic: one year, no search, land drawn over the package's picture and the black of no data left clear", async ({ page }) => {
+  // every tile is magenta on its right half and black (no data) on its left half
+  const gibs = await routeGibs(page, "swath");
+  await routeTiles(page);
+  await openEarth(page, `time=${NOON}&center=0,23`);
+  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
+  expect(gibs.urls).toEqual([]);
+  await setView(page, await zoomFor(page, 8000));
+  await expect.poll(async () => (await statsOf(page)).tiles.shown, { timeout: 30_000 }).toBeGreaterThan(0);
+  await untilStill(page);
+  expect(gibs.urls.length).toBeGreaterThan(0);
+  expect(gibs.urls.every((url) => url.startsWith("https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual/default/2000-12-01/31.25m/")), "one year, on the 31.25 m grid, no day searched for").toBe(true);
+  const stats = await statsOf(page);
+  expect(stats.tiles.failed, "a tile that is half black is a picture").toBe(0);
+  await expect(page.locator(EARTH).locator("#finer-credit")).toContainText("Global Web-Enabled Landsat Data");
+  // the tiles are laid blended, so the clear half lets the package's own picture show: the left of a tile is not black
+  const box = (await page.locator(EARTH).boundingBox())!;
+  let magenta = 0;
+  let black = 0;
+  for (let i = 0; i < 9; i += 1) {
+    const px = await pixelAt(page, page.locator(EARTH), 0.3 + 0.05 * i, 0.5);
+    if (px[0] > 90 && px[1] < 70 && px[2] > 60) magenta += 1;
+    if (px[0] < 20 && px[1] < 20 && px[2] < 20) black += 1;
+  }
+  expect(box.width).toBeGreaterThan(0);
+  expect(magenta, `some of the line across is the Landsat tile's colour`).toBeGreaterThan(0);
+  expect(black, "and none of it is the black of no data").toBe(0);
 });

@@ -29,7 +29,7 @@ import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
-import { createFinerHolder, GIBS_CREDIT, GIBS_ID } from "../door/gibs.ts";
+import { createFinerHolder, GIBS_ID } from "../door/gibs.ts";
 import { folderSource } from "../door/map.ts";
 import type { TileSources, TileStats } from "../realistic/tile-set.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -610,7 +610,8 @@ export class ChikyuSpace extends HTMLElement {
     if (!note) return;
     const count = this.#model.tiles?.stats.used[GIBS_ID] ?? 0;
     const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
-    const text = count > 0 ? GIBS_CREDIT[lang] : "";
+    const finer = this.#finerHold.source((attr) => this.getAttribute(attr), false);
+    const text = count > 0 && finer ? finer.info.credit[lang] : "";
     if (note.textContent !== text) note.textContent = text;
     if (note.lang !== lang) note.lang = lang;
     if (note.hidden !== (text === "")) note.hidden = text === "";

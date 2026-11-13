@@ -57,6 +57,8 @@ export type EarthMapSource = TileSource<EarthMapPlace, number, ImageTile> & {
    * The source's own grid, when it is not the package's pyramid (`2^(L+1)` columns by `2^L` rows). The loader places tiles from this. Left out, the pyramid is unchanged.
    */
   grid?: MapGrid;
+  /** True when the source's tiles may have transparent pixels (a place it has no data for), so the loader draws them blended and the picture underneath shows through. */
+  holes?: boolean;
 };
 
 /**
