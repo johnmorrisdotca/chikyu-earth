@@ -398,7 +398,7 @@ rotate or drag controls.
 | Element | Zoom range | Why it stops there |
 | --- | --- | --- |
 | `<chikyu-earth>` | 0.1 to 20 times | Natural Earth 1:110m outlines, redrawn at each zoom; at 20 times the view is about 640 km across and a coast is a few straight segments |
-| `<chikyu-earth-realistic>` | 0.1 to 5 times; 20 with `tiles` found | the package's pictures are 4096 pixels across at most; the finest tile level is 4 times that |
+| `<chikyu-earth-realistic>` | 0.1 to 5 times; 40 with `tiles` found (20 for a set that stops at level 4) | the package's pictures are 4096 pixels across at most; the finest tile level is up to 8 times that |
 | `<chikyu-space>` | a millionth to 2.5 times; 0.5 to 6 riding from a body | the zoom is the camera's distance (the whole solar system needs a millionth); close in, the Earth's picture and the textures stay sharp to 2.5 |
 
 [Zoom, pan and turn](docs/guides/zoom-and-pan.md) says more. For buttons, a slider, Auto-turn and the address, add the
