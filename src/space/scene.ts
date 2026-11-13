@@ -28,6 +28,7 @@ import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type Body
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
 import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
+import { createRouteLayer, newRouteState, type RouteLayer, type RouteState } from "../route/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
 type Three = ThreeParts;
@@ -195,6 +196,8 @@ export interface SpaceModel {
   borders: BorderState;
   /** The meridians and parallels on the Earth (src/grid/layer.ts): off unless the element switches them on. */
   grid: GridState;
+  /** A route between two places, on the Earth (src/route/layer.ts): off unless the element sets it. */
+  route: RouteState;
   /** The body or satellite the camera rides along with, or null. */
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
@@ -260,6 +263,7 @@ export const newSpaceModel = (): SpaceModel => ({
   bodyLabel: newBodyLabelState(),
   borders: newBorderState(),
   grid: newGridState(),
+  route: newRouteState(),
   pick: null,
   placeSatellite: null,
   followModel: null,
@@ -680,6 +684,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let borders: BorderLayer | null = null;
       const placeRings: { sprites: PlaceSprites | null; tried: boolean } = { sprites: null, tried: false };
       let gridLayer: GridLayer | null = null;
+      let routeLayer: RouteLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
       const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number } = { key: "", drawing: null, turn: 0, parts: 0 };
@@ -1321,6 +1326,15 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
           }
           gridLayer?.sync(Math.min(px.Earth, 1e5));
+          if ((model.route.ends || routeLayer) && !routeLayer && !model.route.failed) {
+            try {
+              routeLayer = createRouteLayer(three, earth, model.route);
+            } catch (error) {
+              model.route.failed = true;
+              console.warn(error instanceof Error ? error.message : error);
+            }
+          }
+          routeLayer?.sync();
           if (model.rideLost) deps.onRideLost?.();
           if (model.transition) deps.onMoving?.();
           return false;
@@ -1337,6 +1351,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           borders?.dispose();
           placeRings.sprites?.dispose();
           gridLayer?.dispose();
+          routeLayer?.dispose();
           modelSlot.turn += 1;
           dropModel();
           layer?.dispose();

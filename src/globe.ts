@@ -2,6 +2,7 @@
 // arguments always give the same markup, so it works on a server, in a test, or in the element.
 import { geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
 import { COUNTRIES } from "./countries.ts";
+import { routePoints, routeRuns } from "./route.ts";
 import { cleanStyle, STYLES } from "./styles.ts";
 import { projectionView } from "./view.ts";
 import type { GlobeOptions, Rotation } from "./types.ts";
@@ -46,6 +47,11 @@ export function globe(options: GlobeOptions = {}): string {
   for (const feature of COUNTRIES.features) {
     const d = path(feature);
     if (d) parts.push(`<path d="${d}" fill="${style.land}" stroke="${style.line}" stroke-width="${style.outline}" stroke-linejoin="round"/>`);
+  }
+  if (options.route) {
+    const runs = routeRuns(routePoints(options.route.from, options.route.to));
+    const d = path({ type: "MultiLineString", coordinates: runs.map((run) => run.map((place) => [place.lon, place.lat])) });
+    if (d) parts.push(`<path d="${d}" fill="none" stroke="#7df9ff" stroke-width="1.5" stroke-linejoin="round"/>`);
   }
   parts.push(`<path d="${horizon}" fill="none" stroke="${style.line}" stroke-width="${style.horizon}"/>`);
 

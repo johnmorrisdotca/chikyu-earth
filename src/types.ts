@@ -91,4 +91,6 @@ export interface GlobeOptions {
   style?: StyleName;
   /** Draw a light graticule under the countries. Default false. */
   graticule?: boolean;
+  /** A route between two places, drawn over the countries. Absent, none. */
+  route?: { from: GeoPoint; to: GeoPoint } | null;
 }

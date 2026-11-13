@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Distance and the route between two places** (MODULES-679). `route` on `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` (absent by default; the property is the two places or `null`) draws the line between them. `routeInfo` gives the WGS84 geodesic (`kilometres`, Vincenty), the great-circle distance on a sphere of 6371.0088 km, the initial and final bearings, and a flight time at 900 km/h. The line is split at the date line. Nothing is drawn again at rest. There is no flat world map in this package: the line globe is the flat drawing, and `routeRuns` is there for a page that draws its own.
+
 ## 0.42.0 - 2026-11-12
 
 - **Bodies are made only when they are big enough to see** (MODULES-1192). `<chikyu-space>` made the painter's drawing of the Sun, the Moon and every planet in every view, with their mapped pictures, however small or far from the view. It now asks the painter for a body only when the body is in the view and at least 6 CSS pixels across its radius (`BODY_MAKE_PX`); a smaller one, or one out of the view, is a plain sphere of the right colour (the Moon is the view's own Moon), and a body that has shrunk below 3 pixels or left the view is let go of its pictures after four seconds (`BODY_KEEP_MS`), so one that comes and goes is not made again and again. Measured in the default Earth view (Nov 10, centred on -100,40): the pictures loaded went from 10 (the Sun, the Moon and the eight planets, 150,446 bytes) to 1 (the Moon, 16,974 bytes); `stats.bodies.mapped` says how many drawings are the painter's. wakusei-planets' `credit` therefore narrows by itself: an Earth view with no CC BY body in it shows no CC BY line, Jupiter adds Nestaeric's credit, the Sun adds Solar System Scope's, and no line is written while the painter holds nothing. Nothing is drawn at rest and the GPU objects are flat across moves. Tests: `e2e/space-bodies.gl.ts`, `e2e/space-credit.gl.ts`, `e2e/space-full.gl.ts`.

@@ -250,6 +250,8 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 
 ## You are here, and places on the Earth
 
+`route` on `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` draws the line between two places (`lon,lat,lon,lat`). `routeInfo` gives the accurate distance on the Earth's real shape, the great-circle distance, the bearings and a flight time at 900 km/h. The line is off until it is set, and nothing is drawn at rest: [guide](docs/guides/routes.md).
+
 `places` on `<chikyu-space>` and `<chikyu-earth-realistic>` marks places on the Earth, each a beam, a pin or a ring (`places-look`) standing out of the ground, turning with the Earth, hidden on its far side and dimmer at night: `kind: "here"` for the reader's own place (brighter, with a quiet pulse) and favourites, quieter, each with an optional `color`. Up to 5,000: the first 32 in sight stand up with their names, the rest are rings in one draw call, crowds are gathered with their count, and `goToPlace(id)` turns the view to one. Names never overlap; nothing is drawn at rest. The package never asks for the reader's place and stores or sends nothing: the page asks on a press and rounds the place with `nearby` first: [guide](docs/guides/places.md).
 
 ```html
