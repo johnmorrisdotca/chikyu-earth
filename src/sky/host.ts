@@ -1,5 +1,6 @@
 // The names of the brightest stars and the constellations as faint lines, over the sky an element's page draws (hoshi-stars' `sky-labels`, loaded only when an attribute asks for it). The element tells this where the camera looks and what covers the sky at each draw
 // (`frame`); it draws the names and lines on a canvas and a few labels over the picture, never redraws at rest, and lights the figure under the pointer. Stars are directions, so only the camera's turn matters, never its distance.
+import { pressClaimed } from "./claim.ts";
 import type { Culture } from "@johnmorrisdotca/hoshi-stars/culture";
 import type { CoverMask, LabelStyle, StarNames } from "@johnmorrisdotca/hoshi-stars/sky-labels";
 import { canvasRatio } from "../markers/project.ts";
@@ -307,6 +308,7 @@ export function createSkyHost(options: SkyHostOptions): SkyHost {
       const start = down;
       down = undefined;
       if (!start || start.id !== event.pointerId) return;
+      if (pressClaimed(event)) return;
       const here = place(event);
       // a press that did not move, and was not held: a click or a tap, not the start of a turn
       if (Math.hypot(here.x - start.x, here.y - start.y) > 6 || event.timeStamp - start.at > 600) return;

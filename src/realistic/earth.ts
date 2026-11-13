@@ -9,6 +9,7 @@ import { HOME_VIEW, lookAt } from "../view.ts";
 import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "./air.ts";
 import { CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
 import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
+import type { PathHit } from "../space/paths.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "../space/satellite-layer.ts";
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
@@ -96,6 +97,8 @@ export interface EarthModel {
   drawn: { view: GlobeView; time: number; radius: number; centre: GeoPoint } | null;
   /** The map tiles laid over the pictures while the scene is built: what they are doing, for a page or a test. */
   tiles: TileSet | null;
+  /** The page's path under a point of the view (CSS pixels), within a radius, once a draw has been made and one is there. */
+  pathAt: ((x: number, y: number, radius: number) => Omit<PathHit, "pointer"> | null) | null;
   /** The satellite at a point of the view (CSS pixels), within a radius, once a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** Where a satellite of a shown group is on the screen as of the last draw, or `null`. */
@@ -167,6 +170,7 @@ export const newModel = (): EarthModel => ({
   drawn: null,
   tiles: null,
   pick: null,
+  pathAt: null,
   placeSatellite: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
   meteors: newMeteorState(),
@@ -376,8 +380,9 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
               deps.onSatellitesError?.(error);
             }
           }
-          layer?.update(model.time, model.speed, radius);
+          layer?.update(model.time, model.speed, radius, size);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
+          model.pathAt = layer ? (x, y, radius) => layer!.pathAt(x, y, camera, size, radius) : null;
           model.placeSatellite = layer ? (ref) => layer!.placeOf(ref, camera, size) : null;
           if (layer && deps.onHover) {
             const hover = model.satellites.hover;
@@ -482,6 +487,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         dispose() {
           layer?.dispose();
           model.pick = null;
+          model.pathAt = null;
           model.placeSatellite = null;
           clearTimeout(meteorTimer);
           meteors?.dispose();

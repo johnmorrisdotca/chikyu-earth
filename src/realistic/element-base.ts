@@ -14,6 +14,9 @@ import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForOrthographicShell, type SatelliteOthers } from "../space/satellite-focus.ts";
+import { claimPress } from "../sky/claim.ts";
+import { bindPaths, emptyPathStats, pointerOf, type PathControls, type PathStats } from "../space/path-controls.ts";
+import { styleTable, type PathHit, type PathRequest, type PathStyle } from "../space/paths.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "../space/satellite-hover.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
@@ -196,7 +199,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-hit"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -251,6 +254,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #focusView: GlobeView | null = null;
   /** The name and the faint orbit while the pointer rests on a satellite. */
   #hover: SatelliteHover | undefined;
+  #pathControls: PathControls | undefined;
   #reach: string | null = null;
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
@@ -442,6 +446,15 @@ export class ChikyuEarthRealistic extends HTMLElement {
       style: () => hoverStyleOf(this),
     });
     this.#hover.sync();
+    this.#pathControls = bindPaths({
+      element: this,
+      state: this.#model.satellites,
+      request: () => this.#gate?.soon(),
+      pathAt: (x, y, radius) => this.#model.pathAt?.(x, y, radius) ?? null,
+      pick: (x, y) => this.#model.pick?.(x, y, 12) ?? null,
+      riding: () => false,
+    });
+    this.#pathControls.sync();
     this.#startTick();
     document.addEventListener("visibilitychange", this.#onVisible);
   }
@@ -449,6 +462,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   disconnectedCallback(): void {
     this.#hover?.stop();
     this.#hover = undefined;
+    this.#pathControls?.stop();
+    this.#pathControls = undefined;
     this.removeEventListener("pointerdown", this.#take);
     this.removeEventListener("pointerdown", this.#down);
     this.removeEventListener("wheel", this.#wheel, { capture: true });
@@ -553,6 +568,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.soon();
     } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
+    else if (name === "selected-path") this.#pathControls?.sync();
+    else if (name === "path-hit") { /* read at each press and move */ }
     else if (name === "satellite-streak-max") {
       this.#model.satellites.streakMax = readStreakMax(value);
       this.#gate?.soon();
@@ -1206,6 +1223,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     tiers: Record<EarthLayer, number>;
     tiles: TileStats;
     satellites: SatelliteStats;
+    /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
+    paths: PathStats;
     draws: number;
     contexts: number;
     canvas: { width: number; height: number; pixels: number };
@@ -1238,6 +1257,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       state: this.#state,
       tiers: { ...this.#tiers },
       satellites: this.#satelliteStats(),
+      paths: this.#pathControls?.stats() ?? emptyPathStats(),
       tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false },
       draws: stats?.draws ?? 0,
       contexts: stats?.contexts ?? 0,
@@ -1474,6 +1494,99 @@ export class ChikyuEarthRealistic extends HTMLElement {
     return chosen ? { ...chosen } : null;
   }
 
+  // --- paths -------------------------------------------------------------------------------------------------------------------------------------
+  /**
+   * Draw these satellites' orbits at once, each in a look from the table (`pathStyles`), without a satellite being chosen. One draw call for all of them and the chosen satellite's own orbit, and nothing is drawn at rest. At most 16 are kept, the last of the list.
+   * `id` is a NORAD catalogue number or `group:index` (`stations:0`); an id that matches no satellite is skipped (`stats.paths.unresolved`). A satellite asked for twice is drawn once, in the later look. `style` is the name of a look (`selected`, `hovered`, `favourite`, `path`, or one of the page's own)
+   * or a partial look over `path`. `[]` takes them all away. Where the pointer is on one, `chikyu-path-hover` and `chikyu-path-click` say which (`path-hit`).
+   *
+   * @param list - The paths, oldest first.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space";
+   *
+   * const show = (space: ChikyuSpace): void => space.setPaths([{ id: 25544, style: "favourite" }, { id: "stations:1", style: { color: "#7fdbff", dash: [8, 4] } }]);
+   * console.log(typeof show);
+   * ```
+   */
+  setPaths(list: readonly PathRequest[]): void {
+    this.#pathControls?.setPaths(list);
+  }
+  /** The paths in use, as set (the last 16). Setting it is `setPaths`. */
+  get paths(): PathRequest[] {
+    return this.#pathControls?.paths ?? [];
+  }
+  set paths(list: readonly PathRequest[]) {
+    this.setPaths(list);
+  }
+  /**
+   * Change the looks the paths are drawn in, by name. Each entry is a partial look over the built-in one of that name (or over `path`, for a name of the page's own); `null` takes the page's entry away. Without `replace` the entries are added to those already set.
+   * The built-in looks differ by width and dash as well as colour: `selected` (white, 2 px, solid, also the look of the chosen satellite's own orbit), `hovered` (white, 1.5 px, dashed), `favourite` (amber, 1.75 px, dotted) and `path` (white, 1.5 px, solid).
+   * A look is `{ color, width (0.5 to 8 CSS pixels), opacity (0 to 1), dash ([dash, gap] in CSS pixels, or null) }`.
+   *
+   * @param table - The entries by name.
+   * @param replace - `true` to drop the entries set before.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space";
+   *
+   * const quiet = (space: ChikyuSpace): void => space.setPathStyles({ selected: { color: "#ffd166", width: 3, dash: null } });
+   * console.log(typeof quiet);
+   * ```
+   */
+  setPathStyles(table: Readonly<Record<string, Partial<PathStyle> | null>>, replace = false): void {
+    this.#pathControls?.setStyles(table, replace);
+  }
+  /** The table of looks in use, whole: the built-in ones with the page's own over them. A copy. */
+  get pathStyles(): Record<string, PathStyle> {
+    return this.#pathControls?.styles ?? styleTable({});
+  }
+  set pathStyles(table: Readonly<Record<string, Partial<PathStyle> | null>>) {
+    this.setPathStyles(table, true);
+  }
+  /**
+   * Draw the chosen satellite's own orbit (the attribute `selected-path`; on unless `off`). Off, `selectSatellite` still rings and names the satellite and a ride still follows it, but no line is drawn: the page draws it, with `setPaths` and the `selected` look, or its own. The look of the line when it is on is the `selected` entry of `pathStyles`.
+   */
+  get selectedPath(): boolean {
+    return this.getAttribute("selected-path") !== "off";
+  }
+  set selectedPath(value: boolean) {
+    if (value) this.removeAttribute("selected-path");
+    else this.setAttribute("selected-path", "off");
+  }
+  /**
+   * How near, in CSS pixels, the pointer has to be to a path for the pick and hover events to report it (the attribute `path-hit`; 8 when left out, 0 to 40; `0` or `off` turns the test off). A touch is given twice that, and at least 16.
+   * The test covers the page's paths and the chosen satellite's own orbit, not the part of an orbit the Earth hides, and a satellite's dot under the pointer comes first. In a ride from a satellite the test is off unless the attribute is set.
+   */
+  get pathHit(): number {
+    return this.#pathControls?.hit ?? 8;
+  }
+  set pathHit(value: number) {
+    if (Number.isFinite(value) && value >= 0) this.setAttribute("path-hit", String(value));
+    else this.removeAttribute("path-hit");
+  }
+  /**
+   * The path under a point of the element, from the last draw: its id as given, the satellite (`ref`, the same shape as in `chikyu-satellite-click`), the name of its look, the nearest point on it and the distance to it, or `null`.
+   *
+   * @param x - CSS pixels from the element's left.
+   * @param y - CSS pixels from its top.
+   * @param radiusPx - How near the point must be, 0 to 200; `path-hit` when left out.
+   * @returns The path, or `null` when none is within reach.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space";
+   *
+   * const name = (space: ChikyuSpace, x: number, y: number): string => space.pathAt(x, y, 10)?.style ?? "none";
+   * console.log(typeof name);
+   * ```
+   */
+  pathAt(x: number, y: number, radiusPx?: number): PathHit | null {
+    return this.#pathControls?.at(x, y, radiusPx) ?? null;
+  }
+
   /** Facts about one satellite at the moment shown (name, number, element age, height, speed, period, and `ownerCountry` when the owner is one country); undefined if it cannot be placed then. */
   satelliteInfo(ref: SatelliteRef): SatelliteInfo | undefined {
     return this.#model.satellites.groups.get(ref.group)?.satellites.info(ref.index, this.#model.time);
@@ -1507,7 +1620,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (Math.hypot(event.clientX - this.#downX, event.clientY - this.#downY) > 6) return;
     const rect = this.getBoundingClientRect();
     const satellite = this.#model.pick?.(event.clientX - rect.left, event.clientY - rect.top, 12);
-    if (satellite) this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite) }, bubbles: true, composed: true }));
+    if (satellite) {
+      claimPress(event);
+      this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite) }, bubbles: true, composed: true }));
+      return;
+    }
+    if (this.#pathControls?.press(event.clientX - rect.left, event.clientY - rect.top, pointerOf(event))) claimPress(event);
   };
 
   #wheel = (event: WheelEvent): void => immersiveWheel(this, event);
