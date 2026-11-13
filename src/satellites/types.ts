@@ -179,10 +179,10 @@ export interface Satellites {
   pin(ms: number, first?: number, count?: number): void;
   /**
    * The place of each satellite at `ms` into `positions` (3 numbers each) and the stretch of orbit it travels over `spanMs` of game time into `segments` (6 numbers each: where it was `spanMs` earlier, then where it is).
-   * The place is the last `pin`, turned about the orbit's axis by the mean motion, so a fast clock does not run SGP4 for every satellite on every frame. A `spanMs` that would turn it more than half a revolution is cut there. An orbit with an eccentricity of 0.02 or more is placed by SGP4 itself instead (two calls a frame), because a turn at the mean motion would put it off its path.
+   * The place is the last `pin`, turned about the orbit's axis by the mean motion, so a fast clock does not run SGP4 for every satellite on every frame. A `spanMs` that would turn it more than half a revolution is cut there. `maxLength` (Earth radii, 0 or left out for none) is the longest a streak may be along the orbit: a satellite whose span would carry it further is drawn that long, ending at its place, so the length does not grow with a faster clock. For an orbit placed by SGP4 itself the cap is applied as a shorter span of time, from the speed SGP4 gives there. An orbit with an eccentricity of 0.02 or more is placed by SGP4 itself instead (two calls a frame), because a turn at the mean motion would put it off its path.
    * Returns how many were written.
    */
-  arc(ms: number, spanMs: number, positions: Float32Array, segments: Float32Array): number;
+  arc(ms: number, spanMs: number, positions: Float32Array, segments: Float32Array, maxLength?: number): number;
   /** One satellite at exactly `ms` (no interpolation): position in Earth radii and velocity in km/s into `out` (6 numbers). False if its elements are too old or SGP4 gave up. */
   exact(index: number, ms: number, out: Float64Array): boolean;
   /** The path of satellite `index` for one revolution from `ms`, `points` + 1 points in order along it (the last on the first), into a new array of Earth radii. */

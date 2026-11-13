@@ -12,7 +12,7 @@ import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, new
 
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
-import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
+import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForOrthographicShell, type SatelliteOthers } from "../space/satellite-focus.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "../space/satellite-hover.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
@@ -95,7 +95,7 @@ const readDrift = (value: string | null): number => (value !== null && Number.is
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -195,7 +195,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "hover-path", "names-on-hover"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -541,6 +541,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.soon();
     } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
+    else if (name === "satellite-streak-max") {
+      this.#model.satellites.streakMax = readStreakMax(value);
+      this.#gate?.soon();
+    }
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -1243,6 +1247,26 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
+   * The longest a satellite's streak may be on the screen, in CSS pixels (the attribute `satellite-streak-max`; 8 when the page says nothing; `0` or `off` for no cap). Above 60 times real time each satellite is drawn as a streak along its orbit
+   * for the stretch one frame spans, and at a fast clock that stretch is long: at an hour a second a low satellite would cross a tenth of the Earth in one frame. The cap is a length on the screen, so a low and a high satellite are drawn equally long, and the streak keeps the look it has at 10 minutes a second at any speed. It is the smaller of this number of pixels and 0.025 of the Earth's drawn radius (about 160 km of orbit, what a low satellite covers in a frame at 10 minutes a second), so as the Earth is drawn smaller the streak shrinks in proportion, to a dot, instead of staying as long on a small Earth as on a large one. The marks also lose weight on a small Earth: below a drawn radius of 150 pixels the streaks are fainter and the dark rim of the dots fades, gone at 40 pixels, and a crowd of satellites on a small Earth is drawn fainter in proportion so thousands of them do not wash it. Pointing along the orbit and ending at the satellite, it is the same length at any frame rate. Off restores the whole stretch.
+   *
+   * @example
+   * ```ts
+   * import "@johnmorrisdotca/chikyu-earth/realistic/element";
+   *
+   * const earth = document.querySelector("chikyu-earth-realistic")!;
+   * earth.satelliteStreakMax = 12;
+   * ```
+   */
+  get satelliteStreakMax(): number {
+    return this.#model.satellites.streakMax;
+  }
+  set satelliteStreakMax(value: number) {
+    if (Number.isFinite(value) && value >= 0) this.setAttribute("satellite-streak-max", String(value));
+    else this.removeAttribute("satellite-streak-max");
+  }
+
+  /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds, so every group of the catalogue can be shown at once. Giving the name of a group
    * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations). The groups are placed by SGP4 about once a second and interpolated
    * between. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit instead of being hidden. They are hidden by the Earth when they are behind it, and draw at most 30 times a second and not at all while the clock holds.
@@ -1426,7 +1450,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
   }
 
   // A press that does not turn the view (under 6 pixels) on a satellite tells the page, which chooses it with `selectSatellite` if it likes.

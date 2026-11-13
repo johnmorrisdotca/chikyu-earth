@@ -41,7 +41,7 @@ import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
-import { MAX_ORBIT_GROUP, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
+import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "./satellite-hover.ts";
 import { clampFollow, retargetFollow } from "./follow.ts";
@@ -187,7 +187,7 @@ export interface Riding {
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -270,7 +270,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "ride-viewpoint", "hover-path", "names-on-hover", "follow", "follow-ease", "dim-occluded"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "ride-viewpoint", "hover-path", "names-on-hover", "follow", "follow-ease", "dim-occluded", "satellite-streak-max"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -616,6 +616,10 @@ export class ChikyuSpace extends HTMLElement {
       this.#gate?.request();
     } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
     else if (name === "follow") this.#easeFollow(clampFollow(Number(value)));
+    else if (name === "satellite-streak-max") {
+      this.#model.satellites.streakMax = readStreakMax(value);
+      this.#gate?.request();
+    }
     else if (name === "tiles") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
@@ -1596,6 +1600,26 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
+   * The longest a satellite's streak may be on the screen, in CSS pixels (the attribute `satellite-streak-max`; 8 when the page says nothing; `0` or `off` for no cap). Above 60 times real time each satellite is drawn as a streak along its orbit
+   * for the stretch one frame spans, and at a fast clock that stretch is long: at an hour a second a low satellite would cross a tenth of the Earth in one frame. The cap is a length on the screen, so a low and a high satellite are drawn equally long, and the streak keeps the look it has at 10 minutes a second at any speed. It is the smaller of this number of pixels and 0.025 of the Earth's drawn radius (about 160 km of orbit, what a low satellite covers in a frame at 10 minutes a second), so as the Earth is drawn smaller the streak shrinks in proportion, to a dot, instead of staying as long on a small Earth as on a large one. The marks also lose weight on a small Earth: below a drawn radius of 150 pixels the streaks are fainter and the dark rim of the dots fades, gone at 40 pixels, and a crowd of satellites on a small Earth is drawn fainter in proportion so thousands of them do not wash it. Pointing along the orbit and ending at the satellite, it is the same length at any frame rate. Off restores the whole stretch.
+   *
+   * @example
+   * ```ts
+   * import "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.querySelector("chikyu-space")!;
+   * space.satelliteStreakMax = 12;
+   * ```
+   */
+  get satelliteStreakMax(): number {
+    return this.#model.satellites.streakMax;
+  }
+  set satelliteStreakMax(value: number) {
+    if (Number.isFinite(value) && value >= 0) this.setAttribute("satellite-streak-max", String(value));
+    else this.removeAttribute("satellite-streak-max");
+  }
+
+  /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds. Giving the name of a group
    * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations).
    * The groups are placed by SGP4 about once a second and interpolated between. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit instead of being hidden.
@@ -1839,6 +1863,10 @@ export class ChikyuSpace extends HTMLElement {
   /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
   #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean; occluded?: boolean }[]): void {
     if (marks.length > 0) this.#prepareSatLabelLang();
+    // a satellite ridden from outside is drawn as its model: a ring and a name on it would cover the model (MODULES-1303)
+    const ride = this.#model.ride;
+    const ridden = ride && ride.viewpoint === "outside" && typeof ride.target !== "string" ? ride.target : null;
+    if (ridden) marks = marks.filter((m) => !(m.ref.group === ridden.group && m.ref.index === ridden.index));
     this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible, occluded: m.occluded === true }));
     const now = new Map<string, boolean>();
     for (const m of marks) {
@@ -1932,7 +1960,7 @@ export class ChikyuSpace extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
-    followModel: { x: number; y: number; shown: boolean; parts: number } | null;
+    followModel: { x: number; y: number; shown: boolean; parts: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: readonly number[]; y: readonly number[]; z: readonly number[] } } | null;
     /** The finer map tiles (`tiles`): the level wanted now (`null` while the package's own pictures are sharp enough), the tiles held and shown, and the fetches made. */
     tiles: TileStats;
     /**
@@ -1998,7 +2026,7 @@ export class ChikyuSpace extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
   }
 
   // --- the game clock ----------------------------------------------------------------------------------------------------------------------------

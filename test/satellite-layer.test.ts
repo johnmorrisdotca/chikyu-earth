@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSatelliteLayer, newSatelliteState } from "../src/space/satellite-layer.ts";
+import { createSatelliteLayer, CROWD_COVER_DOTS, CROWD_COVER_STREAKS, crowdFade, DEFAULT_STREAK_MAX, markWeight, newSatelliteState, readStreakMax, STREAK_REACH } from "../src/space/satellite-layer.ts";
 import { createSatellites, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
 import { madeUp } from "./madeup-elements.ts";
 
@@ -228,4 +228,109 @@ test("the orbit under the pointer is computed once, at about a third of the chos
   layer.update(time, 0, 300);
   assert.equal(drawn.hoverPath, false, "leaving takes the path away");
   assert.equal(local.children.filter((child) => child.name === "hover-path").length, 1, "twenty hovers would still be the one line");
+});
+
+/** The longest streak, in CSS pixels, after a run of frames `frameMs` of wall time apart at `speed`, with the Earth `radius` pixels across its radius and the cap `max`. */
+const longestAfter = (speed: number, frameMs: number, radius: number, max: number): number => {
+  const state = newSatelliteState();
+  state.streakMax = max;
+  const round = stations.filter((set) => set.ECCENTRICITY < 0.02);
+  state.groups.set("stations", { satellites: createSatellites(round), color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  for (let frame = 0; frame < 4; frame += 1) layer.update(time + frame * speed * frameMs, speed, radius);
+  return state.drawn.longestStreakPx;
+};
+
+test("the streak is the same length whether the frames come every 33 or every 200 milliseconds, capped or not", () => {
+  for (const [speed, max] of [[120, DEFAULT_STREAK_MAX], [600, DEFAULT_STREAK_MAX], [3600, DEFAULT_STREAK_MAX], [86_400, DEFAULT_STREAK_MAX], [120, 0], [3600, 0]] as const) {
+    const quick = longestAfter(speed, 33, 300, max);
+    const slow = longestAfter(speed, 200, 300, max);
+    assert.ok(quick > 0, `${speed} times: a streak is drawn`);
+    assert.ok(Math.abs(quick - slow) / quick < 0.001, `${speed} times, cap ${max}: ${quick.toFixed(3)} px at 33 ms against ${slow.toFixed(3)} px at 200 ms`);
+  }
+});
+
+/** The cap on the screen: a share of the Earth's drawn radius, with the pixel ceiling. */
+const capOf = (radius: number, max: number): number => Math.min(max, STREAK_REACH * radius);
+
+test("the longest streak on the screen is the cap at an hour and a day a second, and keeps the 10-minutes-a-second look", () => {
+  const ten = longestAfter(600, 33, 300, DEFAULT_STREAK_MAX);
+  assert.ok(ten > 5 && ten <= capOf(300, DEFAULT_STREAK_MAX), `10 minutes a second on a whole Earth: ${ten.toFixed(1)} px`);
+  assert.equal(ten, longestAfter(600, 33, 300, 0), "the cap does not touch the 10-minutes-a-second look");
+  for (const speed of [3600, 86_400]) {
+    const capped = longestAfter(speed, 33, 300, DEFAULT_STREAK_MAX);
+    assert.ok(Math.abs(capped - capOf(300, DEFAULT_STREAK_MAX)) < 0.02 * DEFAULT_STREAK_MAX, `${speed} times: ${capped.toFixed(2)} px against a cap of ${capOf(300, DEFAULT_STREAK_MAX)}`);
+    assert.ok(longestAfter(speed, 33, 300, 0) > 3 * DEFAULT_STREAK_MAX, `${speed} times with no cap: the stretch is long`);
+  }
+  assert.ok(Math.abs(longestAfter(3600, 33, 900, 20) - 20) < 0.4, "a page that asks for a ceiling of 20 pixels gets 20 on a large Earth");
+  assert.ok(Math.abs(longestAfter(3600, 33, 300, 20) - STREAK_REACH * 300) < 0.2, "and the share of the radius on a smaller one");
+});
+
+test("the streak shrinks with the Earth's drawn size: a share of its radius, a few pixels on a whole Earth and a dot on a tiny one", () => {
+  const sizes = [210, 105, 42, 10] as const;
+  const long = sizes.map((radius) => longestAfter(3600, 33, radius, DEFAULT_STREAK_MAX));
+  const slow = sizes.map((radius) => longestAfter(600, 33, radius, DEFAULT_STREAK_MAX));
+  sizes.forEach((radius, i) => {
+    assert.ok(Math.abs(long[i]! - STREAK_REACH * radius) < 0.02 * STREAK_REACH * radius + 0.01, `an hour a second, Earth radius ${radius} px: ${long[i]!.toFixed(2)} px against ${(STREAK_REACH * radius).toFixed(2)}`);
+    assert.ok(slow[i]! <= long[i]! + 1e-9 && slow[i]! <= STREAK_REACH * radius + 1e-9, "10 minutes a second is never longer than the cap either");
+  });
+  assert.ok(Math.abs(long[1]! / long[0]! - 0.5) < 0.02, "half the Earth, half the streak");
+  assert.ok(Math.abs(long[2]! / long[0]! - 0.2) < 0.02, "a fifth of the Earth, a fifth of the streak");
+  assert.ok(long[3]! < 0.5, "a tiny Earth: the streak is a dot");
+});
+
+test("the marks lose weight as the Earth is drawn smaller: full from 150 pixels, none at 40, fainter streaks and no dark rim", () => {
+  assert.equal(markWeight(210), 1);
+  assert.equal(markWeight(150), 1);
+  assert.equal(markWeight(40), 0);
+  assert.equal(markWeight(5), 0);
+  assert.ok(markWeight(105) > 0.4 && markWeight(105) < 0.8);
+  assert.ok(markWeight(60) < markWeight(80) && markWeight(80) < markWeight(120), "it only grows with the size");
+  const state = newSatelliteState();
+  const rims: number[] = [];
+  const opacities: number[] = [];
+  const round = stations.filter((set) => set.ECCENTRICITY < 0.02);
+  state.groups.set("stations", { satellites: createSatellites(round), color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  for (const radius of [210, 105, 42]) {
+    layer.update(time, 600, radius);
+    const entries = scene.children as { material?: { uniforms?: { rim?: { value: number } }; opacity?: number } }[];
+    const dots = [...entries].reverse().find((child) => child.material?.uniforms?.rim && child.material.uniforms.rim.value !== undefined && (child.material.uniforms as { ring?: { value: number } }).ring?.value === 0);
+    rims.push(dots!.material!.uniforms!.rim!.value);
+    opacities.push(state.drawn.weight);
+  }
+  assert.deepEqual(rims, opacities, "the dots' rim follows the same weight");
+  assert.ok(rims[0]! === 1 && rims[1]! < 1 && rims[2]! < 0.1, `rim at three sizes: ${rims.map((r) => r.toFixed(2)).join(", ")}`);
+});
+
+test("satellite-streak-max reads a number of pixels, off or 0 for none, and anything else is the default", () => {
+  assert.equal(readStreakMax(null), DEFAULT_STREAK_MAX);
+  assert.equal(readStreakMax(""), DEFAULT_STREAK_MAX);
+  assert.equal(readStreakMax("12"), 12);
+  assert.equal(readStreakMax("2.5"), 2.5);
+  assert.equal(readStreakMax("0"), 0);
+  assert.equal(readStreakMax("off"), 0);
+  assert.equal(readStreakMax(" OFF "), 0);
+  assert.equal(readStreakMax("-3"), DEFAULT_STREAK_MAX);
+  assert.equal(readStreakMax("wide"), DEFAULT_STREAK_MAX);
+  assert.equal(newSatelliteState().streakMax, DEFAULT_STREAK_MAX);
+});
+
+test("a crowd of marks is drawn fainter on a small Earth, in proportion to what they would cover, and not at all on a whole one", () => {
+  const dot = (radius: number, marks = 18_252): number => crowdFade(marks, (2 * Math.max(0.45, Math.min(1, radius / 205))) ** 2, radius, CROWD_COVER_DOTS);
+  assert.equal(dot(205), 1, "16,000 satellites on a whole Earth are drawn as ever");
+  assert.equal(dot(150), 1);
+  assert.equal(crowdFade(20, 4, 41, CROWD_COVER_DOTS), 1, "twenty stations on a small Earth are not a crowd");
+  assert.ok(dot(103) < 1 && dot(103) > dot(41), "half the Earth: partly faded");
+  assert.ok(dot(41) < 0.1, `a fifth of the Earth: ${dot(41).toFixed(3)}`);
+  const streak = (radius: number): number => crowdFade(18_252, Math.max(1, 0.025 * radius), radius, CROWD_COVER_STREAKS, false);
+  assert.ok(streak(205) > 0.95, `16,000 streaks on a whole Earth: ${streak(205).toFixed(2)}`);
+  assert.ok(streak(103) < streak(205) && streak(41) < streak(103), "the smaller the Earth, the fainter the crowd");
+  assert.ok(streak(41) < 0.25);
+  assert.ok(streak(41) >= dot(41), "streaks are allowed more cover than dots");
+  assert.equal(crowdFade(20, 4, 41, CROWD_COVER_STREAKS, false), 1, "a few streaks are not a crowd at any size");
+  assert.equal(crowdFade(0, 4, 41, CROWD_COVER_DOTS), 1);
+  assert.equal(crowdFade(100, 4, 0, CROWD_COVER_DOTS), 1);
 });

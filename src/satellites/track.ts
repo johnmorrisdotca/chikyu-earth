@@ -236,8 +236,10 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         pinMsOf[i] = ms;
       }
     },
-    arc(ms, spanMs, positions, segments) {
+    arc(ms, spanMs, positions, segments, maxLength = 0) {
       if (n === 0) return 0;
+      // the longest a streak may be, in Earth radii along the orbit; 0, or anything that is not a positive number, leaves the stretch as long as the span makes it
+      const cap = maxLength > 0 && Number.isFinite(maxLength) ? maxLength : 0;
       // a satellite never pinned is pinned now, all together
       if (pinnedCount < n) {
         sample(pinned, pinOk, ms, 0, n, true);
@@ -267,7 +269,13 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
           segments[w + 3] = place[0]!;
           segments[w + 4] = place[1]!;
           segments[w + 5] = place[2]!;
-          if (exactAt(i, ms - span, place)) {
+          // SGP4 gave the speed here (km/s), so the cap in Earth radii becomes a stretch of time for this satellite and the start is placed by SGP4 that much earlier
+          let own = span;
+          if (cap > 0) {
+            const reach = (Math.hypot(place[3]!, place[4]!, place[5]!) / EARTH_RADIUS_KM) * (Math.abs(span) / 1000);
+            if (reach > cap) own = (span * cap) / reach;
+          }
+          if (exactAt(i, ms - own, place)) {
             segments[w] = place[0]!;
             segments[w + 1] = place[1]!;
             segments[w + 2] = place[2]!;
@@ -289,7 +297,12 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         const nx = normal[k]!;
         const ny = normal[k + 1]!;
         const nz = normal[k + 2]!;
-        const sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
+        let sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
+        if (cap > 0) {
+          // along the orbit a turn of `sweep` is `sweep` times the height in Earth radii, so the cap is a turn of cap / height
+          const height = Math.hypot(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!);
+          if (height > 0 && Math.abs(sweep) * height > cap) sweep = Math.sign(sweep) * (cap / height);
+        }
         const along = rate[i]! * (ms - pinMsOf[i]!);
         turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along, positions, k);
         turn(pinned[k]!, pinned[k + 1]!, pinned[k + 2]!, nx, ny, nz, along - sweep, segments, w);

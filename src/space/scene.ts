@@ -39,7 +39,9 @@ const MAX_MARKED = 80;
 const RAD = Math.PI / 180;
 const FOV = 35;
 /** How big a satellite seen from outside by a ride from itself is drawn: its radius is this share of the height of the view (a model about a fifth of the height across; the satellite is a few metres, so this is not to scale). */
-const OUTSIDE_RADIUS_SHARE = 0.09;
+const OUTSIDE_RADIUS_SHARE = 0.1;
+/** The share of the view's height an outside ride along (looking along the way it goes) draws the satellite's radius at: it sits at the bottom middle with part of it below the bottom edge, large enough to read and to be drawn sharp (MODULES-1303). */
+const OUTSIDE_ALONG_SHARE = 0.17;
 /** How much of the view's shorter side the Earth's disc fills at zoom 1 when the page does not say: 0.9, so the atmosphere's glow (8% beyond the disc) is inside the view and never cut. */
 export const DEFAULT_EARTH_SIZE = 0.9;
 
@@ -229,7 +231,7 @@ export interface SpaceModel {
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
-  followModel: { x: number; y: number; shown: boolean; parts: number } | null;
+  followModel: { x: number; y: number; shown: boolean; parts: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: Vec3; y: Vec3; z: Vec3 } } | null;
   /** The map tiles laid over the Earth while the scene is built: what they are doing, for a page or a test. */
   tiles: TileSet | null;
   /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
@@ -739,7 +741,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let routeLayer: RouteLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
-      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number } = { key: "", drawing: null, turn: 0, parts: 0 };
+      const modelSlot: { key: string; drawing: BodyDrawing | null; turn: number; parts: number; axes: { x: Vec3; y: Vec3; z: Vec3 } | null } = { key: "", drawing: null, turn: 0, parts: 0, axes: null };
       const dropModel = (): void => {
         if (!modelSlot.drawing) return;
         scene.remove(modelSlot.drawing.object);
@@ -1150,13 +1152,17 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 .catch((error: unknown) => deps.onPainterError?.(error));
             }
           }
-          const axes = shownSat ? satelliteAxes(shownSat.place, shownSat.velocity) : null;
+          // the model's attitude is the track frame (x along the way it goes, level; z straight up). A moment with no level speed keeps the last good frame, so the model neither drops nor turns (MODULES-1303)
+          const freshAxes = shownSat ? satelliteAxes(shownSat.place, shownSat.velocity) : null;
+          if (freshAxes) modelSlot.axes = freshAxes;
+          else if (!shownSat) modelSlot.axes = null;
+          const axes = freshAxes ?? (shownSat ? modelSlot.axes : null);
           // a generic drawing is for an outside ride only; a page's model is drawn wherever the camera is not at the satellite
           const drawn = shownSat !== null && (ride?.viewpoint === "outside" || (followed !== null && painted));
           if (modelSlot.drawing && shownSat && axes && drawn) {
             const object = modelSlot.drawing.object;
             const away = Math.hypot(shownSat.place[0] - camera.position.x, shownSat.place[1] - camera.position.y, shownSat.place[2] - camera.position.z);
-            const share = followed ? MODEL_RADIUS_SHARE : OUTSIDE_RADIUS_SHARE;
+            const share = followed ? MODEL_RADIUS_SHARE : ride?.look === "horizon" ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE;
             object.matrix.set(...(modelMatrix(shownSat.place, axes, modelRadius(away, half, share, 1e-9)) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
             object.matrixWorldNeedsUpdate = true;
             object.visible = true;
@@ -1164,7 +1170,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             modelSlot.drawing.light?.(toSunNow);
             modelSlot.drawing.update?.({ toSun: toSunNow, ms: model.time, radiusPx: size.height * share });
             projected.set(shownSat.place[0], shownSat.place[1], shownSat.place[2]).project(camera);
-            model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true, parts: modelSlot.parts };
+            const sx = ((projected.x + 1) / 2) * size.width;
+            const sy = ((1 - projected.y) / 2) * size.height;
+            const radiusPx = size.height * share;
+            model.followModel = { x: sx, y: sy, shown: true, parts: modelSlot.parts, radiusPx, box: { left: sx - radiusPx, top: sy - radiusPx, right: sx + radiusPx, bottom: sy + radiusPx }, axes };
           } else {
             if (modelSlot.drawing) modelSlot.drawing.object.visible = false;
             model.followModel = null;
