@@ -76,8 +76,13 @@ const TIME_EVENT_MS = 250;
 const SUN_RATE = 360 / 86_400;
 /** Tilt to the poles; zoom from a tenth of Fit, which leaves the whole Earth small in the view, to 5 times: the package's own pictures are sharp to about 5 times. */
 const LIMITS = { tiltMax: 90, zoomMin: 0.1, zoomMax: 5 };
-/** With the finer tiles the detail runs 4 times further: the finest level is 4 times wider than the widest picture. */
-const TILES_ZOOM_MAX = "20";
+/** The width of the day picture the tiles are laid over: the zoom limit with no tiles is sharp to its width. */
+const PICTURE_WIDTH = 4096;
+/**
+ * With the finer tiles the detail runs as many times further as the finest day level is wider than the widest picture (16384 across, 4 times: a limit of 20; 32768, 8 times: 40).
+ * Never below the limit the pictures have, and the pictures' own limit when the set has no day layer.
+ */
+const tilesZoomMax = (layers: Record<string, number>): string => String(Math.max(LIMITS.zoomMax, Math.round((LIMITS.zoomMax * (layers["day"] ?? 0)) / PICTURE_WIDTH)));
 
 const readCentre = (value: string | null): GeoPoint | null => {
   if (!value) return null;
@@ -349,9 +354,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
       sources: () => this.#tileSources(),
       onTiles: (layers) => {
         if (!this.hasAttribute("zoom-max") || this.getAttribute("zoom-max") === this.#reach) {
-          this.#reach = TILES_ZOOM_MAX;
-          // not written again when it is already there: the view controls take a written attribute as a new limit and bring the view back to fit, which a change of source must not do to a reader's zoom
-          if (this.getAttribute("zoom-max") !== TILES_ZOOM_MAX) this.setAttribute("zoom-max", TILES_ZOOM_MAX);
+          // only ever raised: the view controls take a written attribute as a new limit and bring the view back to fit, which a change of source (one with fewer levels, say) must not do to a reader's zoom.
+          // It is lowered when the tiles are taken away (below), not before.
+          const reach = String(Math.max(Number(this.#reach ?? 0), Number(tilesZoomMax(layers))));
+          this.#reach = reach;
+          if (this.getAttribute("zoom-max") !== reach) this.setAttribute("zoom-max", reach);
         }
         this.dispatchEvent(new CustomEvent("chikyu-tiles", { detail: { layers } }));
       },

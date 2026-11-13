@@ -198,6 +198,8 @@ export function earthTiles(base: string, options: EarthTilesOptions = {}): Earth
   const get = options.fetch ?? ((url, init) => globalThis.fetch(url, init));
   const decode = options.decode ?? ((blob: Blob): Promise<BitmapLike> => createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" }));
   let manifest: Promise<Record<string, TileLayer> | undefined> | undefined;
+  // the levels the folder's manifest has, once it has been read (`levels` is asked before the first `need`); until then, and for a folder that has no manifest, the package's levels 3 and 4
+  let known: Record<string, TileLayer> | undefined;
   const source: EarthMapSource = {
     kind: "tiles",
     layer: "*",
@@ -205,7 +207,7 @@ export function earthTiles(base: string, options: EarthTilesOptions = {}): Earth
     need(place, detail) {
       const layer = place.layer;
       if (typeof layer !== "string" || layer === "") throw new RangeError("a folder of tiles is asked for a place with its layer");
-      return mapKeys(place, detail, DEFAULT_LEVELS, `${layer}/`);
+      return mapKeys(place, detail, known?.[layer] ?? DEFAULT_LEVELS, `${layer}/`);
     },
     async levels(layer) {
       // read once: a folder that cannot be read is not asked again by this source, so a view at rest sends nothing
@@ -216,6 +218,7 @@ export function earthTiles(base: string, options: EarthTilesOptions = {}): Earth
       const layers = await asked;
       // an answer that was no folder is not kept: the next view of it (a changed source, a new element) asks again, and a view at rest never does
       if (layers === undefined && manifest === asked) manifest = undefined;
+      else known = layers;
       return layers?.[layer];
     },
     async load(key, signal) {

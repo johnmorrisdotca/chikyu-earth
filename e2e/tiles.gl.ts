@@ -18,6 +18,7 @@ const zoomFor = async (page: Page, radius: number): Promise<number> => {
 const middle = async (page: Page): Promise<[number, number, number]> => (await pixelAt(page, page.locator(EARTH), 0.5, 0.5)).slice(0, 3) as [number, number, number];
 const magenta = (c: number[]): boolean => c[0]! > 200 && c[1]! < 60 && c[2]! > 200;
 const cyan = (c: number[]): boolean => c[0]! < 60 && c[1]! > 200 && c[2]! > 200;
+const yellow = (c: number[]): boolean => c[0]! > 140 && c[1]! > 140 && c[2]! < 90;
 const level = (tile: string): number => Number(tile.split("/")[1]);
 
 test("a zoom that needs finer pictures asks for the tiles in view, at the level it needs, and draws them over the package's picture", async ({ page }) => {
@@ -28,8 +29,8 @@ test("a zoom that needs finer pictures asks for the tiles in view, at the level 
   expect(magenta(before) || cyan(before), "the package's own picture is on the screen to begin with").toBe(false);
   expect((await statsOf(page)).tiles).toMatchObject({ level: null, held: 0, requested: 0 });
   expect(log.tiles, "nothing is fetched while the package's pictures are sharp enough").toEqual([]);
-  expect(await page.locator(EARTH).getAttribute("zoom-max"), "the tiles lift the element's zoom limit").toBe("20");
-  await expect.poll(() => page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { limits: { zoomMax: number } }).limits.zoomMax), { message: "and the bar for it follows" }).toBe(20);
+  expect(await page.locator(EARTH).getAttribute("zoom-max"), "the tiles lift the element's zoom limit").toBe("40");
+  await expect.poll(() => page.locator("kazoku-view-controls").evaluate((el) => (Reflect.get(el, "controller") as { limits: { zoomMax: number } }).limits.zoomMax), { message: "and the bar for it follows" }).toBe(40);
 
   const base = alive(await counts(page), "Texture");
   await setView(page, await zoomFor(page, 1000));
@@ -59,6 +60,14 @@ test("a zoom that needs finer pictures asks for the tiles in view, at the level 
   expect(log.tiles.slice(level3).every((tile) => level(tile) === 4)).toBe(true);
   const held = (await statsOf(page)).tiles.held;
   expect(held, "held tiles stay within the limit").toBeLessThanOrEqual(48);
+
+  // the finest level the set has (32768 across): the last stretch of the zoom, up to its limit of 40
+  await setView(page, await zoomFor(page, 5200));
+  await expect.poll(async () => (await statsOf(page)).tiles.level).toBe(5);
+  await expect.poll(async () => yellow(await middle(page)), { timeout: 30_000, message: "the level 5 tile is drawn over the level 4 one" }).toBe(true);
+  expect(log.tiles.some((tile) => tile.startsWith("day/5/"))).toBe(true);
+  expect((await statsOf(page)).tiles.held, "held tiles stay within the limit at the finest level").toBeLessThanOrEqual(48);
+  expect((await statsOf(page)).tiles.heldBytes, "and within the graphics memory they are held to").toBeLessThanOrEqual(72 * 1024 * 1024);
 
   // zoom out: the tiles are let go, a few seconds later, and the textures with them
   await setView(page, 1);

@@ -7,6 +7,7 @@ import type { Page } from "@playwright/test";
 export const COLOURS: Record<string, [number, number, number]> = {
   "day/3": [255, 0, 255],
   "day/4": [0, 255, 255],
+  "day/5": [255, 255, 0],
   "night/2": [204, 51, 51],
   "night/3": [51, 204, 51],
 };
@@ -34,7 +35,7 @@ const png = (rgb: [number, number, number]): Buffer => {
 const level = (n: number) => ({ level: n, width: 1024 * 2 ** n, height: 512 * 2 ** n, columns: 2 ** (n + 1), rows: 2 ** n });
 export const MANIFEST = {
   tileSize: 512,
-  layers: { day: { levels: [0, 1, 2, 3, 4].map(level) }, night: { levels: [0, 1, 2, 3].map(level) } },
+  layers: { day: { levels: [0, 1, 2, 3, 4, 5].map(level) }, night: { levels: [0, 1, 2, 3, 4].map(level) } },
 };
 
 export interface TileLog {

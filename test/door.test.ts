@@ -541,6 +541,23 @@ test("the package's own folder reads its manifest once, only when levels are ask
   await assert.rejects(() => source.load("nothing", signal), /not the key of a tile/);
 });
 
+test("a folder's keys follow the levels of its manifest: level 5 where the manifest has it, and the package's levels 3 and 4 before it is read or where it has none", async () => {
+  const signal = new AbortController().signal;
+  const manifest = { tileSize: 512, layers: { day: { levels: [0, 1, 2, 3, 4, 5].map(level) }, night: { levels: [0, 1, 2, 3, 4].map(level) } } };
+  const get = (url: string): Promise<Response> => Promise.resolve(url.endsWith("manifest.json") ? new Response(JSON.stringify(manifest), { status: 200 }) : new Response("", { status: 404 }));
+  const source = earthTiles("/tiles/", { fetch: get });
+  const top = { ...tilePlace({ level: 5, col: 41, row: 7 }), layer: "day" };
+  assert.deepEqual(source.need(top, 32768), ["day/4/20/3"], "before the manifest is read: the finest of levels 3 and 4");
+  await source.levels!("day", signal);
+  assert.deepEqual(source.need(top, 32768), ["day/5/41/7"], "the finest level of the day layer");
+  assert.deepEqual(source.need({ ...tilePlace({ level: 4, col: 20, row: 3 }), layer: "day" }, 16384), ["day/4/20/3"], "a coarser level is still the coarser one");
+  assert.deepEqual(source.need({ ...tilePlace({ level: 4, col: 20, row: 3 }), layer: "night" }, 16384), ["night/4/20/3"], "and the night layer has its own levels, to 4");
+  assert.deepEqual(source.need({ ...tilePlace({ level: 4, col: 20, row: 3 }), layer: "night" }, 32768), ["night/4/20/3"], "never a level the layer does not have");
+  const empty = earthTiles("/nothing/", { fetch: () => Promise.resolve(new Response("", { status: 404 })) });
+  await empty.levels!("day", signal);
+  assert.deepEqual(empty.need(top, 32768), ["day/4/20/3"], "a folder with no manifest keeps the package's levels");
+});
+
 function element(id: number, epoch: string): ElementSet {
   return { OBJECT_NAME: `SAT ${id}`, OBJECT_ID: "1998-067A", EPOCH: epoch, MEAN_MOTION: 15.49, ECCENTRICITY: 0.0007, INCLINATION: 51.6, RA_OF_ASC_NODE: 335.9, ARG_OF_PERICENTER: 339.3, MEAN_ANOMALY: 20.6, NORAD_CAT_ID: id, BSTAR: 0.0001, MEAN_MOTION_DOT: 0.0001, MEAN_MOTION_DDOT: 0 };
 }
