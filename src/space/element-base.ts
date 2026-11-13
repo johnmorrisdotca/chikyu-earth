@@ -23,6 +23,8 @@ import { GRID_ATTRIBUTES, readGrid } from "../grid/lines.ts";
 import { readRoute, routeLeg, routeText, type RouteLeg } from "../route.ts";
 import { applyRoute } from "../route/layer.ts";
 import type { GridStats } from "../grid/layer.ts";
+import { BEAM_ATTRIBUTES, readBeam } from "../beam/geometry.ts";
+import type { BeamStats } from "../beam/layer.ts";
 import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/geometry.ts";
 import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
 import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
@@ -243,6 +245,9 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * `borders` draws the borders on the Earth's land as thin lines that turn with it, as on `<chikyu-earth-realistic>`: `countries`, `regions` (from the page's `borderData.regions`, once the Earth is
  * large enough), or both with a bare attribute; `chikyu-borders-unavailable` is sent when the shapes cannot be loaded.
  *
+ * `beam` draws a beam of light from the chosen satellite (the one marked, or the one ridden) down to the ground below it: a soft cone ending in a lit footprint, the circle from which the satellite is above
+ * `beam-elevation` degrees (25), with `beam-cells` spot cells inside it (an illustration, never an operator's plan), `beam-cell-size`, `beam-color` and `beam-strength`; see {@link beam}.
+ *
  * `grid` draws the meridians and parallels on the Earth, and `country-names` names its countries, as on `<chikyu-earth-realistic>`: the names keep clear of the bodies', the places' and the
  * cities' names and stay on the Earth's disc; `chikyu-country-names-unavailable` is sent when the outlines cannot be loaded.
  *
@@ -269,7 +274,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "ride-viewpoint"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "ride-viewpoint"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -397,6 +402,8 @@ export class ChikyuSpace extends HTMLElement {
     Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
     this.#model.borders.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-borders-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
     this.#model.grid.on = readGrid(this.getAttribute("grid"));
+    this.#applyBeam();
+    this.#model.beam.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-beam-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
     this.#model.grid.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-grid-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
     this.#countries = createCountryHost({
       root,
@@ -587,6 +594,9 @@ export class ChikyuSpace extends HTMLElement {
       this.#gate?.request();
     } else if (name === "grid") {
       this.#model.grid.on = readGrid(value);
+      this.#gate?.request();
+    } else if ((BEAM_ATTRIBUTES as readonly string[]).includes(name)) {
+      this.#applyBeam();
       this.#gate?.request();
     } else if ((COUNTRY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#countries?.refresh();
     else if (name === "satellite-tint") {
@@ -1022,6 +1032,76 @@ export class ChikyuSpace extends HTMLElement {
   set cityNamesStyle(value: CityNamesStyle) {
     this.#citiesStyle = { ...value };
     this.#cities?.setStyle(this.#citiesStyle);
+  }
+
+  /** Read the beam's attributes into the model. */
+  #applyBeam(): void {
+    const { on, elevation, cells, cellSize, colour, strength } = readBeam((name) => this.getAttribute(name));
+    Object.assign(this.#model.beam, { on, elevation, cells, cellSize, colour, strength });
+  }
+
+  /**
+   * Whether a beam of light is drawn from the chosen satellite down to the ground below it (the attribute `beam`, off unless set). The chosen satellite is the one marked with `selectSatellite` or a press,
+   * or the one ridden (Ride along and Ride above, where the camera looks down the beam). The beam is a soft cone, brighter at the satellite and fading towards the ground, ending in a lit ring on the
+   * surface: the footprint, the circle from which the satellite stands above `beamElevation` degrees (25), true to its height. Behind the Earth it is cut off by the limb. It is drawn with the draw that
+   * moves the satellite, and nothing is drawn at rest. Setting it writes the attribute, or takes it away; `stats.beam` says the footprint's radius in kilometres.
+   *
+   * @example
+   * ```ts no-run
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.querySelector<ChikyuSpace>("chikyu-space")!;
+   * space.beam = true;
+   * space.beamElevation = 30;
+   * console.log(space.stats.beam.radiusKm);
+   * ```
+   */
+  get beam(): boolean {
+    return readBeam((name) => this.getAttribute(name)).on;
+  }
+  set beam(value: boolean) {
+    if (value) this.setAttribute("beam", "selected");
+    else this.removeAttribute("beam");
+  }
+
+  /** The least elevation, in degrees, from which the footprint counts the satellite as seen (the attribute `beam-elevation`, 25). Setting it writes the attribute. */
+  get beamElevation(): number {
+    return readBeam((name) => this.getAttribute(name)).elevation;
+  }
+  set beamElevation(value: number) {
+    this.setAttribute("beam-elevation", String(value));
+  }
+
+  /** How many spot cells are drawn inside the footprint, 0 for none (the attribute `beam-cells`, up to 91). They are an illustration of a satellite that serves the ground in cells, not any operator's plan. */
+  get beamCells(): number {
+    return readBeam((name) => this.getAttribute(name)).cells;
+  }
+  set beamCells(value: number) {
+    this.setAttribute("beam-cells", String(value));
+  }
+
+  /** A spot cell's radius on the ground in kilometres, at most what fits (the attribute `beam-cell-size`, 0 for the fit). */
+  get beamCellSize(): number {
+    return readBeam((name) => this.getAttribute(name)).cellSize;
+  }
+  set beamCellSize(value: number) {
+    this.setAttribute("beam-cell-size", String(value));
+  }
+
+  /** The beam's colour, any CSS colour (the attribute `beam-color`, a pale blue). */
+  get beamColor(): string {
+    return readBeam((name) => this.getAttribute(name)).colour;
+  }
+  set beamColor(value: string) {
+    this.setAttribute("beam-color", value);
+  }
+
+  /** How strong the beam is, from 0 to 1 (the attribute `beam-strength`, 0.6). */
+  get beamStrength(): number {
+    return readBeam((name) => this.getAttribute(name)).strength;
+  }
+  set beamStrength(value: number) {
+    this.setAttribute("beam-strength", String(value));
   }
 
   /** Whether the meridians and parallels are drawn on the Earth (the attribute `grid`). Setting it writes the attribute, or takes it away. */
@@ -1852,6 +1932,8 @@ export class ChikyuSpace extends HTMLElement {
     borders: BorderStats;
     /** The grid: whether it was drawn at the last draw, whether every 15 degrees (else 30), its segments then, how many times its lines were made, and whether it could not be made. */
     grid: GridStats;
+    /** The beam: whether it was drawn at the last draw, the chosen satellite's height, the footprint's radius in kilometres and its angle at the Earth's centre, the elevation, the cells drawn and a cell's radius, and how many times its geometry was made. */
+    beam: BeamStats;
     /** The route between two places: whether one is set, and its geodesic distance, great-circle distance and flight time at 900 km/h. */
     route: { on: boolean; kilometres: number; greatCircleKm: number; flightHours: number };
     /** The names of countries: whether `country-names` is set and the most it asks for, the countries loaded, the names shown at the last draw, how many times they were laid out, and whether the outlines could not be loaded. */
@@ -1884,6 +1966,7 @@ export class ChikyuSpace extends HTMLElement {
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
       grid: { ...this.#model.grid.stats },
+      beam: { ...this.#model.beam.stats },
       route: { ...this.#model.route.stats },
       countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
       seaNames: this.#seas?.stats ?? { on: false, radius: 0, names: 0, renders: 0 },

@@ -7,3 +7,5 @@ export { faceOffset, OUTSIDE_KM, outsidePose, RIDE_FACES, RIDE_FOV, rideFov, rid
 export type { SatelliteScreen } from "./satellite-layer.ts";
 export { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 export { genericSatellite, satelliteKind, type SatelliteKind } from "./generic-satellite.ts";
+export { BEAM_ATTRIBUTES, BEAM_COLOUR, BEAM_ELEVATION, beamCells, footprintAngle, footprintKm, readBeam, type BeamCells, type BeamOptions } from "../beam/geometry.ts";
+export type { BeamStats } from "../beam/layer.ts";

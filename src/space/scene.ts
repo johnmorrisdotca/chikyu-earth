@@ -29,6 +29,7 @@ import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type Body
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
 import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
+import { createBeamLayer, newBeamState, type BeamLayer, type BeamState } from "../beam/layer.ts";
 import { createRouteLayer, newRouteState, type RouteLayer, type RouteState } from "../route/layer.ts";
 import { subsolarPoint, unitVector } from "../realistic/sun.ts";
 
@@ -205,6 +206,8 @@ export interface SpaceModel {
   borders: BorderState;
   /** The meridians and parallels on the Earth (src/grid/layer.ts): off unless the element switches them on. */
   grid: GridState;
+  /** The beam of light from the chosen satellite to the ground below it (src/beam/layer.ts): off unless the element switches it on. */
+  beam: BeamState;
   /** A route between two places, on the Earth (src/route/layer.ts): off unless the element sets it. */
   route: RouteState;
   /** The body or satellite the camera rides along with, or null. */
@@ -272,6 +275,7 @@ export const newSpaceModel = (): SpaceModel => ({
   bodyLabel: newBodyLabelState(),
   borders: newBorderState(),
   grid: newGridState(),
+  beam: newBeamState(),
   route: newRouteState(),
   pick: null,
   placeSatellite: null,
@@ -734,6 +738,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       let borders: BorderLayer | null = null;
       const placeRings: { sprites: PlaceSprites | null; tried: boolean } = { sprites: null, tried: false };
       let gridLayer: GridLayer | null = null;
+      let beamLayer: BeamLayer | null = null;
+      const beamAt = new Float64Array(6);
       let routeLayer: RouteLayer | null = null;
       let marksTold = false;
       // the followed satellite's model: which satellite it is for, the drawing once it is made, and a count so that a model made for a satellite no longer followed is let go
@@ -1416,6 +1422,19 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             }
           }
           gridLayer?.sync(Math.min(px.Earth, 1e5));
+          // the beam, from the chosen satellite (the one ridden, else the one marked) to the ground below it: made the first time it is switched on
+          if (model.beam.on && !beamLayer && !model.beam.stats.failed) {
+            try {
+              beamLayer = createBeamLayer(three, scene, model.beam, 7);
+            } catch (error) {
+              model.beam.stats.failed = true;
+              model.beam.onError?.(error);
+            }
+          }
+          if (beamLayer) {
+            const chosen = model.ride && typeof model.ride.target === "object" ? model.ride.target : model.satellites.selected;
+            beamLayer.sync(model.beam.on && chosen && layer?.exact(chosen, model.time, beamAt) ? [beamAt[0]!, beamAt[1]!, beamAt[2]!] : null);
+          }
           if ((model.route.ends || routeLayer) && !routeLayer && !model.route.failed) {
             try {
               routeLayer = createRouteLayer(three, earth, model.route);
@@ -1442,6 +1461,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           borders?.dispose();
           placeRings.sprites?.dispose();
           gridLayer?.dispose();
+          beamLayer?.dispose();
           routeLayer?.dispose();
           modelSlot.turn += 1;
           dropModel();
