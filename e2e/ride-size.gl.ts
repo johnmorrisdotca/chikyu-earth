@@ -1,7 +1,7 @@
 // The ridden satellite's model falls in size as the camera rises above it, and hands over to the ordinary mark (MODULES-1306): never larger than at the lowest height, smaller at every step up, gone by 2,000 km, with the ring
 // and name back exactly when it has shrunk to the size of a ring; and no part of it is drawn outside the box the scene reports. The clock is the test's own (`speed=0`), stepped by the test.
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createSatellites, type ElementSet } from "../src/satellites/index.ts";
 import { frameAt } from "../src/space/ephemeris.ts";
 import { COUNT_SCRIPT, untilStill } from "./gl.ts";
@@ -124,15 +124,18 @@ test("no part of the model is drawn outside its box, in either size mode: the fr
     const moment = tick;
     const withModel = await at(page, index, km, mode, moment);
     expect(withModel.followModel?.shown, `${km} km: the model is drawn`).toBe(true);
+    await untilStill(page);
     const a = await shot();
     // the same frame with the model hidden: from inside, the view above shows a dot and no drawing of the satellite
     await page.locator(SPACE).evaluate((el) => el.setAttribute("ride-viewpoint", "inside"));
     const hidden = await at(page, index, km, mode, moment);
     expect(hidden.followModel, `${km} km: no model from inside`).toBeNull();
+    await untilStill(page);
     const b = await shot();
     await page.locator(SPACE).evaluate((el) => el.setAttribute("ride-viewpoint", "outside"));
-    await test.info().attach(`${mode}-${km}-with-model.png`, { body: Buffer.from(a, "base64"), contentType: "image/png" });
-    await test.info().attach(`${mode}-${km}-model-hidden.png`, { body: Buffer.from(b, "base64"), contentType: "image/png" });
+    mkdirSync(test.info().outputDir, { recursive: true });
+    writeFileSync(test.info().outputPath(`${mode}-${km}-with-model.png`), Buffer.from(a, "base64"));
+    writeFileSync(test.info().outputPath(`${mode}-${km}-model-hidden.png`), Buffer.from(b, "base64"));
     const box = withModel.followModel!.box;
     const outside = await page.evaluate(
       async ([one, two, left, top, right, bottom]) => {
@@ -164,8 +167,8 @@ test("no part of the model is drawn outside its box, in either size mode: the fr
       },
       [a, b, box.left, box.top, box.right, box.bottom] as const,
     );
-    expect(outside.inside, `${km} km: the model is in the picture`).toBeGreaterThan(20);
-    expect(outside.differing, `${km} km: pixels that differ outside the box`).toBe(0);
+    expect(outside.inside, `${mode} ${km} km: the model is in the picture (box ${JSON.stringify(box)}, ${JSON.stringify(outside)})`).toBeGreaterThan(20);
+    expect(outside.differing, `${mode} ${km} km: pixels that differ outside the box (box ${JSON.stringify(box)}, ${JSON.stringify(outside)})`).toBe(0);
   }
 });
 
