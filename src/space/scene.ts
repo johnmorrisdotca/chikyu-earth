@@ -14,6 +14,8 @@ import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { faceOffset, outsidePose, ridePose, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
+import { newLightFade, stepLightFade, type LightFade } from "../realistic/light-fade.ts";
+import { prefersLessMotion } from "../meteors/note.ts";
 import { genericSatellite, satelliteKind } from "./generic-satellite.ts";
 import { followSpin } from "./follow.ts";
 import { coverBody, covers } from "../sky/cover.ts";
@@ -218,6 +220,8 @@ export interface SpaceModel {
   focus: BodyName;
   /** How the Earth is lit (see `LightMode`); the Sun, the Moon and the planets keep their true places either way. */
   light: LightMode;
+  /** The cross-fade of the Earth's night lights between the true light and `lit`, stepped at each draw (src/realistic/light-fade.ts). */
+  lightFade: LightFade;
   /** How the painter draws the Sun, the planets and their moons (one of its `looks`, or `plain` for the sphere in the right colour); empty for its first. */
   bodies: string;
   /** Filled at each draw. */
@@ -296,6 +300,7 @@ export const newSpaceModel = (): SpaceModel => ({
   focus: "Earth",
   bodies: "",
   light: "sun",
+  lightFade: newLightFade(),
   drawn: null,
   painted: { bodies: 0, moons: 0, held: 0, moon: false, tiles: 0, mapped: 0, pending: 0 },
   lookups: 0,
@@ -850,7 +855,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
           atmosphereMaterial.uniforms["thick"]!.value = model.airThickness;
           glow.scale.setScalar(airTop(model.airThickness));
-          earthMaterial.uniforms["lights"]!.value = model.light === "lit" ? 0 : 1;
+          const fade = stepLightFade(model.lightFade, model.light === "lit", performance.now(), prefersLessMotion());
+          // one more frame while it moves, and none once it has arrived
+          if (fade.fading) deps.invalidate();
+          earthMaterial.uniforms["lights"]!.value = 1 - fade.mix;
           earthMaterial.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
           if (deps.paint) {
             const changed = deps.paint.step(model.time);
