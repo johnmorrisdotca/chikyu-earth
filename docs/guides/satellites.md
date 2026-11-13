@@ -119,9 +119,80 @@ A press on a satellite (not a drag that turns the view, and not one behind the E
 
 ## The orbit under the pointer
 
-When the pointer rests on a satellite, its name is shown and its orbit is drawn faintly: about a third of the brightness of a chosen satellite's orbit, so the two are told apart at a glance. It is one pixel wide, like every orbit here, and the lower brightness is what makes it read as the thinner line. The faint orbit goes when the pointer leaves, after a short fade (at once when the reader asks for reduced motion). One faint orbit at a time. A chosen satellite's orbit is unchanged. A touch does not rest, so nothing new is drawn.
+When the pointer rests on a satellite, its name is shown and its orbit is drawn faintly: about a third of the brightness of a chosen satellite's orbit, so the two are told apart at a glance. It is one pixel wide, thinner than the chosen satellite's orbit (2 px), and the lower brightness makes it read fainter still. The faint orbit goes when the pointer leaves, after a short fade (at once when the reader asks for reduced motion). One faint orbit at a time. A touch does not rest, so nothing new is drawn.
 
 `hover-path` is on where satellites are shown and `names-on-hover` is on. `hover-path="off"` turns the faint orbit off. `names-on-hover="off"` turns the name off, and the faint orbit with it unless `hover-path` is set on its own. The colour and the opacity are `--chikyu-hover-path` and `--chikyu-hover-path-opacity` on the element. The path is worked out once from the elements already loaded, and nothing is drawn while the pointer is still and no satellite is under it.
+
+## Paths of your own
+
+A page can draw orbits for itself: a reader's favourite satellites, the one a search found, the one the pointer is on. The package draws each in a look from a small table, in **one draw call for all of them**, and nothing at rest.
+
+- **`setPaths(list)`** (the property `paths`) takes up to 16 paths, `{ id, style }`: `id` is a NORAD catalogue number or `group:index` (`stations:0`), `style` the name of a look or a partial look `{ color, width, opacity, dash }`. A longer list keeps its last 16, the most recent; `stats.paths.dropped` counts the rest. An id that matches no satellite is skipped (`stats.paths.unresolved`). `[]` takes them all away.
+- **`setPathStyles(table)`** (the property `pathStyles` is the whole table in use) changes the looks by name. The built-in ones differ by width and dash as well as colour, so they are told apart without it: `selected` (white, 2 px, solid), `hovered` (white, 1.5 px, long dashes), `favourite` (amber, 1.75 px, short dashes) and `path` (white, 1.5 px, solid, the look of a path that names none). Your entry is laid over the built-in one of its name; `null` takes it away. A look is `{ color: any CSS colour, width: 0.5 to 8 CSS pixels, opacity: 0 to 1, dash: [dash, gap] in CSS pixels, or null for solid }`. A dash is measured along the orbit at the Earth's drawn size, so it grows and shrinks with the Earth.
+- **`selected-path="off"`** (the property `selectedPath`) stops the package drawing the chosen satellite's own orbit: the ring and the name stay, and a ride still follows it. The line, when it is drawn, has the `selected` look of the table, so a page that only wants another colour or width sets that entry and leaves the attribute alone. The chosen orbit is now 2 px wide, the width of the `selected` look; before it was 1 px.
+- In a ride from a satellite, that satellite's own orbit is drawn in the `selected` look too (unless `selected-path="off"`).
+
+### Which path is under the pointer
+
+`path-hit` (the property `pathHit`) is how near the pointer must be, in CSS pixels, 8 when left out and 0 to 40; `off` or 0 turns the test off. A touch has twice that reach, and at least 16. The test covers your paths and the chosen satellite's own orbit, never the stretch of an orbit the Earth hides. In a ride it is off unless the attribute is set.
+
+- `chikyu-path-hover` is sent when a mouse comes onto a path, moves to another and leaves (`detail` is `null` then). A touch sends none: it does not rest.
+- `chikyu-path-click` is sent for a press or a tap that is not a drag. Both have `detail: { id, ref, style, x, y, distancePx, pointer }`: `id` as you gave it, `ref` the satellite as `{ group, index }`, the same as in `chikyu-satellite-click`, so no lookup is needed; `style` the look's name (`custom` for one given in the request), `x` and `y` the nearest point on the path in CSS pixels in the element, and `pointer` `mouse`, `pen` or `touch`.
+- `pathAt(x, y, radiusPx?)` answers the same question for a point of your own (`null` when none is within reach).
+- **One press, one meaning**, in this order: a satellite's dot (`chikyu-satellite-click`), then a path (`chikyu-path-click`), then the sky (`chikyu-sky-pick`). A press on a path that runs under a dot is the dot's; a press on a path that crosses a star is the path's, and the star hears nothing.
+
+`stats.paths` says what is drawn: `{ requested, drawn, dropped, unresolved, selectedDrawn, draws, hover, hits }`. `draws` is 0 or 1, never more: the paths and the chosen orbit share a draw call. The page's example, the page first:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orbit paths on the Earth from space</title>
+  </head>
+  <body>
+    <chikyu-space center="-100,40" time="2026-11-02T12:00Z" speed="0" texture-base="/textures/" style="width: 420px"></chikyu-space>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
+```
+
+And its script. The chosen satellite's own line is left out, the page draws that satellite's orbit as a favourite in its own look, and a press on it is told:
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, type ElementSet } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+// Your page gets the elements (CelesTrak's JSON, within its usage policy) and passes them in; this is one downloaded element set.
+const iss: ElementSet = {
+  OBJECT_NAME: "ISS (ZARYA)",
+  OBJECT_ID: "1998-067A",
+  EPOCH: "2026-11-02T10:25:21.580320",
+  MEAN_MOTION: 15.49150046,
+  ECCENTRICITY: 0.0007139,
+  INCLINATION: 51.6332,
+  RA_OF_ASC_NODE: 335.9757,
+  ARG_OF_PERICENTER: 339.3739,
+  MEAN_ANOMALY: 20.6961,
+  NORAD_CAT_ID: 25544,
+  BSTAR: 0.00012,
+  MEAN_MOTION_DOT: 0.0001,
+  MEAN_MOTION_DDOT: 0,
+};
+
+const space = document.querySelector("chikyu-space")!;
+space.setSatellites("stations", createSatellites([iss]), { color: "#ffd54f", size: 6 });
+// The package draws no orbit line for the chosen satellite: the page draws it, in a look of its own, with the other paths.
+space.selectedPath = false;
+space.selectSatellite({ group: "stations", index: 0 });
+space.setPathStyles({ favourite: { color: "#7fdbff", width: 3, dash: [8, 5] } });
+space.setPaths([{ id: 25544, style: "favourite" }]);
+// A press or a mouse resting within 8 px of a path says which one, with the same ref as a click on the satellite.
+space.addEventListener("chikyu-path-click", (event) => console.log((event as CustomEvent).detail.id, (event as CustomEvent).detail.ref));
+space.addEventListener("chikyu-path-hover", (event) => console.log((event as CustomEvent).detail?.style ?? "off the path"));
+console.log(space.pathAt(10, 10)); // { id, ref, style, x, y, distancePx, pointer } or null
+```
 
 ## The catalogue
 

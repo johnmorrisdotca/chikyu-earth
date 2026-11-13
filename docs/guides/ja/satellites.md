@@ -119,9 +119,80 @@ console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, v
 
 ## ポインターの下の軌道
 
-ポインターが衛星の上に止まると、その名前が出て、軌道がうすく描かれます。選んだ衛星の軌道の明るさのおよそ3分の1なので、ひと目で区別できます。こちらもほかの軌道と同じく幅は1ピクセルで、明るさが低いので細く見えます。ポインターが離れると、短いフェードのあと消えます (動きを減らす設定のときはすぐに消えます)。うすい軌道は一度に1本です。選んだ衛星の軌道はそのままです。タッチにはホバーがないので、新しいものは描きません。
+ポインターが衛星の上に止まると、その名前が出て、軌道がうすく描かれます。選んだ衛星の軌道の明るさのおよそ3分の1なので、ひと目で区別できます。こちらは幅1ピクセルで、選んだ衛星の軌道 (2ピクセル) より細く、明るさも低いので、さらにうすく見えます。ポインターが離れると、短いフェードのあと消えます (動きを減らす設定のときはすぐに消えます)。うすい軌道は一度に1本です。タッチにはホバーがないので、新しいものは描きません。
 
 `hover-path` は、衛星が表示されていて `names-on-hover` がオンのときオンです。`hover-path="off"` でうすい軌道を消します。`names-on-hover="off"` で名前を消し、`hover-path` を別にオンにしていない限り、うすい軌道も消します。色と不透明度は、要素の `--chikyu-hover-path` と `--chikyu-hover-path-opacity` です。軌道は、読み込み済みの要素から一度だけ計算します。ポインターが止まっていて、下に衛星がないときは、何も描きません。
+
+## 自分用の軌道線
+
+ページは、自分のために軌道を描けます。読者のお気に入りの衛星、検索で見つかった衛星、ポインターが乗っている衛星などです。パッケージは、小さな表にある見た目で、**全部を1回の描画で**描き、静止しているときは何も描きません。
+
+- **`setPaths(list)`** (プロパティ `paths`) は、最大16本の `{ id, style }` を受け取ります。`id` は NORAD 番号か `group:index` (`stations:0`)、`style` は見た目の名前か、一部だけの見た目 `{ color, width, opacity, dash }` です。それより長い一覧は、最後の16本 (新しいもの) を残し、残りは `stats.paths.dropped` に数えます。どの衛星にも合わない id は読み飛ばし、`stats.paths.unresolved` に数えます。`[]` で全部を消します。
+- **`setPathStyles(table)`** (プロパティ `pathStyles` は使われている表の全体) は、見た目を名前で変えます。組み込みの見た目は、色だけでなく太さと破線も違うので、色が分からなくても見分けられます。`selected` (白、2 px、実線)、`hovered` (白、1.5 px、長い破線)、`favourite` (琥珀色、1.75 px、短い破線)、`path` (白、1.5 px、実線。名前を指定しない線の見た目) です。ページの項目は、同じ名前の組み込みの上に重なります。`null` でその項目を外します。見た目は `{ color: CSS の色、width: 0.5〜8 CSS ピクセル、opacity: 0〜1、dash: [線, すきま] (CSS ピクセル)、実線は null }` です。破線の長さは、描かれた地球の大きさで軌道に沿って測るので、地球と一緒に大きくなり、小さくなります。
+- **`selected-path="off"`** (プロパティ `selectedPath`) は、選んだ衛星自身の軌道線をパッケージが描くのをやめます。輪と名前は残り、乗る動作もそのまま衛星を追います。線を描くときの見た目は表の `selected` なので、色や太さを変えたいだけなら、属性はそのままにして、その項目を設定します。選んだ軌道の幅は `selected` の2 pxになりました (以前は1 px)。
+- 衛星に乗っているとき、その衛星自身の軌道も `selected` の見た目で描かれます (`selected-path="off"` でなければ)。
+
+### ポインターの下にある線
+
+`path-hit` (プロパティ `pathHit`) は、ポインターがどこまで近ければよいかを CSS ピクセルで表します。指定がなければ8、範囲は0〜40で、`off` か0でこの判定を止めます。タッチは2倍の距離 (最低16) まで届きます。判定の対象は、ページの線と選んだ衛星自身の軌道で、地球に隠れた部分は対象外です。衛星に乗っているときは、この属性を指定しない限り判定しません。
+
+- `chikyu-path-hover` は、マウスが線に乗ったとき、別の線に移ったとき、離れたとき (そのとき `detail` は `null`) に出ます。タッチは止まらないので、出しません。
+- `chikyu-path-click` は、ドラッグでない押下かタップのときに出ます。どちらも `detail: { id, ref, style, x, y, distancePx, pointer }` を持ちます。`id` は渡したとおり、`ref` は `chikyu-satellite-click` と同じ `{ group, index }` なので、探し直す必要はありません。`style` は見た目の名前 (指定の中に書いたものは `custom`)、`x` と `y` は線上の最も近い点 (要素の中の CSS ピクセル)、`pointer` は `mouse`、`pen`、`touch` です。
+- `pathAt(x, y, radiusPx?)` は、ページが決めた点について同じことを答えます (届く範囲に線がなければ `null`)。
+- **1回の押下は1つの意味だけ**で、順番は次のとおりです。衛星の点 (`chikyu-satellite-click`)、線 (`chikyu-path-click`)、空 (`chikyu-sky-pick`)。点の下を通る線を押すと点のもの、星と交わる線を押すと線のもので、星には何も届きません。
+
+`stats.paths` は描かれているものを答えます: `{ requested, drawn, dropped, unresolved, selectedDrawn, draws, hover, hits }`。`draws` は0か1で、それ以上にはなりません。線と選んだ軌道は、1回の描画を分け合います。ページの例は、まずページです。
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orbit paths on the Earth from space</title>
+  </head>
+  <body>
+    <chikyu-space center="-100,40" time="2026-11-02T12:00Z" speed="0" texture-base="/textures/" style="width: 420px"></chikyu-space>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
+```
+
+そのスクリプトです。選んだ衛星自身の線は描かず、ページがその衛星の軌道を、自分の見た目のお気に入りとして描き、押すと知らせを受けます。
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import { createSatellites, type ElementSet } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+// Your page gets the elements (CelesTrak's JSON, within its usage policy) and passes them in; this is one downloaded element set.
+const iss: ElementSet = {
+  OBJECT_NAME: "ISS (ZARYA)",
+  OBJECT_ID: "1998-067A",
+  EPOCH: "2026-11-02T10:25:21.580320",
+  MEAN_MOTION: 15.49150046,
+  ECCENTRICITY: 0.0007139,
+  INCLINATION: 51.6332,
+  RA_OF_ASC_NODE: 335.9757,
+  ARG_OF_PERICENTER: 339.3739,
+  MEAN_ANOMALY: 20.6961,
+  NORAD_CAT_ID: 25544,
+  BSTAR: 0.00012,
+  MEAN_MOTION_DOT: 0.0001,
+  MEAN_MOTION_DDOT: 0,
+};
+
+const space = document.querySelector("chikyu-space")!;
+space.setSatellites("stations", createSatellites([iss]), { color: "#ffd54f", size: 6 });
+// The package draws no orbit line for the chosen satellite: the page draws it, in a look of its own, with the other paths.
+space.selectedPath = false;
+space.selectSatellite({ group: "stations", index: 0 });
+space.setPathStyles({ favourite: { color: "#7fdbff", width: 3, dash: [8, 5] } });
+space.setPaths([{ id: 25544, style: "favourite" }]);
+// A press or a mouse resting within 8 px of a path says which one, with the same ref as a click on the satellite.
+space.addEventListener("chikyu-path-click", (event) => console.log((event as CustomEvent).detail.id, (event as CustomEvent).detail.ref));
+space.addEventListener("chikyu-path-hover", (event) => console.log((event as CustomEvent).detail?.style ?? "off the path"));
+console.log(space.pathAt(10, 10)); // { id, ref, style, x, y, distancePx, pointer } or null
+```
 
 ## カタログ
 

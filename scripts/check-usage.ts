@@ -371,6 +371,25 @@ await step("satellites", async () => {
   });
 });
 
+await step("paths", async () => {
+  // The page's own orbit line, built by Vite from the package as npm packs it: the chosen satellite's own line is left out, and one path is drawn in one call.
+  const out = join(usage, "out", "paths");
+  await viteBuild({ root: examples("paths"), logLevel: "warn", build: { outDir: out, emptyOutDir: true }, base: "./", configFile: false });
+  await opened(browser, async (page) => {
+    await serve(page, "https://app.test", out);
+    await page.route("https://app.test/textures/**", (route) => {
+      const file = join(installed, "dist", "textures", new URL(route.request().url()).pathname.slice("/textures/".length));
+      return existsSync(file) ? route.fulfill({ body: readFileSync(file), contentType: "image/webp" }) : route.fulfill({ status: 404, body: "" });
+    });
+    await page.goto("https://app.test/");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => {
+      const stats = Reflect.get(document.querySelector("chikyu-space")!, "stats") as { paths: { requested: number; drawn: number; draws: number; selectedDrawn: boolean } };
+      return stats.paths.requested === 1 && stats.paths.drawn === 1 && stats.paths.draws === 1 && !stats.paths.selectedDrawn;
+    }, undefined, { timeout: 20_000 });
+  });
+});
+
 await step("ride", async () => {
   // Riding along with a satellite, built by Vite from the package as npm packs it: the camera must come up at the ISS's height and be moving a minute a second.
   const out = join(usage, "out", "ride");
@@ -511,6 +530,8 @@ const FILES: Record<string, string[]> = {
   "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],
   "node/sheets.mjs": ["docs/guides/printable-sheets.md", "docs/guides/ja/printable-sheets.md"],
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
+  "paths/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "paths/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "ride/index.html": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "ride/main.ts": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "together/index.html": ["docs/guides/two-packages.md", "docs/guides/ja/two-packages.md"],
