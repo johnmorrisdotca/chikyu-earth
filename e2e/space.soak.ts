@@ -42,10 +42,24 @@ async function sample(page: Page, t0: number) {
   return { at: Math.round((Date.now() - t0) / 1000), heapMB: Math.round((heap / 1048576) * 100) / 100, textures: alive(c, "Texture"), buffers: alive(c, "Buffer"), programs: alive(c, "Program"), all: sum(c.created) - sum(c.deleted), draws: s.draws, canvasMP: s.canvas.pixels / 1e6, bodies: s.bodies };
 }
 
+/** The view controls' Auto-turn, stopped: the Earth's view then keeps the yaw it was set to. Returns whether it was turning, to start it again once the count is taken. */
+async function stopTurning(page: Page): Promise<boolean> {
+  return page.locator("kazoku-view-controls").evaluate((el) => {
+    const controls = el as unknown as { state: { turning: boolean }; pause(): void };
+    const was = controls.state.turning;
+    controls.pause();
+    return was;
+  });
+}
+const startTurning = (page: Page): Promise<void> => page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { play(): void }).play());
+
 /** Back to the opening state: paused at the Earth, the larger pictures freed. */
-async function rest(page: Page, opening: { orbits: unknown; labels: unknown }): Promise<void> {
+async function rest(page: Page, opening: { orbits: unknown; labels: unknown }): Promise<boolean> {
   // in sight: a view out of sight draws nothing, and what is let go is let go at a draw
   await page.locator(SPACE).scrollIntoViewIfNeeded();
+  const turning = await stopTurning(page);
+  // and still: the demo's controls turn the view at several degrees a second, so the Earth's view would sweep round and bring Jupiter, with its moons, or Saturn into the background (made once big enough, MODULES-1192) at a yaw that depends on how long the
+  // settling took; the same view holds the same objects only when it is the same view
   await page.locator(SPACE).evaluate((el, o) => {
     Reflect.set(el, "speed", 0);
     Reflect.set(el, "scale", "compressed");
@@ -81,6 +95,7 @@ async function rest(page: Page, opening: { orbits: unknown; labels: unknown }): 
     await page.waitForTimeout(500);
   }
   expect(Date.now() - since, `the bodies and the GPU objects settled in 40 s (last: ${seen})`).toBeGreaterThanOrEqual(5000);
+  return turning;
 }
 
 test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
@@ -92,7 +107,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto("/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=10,20&sats=stations,starlink");
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
-  await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(0);
+  await expect.poll(async () => (await statsOf(page)).draws, { timeout: 30_000 }).toBeGreaterThan(0);
   await expect.poll(async () => (await statsOf(page)).satellites.groups, { timeout: 20_000 }).toBe(2);
   // the large group, once, so the satellites' own shaders and the chosen satellite's ring are made before the baseline
   await addMany(page);
@@ -160,10 +175,12 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     if (n % 4 === 1) await page.locator(SPACE).evaluate((el, i) => (el as unknown as { selectSatellite(r: unknown): void }).selectSatellite(i % 5 === 0 ? null : { group: "starlink", index: i % 400 }), n);
     await page.waitForTimeout(400 + Math.floor(random() * 400));
     if (!warm && Date.now() >= warmAt) {
-      await rest(page, opening);
+      const turning = await rest(page, opening);
       warm = await sample(page, t0);
       samples.push(warm);
       console.log(`warm  ${JSON.stringify(warm)}`);
+      // the walk goes on with the view turning, as it began
+      if (turning) await startTurning(page);
     } else if (Date.now() >= nextSample) {
       const s = await sample(page, t0);
       samples.push(s);
@@ -176,15 +193,16 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   const last = await sample(page, t0);
   console.log(`final ${JSON.stringify(last)}`);
   const drawsPerSecond = (last.draws - warm!.draws) / (last.at - warm!.at);
-  console.log(`space soak ${MINUTES} min: ${step} steps, heap ${warm!.heapMB} -> ${last.heapMB} MB, GPU objects ${warm!.all} -> ${last.all}, ${drawsPerSecond.toFixed(2)} frames a second after warm-up`);
+  console.log(`space soak ${MINUTES} min: ${step} steps, heap ${warm!.heapMB} -> ${last.heapMB} MB, textures ${warm!.textures} -> ${last.textures}, buffers ${warm!.buffers} -> ${last.buffers}, programs ${warm!.programs} -> ${last.programs}, GPU objects ${warm!.all} -> ${last.all}, ${drawsPerSecond.toFixed(2)} frames a second after warm-up`);
   expect(last.heapMB - warm!.heapMB, "JS heap grew").toBeLessThanOrEqual(4);
-  // The same view, settled, holds what it held at the start, give or take what the path to it leaves: the made set is the same (`stats.bodies`, settled in `rest`), but the opening view has come out at 63, 66, 69 and 72 buffers and at 8 and
-  // 9 programs in different runs, each steady for five seconds (a shader or a geometry kept from a body seen on the way). So no count may grow past that band; a body let go without its geometry disposed takes the one-minute soak from 60 textures to 87
-  // and from 330 GPU objects to 416, far outside it.
-  const band = { buffers: 6, programs: 1, all: 9 };
+  // The same view, still and settled (in `rest`), holds the same objects: the made set is the same (`stats.bodies`), so no texture or program may be more than at the start. The view was turning on its own at several degrees a second, and which bodies are in the
+  // background of an Earth view (Jupiter and its moons come into it at some yaws) then depended on the yaw the count happened to be taken at: 17 textures against 9 in one run (MODULES-1198); the view is now still, and textures and programs
+  // are equal in every run. What still varies is the buffers, in steps of three (one geometry and its array object): the still view came out at 70, 73 and 76, warm and at the end, and one run ended a geometry above where it began, with the made set the same
+  // and the tiles and satellites flat. So one geometry is allowed (3 buffers, 4 GPU objects); a body let go without its geometry disposed takes the one-minute soak from 60 textures to 87 and from 330 GPU objects to 416.
+  const band = { buffers: 3, all: 4 };
   expect(last.textures, "textures").toBeLessThanOrEqual(warm!.textures);
   expect(last.buffers, "buffers").toBeLessThanOrEqual(warm!.buffers + band.buffers);
-  expect(last.programs, "programs").toBeLessThanOrEqual(warm!.programs + band.programs);
+  expect(last.programs, "programs").toBeLessThanOrEqual(warm!.programs);
   expect(last.all, "GPU objects").toBeLessThanOrEqual(warm!.all + band.all);
   expect(Math.max(...samples.map((s) => s.canvasMP)), "canvas megapixels").toBeLessThanOrEqual(6);
   expect(drawsPerSecond, "frames a second").toBeLessThanOrEqual(30);
