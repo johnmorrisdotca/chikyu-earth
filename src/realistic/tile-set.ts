@@ -473,6 +473,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         ...shared.extra,
         nightRect,
         tileAlpha: cover,
+        // the source's look: each colour multiplied, and clear below a luminance (the defaults leave a tile as it is: the clear range, in 0 to 1, lies below black)
+        tileGain: { value: entry.source.look?.gain ?? [1, 1, 1] },
+        tileClear: { value: entry.source.look ? [entry.source.look.clear[0] / 255, entry.source.look.clear[1] / 255] : [-2, -1] },
         rect: { value: gridRect(entry) },
         // a finer level sits a little higher, so two levels at once never fight for the same depth; a grid tile sits above the package's finest. All sit above the whole-Earth sphere's flat faces
         radius: { value: entry.gridLevel ? 1.0008 : 1.0004 + 0.0001 * (entry.id.level - 3) },
@@ -480,8 +483,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
-      transparent: false,
-      depthWrite: true,
+      // a source whose tiles have holes (no data, which the source made transparent) is drawn blended, so the picture under it shows there
+      transparent: entry.source.holes === true,
+      depthWrite: entry.source.holes !== true,
     });
     entry.cover = cover;
     const mesh = new three.Mesh(geometry, material);
@@ -708,8 +712,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         entry.cover.value = t;
         const material = entry.mesh?.material as { transparent?: boolean; depthWrite?: boolean } | undefined;
         if (material) {
-          material.transparent = t < 1;
-          material.depthWrite = t >= 1;
+          const holes = entry.source.holes === true;
+          material.transparent = t < 1 || holes;
+          material.depthWrite = t >= 1 && !holes;
         }
         if (t < 1) fading = true;
       }

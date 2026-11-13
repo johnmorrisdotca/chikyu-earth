@@ -220,6 +220,19 @@ const unit = (a: Vec3): Vec3 => {
 export type RideViewpoint = "outside" | "inside";
 
 /**
+ * How big the model of the ridden satellite is drawn as the camera rises above it in a ride above: `distance` (the default) lets it shrink as one over the height and hand over to the ordinary mark between 1,000 and 2,000 km, `fixed` keeps the same share of the picture at every height, as 0.46.1 did.
+ *
+ * @example
+ * ```ts
+ * import type { RideModelSize } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const sizes: RideModelSize[] = ["distance", "fixed"];
+ * console.log(sizes.join(" or "));
+ * ```
+ */
+export type RideModelSize = "distance" | "fixed";
+
+/**
  * How far an outside ride keeps the camera from the satellite, in kilometres. The satellite itself is a few metres across, so it is drawn far larger than life (a model about a fifth of the picture's height across): not to scale, and the page says so in its caption.
  *
  * @example

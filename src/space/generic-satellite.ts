@@ -4,22 +4,22 @@ import type * as THREE from "three";
 import type { BodyDrawing } from "./scene.ts";
 
 /**
- * What a generic drawing shows: `bus` a box with two solar panels, `communications` the same with a dish on its nadir face, `flat` a flat panel with one long solar array (the shape of a large constellation's satellites), `station` a row of modules with a truss and panels.
+ * What a generic drawing shows: `bus` a box with two framed solar panels, `communications` the same with a dish on its nadir face, `flat` a flat body with one long framed panel (the shape of a large constellation's satellites), `station` a row of modules with a truss and panels, `cubesat` a slim box (a 3U, three times as long as it is wide) with short deployed panels.
  *
  * @example
  * ```ts
  * import type { SatelliteKind } from "@johnmorrisdotca/chikyu-earth/space";
  *
- * const kinds: SatelliteKind[] = ["bus", "communications", "flat", "station"];
+ * const kinds: SatelliteKind[] = ["bus", "communications", "flat", "station", "cubesat"];
  * console.log(kinds.length);
  * ```
  */
-export type SatelliteKind = "bus" | "communications" | "flat" | "station";
+export type SatelliteKind = "bus" | "communications" | "flat" | "station" | "cubesat";
 
 const COMMS = /(INTELSAT|SES-|EUTELSAT|ASTRA|ECHOSTAR|DIRECTV|TELSTAR|GALAXY|YAMAL|THURAYA|INMARSAT|IRIDIUM|GLOBALSTAR|ORBCOMM|TDRS|VIASAT|ANIK|SKYNET|MILSTAR|SAT-|SATCOM|COMSAT|OPTUS|JCSAT|SUPERBIRD|HISPASAT|ARABSAT|NILESAT|TURKSAT|KOREASAT|ASIASAT|APSTAR|EXPRESS|BADR)/i;
 
 /**
- * Which kind of drawing a satellite gets, from its name: a large constellation (`STARLINK`, `ONEWEB`, `KUIPER`) is `flat`, a station (`ISS`, `ZARYA`, `TIANGONG`, `CSS`) is `station`, a communications satellite (by the common operators' names) has a dish, and anything else is a plain `bus`.
+ * Which kind of drawing a satellite gets, from its name: a large constellation (`STARLINK`, `ONEWEB`, `KUIPER`) is `flat`, a cubesat (`FLOCK`, `DOVE`, `LEMUR`, `SPIRE` and similar names) is `cubesat`, a station (`ISS`, `ZARYA`, `TIANGONG`, `CSS`) is `station`, a communications satellite (by the common operators' names) has a dish, and anything else is a plain `bus`.
  *
  * @param name - The satellite's name (the element set's `OBJECT_NAME`).
  * @returns The kind.
@@ -33,6 +33,7 @@ const COMMS = /(INTELSAT|SES-|EUTELSAT|ASTRA|ECHOSTAR|DIRECTV|TELSTAR|GALAXY|YAM
  */
 export function satelliteKind(name: string): SatelliteKind {
   if (/^(STARLINK|ONEWEB|KUIPER)/i.test(name)) return "flat";
+  if (/^(FLOCK|DOVE|LEMUR|SPIRE|SWARM|CUBESAT|ARKYD|CP-?\d|AAUSAT|UNISAT|GOMX|GOMSPACE)|CUBESAT|\b3U\b/i.test(name)) return "cubesat";
   if (/(ISS|ZARYA|TIANGONG|CSS|TIANHE|WENTIAN|MENGTIAN)/i.test(name)) return "station";
   if (COMMS.test(name)) return "communications";
   return "bus";
@@ -71,22 +72,60 @@ export function genericSatellite(three: typeof THREE, kind: SatelliteKind): Body
   };
   const box = (x: number, y: number, z: number): THREE.BufferGeometry => new three.BoxGeometry(x, y, z);
   const tube = (radius: number, length: number): THREE.BufferGeometry => new three.CylinderGeometry(radius, radius, length, 16);
+  /**
+   * A thin solar panel with a frame: `w` across (along x) and `l` long (along y) with its middle at `y`; a light frame round a darker plate of cells, a hair apart, so it reads as a panel and not a slab. Every part lies in the panel's own box.
+   */
+  const panel = (w: number, l: number, y: number, x = 0, z = 0): void => {
+    const edge = 0.022;
+    const thick = 0.014;
+    add(box(w, l - 2 * edge, 0.008), 0x1d3d78, [x, y, z]);
+    add(box(w, edge, thick), 0xb4b9c2, [x, y - (l - edge) / 2, z]);
+    add(box(w, edge, thick), 0xb4b9c2, [x, y + (l - edge) / 2, z]);
+    add(box(edge, l, thick), 0xb4b9c2, [x - (w - edge) / 2, y, z]);
+    add(box(edge, l, thick), 0xb4b9c2, [x + (w - edge) / 2, y, z]);
+  };
   if (kind === "flat") {
-    add(box(0.5, 0.36, 0.03), 0xd7dadf, [0, 0, 0]);
-    add(box(0.5, 1.1, 0.01), 0x1f3f7a, [0, 0.74, 0]);
+    // a flat-pack body (a few metres across, a few centimetres thick) with its one long array and a small antenna panel
+    add(box(0.52, 0.34, 0.04), 0xcfd3d9, [0, 0, 0]);
+    add(box(0.3, 0.2, 0.012), 0x8e939b, [0.04, 0, -0.026]);
+    add(box(0.05, 0.05, 0.05), 0x4a4f58, [-0.18, 0, 0.045]);
+    add(box(0.03, 0.2, 0.015), 0xb4b9c2, [0, 0.27, 0]);
+    panel(0.4, 0.6, 0.57);
   } else if (kind === "station") {
+    // a row of modules, the truss across them and two panels at each end of it
     add(tube(0.07, 0.8), 0xd9dde3, [0, 0, 0], [0, 0, half]);
+    add(tube(0.05, 0.4), 0xc8ccd2, [0.1, 0, 0.09], [0, 0, half]);
     add(box(0.05, 1.7, 0.05), 0xb7bcc4, [-0.2, 0, 0]);
-    for (const y of [-0.75, 0.75]) add(box(0.3, 0.3, 0.012), 0x274a8c, [-0.2, y, 0]);
+    for (const y of [-0.78, 0.78]) {
+      panel(0.22, 0.24, y, -0.27);
+      panel(0.22, 0.24, y, -0.05);
+    }
+  } else if (kind === "cubesat") {
+    // a 3U: three times as long as it is wide, with a short panel deployed on each side
+    add(box(0.78, 0.26, 0.26), 0xbfc3ca, [0, 0, 0]);
+    add(box(0.8, 0.28, 0.02), 0x2a2d33, [0, 0, 0.14]);
+    add(box(0.02, 0.28, 0.28), 0x2a2d33, [0.4, 0, 0]);
+    add(box(0.2, 0.2, 0.02), 0x5a606b, [-0.1, 0, -0.14]);
+    for (const side of [-1, 1]) {
+      add(box(0.03, 0.12, 0.012), 0xb4b9c2, [0, side * 0.19, 0]);
+      panel(0.5, 0.34, side * 0.4);
+    }
   } else {
-    add(box(0.5, 0.4, 0.4), 0xd7b35a, [0, 0, 0]);
-    for (const y of [-1, 1]) {
-      add(box(0.18, 0.04, 0.04), 0xb7bcc4, [0, y * 0.4, 0]);
-      add(box(0.36, 0.52, 0.012), 0x1f3f7a, [0, y * 0.72, 0]);
+    // a bus: a body with a pale radiator plate on its top face, a camera on its nadir face, two booms and two framed panels
+    add(box(0.46, 0.36, 0.36), 0xc9a24a, [0, 0, 0]);
+    add(box(0.44, 0.34, 0.012), 0xe2e4e8, [0, 0, 0.186]);
+    add(box(0.47, 0.37, 0.07), 0x8a6d2a, [0, 0, -0.1]);
+    add(tube(0.06, 0.1), 0x30343b, [0.1, 0, -0.24], [half, 0, 0]);
+    add(box(0.06, 0.06, 0.06), 0x4a4f58, [-0.16, 0, 0.21]);
+    for (const side of [-1, 1]) {
+      add(box(0.03, 0.2, 0.02), 0xb4b9c2, [0, side * 0.28, 0]);
+      panel(0.38, 0.54, side * 0.67);
     }
     if (kind === "communications") {
-      add(tube(0.05, 0.14), 0xb7bcc4, [0.1, 0, 0.27]);
-      add(new three.CylinderGeometry(0.2, 0.02, 0.1, 20), 0xe8eaee, [0.1, 0, 0.36]);
+      // the dish on the nadir face, on a short mast, and a small horn beside it
+      add(tube(0.025, 0.14), 0xb4b9c2, [0, 0, -0.25], [half, 0, 0]);
+      add(new three.CylinderGeometry(0.24, 0.03, 0.09, 24), 0xe8eaee, [0, 0, -0.34], [half, 0, 0]);
+      add(box(0.06, 0.06, 0.1), 0xb4b9c2, [-0.2, 0, -0.26]);
     }
   }
   const sun = new three.DirectionalLight(0xfff4e0, 3.2);

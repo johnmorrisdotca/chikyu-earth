@@ -124,3 +124,86 @@ export function modelMatrix(place: Vec3, axes: { x: Vec3; y: Vec3; z: Vec3 }, sc
 export function modelRadius(away: number, half: number, share: number, real: number): number {
   return Math.max(real, away * half * share * 2);
 }
+
+/**
+ * The lowest height of a ride above a satellite, in kilometres: the model keeps its full size from here down (MODULES-1306).
+ *
+ * @example
+ * ```ts
+ * import { ABOVE_MODEL_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(ABOVE_MODEL_KM);
+ * ```
+ */
+export const ABOVE_MODEL_KM = 150;
+
+/**
+ * The share of the view's height the model's radius takes at the lowest height of a ride above a satellite (0.17): the size every page has seen since 0.46.1, and the size `ride-model-size="fixed"` keeps at every height.
+ *
+ * @example
+ * ```ts
+ * import { ABOVE_MODEL_SHARE } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(ABOVE_MODEL_SHARE);
+ * ```
+ */
+export const ABOVE_MODEL_SHARE = 0.17;
+
+/**
+ * The height, in kilometres, from which the model is let shrink to nothing: below it the model follows one over the height, from it a smooth step takes the model down to nothing at `MODEL_FADE_TO_KM`.
+ *
+ * @example
+ * ```ts
+ * import { MODEL_FADE_FROM_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MODEL_FADE_FROM_KM);
+ * ```
+ */
+export const MODEL_FADE_FROM_KM = 1000;
+
+/**
+ * The height, in kilometres, by which the model has shrunk to nothing and the satellite is its ordinary mark (ring and name) again.
+ *
+ * @example
+ * ```ts
+ * import { MODEL_FADE_TO_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MODEL_FADE_TO_KM);
+ * ```
+ */
+export const MODEL_FADE_TO_KM = 2000;
+
+/**
+ * The model's drawn radius, in CSS pixels, below which the satellite's ring and name come back (the ring is about this big, so the two are not drawn over each other).
+ *
+ * @example
+ * ```ts
+ * import { MODEL_HANDOVER_PX } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MODEL_HANDOVER_PX);
+ * ```
+ */
+export const MODEL_HANDOVER_PX = 10;
+
+/**
+ * The share of the view's height that a model's radius takes when the camera is `distanceKm` above the satellite (a ride above it). A satellite is a few metres across, so the model is drawn larger than it is, but a
+ * model that stays a share of the picture at any height becomes a block thousands of kilometres across from far up. So the model keeps a fixed size in the world, about 16 km in radius, which is the share `ABOVE_MODEL_SHARE`
+ * at `ABOVE_MODEL_KM`: it is never larger than that, falls as one over the height above it, and from `MODEL_FADE_FROM_KM` is let down smoothly (a smooth step) to nothing at `MODEL_FADE_TO_KM`, where the satellite is its ordinary mark.
+ * Pure, so a test can ask it at any height.
+ *
+ * @param distanceKm - The camera's distance from the satellite, in kilometres.
+ * @returns The share, from 0 to 0.17.
+ *
+ * @example
+ * ```ts
+ * import { aboveModelShare } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(aboveModelShare(150), aboveModelShare(1000) < aboveModelShare(150), aboveModelShare(6000));
+ * ```
+ */
+export function aboveModelShare(distanceKm: number): number {
+  if (!(distanceKm > 0)) return ABOVE_MODEL_SHARE;
+  const base = ABOVE_MODEL_SHARE * Math.min(1, ABOVE_MODEL_KM / distanceKm);
+  const t = Math.min(1, Math.max(0, (distanceKm - MODEL_FADE_FROM_KM) / (MODEL_FADE_TO_KM - MODEL_FADE_FROM_KM)));
+  return base * (1 - t * t * (3 - 2 * t));
+}

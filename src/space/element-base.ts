@@ -31,7 +31,7 @@ import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
-import { createFinerHolder, GIBS_CREDIT, GIBS_ID } from "../door/gibs.ts";
+import { createFinerHolder, GIBS_ID } from "../door/gibs.ts";
 import { folderSource } from "../door/map.ts";
 import type { TileSources, TileStats } from "../realistic/tile-set.ts";
 import { setThreeLoader, takeRenderer } from "../realistic/shared.ts";
@@ -46,7 +46,7 @@ import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/type
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
-import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook, type RideViewpoint } from "./ride.ts";
+import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
@@ -161,6 +161,8 @@ export interface RideOptions {
   face?: RideFace;
   /** `outside` (the default, or the element's `ride-viewpoint`) shows the satellite: with `view: "from"` the camera is a little behind and above it (straight above it with `look: "down"`), and a satellite the page has no model for is drawn small from the package's own sketch of its kind. `inside` is the camera at the satellite, as before, and no sketch. A body is always ridden from inside. */
   viewpoint?: RideViewpoint;
+  /** `distance` (the default, or the element's `ride-model-size`) lets the model of a satellite seen from above shrink as the camera rises and hand over to the ordinary mark, ring and name, between 1,000 and 2,000 km; `fixed` keeps one share of the picture at every height. */
+  modelSize?: RideModelSize;
   distanceKm?: number;
   smooth?: boolean;
 }
@@ -184,11 +186,13 @@ export interface Riding {
   distanceKm: number;
   /** `outside` or `inside` (see `RideOptions`). */
   viewpoint: RideViewpoint;
+  /** `distance` or `fixed` (see `RideOptions`). */
+  modelSize: RideModelSize;
 }
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; selectedRing: boolean };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -274,7 +278,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "ride-viewpoint"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -531,6 +535,7 @@ export class ChikyuSpace extends HTMLElement {
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === "ride-viewpoint") this.#applyViewpoint();
+    else if (name === "ride-model-size") this.#applyModelSize();
     else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
     else if (name === "time") this.time = readTime(value);
     else if (name === "speed") this.speed = this.#readSpeed();
@@ -606,7 +611,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-streak-max") {
       this.#model.satellites.streakMax = readStreakMax(value);
       this.#gate?.request();
-    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date") this.#gate?.request();
+    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
     if (name === "lang") this.#showFinerCredit();
@@ -620,7 +625,8 @@ export class ChikyuSpace extends HTMLElement {
     if (!note) return;
     const count = this.#model.tiles?.stats.used[GIBS_ID] ?? 0;
     const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
-    const text = count > 0 ? GIBS_CREDIT[lang] : "";
+    const finer = this.#finerHold.source((attr) => this.getAttribute(attr), false);
+    const text = count > 0 && finer ? finer.info.credit[lang] : "";
     if (note.textContent !== text) note.textContent = text;
     if (note.lang !== lang) note.lang = lang;
     if (note.hidden !== (text === "")) note.hidden = text === "";
@@ -950,6 +956,7 @@ export class ChikyuSpace extends HTMLElement {
   /** Tells the names of cities, then of countries, where the Earth is in the picture just drawn; the countries' names keep clear of the bodies', the places' and the cities'. */
   #nameFrame(frame: CountryFrame | null): void {
     this.#lastNameFrame = frame;
+    this.#tellModel();
     this.#relayNames(true, false);
   }
 
@@ -1002,9 +1009,28 @@ export class ChikyuSpace extends HTMLElement {
     countries.frame(frame, countries.stats.on && frame ? [...this.#bodyNameBoxes(), ...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? [])] : []);
   }
 
-  /** The boxes the bodies' names take beside them in the picture just drawn. */
+  /** The box of the ridden satellite's model as last told to the page (`chikyu-ride-model`), or null when none was told or it has gone. */
+  #toldModel: { left: number; top: number; right: number; bottom: number } | null = null;
+
+  /**
+   * Tells the page where the ridden satellite's model is, when that has changed by more than a pixel (or it has come or gone): `chikyu-ride-model` with `detail: { box, radiusPx, x, y }` (CSS pixels from the element's top left; `box` is `null` when no model is drawn),
+   * so a page can keep its own labels clear of it as the package keeps its own names clear. Nothing is sent while the box stands still, so a view at rest sends nothing.
+   */
+  #tellModel(): void {
+    const now = this.#model.followModel;
+    const was = this.#toldModel;
+    const box = now ? now.box : null;
+    const moved = box === null || was === null ? box !== was : Math.abs(box.left - was.left) > 1 || Math.abs(box.top - was.top) > 1 || Math.abs(box.right - was.right) > 1 || Math.abs(box.bottom - was.bottom) > 1;
+    if (!moved) return;
+    this.#toldModel = box ? { ...box } : null;
+    this.dispatchEvent(new CustomEvent("chikyu-ride-model", { detail: { box, radiusPx: now?.radiusPx ?? 0, x: now?.x ?? 0, y: now?.y ?? 0 } }));
+  }
+
+  /** The boxes the bodies' names take beside them in the picture just drawn, and the box of the ridden satellite's model, which is nearer than anything on the ground and so keeps the names clear of it. */
   #bodyNameBoxes(): { left: number; top: number; width: number; height: number }[] {
     const taken: { left: number; top: number; width: number; height: number }[] = [];
+    const modelBox = this.#model.followModel?.box;
+    if (modelBox) taken.push({ left: modelBox.left, top: modelBox.top, width: modelBox.right - modelBox.left, height: modelBox.bottom - modelBox.top });
     if (this.#model.labels && this.#places) {
       for (const name of BODY_NAMES) {
         const at = this.#places[name];
@@ -1404,7 +1430,7 @@ export class ChikyuSpace extends HTMLElement {
       // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
       const faceable = !(view === "follow" && typeof target === "string");
       const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint };
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize };
       if (face) {
         model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
         model.rideTurn = 0;
@@ -1539,6 +1565,35 @@ export class ChikyuSpace extends HTMLElement {
   }
   set rideViewpoint(value: RideViewpoint) {
     this.setAttribute("ride-viewpoint", value === "inside" ? "inside" : "outside");
+  }
+
+  /**
+   * How the model of a satellite seen from above is sized as the camera rises: `distance` (the default; the attribute `ride-model-size`) lets it shrink with the height and hand over to the ordinary mark (ring and name) between 1,000 and 2,000 km, `fixed` keeps the same share of the picture at every height, as 0.46.1 did.
+   * It is the default for the next `ride` and, set while riding, changes the one ridden at the next draw. See `RideOptions.modelSize`.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideModelSize = "fixed";
+   * console.log(space.rideModelSize);
+   * ```
+   */
+  get rideModelSize(): RideModelSize {
+    return this.getAttribute("ride-model-size") === "fixed" ? "fixed" : "distance";
+  }
+  set rideModelSize(value: RideModelSize) {
+    this.setAttribute("ride-model-size", value === "fixed" ? "fixed" : "distance");
+  }
+
+  #applyModelSize(): void {
+    const ride = this.#model.ride;
+    const next = this.rideModelSize;
+    if (!ride || ride.modelSize === next) return;
+    this.#model.ride = { ...ride, modelSize: next };
+    this.#gate?.request();
+    this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
   }
 
   #applyViewpoint(): void {
@@ -1819,9 +1874,8 @@ export class ChikyuSpace extends HTMLElement {
   /** Hands the places layer the ringed satellites of this draw, and tells the page when one comes into view or goes out of it. */
   #showMarks(marks: readonly { ref: SatelliteRef; x: number; y: number; visible: boolean }[]): void {
     if (marks.length > 0) this.#prepareSatLabelLang();
-    // a satellite ridden from outside is drawn as its model: a ring and a name on it would cover the model (MODULES-1303)
-    const ride = this.#model.ride;
-    const ridden = ride && ride.viewpoint === "outside" && typeof ride.target !== "string" ? ride.target : null;
+    // a satellite whose model is drawn (a ride from outside, while the model is big enough to read) has no ring and name on it: they would cover the model; they come back when it hands over to the mark (MODULES-1303, 1306)
+    const ridden = this.#model.satellites.modelOver;
     if (ridden) marks = marks.filter((m) => !(m.ref.group === ridden.group && m.ref.index === ridden.index));
     this.#marks = marks.map((m) => ({ id: `${m.ref.group}:${m.ref.index}`, label: this.#satelliteName(m.ref), x: m.x, y: m.y, visible: m.visible }));
     const now = new Map<string, boolean>();
@@ -1985,7 +2039,7 @@ export class ChikyuSpace extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, selectedRing: drawn.selectedRing };
   }
 
   // --- the game clock ----------------------------------------------------------------------------------------------------------------------------
