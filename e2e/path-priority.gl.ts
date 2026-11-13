@@ -114,37 +114,39 @@ test("at the Low level a crowd of dots hides a path under the default and does n
   const point = await crowdedPoint(page);
   const box = (await page.locator(SPACE).boundingBox())!;
 
-  // dots (the default): a press is the dot's, and the path is not heard
+  // dots (the default): a hover under a dot is not the path's, and a press is the dot's, and the path is not heard
   expect(await inPage(page, (api) => api.pathPriority, null)).toBe("dots");
-  await clearLog(page);
-  await press(page, point.x, point.y);
-  await expect.poll(async () => (await clicks(page)).length).toBe(1);
-  expect(await clicks(page), "a dot wins: only the satellite click").toEqual(["chikyu-satellite-click"]);
-  expect(((await logOf(page)).find((entry) => entry.type === "chikyu-satellite-click")!.detail as { group: string }).group).toBe("starlink");
-  await untilStill(page);
-
   await clearLog(page);
   await page.mouse.move(box.x + point.x, box.y + point.y);
   await page.evaluate(async () => {
     for (let frame = 0; frame < 4; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
   });
   expect((await logOf(page)).filter((entry) => entry.type === "chikyu-path-hover" && entry.detail !== null), "a hover under a dot is not the path's").toHaveLength(0);
+  await clearLog(page);
+  await press(page, point.x, point.y);
+  await expect.poll(async () => (await clicks(page)).length).toBe(1);
+  expect(await clicks(page), "a dot wins: only the satellite click").toEqual(["chikyu-satellite-click"]);
+  expect(((await logOf(page)).find((entry) => entry.type === "chikyu-satellite-click")!.detail as { group: string }).group).toBe("starlink");
+  await untilStill(page);
+  // the demo answers a click on a satellite by choosing it and turning the view to it: let go of the choice and find a crowded point again on the picture as it is now
+  await change(page, (api) => api.selectSatellite(null));
+  const crowd = await crowdedPoint(page);
 
   // paths: the same press and the same hover are the path's, and only the path's
   await page.locator(SPACE).evaluate((el) => el.setAttribute("path-priority", "paths"));
   expect(await inPage(page, (api) => api.pathPriority, null)).toBe("paths");
   await untilStill(page);
   await clearLog(page);
-  await press(page, point.x, point.y);
+  await press(page, crowd.x, crowd.y);
   await expect.poll(async () => (await clicks(page)).length).toBe(1);
   expect(await clicks(page), "the path wins: only the path click").toEqual(["chikyu-path-click"]);
   const told = (await logOf(page)).find((entry) => entry.type === "chikyu-path-click")!.detail as { id: number | string; ref: Ref };
-  expect(told.id).toBe(point.id);
+  expect(told.id).toBe(crowd.id);
   expect(told.ref).toEqual({ group: "stations", index: 2 });
   await untilStill(page);
 
   await clearLog(page);
-  await page.mouse.move(box.x + point.x + 1, box.y + point.y);
+  await page.mouse.move(box.x + crowd.x + 1, box.y + crowd.y);
   await expect.poll(async () => (await logOf(page)).some((entry) => entry.type === "chikyu-path-hover" && entry.detail !== null), { timeout: 20_000 }).toBe(true);
   expect(await clicks(page), "a hover is not a press").toEqual([]);
 });
