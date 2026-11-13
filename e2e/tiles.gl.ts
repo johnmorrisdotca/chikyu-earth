@@ -15,6 +15,27 @@ const zoomFor = async (page: Page, radius: number): Promise<number> => {
   return radius / (Math.min(box.width, box.height) / 2 / 1.08 - 1);
 };
 
+/**
+ * The tiles of a place come in waves, and nothing is loading between two of them. The place is whole when nothing is loading and neither the count of tiles shown nor the count asked for has moved
+ * through several polls in a row (a wave that was still to be asked for would move one of them).
+ */
+const untilWholePlace = async (page: Page): Promise<void> => {
+  let last = "";
+  let same = 0;
+  await expect
+    .poll(
+      async () => {
+        const tiles = (await statsOf(page)).tiles;
+        const now = `${tiles.shown}/${tiles.requested}`;
+        same = tiles.loading === 0 && now === last ? same + 1 : 0;
+        last = now;
+        return same;
+      },
+      { timeout: 30_000, intervals: [100], message: "the tiles of the place are all in" },
+    )
+    .toBeGreaterThanOrEqual(8);
+};
+
 const middle = async (page: Page): Promise<[number, number, number]> => (await pixelAt(page, page.locator(EARTH), 0.5, 0.5)).slice(0, 3) as [number, number, number];
 const magenta = (c: number[]): boolean => c[0]! > 200 && c[1]! < 60 && c[2]! > 200;
 const cyan = (c: number[]): boolean => c[0]! < 60 && c[1]! > 200 && c[2]! > 200;
@@ -91,7 +112,7 @@ test("tiles of a place left are kept a few seconds, so going back asks for nothi
   await expect.poll(async () => (await statsOf(page)).tiles.requested, { timeout: 30_000 }).toBeGreaterThan(here);
   await expect.poll(async () => (await statsOf(page)).tiles.loading, { timeout: 30_000 }).toBe(0);
   await expect.poll(async () => (await statsOf(page)).tiles.shown, { timeout: 30_000 }).toBeGreaterThan(2);
-  await settle(page, 800); // the tiles of a place come in waves (nothing is loading between two of them): the count to compare with is the whole place's
+  await untilWholePlace(page);
   const away = (await statsOf(page)).tiles;
   expect(away.held, "the place left is still held").toBeGreaterThan(away.shown);
   expect(away.held, "within the limit").toBeLessThanOrEqual(48);
