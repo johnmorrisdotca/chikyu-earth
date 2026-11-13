@@ -116,7 +116,7 @@ export function frameAt(ms: number): Frame {
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 /**
- * A frame between two others, `t` from 0 to 1. The spin goes the short way round, so a step under half a turn is right.
+ * A frame between two others, `t` from 0 to 1. The spin advances by how far the Earth turns in that time, so a step of a second takes the short way and a step of a day is a full turn.
  *
  * @param a - The earlier frame.
  * @param b - The later frame.
@@ -136,7 +136,9 @@ export function blend(a: Frame, b: Frame, t: number): Frame {
   const planets = {} as Record<PlanetName, Vec3>;
   for (const name of PLANETS) planets[name] = lerp3(a.planets[name], b.planets[name], t);
   let turn = b.spin - a.spin;
-  turn -= 360 * Math.round(turn / 360);
+  // The samples are wrapped to a circle. Pick the turn that matches how far the Earth really turns in the time between them, so a step of a day is a full turn and a step of a second is the short way.
+  const expected = ((b.ms - a.ms) / 86_164_090.5) * 360;
+  turn += 360 * Math.round((expected - turn) / 360);
   return { ms: a.ms + (b.ms - a.ms) * t, sun: lerp3(a.sun, b.sun, t), moon: lerp3(a.moon, b.moon, t), planets, spin: a.spin + turn * t };
 }
 
