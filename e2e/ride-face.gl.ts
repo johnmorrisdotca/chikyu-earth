@@ -1,6 +1,6 @@
 // Facing while riding: each way lands near its direction, the button stays pressed until the view is turned, the address keeps it, less motion is instant, and a held clock draws nothing after the glide.
 import { expect, test, type Page } from "@playwright/test";
-import { settle } from "./gl.ts";
+import { settle, untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -79,7 +79,8 @@ test("less motion turns at once, and nothing is drawn at rest afterwards", async
     return { gliding: space.stats.ride.gliding, draws: space.stats.draws };
   });
   expect(jumped.gliding, "reduced motion does not glide").toBe(false);
-  await settle(page, 600);
+  // the turn brings bodies into view: their pictures arrive in draws of their own, and rest is after the last
+  await untilArrived(page);
   const draws = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
   await page.waitForTimeout(700);
   expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws), "nothing is drawn at rest").toBe(draws);

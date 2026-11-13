@@ -1633,8 +1633,8 @@ export class ChikyuSpace extends HTMLElement {
     ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
     camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
-    /** What the body painter has made at the last draw: the Sun and planets with a drawing, the moons shown round a planet that is near and the moons held (shown, or gone from the view for less than four seconds), whether the Moon is the painter's (`moon`), and the bodies with finer map tiles on them (`tiles`). `mapped` is how many drawings are the painter's, with its pictures: a body out of the view, or too small to show its map, is a plain sphere and the painter is not asked for it. */
-    bodies: { look: string; painted: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number };
+    /** What the body painter has made at the last draw: the Sun and planets with a drawing, the moons shown round a planet that is near and the moons held (shown, or gone from the view for less than four seconds), whether the Moon is the painter's (`moon`), and the bodies with finer map tiles on them (`tiles`). `mapped` is how many drawings are the painter's, with its pictures: a body out of the view, or too small to show its map, is a plain sphere and the painter is not asked for it. `pending` is how many pictures asked of the painter have not yet arrived, and one more while a gathered draw (reduced motion) waits for its second: while it is above 0 a draw is still to come that nothing but the view itself asked for. */
+    bodies: { look: string; painted: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number; pending: number };
     /** The meteors: whether they are on, the streaks alive now and started so far, the streaks a second being drawn, and the strongest active shower's code and rate. */
     meteors: { on: boolean; strength: number; alive: number; spawned: number; perSecond: number; shower: string | null; zhr: number };
     /** The name written on the Earth: whether `body-label` is set, its text, the label is made, and it is showing (it is hidden while the Earth is small). */
@@ -1677,7 +1677,7 @@ export class ChikyuSpace extends HTMLElement {
       satellites: this.#satelliteStats(),
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null, facing: this.facing },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
-      bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons, held: this.#model.painted.held, moon: this.#model.painted.moon, tiles: this.#model.painted.tiles, mapped: this.#model.painted.mapped },
+      bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons, held: this.#model.painted.held, moon: this.#model.painted.moon, tiles: this.#model.painted.tiles, mapped: this.#model.painted.mapped, pending: this.#model.painted.pending },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },

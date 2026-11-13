@@ -1,5 +1,6 @@
 // A press, a tap or Enter on a named star or a constellation figure sends chikyu-sky-pick, and nothing is drawn at rest. Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -160,6 +161,8 @@ test("a press, a tap and Enter pick a named star or a figure, and rest draws not
   await expect.poll(async () => (await picks(page)).length).toBe(beforeKeys + 3);
   expect((await picks(page)).at(-1)!.abbreviation, "Shift+C goes back").toBe(forward.abbreviation);
 
+  // the sky was turned and the Earth made small, which brought bodies into view: their pictures arrive in draws of their own, and rest is after the last
+  await untilArrived(page);
   const drawn = await draws(page);
   const laid = await renders(page);
   await page.waitForTimeout(1000);

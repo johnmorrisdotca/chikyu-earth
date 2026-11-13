@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
 import { MOON_KEEP_MS } from "../src/space/scene.ts";
-import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed, untilStill } from "./gl.ts";
+import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed, untilArrived, untilStill } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -55,6 +55,8 @@ test("the Moon is drawn half lit, and the Sun, the Moon and the planets are name
 
 test("paused, nothing is drawn and no frame is asked for; at real time, at most one draw in 6 seconds", async ({ page }) => {
   await open(page);
+  // the bodies the opening view shows are made after its first draw, and their pictures arrive in draws of their own: rest is after the last
+  await untilArrived(page);
   const before = await counts(page);
   await page.waitForTimeout(4000);
   const after = await counts(page);
