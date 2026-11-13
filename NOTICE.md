@@ -34,6 +34,12 @@ Each outline's English name, Japanese name and country code come from **chizu**'
 **kuni**'s (https://github.com/johnmorrisdotca/kuni, also by John Morris) and Unicode CLDR's
 (https://www.unicode.org/license.txt) and Wikidata's (CC0). chizu's own NOTICE.md has the terms.
 
+## City names for the "you are here" marker
+
+The names `here-city` puts on a `here` marker (the capitals, the cities of a million, those of 100,000 and the smaller towns of one or two countries, `src/markers/here-city.ts`) are read at run time from **kuni**'s
+`/cities` (https://github.com/johnmorrisdotca/kuni, MIT, also by John Morris), which builds them from Wikidata's structured data (CC0, https://www.wikidata.org/wiki/Wikidata:Licensing) and Natural Earth's populated
+places (public domain); kuni's own NOTICE.md has the terms and the dates they were read. This package adds no source of its own and stores no city. Read 2026-11-13.
+
 ## The realistic Earth's pictures
 
 The pictures in `textures/` (and `dist/textures/`) are made by `scripts/make-textures.py` from four NASA Earth Observatory images, resized and
