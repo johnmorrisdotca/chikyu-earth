@@ -1,6 +1,6 @@
 {
   "name": "@johnmorrisdotca/chikyu-earth",
-  "version": "0.45.0",
+  "version": "0.46.0",
   "description": "Chikyu Earth 地球 — A line-drawn globe for the web: country outlines that turn at the Earth's own rate, centred on the place you give it, with an optional realistic Earth from space (three.js), the Sun, Moon and planets, satellites on their orbits, and markers for any place. A web component and an SVG string.",
   "keywords": [
     "earth",
