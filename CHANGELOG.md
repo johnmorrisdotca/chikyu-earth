@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Plain catalogue rows, found in Japanese too** (MODULES-1216). `catalogueRows()` in `@johnmorrisdotca/chikyu-earth/satellites` returns one row for every group and every satellite, with English and Japanese names, for a page to index. The Japanese name is the short name where the package has one (the ISS, Tiangong as `天宮`, Hubble as `ハッブル`); otherwise it is the English name, which is the same spelling in Japanese (Sentinel-2A). `aka` lists the catalogue's own other names (HST for Hubble, and a designation written in parentheses). `findInCatalogue` also matches a Japanese name and a group's Japanese label as typed, folding only case and width, and an English or numeric query returns the same entries as before.
+
 ## 0.42.0 - 2026-11-13
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.

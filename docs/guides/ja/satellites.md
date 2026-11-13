@@ -110,7 +110,18 @@ console.log(catalogueEntry(5).about);
 console.log(findInCatalogue("sentinel 2").map((entry) => entry.name).join(", "));
 ```
 
-`findInCatalogue(text)` は、名前、番号、衛星の役目 ("weather"、"telescope" など) に合う項目を、大文字小文字や記号を無視して探します。デモの「探す」欄はこれを使い、そのあと、読み込んだ衛星の名前の中も探します。
+`findInCatalogue(text)` は、名前、番号、衛星の役目 ("weather"、"telescope" など) に合う項目を、大文字小文字や記号を無視して探します。日本語の名前と、グループの日本語の見出しにも、入力したまま合います。かなでも漢字でも同じです。揃えるのは、大文字と小文字、全角と半角だけです。英語や数字で探すと、これまでと同じ項目が返ります。デモの「探す」欄はこれを使い、そのあと、読み込んだ衛星の名前の中も探します。
+
+`catalogueRows()` は、すべてのグループと、名前のある衛星のそれぞれについて、平らな行を1つ返します。ページは、これを自分の検索ボックスの索引にできます。行には `kind` (`group` または `satellite`)、`id`、英語と日本語の `names`、`orbit` があります。衛星の行には `noradId` と `group` もあります。日本語の名前は、パッケージが短い名前を持っているときはその短い名前です (ISS、天宮、ハッブル)。短い名前がないときは、日本語の名前は英語の名前と同じです。Sentinel-2A のように、日本語でも同じ綴りで書く名前です。`aka` は、カタログにすでに書いてある別の名前です。ハッブルの HST などです。ページが表示している言語として `en` または `ja` を渡せます。どちらの名前も常に行に入っているので、1つの索引で両方の言語に使えます。
+
+```js
+import { catalogueRows, findInCatalogue } from "@johnmorrisdotca/chikyu-earth/satellites";
+
+const hubble = catalogueRows().find((row) => row.noradId === 20580);
+console.log(`${hubble.names.en} / ${hubble.names.ja} (${hubble.aka.join(", ")})`);
+console.log(findInCatalogue("ハッブル").map((entry) => entry.name).join(", "));
+console.log(catalogueRows().filter((row) => row.kind === "group").length);
+```
 
 ## 自分の取得元
 

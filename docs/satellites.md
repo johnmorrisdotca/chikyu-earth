@@ -67,4 +67,4 @@ The same step then asks Space-Track for any group CelesTrak left more than 12 ho
 ## The catalogue
 
 `SATELLITE_GROUPS` (fourteen groups, each with its CelesTrak list or catalogue numbers, an orbit kind, whether it sits still, and a line in English and Japanese) and `CATALOGUE` (about forty satellites by NORAD number, with a line each)
-carry no elements. `findInCatalogue` finds by name, number or what a satellite does. JWST is left out on purpose: it is not in Earth orbit.
+carry no elements. `catalogueRows` gives one plain row for every group and every satellite, in English and Japanese, for a page to index. `findInCatalogue` finds by name, number or what a satellite does, and also by a Japanese name or a group's Japanese label. JWST is left out on purpose: it is not in Earth orbit.
