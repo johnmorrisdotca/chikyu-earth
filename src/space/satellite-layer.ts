@@ -30,14 +30,34 @@ export interface SatelliteState {
   /** Written at each draw: satellites placed, whether the clock is too fast for the groups, and the milliseconds the last update took. */
   /** Colour each dot by its orbit class. Off by default: a group keeps the one colour it was given. */
   orbitTint: boolean;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
+  /**
+   * The satellite the pointer rests on, and the faint orbit drawn for it. `fade` is 1 while the pointer rests and falls to 0 after it leaves.
+   * `enabled` is off when the page turns the faint orbit off. The path is computed once per satellite, from the elements already loaded.
+   */
+  hover: { ref: SatelliteRef | null; fade: number; enabled: boolean; color: string; opacity: number };
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
 }
-
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
 const ORBIT_POINTS = 120;
+/** How bright the chosen satellite's orbit is. The orbit under the pointer is about a third of this, so the two are told apart at a glance. */
+export const SELECTED_PATH_OPACITY = 0.85;
+/** The orbit under the pointer, before it fades. A page may set another with `--chikyu-hover-path-opacity`. */
+export const HOVER_PATH_OPACITY = SELECTED_PATH_OPACITY / 3;
+
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0 } });
+/** How long the faint orbit takes to go after the pointer leaves, in milliseconds. Reduced motion takes it away at once. */
+export const HOVER_FADE_MS = 180;
+
+/**
+ * How much of the faint orbit is left `elapsedMs` into its fade, from `from` (1 while the pointer rests) down to 0.
+ *
+ * @param elapsedMs - Milliseconds since the pointer left.
+ * @param from - The opacity share when the fade began, 0 to 1.
+ * @returns The share still drawn, 0 when the fade is over.
+ */
+export const fadeLeft = (elapsedMs: number, from: number): number => from * (1 - Math.min(1, Math.max(0, elapsedMs) / HOVER_FADE_MS));
 const ORBIT_REFRESH_GAME_MS = 30 * 60_000;
 const ORBIT_REFRESH_WALL_MS = 1000;
 
@@ -199,7 +219,17 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   selectedPoints.renderOrder = 6;
   selectedPoints.visible = false;
   scene.add(selectedPoints);
-  const selectedLine = { positions: new Float32Array(ORBIT_POINTS * 3), geometry: new three.BufferGeometry(), material: new three.LineBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.85 }) };
+  // One line for the whole life of the layer, rewritten in place: a hover does not make a new buffer. It is about a third as bright as the chosen orbit, so it reads thinner and fainter. WebGL draws a line one pixel wide, and the chosen orbit is left as it is.
+  const hoverLine = { positions: new Float32Array(ORBIT_POINTS * 3), geometry: new three.BufferGeometry(), material: new three.LineBasicMaterial({ color: "#ffffff", transparent: true, opacity: HOVER_PATH_OPACITY }) };
+  hoverLine.geometry.setAttribute("position", new three.BufferAttribute(hoverLine.positions, 3));
+  const hoverLoop = new three.LineLoop(hoverLine.geometry, hoverLine.material);
+  hoverLoop.name = "hover-path";
+  hoverLoop.frustumCulled = false;
+  hoverLoop.visible = false;
+  hoverLoop.renderOrder = 4;
+  scene.add(hoverLoop);
+  let hoverKey = "";
+  const selectedLine = { positions: new Float32Array(ORBIT_POINTS * 3), geometry: new three.BufferGeometry(), material: new three.LineBasicMaterial({ color: "#ffffff", transparent: true, opacity: SELECTED_PATH_OPACITY }) };
   selectedLine.geometry.setAttribute("position", new three.BufferAttribute(selectedLine.positions, 3));
   const selectedLoop = new three.LineLoop(selectedLine.geometry, selectedLine.material);
   selectedLoop.frustumCulled = false;
@@ -399,11 +429,36 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         }
         selectedLoop.visible = true;
         selectedMaterial.uniforms["size"]!.value = 14 * ratio();
+        state.drawn.selectedOpacity = selectedLine.material.opacity;
       } else {
         selectedPoints.visible = false;
         selectedLoop.visible = false;
         selectedKey = "";
+        state.drawn.selectedOpacity = 0;
       }
+
+      // The faint orbit: one path at a time, computed once from the elements already loaded, hidden while it is the chosen satellite's own orbit.
+      const hover = state.hover;
+      const hoverRef = hover.enabled && hover.fade > 0 ? hover.ref : null;
+      const hoverSet = hoverRef ? find(hoverRef) : undefined;
+      const sameAsSelected = Boolean(hoverRef && state.selected && hoverRef.group === state.selected.group && hoverRef.index === state.selected.index);
+      const hoverOk = Boolean(hoverRef && hoverSet && !sameAsSelected && hoverRef.index >= 0 && hoverRef.index < hoverSet.count && hoverSet.visible(hoverRef.index));
+      if (hoverOk && hoverRef && hoverSet) {
+        const key = `${hoverRef.group}:${hoverRef.index}`;
+        if (key !== hoverKey) {
+          hoverKey = key;
+          hoverLine.positions.set(hoverSet.orbit(hoverRef.index, time, ORBIT_POINTS).subarray(0, ORBIT_POINTS * 3));
+          (hoverLine.geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+        }
+        hoverLine.material.color.set(hover.color || "#ffffff");
+        hoverLine.material.opacity = hover.opacity * hover.fade;
+        hoverLoop.visible = hoverLine.material.opacity > 0;
+      } else {
+        hoverLoop.visible = false;
+        if (!hoverRef) hoverKey = "";
+      }
+      state.drawn.hoverPath = hoverLoop.visible;
+      state.drawn.hoverOpacity = hoverLoop.visible ? hoverLine.material.opacity : 0;
       state.drawn.placed = placed;
       state.drawn.segments = segments;
       state.drawn.dotScale = dotScale;
@@ -516,11 +571,13 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     dispose() {
       for (const entry of drawn.values()) drop(entry);
       drawn.clear();
-      scene.remove(selectedPoints, selectedLoop);
+      scene.remove(selectedPoints, selectedLoop, hoverLoop);
       selectedGeometry.dispose();
       selectedMaterial.dispose();
       selectedLine.geometry.dispose();
       selectedLine.material.dispose();
+      hoverLine.geometry.dispose();
+      hoverLine.material.dispose();
     },
   };
 }

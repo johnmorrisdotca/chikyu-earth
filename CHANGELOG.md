@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A faint orbit while the pointer rests on a satellite** (MODULES-1234). On `<chikyu-space>` and `<chikyu-earth-realistic>`, resting on a satellite shows its name and draws its orbit at about a third of the brightness of a chosen satellite's orbit (`hover-path`, on when `names-on-hover` is on; `hover-path="off"` turns the orbit off, `names-on-hover="off"` turns the name off). The colour and the opacity are `--chikyu-hover-path` and `--chikyu-hover-path-opacity`. The path is worked out once from the elements already loaded. It fades out when the pointer leaves (at once when the reader asks for reduced motion). A chosen orbit is unchanged. A touch does not rest, so nothing new is drawn, and nothing is drawn while the pointer is still and no satellite is under it.
+
 ## 0.42.0 - 2026-11-13
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.

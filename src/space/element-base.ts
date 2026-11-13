@@ -40,6 +40,7 @@ import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
+import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "./satellite-hover.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
@@ -178,7 +179,7 @@ export interface Riding {
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -218,7 +219,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -261,7 +262,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "hover-path", "names-on-hover"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -301,6 +302,8 @@ export class ChikyuSpace extends HTMLElement {
   #pool = new Map<BodyName, HTMLElement>();
   #places: Record<BodyName, BodyPlace | null> | undefined;
   #chosenLabel: HTMLElement | undefined;
+  /** The name and the faint orbit while the pointer rests on a satellite. */
+  #hover: SatelliteHover | undefined;
   #focusBeforeRide: BodyName = "Earth";
   #lostTold = false;
   #names: Partial<Record<BodyName, string>> = {};
@@ -430,6 +433,7 @@ export class ChikyuSpace extends HTMLElement {
       onLabelError: (error) => this.dispatchEvent(new CustomEvent("chikyu-body-label-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
       onSatelliteMarks: (marks) => this.#showMarks(marks),
       onSelected: (place) => this.#placeChosen(place),
+      onHover: (place) => this.#hover?.follow(place),
       onMoving: () => this.#gate?.request(),
       onRideLost: () => this.#rideLost(),
       onPlaceRings: (drawn) => this.#ringsDrawn(drawn),
@@ -459,6 +463,20 @@ export class ChikyuSpace extends HTMLElement {
     this.#last = performance.now();
     this.#schedule();
     this.addEventListener("pointerdown", this.#down);
+    this.#hover = bindSatelliteHover({
+      element: this,
+      state: this.#model.satellites,
+      pick: (x, y) => this.#model.pick?.(x, y, 12) ?? null,
+      place: (ref) => this.placeSatellite(ref),
+      name: (ref) => this.satelliteInfo(ref)?.name,
+      selected: () => this.selectedSatellite,
+      request: () => this.#gate?.request(),
+      labelParent: () => this.#labelBox ?? null,
+      pathOn: () => hoverPathOn(this.getAttribute("hover-path"), this.getAttribute("names-on-hover")),
+      namesOn: () => namesHoverOn(this.getAttribute("names-on-hover")),
+      style: () => hoverStyleOf(this),
+    });
+    this.#hover.sync();
     // before the shared hands (which hear it after this): a plain wheel in an immersive view zooms
     this.addEventListener("wheel", this.#wheel, { capture: true, passive: false });
     this.addEventListener("keydown", this.#faceKey);
@@ -476,6 +494,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#hands?.unbind();
     this.#hands = undefined;
     this.#zoomRange(false);
+    this.#hover?.stop();
+    this.#hover = undefined;
     this.removeEventListener("pointerdown", this.#down);
     this.removeEventListener("wheel", this.#wheel, { capture: true });
     this.removeEventListener("keydown", this.#faceKey);
@@ -562,7 +582,8 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-tint") {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.request();
-    } else if (name === "tiles") this.#gate?.request();
+    } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
+    else if (name === "tiles") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
   }
@@ -1422,6 +1443,10 @@ export class ChikyuSpace extends HTMLElement {
     if (satellites === null) {
       groups.delete(group);
       if (this.#model.satellites.selected?.group === group) this.#model.satellites.selected = null;
+      if (this.#model.satellites.hover.ref?.group === group) {
+        this.#model.satellites.hover.ref = null;
+        this.#model.satellites.hover.fade = 0;
+      }
     } else {
       const was = groups.get(group);
       groups.set(group, {
@@ -1451,6 +1476,27 @@ export class ChikyuSpace extends HTMLElement {
   /** The groups now set, with how many satellites each holds and whether it is shown. */
   get satelliteGroups(): { name: string; count: number; visible: boolean }[] {
     return [...this.#model.satellites.groups].map(([name, group]) => ({ name, count: group.satellites.count, visible: group.visible }));
+  }
+
+  /**
+   * Draw a faint orbit while the pointer rests on a satellite. On unless `hover-path="off"`. Left unset, it is on when `names-on-hover` is on.
+   * The colour and the opacity are the custom properties `--chikyu-hover-path` and `--chikyu-hover-path-opacity`.
+   */
+  get hoverPath(): boolean {
+    return hoverPathOn(this.getAttribute("hover-path"), this.getAttribute("names-on-hover"));
+  }
+  set hoverPath(value: boolean) {
+    if (value) this.setAttribute("hover-path", "");
+    else this.setAttribute("hover-path", "off");
+  }
+
+  /** Show a satellite's name while the pointer rests on it. On unless `names-on-hover="off"`. A touch does not rest, so it shows nothing. */
+  get namesOnHover(): boolean {
+    return namesHoverOn(this.getAttribute("names-on-hover"));
+  }
+  set namesOnHover(value: boolean) {
+    if (value) this.removeAttribute("names-on-hover");
+    else this.setAttribute("names-on-hover", "off");
   }
 
   /** Mark one satellite: a larger ring round it, its orbit drawn, and its name beside it. `null` lets it go. */
@@ -1705,7 +1751,7 @@ export class ChikyuSpace extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
   }
 
   // --- the game clock ----------------------------------------------------------------------------------------------------------------------------

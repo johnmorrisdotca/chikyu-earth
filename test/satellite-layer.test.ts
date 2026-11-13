@@ -45,8 +45,12 @@ class Attribute {
 }
 class Material {
   uniforms: Record<string, { value: unknown }> = {};
-  constructor(options: { uniforms?: Record<string, { value: unknown }> } = {}) {
+  opacity = 1;
+  color = { value: "#ffffff", set(value: string) { this.value = value; return this; } };
+  constructor(options: { uniforms?: Record<string, { value: unknown }>; opacity?: number; color?: string } = {}) {
     this.uniforms = options.uniforms ?? {};
+    if (options.opacity !== undefined) this.opacity = options.opacity;
+    if (options.color !== undefined) this.color.value = options.color;
   }
   dispose(): void {}
 }
@@ -141,4 +145,52 @@ test("above 60 times real time a big group is pinned whole once, then a slice a 
   assert.ok(widest < group.count / 10, `a frame pinned ${widest} of ${group.count} satellites`);
   assert.ok(total > 0, "slices are pinned: the places do not go stale");
   assert.equal(state.drawn.placed, group.count, "every satellite is still drawn");
+});
+
+test("the orbit under the pointer is computed once, at about a third of the chosen orbit's brightness, and it goes when the pointer leaves", () => {
+  const local = { children: [] as { name?: string; visible: boolean; geometry?: Geo; material?: { opacity: number } }[], add(item: { name?: string; visible: boolean }) { this.children.push(item); }, remove(item: unknown) { this.children = this.children.filter((child) => child !== item); } };
+  const state = newSatelliteState();
+  const group = createSatellites(stations);
+  const orbit = group.orbit.bind(group);
+  const orbits: number[] = [];
+  group.orbit = (index, ms, points) => {
+    orbits.push(index);
+    return orbit(index, ms, points);
+  };
+  state.groups.set("stations", { satellites: group, color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), local as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  layer.update(time, 0, 300);
+  const hover = state as unknown as { hover: { ref: { group: string; index: number } | null; fade: number; enabled: boolean; color: string; opacity: number } };
+  const drawn = state.drawn as unknown as { hoverPath?: boolean; hoverOpacity?: number; selectedOpacity?: number };
+  hover.hover = { ref: { group: "stations", index: 0 }, fade: 1, enabled: true, color: "#ffffff", opacity: 0.85 / 3 };
+  const before = orbits.length;
+  layer.update(time, 0, 300);
+  assert.deepEqual(orbits.slice(before), [0], "the path is computed once when the pointer comes to rest");
+  assert.equal(drawn.hoverPath, true, "the faint orbit is drawn");
+  assert.ok((drawn.hoverOpacity ?? 0) > 0);
+  assert.ok((drawn.hoverOpacity ?? 1) < 0.85, "fainter than the chosen orbit");
+  assert.ok(Math.abs((drawn.hoverOpacity ?? 0) * 3 - 0.85) < 0.02, "about a third of the brightness");
+  const line = local.children.find((child) => child.name === "hover-path");
+  assert.ok(line, "one hover path");
+  const positions = (line.geometry!.getAttribute("position") as Attribute).array;
+  const again = orbit(0, time, positions.length / 3);
+  for (let i = 0; i < positions.length; i += 1) assert.equal(positions[i], again[i], `point ${i}`);
+  layer.update(time + 120_000, 0, 300);
+  assert.equal(orbits.length, before + 1, "a still pointer does not compute the path again");
+  state.selected = { group: "stations", index: 0 };
+  layer.update(time, 0, 300);
+  assert.equal(drawn.hoverPath, false, "a chosen orbit is not covered by a second one");
+  assert.ok((drawn.selectedOpacity ?? 0) > (drawn.hoverOpacity ?? 1));
+  state.selected = { group: "stations", index: 1 };
+  hover.hover.ref = { group: "stations", index: 0 };
+  hover.hover.fade = 1;
+  layer.update(time, 0, 300);
+  assert.equal(drawn.hoverPath, true);
+  assert.deepEqual(orbits.slice(before), [0, 0, 1], "the two later paths are the chosen satellite's; the one under the pointer is not computed again");
+  hover.hover.fade = 0;
+  hover.hover.ref = null;
+  layer.update(time, 0, 300);
+  assert.equal(drawn.hoverPath, false, "leaving takes the path away");
+  assert.equal(local.children.filter((child) => child.name === "hover-path").length, 1, "twenty hovers would still be the one line");
 });
