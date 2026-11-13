@@ -59,6 +59,18 @@ test("at a steady rate the track looks things up once a step, not once a frame",
   assert.ok(track.lookups <= 2 * 12, `${track.lookups} lookups for 300 frames over about ${Math.round((300 * 33 * 3600) / 1000)} s of game time`);
 });
 
+test("a day-long step turns with the Earth, and a one-second step still takes the short way", () => {
+  const start = Date.UTC(2026, 10, 2, 18);
+  const a = frameAt(start);
+  const day = frameAt(start + 86_400_000);
+  const mid = blend(a, day, 0.5);
+  const turned = mid.spin - a.spin;
+  assert.ok(Math.abs(turned - 180.5) < 1, `half a day turned ${turned} degrees`);
+  const b = { ...a, ms: a.ms + 1000, spin: a.spin + 359.9 };
+  const short = blend(a, b, 0.5);
+  near(((short.spin - a.spin + 540) % 360) - 180, -0.05, 1e-6, "half of -0.1 degrees");
+});
+
 test("the spin goes the short way round and a blend keeps unit lengths", () => {
   const a = frameAt(Date.UTC(2026, 10, 2, 0));
   const b = { ...a, ms: a.ms + 1000, spin: a.spin + 359.9 };

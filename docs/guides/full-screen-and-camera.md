@@ -55,6 +55,21 @@ The light reads the real Sun and the real moment in every mode: only the camera 
 
 `<chikyu-space>` takes the same `camera` (it was always the ground before 0.24), and `earth-size` (the share of the shorter side the Earth's disc fills at Fit, 0.9 by default so the glow is never cut), `earth-x` and `earth-y` (where the Earth's centre is in the view, 0.5 and 0.5 in the middle). Both elements fill their box in any shape, so the demo's panel, Wide and the embed frame draw edge to edge, with no square inside.
 
+## A share of the Earth's turn: `follow`
+
+`follow` on `<chikyu-space>` is a number from 0 to 1. 0, the default, holds the stars: the Earth turns beneath the camera, which is what `camera="space"` already does, so a page that does not set it changes nothing. 1 turns with the Earth, so the longitude under the middle of the view stays. A number between takes that share of the turn. It follows the clock, including a fast clock, a reversed one, and a paused one (at speed 0 the view does not turn).
+
+Changing `follow` does not jump the longitude under the middle. `follow-ease` is how many seconds the change takes: 0.4 when left out, so the change can be seen, and 0 for none. A reader who asked for reduced motion gets the change at once. The page no longer has to add a share of the Earth's turn to the yaw every frame. Nothing is drawn while the clock is stopped and `follow` is not changing.
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+
+const space = document.querySelector("chikyu-space")!;
+space.follow = 1;
+space.followEase = 0;
+console.log(space.centreLongitude, space.shownTime);
+```
+
 ## How the Earth looks
 
 The realistic Earth is shaded from the NASA pictures the package already carries (Blue Marble, Black Marble, the cloud map, the water mask; see `NOTICE.md`), with no new data:

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A share of the Earth's turn on the space view** (MODULES-1223). `follow` on `<chikyu-space>` is a number from 0 to 1. 0, the default, holds the stars, which is what `camera="space"` already does, so a page that sets nothing changes nothing. 1 turns with the Earth. A number between takes that share. Changing it keeps the longitude under the middle of the view. `follow-ease` is how many seconds the change takes (0.4 when left out, 0 for none, and at once when the reader asks for reduced motion). It follows a fast, reversed or paused clock, and nothing is drawn while the clock is stopped and `follow` is not changing. A step of the clock longer than half a turn now keeps the Earth's real turn (a day is a full turn), so a fast clock moves the ground at the Earth's own rate. `centreLongitude` reads the longitude under the middle, and `shownTime` is the moment of the draw it belongs to.
+
 ## 0.42.0 - 2026-11-13
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.

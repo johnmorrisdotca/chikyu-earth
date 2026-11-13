@@ -14,6 +14,7 @@ import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { faceOffset, ridePose, type RideFace, type RideLook } from "./ride.ts";
+import { followSpin } from "./follow.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
@@ -166,6 +167,8 @@ export interface SpaceModel {
   cloudDrift: number;
   /** For the `space` camera: the Earth's turn against the stars (degrees) at the moment the camera was set, so it stays in the stars while the Earth turns beneath; null until the next draw sets it. */
   cameraSpin: number | null;
+  /** How much of the Earth's turn the space camera takes: 0 holds the stars, 1 turns with the Earth. */
+  follow: number;
   /** The share of the view's shorter side the Earth's disc fills at zoom 1, and where its centre is in the view (0 to 1 across and down; 0.5, 0.5 is the middle). */
   earth: { size: number; x: number; y: number };
   /** The camera's distance at zoom 1 in radii of the body it looks at, as the last draw worked it out from the view's shape and `earth.size`. */
@@ -238,6 +241,7 @@ export const newSpaceModel = (): SpaceModel => ({
   airThickness: AIR_THICKNESS_DEFAULT,
   cloudDrift: 0,
   cameraSpin: null,
+  follow: 0,
   earth: { size: DEFAULT_EARTH_SIZE, x: 0.5, y: 0.5 },
   fit: fitDistance(DEFAULT_EARTH_SIZE, 1),
   orbits: true,
@@ -933,7 +937,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             let baseLat = model.centre.lat;
             if (model.camera === "space") {
               if (model.cameraSpin === null) model.cameraSpin = frame.spin;
-              spin = model.cameraSpin;
+              // 0 holds the stars (the anchor alone, as before). 1 uses the Earth's turn now. In between, that share of the turn since the anchor.
+              spin = followSpin(model.cameraSpin, frame.spin, model.follow);
             } else if (model.camera === "sun") {
               spin = Math.atan2(-frame.sun[2], frame.sun[0]) / RAD;
               baseLat += Math.asin(Math.max(-1, Math.min(1, frame.sun[1] / (Math.hypot(...frame.sun) || 1)))) / RAD;

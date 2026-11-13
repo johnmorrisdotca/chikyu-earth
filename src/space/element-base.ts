@@ -40,6 +40,7 @@ import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
+import { clampFollow, retargetFollow } from "./follow.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
@@ -261,7 +262,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles", "follow", "follow-ease"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -301,6 +302,8 @@ export class ChikyuSpace extends HTMLElement {
   #pool = new Map<BodyName, HTMLElement>();
   #places: Record<BodyName, BodyPlace | null> | undefined;
   #chosenLabel: HTMLElement | undefined;
+  /** The ease of `follow` from one share to the next, if one is running. */
+  #followTimer: ReturnType<typeof setTimeout> | undefined;
   #focusBeforeRide: BodyName = "Earth";
   #lostTold = false;
   #names: Partial<Record<BodyName, string>> = {};
@@ -482,6 +485,8 @@ export class ChikyuSpace extends HTMLElement {
     window.removeEventListener("pointerup", this.#up, true);
     clearTimeout(this.#timer);
     this.#timer = undefined;
+    clearTimeout(this.#followTimer);
+    this.#followTimer = undefined;
     this.#gate?.cancel();
     this.#view?.dispose();
     this.#view = undefined;
@@ -562,7 +567,8 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-tint") {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.request();
-    } else if (name === "tiles") this.#gate?.request();
+    } else if (name === "follow") this.#easeFollow(clampFollow(Number(value)));
+    else if (name === "tiles") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
   }
@@ -1041,6 +1047,81 @@ export class ChikyuSpace extends HTMLElement {
   set camera(value: CameraMode) {
     this.#model.camera = value;
     this.#model.cameraSpin = null;
+    this.#gate?.request();
+  }
+
+  /**
+   * How much of the Earth's turn the space camera takes, from 0 to 1. 0, the default, holds the stars: the Earth turns beneath the camera, which is what `camera="space"` already does, so a page that sets nothing keeps that.
+   * 1 turns with the Earth, so the ground under the middle stays. A value between takes that share of the turn. Changing it does not move the longitude under the middle. `follow-ease` is how many seconds the change takes (0.4 when left out, 0 for none; at once when the reader asks for reduced motion). It asks for no frame of its own once the change has settled, and none while the clock is stopped.
+   */
+  get follow(): number {
+    return clampFollow(Number(this.getAttribute("follow")));
+  }
+  set follow(value: number) {
+    const next = clampFollow(value);
+    const text = String(next);
+    if (this.getAttribute("follow") === text) this.#easeFollow(next);
+    else this.setAttribute("follow", text);
+  }
+
+  /** Seconds `follow` takes to change. Left out, 0.4. `0` changes at once. */
+  get followEase(): number {
+    const raw = this.getAttribute("follow-ease");
+    if (raw === null || raw === "") return 0.4;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  set followEase(value: number) {
+    this.setAttribute("follow-ease", String(value));
+  }
+
+  /** The longitude, in degrees, under the middle of the view, or null before the first draw. */
+  get centreLongitude(): number | null {
+    const base = this.#model.lookBase;
+    if (!base) return null;
+    return ((((base.lon - this.#model.view.yaw) % 360) + 540) % 360) - 180;
+  }
+
+  /** The moment of the last draw, in milliseconds, or null before the first. The longitude under the middle belongs to this moment. */
+  get shownTime(): number | null {
+    return this.#model.drawn?.frame.ms ?? null;
+  }
+
+  /** Move `follow` to `next`, keeping the longitude under the middle, and ask for the frames of the ease. */
+  #easeFollow(next: number): void {
+    if (this.#followTimer !== undefined) {
+      clearTimeout(this.#followTimer);
+      this.#followTimer = undefined;
+    }
+    const to = clampFollow(next);
+    const from = this.#model.follow;
+    const seconds = prefersLessMotion() ? 0 : this.followEase;
+    if (!(seconds > 0) || to === from) {
+      this.#applyFollow(to);
+      return;
+    }
+    const started = performance.now();
+    const step = (): void => {
+      const t = Math.min(1, (performance.now() - started) / (seconds * 1000));
+      const eased = t * t * (3 - 2 * t);
+      this.#applyFollow(from + (to - from) * eased);
+      if (t < 1 && this.isConnected) this.#followTimer = setTimeout(step, 32);
+      else this.#followTimer = undefined;
+    };
+    step();
+  }
+
+  #applyFollow(value: number): void {
+    const spin = this.#model.drawn?.frame.spin;
+    if (this.#model.camera === "space" && this.#model.cameraSpin !== null && spin !== undefined) {
+      const turned = retargetFollow(this.#model.cameraSpin, spin, this.#model.follow, value, this.#model.view.yaw);
+      this.#model.cameraSpin = turned.anchor;
+      if (turned.yaw !== this.#model.view.yaw) {
+        this.#model.view = { ...this.#model.view, yaw: turned.yaw };
+        this.#controls()?.set({ yaw: turned.yaw, tilt: this.#model.view.tilt, zoom: this.#model.view.zoom }, value === this.follow, "follow");
+      }
+    }
+    this.#model.follow = clampFollow(value);
     this.#gate?.request();
   }
 
