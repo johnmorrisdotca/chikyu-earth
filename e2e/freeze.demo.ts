@@ -70,6 +70,25 @@ async function atRest(page: Page): Promise<void> {
     .toBe(true);
 }
 
+/**
+ * Wait until no GL draw has been made over two readings 700 ms apart: what was asked for before the view went out of sight or the tab was hidden has been drawn (or dropped), however late a saturated machine got to it. The controls keep turning and may keep asking for frames of their
+ * own in these tests, so unlike `untilStill` this looks at the GL draw count alone. After it, a count of draws is of what comes later (MODULES-1319).
+ */
+async function drawsStill(page: Page, timeout = 30_000): Promise<void> {
+  let last = -1;
+  await expect
+    .poll(
+      async () => {
+        const now = (await readCounts(page)).draws;
+        const still = now === last;
+        last = now;
+        return still;
+      },
+      { timeout, intervals: [700], message: "the draws asked for before it went out of sight have landed and no more come" },
+    )
+    .toBe(true);
+}
+
 /** Make sure the controls are turning the view (a page that opens with `autoplay` already is). */
 const turn = (page: Page) =>
   page.locator("kazoku-view-controls").evaluate((el) => {
@@ -133,7 +152,21 @@ for (const look of LOOKS) {
           document.querySelector("#globe")!.scrollIntoView = () => undefined;
         });
         await expect.poll(async () => page.locator(ELEMENT[look]).evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(1000);
-        await page.waitForTimeout(800);
+        // the page's own observer is made after the renderer's, so when it says the element is out of view the renderer has been told too; on a machine throttled to a quarter of its speed that is long after the scroll
+        await page.locator(ELEMENT[look]).evaluate(
+          (el) =>
+            new Promise<void>((done) => {
+              const watch = new IntersectionObserver((entries) => {
+                if (!entries[entries.length - 1]!.isIntersecting) {
+                  watch.disconnect();
+                  done();
+                }
+              });
+              watch.observe(el);
+            }),
+        );
+        // a frame asked for before the view went out of sight is drawn, rightly, however late a saturated machine gets to it: wait for the draws to hold still, then count (MODULES-1319)
+        await drawsStill(page);
         const away = await bounded(page, 2500, look);
         expect(away.draws, "no GL draws out of sight").toBe(0);
         expect(away.frames).toBe(0);
@@ -144,7 +177,8 @@ for (const look of LOOKS) {
           Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
           document.dispatchEvent(new Event("visibilitychange"));
         });
-        await page.waitForTimeout(500);
+        // the same: a frame already asked for may land late (51 GL draws on a machine at load 50 to 60); the counts are of what comes after the draws have held still (MODULES-1319)
+        await drawsStill(page);
         const hidden = await bounded(page, 2500, look);
         expect(hidden.draws, "no GL draws in a hidden tab").toBe(0);
         expect(hidden.frames).toBe(0);
@@ -198,7 +232,8 @@ test.describe("the full-screen space view (fullscreen.html?look=space), with the
     await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
     await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { bodies: { painted: number } }).bodies.painted), { timeout: 30_000 }).toBe(9);
     await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
-    await page.waitForTimeout(1500);
+    // rest, not a wait: on a saturated machine the pictures and the gathered draws land seconds after the painted count reads 9, so the count is taken when the element says nothing is still to come and the draws have held still (MODULES-1319)
+    await untilStill(page);
   };
 
   test("at rest nothing is drawn and no frame is asked for", async ({ page }) => {
