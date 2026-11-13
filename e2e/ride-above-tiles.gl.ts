@@ -31,7 +31,7 @@ test("the whole Earth in view asks for no tile: the package's own picture is sha
   await routeElements(page);
   await page.goto("/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0");
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
-  await expect.poll(async () => (await tiles(page)).ready, { message: "the tile set is read" }).toBe(true);
+  await expect.poll(async () => (await tiles(page)).ready, { timeout: 30_000, message: "the tile set is read" }).toBe(true);
   await atRest(page);
   expect((await tiles(page)).level).toBeNull();
   expect(log.tiles, "nothing is fetched").toEqual([]);
@@ -49,6 +49,9 @@ test("above the station the ground is laid with the tiles under the camera at th
   await expect.poll(async () => (await tiles(page)).shown, { timeout: 30_000 }).toBeGreaterThan(0);
   await atRest(page);
   expect(log.tiles.filter((tile) => tile.startsWith("day/")).every((tile) => tile.startsWith("day/3/")), "level 3 day tiles only").toBe(true);
+  // every tile this view needs is in: what the view holds at level 3, to be held again when it comes back to level 3 and not more
+  await expect.poll(async () => (await tiles(page)).loading, { timeout: 30_000, message: "the level 3 tiles are in" }).toBe(0);
+  const level3 = (await tiles(page)).held;
 
   const before = log.tiles.length;
   await rideAt(page, 150);
@@ -65,6 +68,13 @@ test("above the station the ground is laid with the tiles under the camera at th
 
   await rideAt(page, 3000);
   await expect.poll(async () => (await tiles(page)).level, { timeout: 30_000, message: "back up, level 3 again" }).toBe(3);
-  await expect.poll(async () => (await tiles(page)).held, { timeout: 30_000, message: "and the level 4 tiles are freed" }).toBeLessThan(held.held);
+  // the level 3 tiles the view lets go four seconds after it needs no more of them, and asks for again when it comes back: by then the view holds what it held at level 3 before, and the level 4 tiles are not among them. (A count against the level 4 view's own
+  // is not it: that view may or may not still hold the level 3 tiles it let go of, according to how long the test took to get there.)
+  await expect
+    .poll(async () => {
+      const now = await tiles(page);
+      return now.loading === 0 ? now.held : Infinity;
+    }, { timeout: 30_000, message: "and the level 4 tiles are freed" })
+    .toBeLessThanOrEqual(level3);
   await atRest(page);
 });
