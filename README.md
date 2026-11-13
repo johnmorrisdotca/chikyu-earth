@@ -611,7 +611,7 @@ console.log(countryList().filter((country) => country.alpha2 === null).map((coun
 
 ## How to cite
 
-> Morris, J. (2026). *Chikyu Earth* (version 0.44.0) [Computer software]. https://github.com/johnmorrisdotca/chikyu-earth
+> Morris, J. (2026). *Chikyu Earth* (version 0.45.0) [Computer software]. https://github.com/johnmorrisdotca/chikyu-earth
 
 GitHub's "Cite this repository" button reads [CITATION.cff](CITATION.cff) and gives BibTeX and APA. Cite the version you used (`npm ls @johnmorrisdotca/chikyu-earth`), and credit the sources behind the numbers and pictures: [NOTICE.md](NOTICE.md) says who made each one and under what terms.
 
