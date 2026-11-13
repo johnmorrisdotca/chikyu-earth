@@ -58,3 +58,30 @@ test("the model's share of the picture is never more than at the lowest height, 
   // no pop: a step of one kilometre changes the share by under 0.15 per cent of the picture's height
   for (let km = 100; km < 3000; km += 1) assert.ok(Math.abs(aboveModelShare(km + 1) - aboveModelShare(km)) < 0.0015, `${km} km`);
 });
+
+test("given the scene's own Sun light, a drawing makes none of its own and points that one: the scene has the same lights whether or not a drawing is in it (MODULES-1293)", () => {
+  const countLights = (root: three.Object3D): number => {
+    let found = 0;
+    root.traverse((part) => {
+      if ((part as three.DirectionalLight).isDirectionalLight) found += 1;
+    });
+    return found;
+  };
+  const scene = new three.Scene();
+  const sun = new three.DirectionalLight(0xfff4e0, 0);
+  scene.add(sun);
+  assert.equal(countLights(scene), 1, "one light with nothing drawn");
+  const drawing = genericSatellite(three as never, "bus", { sun });
+  scene.add(drawing.object);
+  assert.equal(countLights(scene), 1, "still one with the drawing in the scene");
+  drawing.light?.([0, 1, 0]);
+  assert.deepEqual(sun.position.toArray(), [0, 1, 0], "the scene's light points to the Sun in the scene's axes");
+  assert.ok(sun.intensity > 0, "and is on");
+  scene.remove(drawing.object);
+  drawing.dispose();
+  assert.equal(countLights(scene), 1, "the drawing's going takes no light with it");
+  // a drawing made as a page makes one (no shared light) still brings its own
+  const alone = genericSatellite(three as never, "bus");
+  assert.equal(countLights(alone.object), 1);
+  alone.dispose();
+});
