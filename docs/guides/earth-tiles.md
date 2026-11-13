@@ -67,6 +67,22 @@ The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. 
 
 The clouds stay at the package's 2048 picture: they are soft, and NASA's finer cloud files are no longer served. The city lights go to level 4 (16384 across), half the day map's detail, where there is little more to see.
 
+## Closer than these tiles
+
+The pyramid stops at day level 5 (about 1.2 km a pixel, from a 500 m source). For a view closer than that, `tiles-finer="gibs"` asks the browser to read a daily true-colour picture from NASA's Global Imagery Browse Services. It is off unless a page sets it: the page is then depending on that service.
+
+```html
+<chikyu-earth-realistic texture-base="/textures/" tiles="/tiles/" tiles-finer="gibs"></chikyu-earth-realistic>
+```
+
+`<chikyu-space>` takes the same attribute. The picture is the VIIRS daily true-colour layer for the UTC day before the moment on show (a day's swaths are not all in yet). The clouds are not taken out. `tiles-finer-layer` can name `MODIS_Terra_CorrectedReflectance_TrueColor` instead, or `BlueMarble_ShadedRelief_Bathymetry`, which is a static picture at the same resolution as level 5 and only a stand-in. `tiles-finer-date` is `previous-day` (the default), `shown`, or one day `yyyy-mm-dd`.
+
+Nothing is fetched until the view is closer than the tiles already underneath, and nothing is fetched for a day the layer did not have on 2026-11-13 (the day its range was read). A tile that is missing, black, or still out after two seconds is left, the coarser picture stays, and that tile is not asked for again while it remains in view. The same limits hold: 48 tiles, 72 MB, six requests at a time, and nothing at rest. A tile that arrives fades in over a third of a second, unless the reader asked for less motion, in which case it is shown at once. While those tiles are on the screen the element's credit line shows NASA's acknowledgement.
+
+The reader's browser asks NASA's server itself. This package does not proxy the request, so NASA's server sees it.
+
+`gibsTiles({ time })` from `@johnmorrisdotca/chikyu-earth/door` is the same source, for a page that builds its own. With `data="own"` the realistic Earth ignores it.
+
 ## Making them
 
 ```sh

@@ -1,7 +1,8 @@
 // The maths of the Earth's map tiles, with no browser and no three.js: which pyramid level a zoom needs, and which tiles of that level are in view. Pure.
 //
 // A tile set is the map cut into 512 pixel squares: level L is `1024 * 2^L` pixels across, in `2^(L+1)` columns and `2^L` rows, column 0 at longitude -180 and row 0 at
-// latitude 90, a tile at `<layer>/<level>/<column>/<row>.webp` (`scripts/make-earth-tiles.py` makes one).
+// latitude 90, a tile at `<layer>/<level>/<column>/<row>.webp` (`scripts/make-earth-tiles.py` makes one). A source may declare a different grid; `gridTilesInView` walks only the columns and rows the view can see.
+import { gridOnEarth, gridSpan, gridTileAt, type MapGrid, type MapGridLevel } from "../door/grid.ts";
 
 /**
  * One tile of the map pyramid: a level, a column counted east from longitude -180 and a row counted south from latitude 90.
@@ -375,4 +376,90 @@ export function parseManifest(json: unknown): { tileSize: number; layers: Record
     if (levels.length > 0) layers[name] = { tileSize: 512, levels: levels.sort((a, b) => a.level - b.level) };
   }
   return Object.keys(layers).length > 0 ? { tileSize: 512, layers } : undefined;
+}
+
+/**
+ * The tiles of one level of a source's own grid that are in view. Only the columns and rows under the box are tested, so a fine matrix (hundreds of columns) is not walked. A tile that misses the Earth is left out.
+ *
+ * @param level - A level of the source's grid.
+ * @param extent - The Earth's extent, from the same grid.
+ * @param camera - The camera.
+ * @param sun - The Sun's direction as the camera sees it, for each tile's `ndl`; left out, `ndl` is 1.
+ * @returns The tiles in view, the nearest to the middle of the box first.
+ *
+ * @example
+ * ```ts
+ * import { gibsGrid } from "@johnmorrisdotca/chikyu-earth/door";
+ * import { gridTilesInView } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * const grid = gibsGrid("250m");
+ * console.log(gridTilesInView(grid.levels[6]!, grid.extent, { lon: 0, lat: 0, width: 800, height: 600, panX: 0, panY: 0, radius: 8000 }).length > 0);
+ * ```
+ */
+export function gridTilesInView(level: MapGridLevel, extent: MapGrid["extent"], camera: TileCamera, sun?: readonly [number, number, number]): VisibleTile[] {
+  const lonRad = camera.lon * RAD;
+  const latRad = camera.lat * RAD;
+  const look = camera.perspective;
+  const margin = Math.min(160, Math.min(camera.width, camera.height) / 4);
+  const cx = camera.width / 2 + camera.panX;
+  const cy = camera.height / 2 + camera.panY;
+  const eyeLength = look ? Math.hypot(...look.eye) : 1;
+  const ndlOf = (z: readonly [number, number, number]): number => (sun ? z[0] * sun[0] + z[1] * sun[1] + z[2] * sun[2] : 1);
+  const sample = (lon: number, lat: number): { n: [number, number, number]; screen: { x: number; y: number } | null; flat: { x: number; y: number } | null; toward: number } => {
+    if (!look) {
+      const n = turned(lon * RAD, lat * RAD, lonRad, latRad);
+      const at = { x: cx + n[0] * camera.radius, y: cy - n[1] * camera.radius };
+      return { n, screen: n[2] < 0 ? null : at, flat: at, toward: n[2] };
+    }
+    const cl = Math.cos(lat * RAD);
+    const n: [number, number, number] = [cl * Math.sin(lon * RAD), Math.sin(lat * RAD), cl * Math.cos(lon * RAD)];
+    const along = n[0] * look.eye[0] + n[1] * look.eye[1] + n[2] * look.eye[2];
+    const screen = along < 1 ? null : look.project(n);
+    return { n, screen, flat: screen, toward: along / eyeLength };
+  };
+  const candidates = new Set<number>();
+  const step = 24;
+  for (let y = 0; y <= camera.height + step - 1; y += step) {
+    for (let x = 0; x <= camera.width + step - 1; x += step) {
+      const place = pointOnEarth(camera, Math.min(x, camera.width), Math.min(y, camera.height));
+      if (!place) continue;
+      const at = gridTileAt(level, place.lon, place.lat, extent);
+      if (!at) continue;
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          const col = at.col + dc;
+          const row = at.row + dr;
+          if (col < 0 || row < 0 || col >= level.columns || row >= level.rows) continue;
+          if (!gridOnEarth(level, col, row, extent)) continue;
+          candidates.add(row * level.columns + col);
+        }
+      }
+    }
+  }
+  const found: VisibleTile[] = [];
+  for (const key of candidates) {
+    const col = key % level.columns;
+    const row = Math.floor(key / level.columns);
+    const span = gridSpan(level, col, row);
+    const west = Math.max(span.lonMin, extent.west);
+    const east = Math.min(span.lonMax, extent.east);
+    const north = Math.min(span.latMax, extent.north);
+    const south = Math.max(span.latMin, extent.south);
+    const middle = sample((west + east) / 2, (north + south) / 2);
+    if (middle.toward < -0.4) continue;
+    let inside = false;
+    let darkest = 1;
+    for (let j = 0; j <= 2; j += 1) {
+      for (let i = 0; i <= 2; i += 1) {
+        const p = sample(west + ((east - west) * i) / 2, north + ((south - north) * j) / 2);
+        darkest = Math.min(darkest, ndlOf(p.n));
+        if (p.screen && p.screen.x >= -margin && p.screen.x <= camera.width + margin && p.screen.y >= -margin && p.screen.y <= camera.height + margin) inside = true;
+      }
+    }
+    if (!inside) continue;
+    const d = middle.flat ? Math.hypot(middle.flat.x - camera.width / 2, middle.flat.y - camera.height / 2) : Math.hypot(camera.width, camera.height);
+    found.push({ level: level.level, col, row, d, ndl: darkest });
+  }
+  found.sort((a, b) => a.d - b.d);
+  return found;
 }

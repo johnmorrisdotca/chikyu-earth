@@ -257,7 +257,7 @@ test("3. removing, switching off or ignoring a source gives the first picture ba
   earth.sync();
   await until(() => day.aborted.length === started.length, "the aborts");
   assert.deepEqual([...day.aborted].sort(), [...started].sort());
-  assert.deepEqual(earth.set.stats, { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 6, heldBytes: 0, refused: 0, used: {} });
+  assert.deepEqual(earth.set.stats, { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 6, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false });
   assert.equal(earth.assets.stats().entries, 0, "nothing of it is kept");
   // and it comes back when the page puts it back
   const again = mine("mine");
