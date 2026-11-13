@@ -13,7 +13,8 @@ import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
-import { faceOffset, ridePose, type RideFace, type RideLook } from "./ride.ts";
+import { faceOffset, outsidePose, ridePose, type RideFace, type RideLook, type RideViewpoint } from "./ride.ts";
+import { genericSatellite, satelliteKind } from "./generic-satellite.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
 import type { PlaceView } from "../markers/places.ts";
@@ -36,6 +37,8 @@ type Three = ThreeParts;
 const MAX_MARKED = 80;
 const RAD = Math.PI / 180;
 const FOV = 35;
+/** How big a satellite seen from outside by a ride from itself is drawn: its radius is this share of the height of the view (a model about a fifth of the height across; the satellite is a few metres, so this is not to scale). */
+const OUTSIDE_RADIUS_SHARE = 0.09;
 /** How much of the view's shorter side the Earth's disc fills at zoom 1 when the page does not say: 0.9, so the atmosphere's glow (8% beyond the disc) is inside the view and never cut. */
 export const DEFAULT_EARTH_SIZE = 0.9;
 
@@ -140,6 +143,8 @@ export interface RideState {
   face: RideFace | null;
   /** For `follow` a satellite: how far the camera keeps, in kilometres. */
   distanceKm: number;
+  /** `outside`: a ridden satellite is in the picture (the camera a little behind and above it in `from`, a drawing of it where the page has no model); `inside`: as a ride was before, the camera at the satellite and no drawing of it where the page has no model. */
+  viewpoint: RideViewpoint;
 }
 
 /** The camera as the last draw left it, for the next one to start from when the ride changes. */
@@ -878,6 +883,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let focusRadius = radiusOf(focus);
           let rideFrom: { position: Vec3; velocity: Vec3; hidden: BodyName | null; gameSeconds: number } | null = null;
           let followed: { place: Vec3; velocity: Vec3; ref: SatelliteRef } | null = null;
+          // a satellite ridden from itself: where it is, so that an outside ride can show it
+          let ridden: { place: Vec3; velocity: Vec3; ref: SatelliteRef } | null = null;
           model.rideLost = false;
           model.lookBase = null;
           model.rideMotion = 0;
@@ -902,7 +909,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 focusPos = place;
                 focusRadius = Math.max(1e-4, ride.distanceKm / 6371 / fit);
                 followed = { place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], ref: ride.target };
-              } else rideFrom = { position: place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], hidden: null, gameSeconds: 0 };
+              } else {
+                rideFrom = { position: place, velocity: [rideState[3]!, rideState[4]!, rideState[5]!], hidden: null, gameSeconds: 0 };
+                ridden = { place, velocity: rideFrom.velocity, ref: ride.target };
+              }
             } else model.rideLost = true;
           }
           const hidden = rideFrom?.hidden ?? null;
@@ -914,14 +924,21 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           let fovNow = FOV;
           let distance = 0;
           if (rideFrom) {
-            const pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn, ...(ride!.face ? { face: ride!.face } : {}) });
+            let pose = ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: model.view.yaw, tilt: model.view.tilt, zoom: model.view.zoom, turn: model.rideTurn, ...(ride!.face ? { face: ride!.face } : {}) });
             model.rideDistance = Math.hypot(...rideFrom.position);
+            // an outside ride: the same look, from a little way back along it, so the satellite is in the picture
+            let outsideAway = Infinity;
+            if (ridden && ride!.viewpoint === "outside") {
+              const out = outsidePose(pose, ride!.look);
+              pose = out.pose;
+              outsideAway = out.distance;
+            }
             camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
             camera.up.set(pose.up[0], pose.up[1], pose.up[2]);
             camera.lookAt(pose.position[0] + pose.forward[0], pose.position[1] + pose.forward[1], pose.position[2] + pose.forward[2]);
             fovNow = pose.fov;
             const away = Math.hypot(...rideFrom.position);
-            camera.near = Math.max(0.0008, Math.min(0.05, (away - 1) * 0.1));
+            camera.near = outsideAway < Infinity ? Math.max(1e-5, outsideAway * 0.1) : Math.max(0.0008, Math.min(0.05, (away - 1) * 0.1));
             camera.far = Math.max(2000, 400 + (mode === "true" ? 40 * 23_481 : 0));
             // how fast the ground goes by under the camera, in pixels a second at 1x: the speed over the height for a satellite, the turn of the direction to the Earth for a body
             const focal = (size.height / 2) / Math.tan((fovNow / 2) * RAD);
@@ -1085,14 +1102,34 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           model.painted = { bodies: paintedBodies, moons: paintedMoons, held: 0, moon: paintedMoon !== undefined, tiles: tiled, mapped: model.painted.mapped, pending: model.painted.pending };
           // the followed satellite as a model, when the page has one for it: made once, placed where the satellite is, pointed the way it flies, sized to read and lit by the Sun
           const satellitePainter = deps.satellitePainter?.();
-          const group = followed ? model.satellites.groups.get(followed.ref.group) : undefined;
-          const norad = followed && group ? group.satellites.sets[followed.ref.index]?.NORAD_CAT_ID : undefined;
-          const modelKey = norad !== undefined && satellitePainter?.has(norad) ? String(norad) : "";
+          // the satellite to draw: the one followed or seen from above, or (an outside ride from the satellite itself) the one ridden
+          const candidate = followed ?? ridden;
+          const shownSat = followed ?? (ride?.viewpoint === "outside" ? ridden : null);
+          const group = candidate ? model.satellites.groups.get(candidate.ref.group) : undefined;
+          const set = candidate && group ? group.satellites.sets[candidate.ref.index] : undefined;
+          const norad = set?.NORAD_CAT_ID;
+          // a model the page made for it, drawn only while the camera is outside it (followed or above it, or an outside ride); else the package's own small drawing by kind, kept (hidden) while the ride stays on the satellite, and let go when it ends
+          const painted = norad !== undefined && satellitePainter?.has(norad) === true;
+          const genericKey = set ? `generic:${satelliteKind(set.OBJECT_NAME ?? "")}` : "";
+          const modelKey = set === undefined || norad === undefined ? "" : painted ? (shownSat ? String(norad) : "") : ride?.viewpoint === "outside" || modelSlot.key === genericKey ? genericKey : "";
           if (modelKey !== modelSlot.key) {
             dropModel();
             modelSlot.key = modelKey;
             const turn = (modelSlot.turn += 1);
-            if (modelKey && satellitePainter && norad !== undefined) {
+            const adopt = (made: BodyDrawing): void => {
+              made.object.matrixAutoUpdate = false;
+              made.object.visible = false;
+              scene.add(made.object);
+              modelSlot.drawing = made;
+              // how many meshes the model is made of: a draw call each, which a test of the draw budget adds to the scene's own
+              modelSlot.parts = 0;
+              made.object.traverse((part) => {
+                if ((part as THREE.Mesh).isMesh) modelSlot.parts += 1;
+              });
+              deps.invalidate();
+            };
+            if (modelKey.startsWith("generic:")) adopt(genericSatellite(three as unknown as typeof THREE, modelKey.slice(8) as ReturnType<typeof satelliteKind>));
+            else if (modelKey && satellitePainter && norad !== undefined) {
               void Promise.resolve(satellitePainter.make(three, norad, { look: "", invalidate: () => deps.invalidate(), ratio: model.ratio(), maxTexture: deps.cap() }))
                 .then((made) => {
                   if (!made) return;
@@ -1100,31 +1137,25 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                     made.dispose();
                     return;
                   }
-                  made.object.matrixAutoUpdate = false;
-                  made.object.visible = false;
-                  scene.add(made.object);
-                  modelSlot.drawing = made;
-                  // how many meshes the model is made of: a draw call each, which a test of the draw budget adds to the scene's own
-                  modelSlot.parts = 0;
-                  made.object.traverse((part) => {
-                    if ((part as THREE.Mesh).isMesh) modelSlot.parts += 1;
-                  });
-                  deps.invalidate();
+                  adopt(made);
                 })
                 .catch((error: unknown) => deps.onPainterError?.(error));
             }
           }
-          const axes = followed ? satelliteAxes(followed.place, followed.velocity) : null;
-          if (modelSlot.drawing && followed && axes) {
+          const axes = shownSat ? satelliteAxes(shownSat.place, shownSat.velocity) : null;
+          // a generic drawing is for an outside ride only; a page's model is drawn wherever the camera is not at the satellite
+          const drawn = shownSat !== null && (ride?.viewpoint === "outside" || (followed !== null && painted));
+          if (modelSlot.drawing && shownSat && axes && drawn) {
             const object = modelSlot.drawing.object;
-            const away = Math.hypot(followed.place[0] - camera.position.x, followed.place[1] - camera.position.y, followed.place[2] - camera.position.z);
-            object.matrix.set(...(modelMatrix(followed.place, axes, modelRadius(away, half, MODEL_RADIUS_SHARE, 1e-9)) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
+            const away = Math.hypot(shownSat.place[0] - camera.position.x, shownSat.place[1] - camera.position.y, shownSat.place[2] - camera.position.z);
+            const share = followed ? MODEL_RADIUS_SHARE : OUTSIDE_RADIUS_SHARE;
+            object.matrix.set(...(modelMatrix(shownSat.place, axes, modelRadius(away, half, share, 1e-9)) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
             object.matrixWorldNeedsUpdate = true;
             object.visible = true;
             const toSunNow = unit(frame.sun);
             modelSlot.drawing.light?.(toSunNow);
-            modelSlot.drawing.update?.({ toSun: toSunNow, ms: model.time, radiusPx: size.height * MODEL_RADIUS_SHARE });
-            projected.set(followed.place[0], followed.place[1], followed.place[2]).project(camera);
+            modelSlot.drawing.update?.({ toSun: toSunNow, ms: model.time, radiusPx: size.height * share });
+            projected.set(shownSat.place[0], shownSat.place[1], shownSat.place[2]).project(camera);
             model.followModel = { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height, shown: true, parts: modelSlot.parts };
           } else {
             if (modelSlot.drawing) modelSlot.drawing.object.visible = false;

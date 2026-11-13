@@ -610,7 +610,7 @@ if (flat && controls && stage) {
       rideInfo.textContent = say(riding.view === "follow" ? "rideFollowBody" : "rideBody", { name: say(`body_${riding.target}`), distance: Math.round(facts.distanceKm).toLocaleString(say("locale")) });
     } else {
       const info = space.satelliteInfo(riding.target);
-      rideInfo.textContent = info ? say("rideSat", { name: info.name, altitude: Math.round(info.altitudeKm), period: Math.round(info.periodMinutes) }) : say("rideLost");
+      rideInfo.textContent = info ? say("rideSat", { name: info.name, altitude: Math.round(info.altitudeKm), period: Math.round(info.periodMinutes) }) + (riding.viewpoint === "outside" ? ` ${say("rideScale")}` : "") : say("rideLost");
     }
   };
   function stopRide(keepZoom = false): void {

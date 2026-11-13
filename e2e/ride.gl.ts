@@ -43,6 +43,8 @@ async function open(page: Page, query = ""): Promise<void> {
   await expect.poll(async () => (await statsOf(page)).satellites.placed, { timeout: 20_000 }).toBeGreaterThan(5);
   // the controls' own Auto-turn (on for a reader with no motion preference) asks for its own animation frames; these tests are about the ride's
   await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
+  // these tests are about the ride from the satellite itself (the camera at it); the ride seen from outside is `ride-outside.gl.ts`
+  await page.locator(SPACE).evaluate((el) => el.setAttribute("ride-viewpoint", "inside"));
   await settle(page);
 }
 
