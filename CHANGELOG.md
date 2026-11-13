@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.47.1 - 2026-11-13
+
+- **Two freeze tests no longer fail on a saturated machine** (MODULES-1319). The full-screen at-rest test and the ride-look hidden-tab test now wait for the page's own out-of-sight signal and count draws only once they have held still. Tests only; the package is unchanged.
+
 ## 0.47.0 - 2026-11-13
 
 - **The demo's Find box keeps a Japanese query.** A name in kana or kanji used to be dropped before the catalogue was asked, so `ハッブル` found nothing. It now asks the catalogue, and a satellite the package knows by a short name is listed by that name (Hubble, not only HST).
