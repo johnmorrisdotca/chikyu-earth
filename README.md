@@ -176,7 +176,7 @@ atmosphere at the rim, drawn with three.js through kazoku-ui's shared renderer. 
 
 Needs `three` and `@johnmorrisdotca/kazoku-ui` (both optional peers) and the pictures (1.6 MB, from NASA, in `dist/textures/`). It draws nothing while nothing changes,
 at most 30 times a second while it does, in one WebGL context, with textures that grow as you zoom and are freed after. With `tiles="/tiles/"` (a folder of NASA map
-tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view, so you can zoom in to 40 times and stay sharp. With `speed="86400"` (a day a second; the name `<chikyu-space>` uses) its clock runs on from the date shown and the Sun, the night side and the clouds follow it ([guide](docs/guides/time-and-play.md)). `immersive` fills the window, `camera="space"` holds the camera in the stars so the Earth turns beneath it, and it draws every satellite group at once ([guide](docs/guides/full-screen-and-camera.md)). All of it, the budget and the tests:
+tiles, [how](docs/guides/earth-tiles.md)) it loads only the finer tiles in view, so you can zoom in to 40 times and stay sharp. `tiles-finer="gibs"` (off unless set) also asks NASA's imagery service for a daily picture, only closer than those tiles, and the credit line names it while it is on screen. With `speed="86400"` (a day a second; the name `<chikyu-space>` uses) its clock runs on from the date shown and the Sun, the night side and the clouds follow it ([guide](docs/guides/time-and-play.md)). `immersive` fills the window, `camera="space"` holds the camera in the stars so the Earth turns beneath it, and it draws every satellite group at once ([guide](docs/guides/full-screen-and-camera.md)). All of it, the budget and the tests:
 [docs/realistic.md](docs/realistic.md).
 
 ## The Sun, the Moon and the planets
@@ -359,7 +359,7 @@ Passes are only as good as the orbit data are new: each pass says how old its el
 <p align="center"><img alt="Riding along with the ISS, tipped towards the horizon: the Earth's curve and atmosphere, and the orbits of the other stations in the sky" src="docs/images/space-ride-horizon.png" width="420"></p>
 
 `space.ride({ group: "stations", index: 0 }, { look: "horizon" })` puts the camera on the ISS (or a Starlink satellite, the Moon, a planet) at its real place for the moment shown and looks at the Earth, which goes by beneath
-as the body moves along its orbit; switch to another body and the camera glides there. Straight down or toward the horizon, from the body or following it at a distance, time faster or slower. A ridden satellite is in the picture by default (the camera a little behind and above it, a small drawing of it where the page has no model, not to scale); `ride-viewpoint="inside"` (property `rideViewpoint`, option `viewpoint`) puts the camera at the satellite instead. It animates continuously, so it keeps to the
+as the body moves along its orbit; switch to another body and the camera glides there. Straight down or toward the horizon, from the body or following it at a distance, time faster or slower. A ridden satellite is in the picture by default (the camera a little behind and above it, a small drawing of it where the page has no model, not to scale); `ride-viewpoint="inside"` (property `rideViewpoint`, option `viewpoint`) puts the camera at the satellite instead. Seen from above, the model shrinks as the ride rises and hands over to the ordinary mark by 2,000 km; `ride-model-size="fixed"` (property `rideModelSize`, option `modelSize`) keeps one size at every height. It animates continuously, so it keeps to the
 same budget: at most 30 frames a second (one a second for reduced motion), nothing drawn while paused, out of sight or hidden. [Ride along guide](docs/guides/ride-along.md), [docs/ride-along.md](docs/ride-along.md).
 
 ## Printable sheets
@@ -611,7 +611,7 @@ console.log(countryList().filter((country) => country.alpha2 === null).map((coun
 
 ## How to cite
 
-> Morris, J. (2026). *Chikyu Earth* (version 0.46.1) [Computer software]. https://github.com/johnmorrisdotca/chikyu-earth
+> Morris, J. (2026). *Chikyu Earth* (version 0.46.5) [Computer software]. https://github.com/johnmorrisdotca/chikyu-earth
 
 GitHub's "Cite this repository" button reads [CITATION.cff](CITATION.cff) and gives BibTeX and APA. Cite the version you used (`npm ls @johnmorrisdotca/chikyu-earth`), and credit the sources behind the numbers and pictures: [NOTICE.md](NOTICE.md) says who made each one and under what terms.
 

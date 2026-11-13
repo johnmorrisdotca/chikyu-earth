@@ -22,7 +22,11 @@ const NOON = "2026-06-21T12:00Z";
 const LOOKS = ["realistic", "space", "satellites", "ride", "above"] as const;
 const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", satellites: "chikyu-space", ride: "chikyu-space", above: "chikyu-space" } as const;
 
-async function open(page: Page, look: (typeof LOOKS)[number], query = ""): Promise<void> {
+/**
+ * `size` is how the ridden model is sized as the ride rises (`ride-model-size`): the demo's "above" look rides at its default 3,000 km, where the model of the default `distance` size has handed over to the ordinary mark and is not drawn, so the looks that
+ * mean to have the model drawn ask for `fixed` (the same size at every height, as before 0.46.1); `distance` is the default and is checked on its own (MODULES-1306).
+ */
+async function open(page: Page, look: (typeof LOOKS)[number], query = "", size: "fixed" | "distance" = "fixed"): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
   const space = look === "space" || look === "satellites" || look === "ride" || look === "above";
   const withSatellites = look === "satellites" || look === "ride" || look === "above";
@@ -30,6 +34,7 @@ async function open(page: Page, look: (typeof LOOKS)[number], query = ""): Promi
   await page.locator(`${ELEMENT[look]}[data-state=live]`).waitFor({ timeout: 60_000 });
   // riding at the ISS needs the Earth's largest pictures: let them arrive, and the ones that are let go be let go, before anything is asked of the page
   if (look === "ride" || look === "above") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
+  if (look === "above" && size === "fixed") await page.locator("chikyu-space").evaluate((el) => el.setAttribute("ride-model-size", "fixed"));
   if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
   // 800 ms for the pictures to arrive, and the second in which a reader who asked for reduced motion has the draws they ask for gathered (MODULES-1195)
@@ -167,6 +172,24 @@ for (const look of LOOKS) {
   });
 }
 
+
+// The default size of a ridden model shrinks as the ride rises (MODULES-1306): over the ISS at the demo's 3,000 km the model has handed over to the ordinary mark, so none is drawn, and the view still draws at most once for each frame of the page.
+test.describe("the above look at the default model size", () => {
+  test.use({ reducedMotion: "no-preference" });
+  test("no model at 3,000 km, and still at most one draw for each frame, one frame asked for at a time", async ({ page }) => {
+    await open(page, "above", "", "distance");
+    await turn(page);
+    await page.waitForTimeout(500);
+    const turning = await bounded(page, 3000, "above");
+    expect(turning.callbacks).toBeGreaterThan(5);
+    expect(turning.frames, "frames drawn").toBeLessThanOrEqual(turning.callbacks + 3);
+    const model = await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: unknown }).followModel);
+    expect(model, "no model is drawn from 3,000 km above").toBeNull();
+    expect(turning.draws, "GL draw calls for each frame drawn").toBeLessThanOrEqual(Math.max(1, turning.frames) * 40);
+    expect(turning.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(turning.callbacks + 3);
+    expect(turning.outstanding, "one request waiting at a time").toBeLessThanOrEqual(3);
+  });
+});
 test.describe("the full-screen space view (fullscreen.html?look=space), with the planets' pictures", () => {
   const openFull = async (page: Page): Promise<void> => {
     await page.addInitScript(COUNT_SCRIPT);

@@ -45,7 +45,9 @@ export interface SatelliteState {
    * 0 draws the whole stretch one frame spans, however long that is.
    */
   streakMax: number;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
+  /** Set at each draw by the view: the satellite a ride shows as its model while the model is big enough to read. Its ring (the chosen marker) and name are left off while this is so; its orbit line stays. Clears with the ride, or when the model has handed over to the mark. */
+  modelOver: SatelliteRef | null;
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
 }
 
 /**
@@ -106,7 +108,7 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -595,7 +597,9 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         selectedPosition[1] = tmp[1]!;
         selectedPosition[2] = tmp[2]!;
         (selectedGeometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
-        selectedPoints.visible = true;
+        const over = state.modelOver !== null && state.modelOver.group === chosen.group && state.modelOver.index === chosen.index;
+        selectedPoints.visible = !over;
+        state.drawn.selectedRing = !over;
         const key = `${chosen.group}:${chosen.index}`;
         if (key !== selectedKey || (Math.abs(time - selectedAt) > ORBIT_REFRESH_GAME_MS && started - selectedWall > ORBIT_REFRESH_WALL_MS)) {
           selectedKey = key;
@@ -609,6 +613,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         state.drawn.selectedOpacity = selectedLine.material.opacity;
       } else {
         selectedPoints.visible = false;
+        state.drawn.selectedRing = false;
         selectedLoop.visible = false;
         selectedKey = "";
         state.drawn.selectedOpacity = 0;

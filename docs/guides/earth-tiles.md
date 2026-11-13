@@ -67,6 +67,26 @@ The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. 
 
 The clouds stay at the package's 2048 picture: they are soft, and NASA's finer cloud files are no longer served. The city lights go to level 4 (16384 across), half the day map's detail, where there is little more to see.
 
+## Closer than these tiles
+
+The pyramid stops at day level 5 (about 1.2 km a pixel, from a 500 m source). For a view closer than that, `tiles-finer="gibs"` asks the browser to read finer pictures of the land from NASA's Global Imagery Browse Services. It is off unless a page sets it: the page is then depending on that service.
+
+```html
+<chikyu-earth-realistic texture-base="/textures/" tiles="/tiles/" tiles-finer="gibs"></chikyu-earth-realistic>
+```
+
+`<chikyu-space>` takes the same attribute. By default the picture is NASA's Landsat annual true-colour mosaic (the layer `Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual`, Global Web-Enabled Landsat Data, 30 m a pixel, about 40 times finer than level 5). It is a mosaic of the whole year, so it has no cloud, and it is one picture, so no day is searched for. **What it is not.** It is land only: the oceans, Antarctica and the far north have no picture (nothing was found at 72 degrees north in Greenland or at 78 degrees on Svalbard on 2026-11-13), and there the package's own picture stays. It is old: its newest year is 2000 (the layer also has 1984, 1985, 1988 to 1990, 1998 and 1999), so a city is as it was then. And it is a mosaic of separate Landsat scenes, so here and there a straight edge shows where one scene meets the next, in a slightly different colour. `tiles-finer-date` names another year of the layer by its year (`1990-06-01` or `1990-12-01` for 1990); a year it does not have is the newest.
+
+A black pixel is the service's mark for no data, and a nearly black one is Landsat's sea, so both are made clear and the package's own picture shows through: the sea stays the package's blue sea, and a coast is cut by the Landsat picture itself. The colours are multiplied by 0.76, 0.66 and 0.55 (red, green, blue), which brings them to the darker, warmer look of the package's own pictures; that is the median, over six places on land, of our level 5 against this layer's mean colour. A tile that is wholly black is taken for no picture and is not shown; a tile that is partly black is shown, and its black part is clear.
+
+`tiles-finer-layer="today"` is the other choice: the MODIS Terra daily true-colour picture (`MODIS_Terra_CorrectedReflectance_TrueColor`, 250 m), a look of the Earth as it was yesterday from space. It is one day of passes of one satellite with the clouds left in and gaps between passes, so it is often cloud over the ground, and it is the picture of a day, not a map. By default the day is the most recent one that has a picture, looked for from the UTC day before the moment on show (a day's passes are not all in yet) and stepping back: the page asks for one tile, the one under the middle of the view, for each day in turn, newest first and one at a time, up to 10 days back, and keeps the first day that answers with a picture. The answer is kept for the session, so moving the view asks for nothing again. If no day in ten has a picture the page says nothing and keeps the package's own tiles. A day before the layer's first day (2000-02-24 for Terra) is not asked for, and neither is a day that the layer's list shows as a gap. The capabilities file is never fetched. For this layer `tiles-finer-date` is `latest` (the default, as above), `previous-day` (that one day alone), `shown` (the UTC day of the moment on show), or one day `yyyy-mm-dd`. Other layer ids work too (`VIIRS_SNPP_CorrectedReflectance_TrueColor`, whose days ran only to 2026-11-02 when this was written, and `BlueMarble_ShadedRelief_Bathymetry`, a static picture at the resolution of level 5 and only a stand-in); `landsat` is the default's short name.
+
+Nothing is fetched until the view is closer than the tiles already underneath, and nothing is fetched for a day a daily layer is known not to have (before its first day, or in a gap its list showed on 2026-11-13). A tile that is missing, black, or still out after two seconds is left, the coarser picture stays, and that tile is not asked for again while it remains in view. `tiles-finer-timeout` (milliseconds, 2000 when the page says nothing) gives a tile longer on a slow link. The same limits hold: 48 tiles, 72 MB, six requests at a time, and nothing at rest. A tile that arrives fades in over a third of a second, unless the reader asked for less motion, in which case it is shown at once. While those tiles are on the screen the element's credit line shows NASA's acknowledgement, and for the Landsat mosaic a line about its data.
+
+The reader's browser asks NASA's server itself. This package does not proxy the request, so NASA's server sees it.
+
+`gibsTiles({ time })` from `@johnmorrisdotca/chikyu-earth/door` is the same source, for a page that builds its own. With `data="own"` the realistic Earth ignores it.
+
 ## Making them
 
 ```sh

@@ -3,6 +3,7 @@
 // tile's key ends in `level/column/row`. Pure apart from the `fetch` and `createImageBitmap` a source is given or finds: no DOM, no three.js.
 import type { BitmapLike, ImageTile, MapPlace, TileSource } from "../data-door.ts";
 import { parseManifest, tileColumns, tileRows, type TileId, type TileLayer } from "../realistic/tiles.ts";
+import type { MapGrid } from "./grid.ts";
 import { OWN_BY_ID, madeHere } from "./own.ts";
 
 const RAD = Math.PI / 180;
@@ -52,6 +53,16 @@ export type EarthMapPlace = MapPlace & { layer?: string };
 export type EarthMapSource = TileSource<EarthMapPlace, number, ImageTile> & {
   layer: MapLayer | "*";
   levels?(layer: string, signal: AbortSignal): TileLayer | undefined | Promise<TileLayer | undefined>;
+  /**
+   * The source's own grid, when it is not the package's pyramid (`2^(L+1)` columns by `2^L` rows). The loader places tiles from this. Left out, the pyramid is unchanged.
+   */
+  grid?: MapGrid;
+  /** True when the source's tiles may have transparent pixels (a place it has no data for), so the loader draws them blended and the picture underneath shows through. */
+  holes?: boolean;
+  /**
+   * How the loader draws this source's tiles, on the graphics card: `clear` is the luminance (0 to 255) at or below which a pixel is wholly transparent and from which it is wholly opaque, and `gain` multiplies each colour. Left out, tiles are drawn as they are.
+   */
+  look?: { clear: readonly [number, number]; gain?: readonly [number, number, number] };
 };
 
 /**

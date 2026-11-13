@@ -173,7 +173,7 @@ test("a satellite the page has no model for is drawn from the package's own in t
   const other = group.sets.findIndex((set) => ![25544, 48274, 20580].includes(set.NORAD_CAT_ID));
   expect(other).toBeGreaterThanOrEqual(0);
   for (const view of ["above", "follow"] as const) {
-    await page.locator(SPACE).evaluate((el, v) => (el as unknown as { ride(t: unknown, o: unknown): void }).ride({ group: "stations", index: v.other }, { view: v.view, smooth: false }), { other, view });
+    await page.locator(SPACE).evaluate((el, v) => (el as unknown as { ride(t: unknown, o: unknown): void }).ride({ group: "stations", index: v.other }, { view: v.view, smooth: false, distanceKm: 150 }), { other, view });
     await expect.poll(async () => (await statsOf(page)).followModel?.shown, { timeout: 20_000, message: `${view}: the package's drawing` }).toBe(true);
     await page.locator(SPACE).evaluate((el) => Reflect.set(el, "rideViewpoint", "inside"));
     await expect.poll(async () => (await statsOf(page)).followModel, { timeout: 20_000, message: `${view}, inside: a dot` }).toBeNull();

@@ -3,11 +3,12 @@
 // three.js is passed in; nothing here imports it.
 import type * as THREE from "three";
 import type { AssetCache } from "@johnmorrisdotca/kazoku-ui/renderer";
+import { gridOnEarth, type MapGridLevel } from "../door/grid.ts";
 import { DEFAULT_LEVELS, tileKeyParts, tilePlace, type EarthMapSource } from "../door/map.ts";
 import { TILE_FRAG, TILE_VERT } from "./shaders.ts";
 import type { ThreeParts } from "./textures.ts";
 import { MAX_TEXTURE, TIERS } from "./tiers.ts";
-import { coveringTile, tileColumns, tileLevel, tileRect, tileRows, tilesInView, type TileCamera, type TileId, type TileLayer, type VisibleTile } from "./tiles.ts";
+import { coveringTile, gridTilesInView, TEXEL_SLACK, tileColumns, tileLevel, tileRect, tileRows, tilesInView, type TileCamera, type TileId, type TileLayer, type VisibleTile } from "./tiles.ts";
 
 /**
  * The most tiles held at once, day and night together, about a megabyte and a third of graphics memory each (a 512 pixel square with its mipmaps).
@@ -48,6 +49,18 @@ export const TILE_BUDGET = 72 * 1024 * 1024;
 
 const IN_FLIGHT = 6;
 const NEW_PER_DRAW = 8;
+/** A finer tile fades in over this many milliseconds, then the loop stops. A reader who asked for less motion skips it. */
+const FADE_MS = 300;
+/** The package's own day pyramid, at level 5. A finer source is not asked until the view wants more than the tiles underneath, and never less than this when those tiles are not loaded yet. */
+const OWN_SERVED = 32768;
+const RAD = Math.PI / 180;
+
+interface GridJob {
+  layer: "day" | "finer";
+  id: TileId;
+  key: string;
+  grid: MapGridLevel;
+}
 // the day mix reaches full light at 0.22: a tile whose darkest point is brighter than that never shows the night picture
 const NIGHT_BELOW = 0.25;
 const GRID = 16;
@@ -66,17 +79,22 @@ interface Asset {
 
 interface Entry {
   key: string;
-  layer: "day" | "night";
+  layer: "day" | "night" | "finer";
   id: TileId;
   /** The source the tile was asked of. */
   source: EarthMapSource;
+  /** Set when the tile is placed on the source's own grid, not the package's pyramid. */
+  gridLevel?: MapGridLevel;
   asset: Asset;
   ready: boolean;
   integrated: boolean;
   lastWanted: number;
+  /** When the tile was first put on the sphere, for the fade. */
+  born?: number;
   mesh?: THREE.Mesh;
   nightRect?: Uniform<number[]>;
   nightMap?: Uniform<THREE.Texture | null>;
+  cover?: Uniform<number>;
 }
 
 /** What the tiles share with the surface they are laid over. */
@@ -92,8 +110,11 @@ export interface TileShared {
   extra?: Record<string, Uniform<unknown>>;
 }
 
-/** The map source each layer is drawn from now, or none: read at every draw. A layer's tiles come from its source alone, and the night tiles go with day tiles (no day source, no tiles). */
-export type TileSources = { day?: EarthMapSource; night?: EarthMapSource };
+/**
+ * The map source each layer is drawn from now, or none: read at every draw. A layer's tiles come from its source alone, and the night tiles go with day tiles (no day source, no night tiles).
+ * `finer` is laid over the day tiles, and only when the view is closer than the day tiles serve. A source with its own `grid` is placed on that grid.
+ */
+export type TileSources = { day?: EarthMapSource; night?: EarthMapSource; finer?: EarthMapSource };
 
 export interface TileSetDeps {
   assets: AssetCache;
@@ -105,6 +126,8 @@ export interface TileSetDeps {
   cap: () => number;
   /** Ask for one draw. */
   invalidate: () => void;
+  /** A reader who asked for less motion: a finer tile is shown at once, with no fade. */
+  reducedMotion?: () => boolean;
   /** Told once when a tile set's manifest has been read: the finest width of each layer. */
   onManifest?: (layers: Record<string, number>) => void;
   limit?: number;
@@ -130,6 +153,10 @@ export interface TileStats {
   refused: number;
   /** The tiles in view that came from each source, by the source's id: what a credit line counts. */
   used: Record<string, number>;
+  /** The level of the finer grid now wanted, or `null` when the view is no closer than the tiles underneath. */
+  finer: number | null;
+  /** True while a finer tile is still fading in. At rest, after the fade, this is false and nothing is drawn for it. */
+  fading: boolean;
 }
 
 export interface TileSet {
@@ -204,8 +231,12 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
   const geometry = patch(three);
   const entries = new Map<string, Entry>();
   const failed = new Map<string, number>();
-  let queue: { layer: "day" | "night"; id: TileId }[] = [];
+  let queue: { layer: "day" | "night" | "finer"; id: TileId; key: string; grid?: MapGridLevel }[] = [];
   let wantedKeys = new Set<string>();
+  /** Grid tiles in view this frame, by the key the source named. */
+  let gridSeen = new Set<string>();
+  let finerLevel: number | null = null;
+  let fading = false;
   /** The sources the levels were read for. */
   let current: TileSources = {};
   /** Counts the times the sources changed: an answer for an earlier set of them is let go. */
@@ -224,12 +255,13 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
   let disposed = false;
   const baseDay = TIERS.day[TIERS.day.length - 1]!;
   const baseNight = TIERS.night[TIERS.night.length - 1]!;
+  const reduced = (): boolean => (deps.reducedMotion ?? (() => typeof globalThis.matchMedia === "function" && globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches))();
 
   const accountOf = (source: EarthMapSource, key: string): string => `chikyu-earth:tile:${tagOf(source)}:${key}`;
 
-  const take = (layer: "day" | "night", id: TileId, source: EarthMapSource): Asset =>
+  const take = (layer: "day" | "night" | "finer", id: TileId, source: EarthMapSource, knownKey?: string): Asset =>
     deps.assets.acquire<Asset>(
-      accountOf(source, keyOf(layer, id)),
+      accountOf(source, knownKey ?? keyOf(layer === "finer" ? "day" : layer, id)),
       () => {
         const texture = new three.Texture();
         texture.wrapS = three.ClampToEdgeWrapping;
@@ -242,7 +274,7 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         made.ready = Promise.resolve()
           .then(() => {
             // the source names its tiles: the one for this place is the key of the pyramid's tile that matches
-            const key = source.need({ ...tilePlace(id), layer }, 1024 * 2 ** id.level).find((one) => {
+            const key = knownKey ?? source.need({ ...tilePlace(id), layer: layer === "finer" ? "day" : layer }, 1024 * 2 ** id.level).find((one) => {
               const parts = tileKeyParts(one);
               return parts !== undefined && parts.level === id.level && parts.col === id.col && parts.row === id.row;
             });
@@ -339,11 +371,11 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
   const pump = (): void => {
     while (inFlight < IN_FLIGHT && queue.length > 0) {
       const next = queue.shift()!;
-      const key = keyOf(next.layer, next.id);
+      const key = next.key;
       if (entries.has(key)) continue;
-      const source = current[next.layer];
+      const source = next.layer === "finer" ? current.finer : current[next.layer];
       if (source === undefined) continue;
-      const entry: Entry = { key, layer: next.layer, id: next.id, source, asset: take(next.layer, next.id, source), ready: false, integrated: false, lastWanted: clock() };
+      const entry: Entry = { key, layer: next.layer, id: next.id, source, ...(next.grid ? { gridLevel: next.grid } : {}), asset: take(next.layer, next.id, source, next.grid ? key : undefined), ready: false, integrated: false, lastWanted: clock() };
       entries.set(key, entry);
       inFlight += 1;
       requested += 1;
@@ -415,9 +447,18 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
     return { level: null, day: [], night: [] };
   };
 
+  const gridRect = (entry: Entry): [number, number, number, number] => {
+    const grid = entry.source.grid;
+    const level = entry.gridLevel;
+    if (!grid || !level) return tileRect(entry.id);
+    const span = gridOnEarth(level, entry.id.col, entry.id.row, grid.extent) ?? { lonMin: -180, lonMax: 180, latMin: -90, latMax: 90 };
+    return [span.lonMin * RAD, span.latMax * RAD, span.lonMax * RAD, span.latMin * RAD];
+  };
+
   const makeMesh = (entry: Entry): void => {
     const nightRect: Uniform<number[]> = { value: [0, 0, 1, 1] };
     const nightMap: Uniform<THREE.Texture | null> = { value: shared.night.value };
+    const cover: Uniform<number> = { value: 1 };
     const material = new three.ShaderMaterial({
       vertexShader: TILE_VERT,
       fragmentShader: TILE_FRAG,
@@ -431,14 +472,22 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         ortho: shared.ortho,
         ...shared.extra,
         nightRect,
-        rect: { value: tileRect(entry.id) },
-        // a finer level sits a little higher, so two levels at once never fight for the same depth; all sit above the whole-Earth sphere's flat faces
-        radius: { value: 1.0004 + 0.0001 * (entry.id.level - 3) },
+        tileAlpha: cover,
+        // the source's look: each colour multiplied, and clear below a luminance (the defaults leave a tile as it is: the clear range, in 0 to 1, lies below black)
+        tileGain: { value: entry.source.look?.gain ?? [1, 1, 1] },
+        tileClear: { value: entry.source.look ? [entry.source.look.clear[0] / 255, entry.source.look.clear[1] / 255] : [-2, -1] },
+        rect: { value: gridRect(entry) },
+        // a finer level sits a little higher, so two levels at once never fight for the same depth; a grid tile sits above the package's finest. All sit above the whole-Earth sphere's flat faces
+        radius: { value: entry.gridLevel ? 1.0008 : 1.0004 + 0.0001 * (entry.id.level - 3) },
       },
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
+      // a source whose tiles have holes (no data, which the source made transparent) is drawn blended, so the picture under it shows there
+      transparent: entry.source.holes === true,
+      depthWrite: entry.source.holes !== true,
     });
+    entry.cover = cover;
     const mesh = new three.Mesh(geometry, material);
     mesh.frustumCulled = false;
     mesh.visible = false;
@@ -452,7 +501,7 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
   const retarget = (): void => {
     const night = nightLevels();
     for (const entry of entries.values()) {
-      if (!entry.mesh || !entry.nightMap || !entry.nightRect) continue;
+      if (!entry.mesh || !entry.nightMap || !entry.nightRect || entry.gridLevel) continue;
       let texture: THREE.Texture | null = null;
       let rect = [0, 0, 1, 1];
       if (night) {
@@ -478,6 +527,14 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
     for (const entry of entries.values()) if (entry.layer === "night" && entry.integrated && entry.ready) nightBy.set(entry.asset.texture, entry);
     for (const entry of entries.values()) {
       if (!entry.mesh) continue;
+      if (entry.gridLevel) {
+        entry.mesh.visible = gridSeen.has(entry.key);
+        if (entry.mesh.visible) {
+          shown += 1;
+          used.set(entry.source.info.id, (used.get(entry.source.info.id) ?? 0) + 1);
+        }
+        continue;
+      }
       let set = visible.get(entry.id.level);
       if (!set) {
         set = new Set(tilesInView(entry.id.level, camera).map((tile) => tile.row * tileColumns(tile.level) + tile.col));
@@ -540,31 +597,85 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         heldBytes: heldBytes(),
         refused,
         used: Object.fromEntries(used),
+        finer: finerLevel,
+        fading,
       };
     },
     sync(camera, sun, night, ratio) {
       if (disposed) return;
       const now = deps.sources();
-      if (now.day !== current.day || now.night !== current.night) {
+      if (now.day !== current.day || now.night !== current.night || now.finer !== current.finer) {
         reset();
-        current = { ...(now.day ? { day: now.day } : {}), ...(now.night ? { night: now.night } : {}) };
-        if (current.day !== undefined) readManifest(current);
+        current = { ...(now.day ? { day: now.day } : {}), ...(now.night ? { night: now.night } : {}), ...(now.finer ? { finer: now.finer } : {}) };
+        if (current.day !== undefined && !current.day.grid) readManifest(current);
+        else if (current.day?.grid) manifest = { layers: {} };
       }
       last = { camera };
-      if (current.day === undefined || !manifest) return;
+      const pyramidReady = current.day !== undefined && !current.day.grid && manifest != null && manifest.layers["day"] !== undefined;
+      if (current.day === undefined && current.finer === undefined) return;
+      if (current.day !== undefined && !current.day.grid && manifest === undefined && current.finer === undefined) return;
       const at = clock();
-      const wanted = choose(camera, sun, night, ratio);
+      const wanted = pyramidReady ? choose(camera, sun, night, ratio) : { level: null as number | null, day: [] as VisibleTile[], night: [] as TileId[] };
       wantedLevel = wanted.level;
-      wantedKeys = new Set([...wanted.day.map((tile) => keyOf("day", tile)), ...wanted.night.map((id) => keyOf("night", id))]);
+      const needed = (2 * Math.PI * camera.radius * ratio) / TEXEL_SLACK;
+      const served = (): number | undefined => {
+        if (current.day?.grid) return Math.max(...current.day.grid.levels.map((level) => level.width));
+        if (current.day === undefined) return OWN_SERVED;
+        if (manifest === undefined) return undefined;
+        const widths = manifest?.layers["day"]?.levels.map((level) => level.width) ?? [];
+        return widths.length > 0 ? Math.max(...widths) : OWN_SERVED;
+      };
+      const jobs: GridJob[] = [];
+      const addGrid = (source: EarthMapSource, layer: "day" | "finer", minWidth: number, taken: number): number | null => {
+        const grid = source.grid;
+        if (!grid) return null;
+        const levels = grid.levels.filter((level) => level.width > minWidth).sort((a, b) => a.width - b.width);
+        if (levels.length === 0 || !(needed > minWidth)) return null;
+        let index = levels.findIndex((level) => level.width >= needed);
+        if (index < 0) index = levels.length - 1;
+        while (index >= 0) {
+          const level = levels[index]!;
+          const tiles = gridTilesInView(level, grid.extent, camera, sun);
+          if (taken + tiles.length <= limit) {
+            for (const tile of tiles) {
+              const place = gridOnEarth(level, tile.col, tile.row, grid.extent);
+              if (!place) continue;
+              const inset = {
+                lonMin: place.lonMin + (place.lonMax - place.lonMin) * 0.25,
+                lonMax: place.lonMax - (place.lonMax - place.lonMin) * 0.25,
+                latMin: place.latMin + (place.latMax - place.latMin) * 0.25,
+                latMax: place.latMax - (place.latMax - place.latMin) * 0.25,
+                layer: "day" as const,
+              };
+              const key = source.need(inset, level.width).find((one) => {
+                const parts = tileKeyParts(one);
+                return parts !== undefined && parts.level === tile.level && parts.col === tile.col && parts.row === tile.row;
+              });
+              if (key) jobs.push({ layer, id: { level: tile.level, col: tile.col, row: tile.row }, key, grid: level });
+            }
+            return level.level;
+          }
+          index -= 1;
+        }
+        return null;
+      };
+      finerLevel = null;
+      if (current.day?.grid) wantedLevel = addGrid(current.day, "day", baseDay, 0);
+      const floor = served();
+      if (current.finer?.grid && floor !== undefined) finerLevel = addGrid(current.finer, "finer", floor, wanted.day.length + wanted.night.length + jobs.length);
+      gridSeen = new Set(jobs.map((job) => job.key));
+      wantedKeys = new Set([...wanted.day.map((tile) => keyOf("day", tile)), ...wanted.night.map((id) => keyOf("night", id)), ...jobs.map((job) => job.key)]);
       // a tile that failed is asked for again only after it has left the view and come back (the view changed), never on a timer and never while it stays in view: at rest the door sends nothing
       for (const key of [...failed.keys()]) if (!wantedKeys.has(key)) failed.delete(key);
       for (const key of wantedKeys) {
         const entry = entries.get(key);
         if (entry) entry.lastWanted = at;
       }
-      queue = [...wanted.day.map((tile) => ({ layer: "day" as const, id: { level: tile.level, col: tile.col, row: tile.row } })), ...wanted.night.map((id) => ({ layer: "night" as const, id }))].filter(
-        (item) => !failed.has(keyOf(item.layer, item.id)) && !entries.has(keyOf(item.layer, item.id)),
-      );
+      queue = [
+        ...wanted.day.map((tile) => ({ layer: "day" as const, id: { level: tile.level, col: tile.col, row: tile.row }, key: keyOf("day", tile) })),
+        ...wanted.night.map((id) => ({ layer: "night" as const, id, key: keyOf("night", id) })),
+        ...jobs.map((job) => ({ layer: job.layer, id: job.id, key: job.key, grid: job.grid })),
+      ].filter((item) => !failed.has(item.key) && !entries.has(item.key));
       pump();
 
       let fresh = 0;
@@ -577,14 +688,37 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         }
         fresh += 1;
         entry.integrated = true;
-        if (entry.layer === "day") makeMesh(entry);
+        if (entry.layer === "day" || entry.layer === "finer") makeMesh(entry);
+        if (entry.gridLevel && entry.cover) {
+          entry.born = at;
+          const full = reduced();
+          entry.cover.value = full ? 1 : 0;
+          const material = entry.mesh?.material as { transparent?: boolean; depthWrite?: boolean } | undefined;
+          if (material && !full) {
+            material.transparent = true;
+            material.depthWrite = false;
+          }
+        }
       }
       sweep();
       retarget();
       const visible = new Map<number, Set<number>>();
       if (wanted.level !== null) visible.set(wanted.level, new Set(wanted.day.map((tile) => tile.row * tileColumns(tile.level) + tile.col)));
       place(camera, visible);
-      if (waiting) deps.invalidate();
+      fading = false;
+      for (const entry of entries.values()) {
+        if (!entry.gridLevel || !entry.cover || !entry.integrated) continue;
+        const t = reduced() ? 1 : Math.min(1, (clock() - (entry.born ?? at)) / FADE_MS);
+        entry.cover.value = t;
+        const material = entry.mesh?.material as { transparent?: boolean; depthWrite?: boolean } | undefined;
+        if (material) {
+          const holes = entry.source.holes === true;
+          material.transparent = t < 1 || holes;
+          material.depthWrite = t >= 1 && !holes;
+        }
+        if (t < 1) fading = true;
+      }
+      if (waiting || fading) deps.invalidate();
       arm();
     },
     dispose() {

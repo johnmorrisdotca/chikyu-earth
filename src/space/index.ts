@@ -3,7 +3,7 @@
 export { AU_IN_EARTH_RADII, blend, createTrack, EARTH_RADIUS_KM, frameAt, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 export { compress, MOON_COMPRESSED, placeAround, placeMoon, placeSun, RADIUS, SUN_COMPRESSED, truePosition, type ScaleMode } from "./scale.ts";
 export { fitDistance, plainPainter, type BodyDrawing, type BodyMoon, type BodyPainter, type BodyView, type PaintContext, type SatellitePainter } from "./scene.ts";
-export { faceOffset, OUTSIDE_KM, outsidePose, RIDE_FACES, RIDE_FOV, rideFov, ridePose, rideTiltLimits, rideTurnDegrees, type RideFace, type RideInput, type RideLook, type RidePose, type RideViewpoint } from "./ride.ts";
+export { faceOffset, OUTSIDE_KM, outsidePose, RIDE_FACES, RIDE_FOV, rideFov, ridePose, rideTiltLimits, rideTurnDegrees, type RideFace, type RideInput, type RideLook, type RidePose, type RideModelSize, type RideViewpoint } from "./ride.ts";
 export { earthHides, type SatelliteScreen } from "./satellite-layer.ts";
-export { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
+export { ABOVE_MODEL_KM, ABOVE_MODEL_SHARE, aboveAxes, aboveModelShare, MODEL_FADE_FROM_KM, MODEL_FADE_TO_KM, MODEL_HANDOVER_PX, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 export { genericSatellite, satelliteKind, type SatelliteKind } from "./generic-satellite.ts";
