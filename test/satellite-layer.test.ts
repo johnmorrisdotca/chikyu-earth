@@ -32,6 +32,8 @@ class Geo {
   getAttribute(name: string): unknown {
     return this.attributes.get(name);
   }
+  setIndex(): void {}
+  setDrawRange(): void {}
   dispose(): void {}
 }
 class Attribute {
@@ -68,7 +70,7 @@ class Vec {
   z = 0;
 }
 const parts = (withLines: boolean) =>
-  ({ Points: Obj, ...(withLines ? { LineSegments: Obj } : {}), BufferGeometry: Geo, BufferAttribute: Attribute, ShaderMaterial: Material, LineBasicMaterial: Material, LineLoop: Obj, Color: Colour, Vector3: Vec }) as never;
+  ({ Points: Obj, ...(withLines ? { LineSegments: Obj } : {}), BufferGeometry: Geo, BufferAttribute: Attribute, ShaderMaterial: Material, LineBasicMaterial: Material, LineLoop: Obj, Mesh: Obj, DoubleSide: 2, Color: Colour, Vector3: Vec }) as never;
 const scene = { children: [] as unknown[], add(item: unknown) { this.children.push(item); }, remove(item: unknown) { this.children = this.children.filter((child) => child !== item); } };
 
 const run = (withLines: boolean) => {

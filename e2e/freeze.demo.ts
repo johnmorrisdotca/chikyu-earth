@@ -733,3 +733,42 @@ test("twenty hovers add no GPU objects, and a still pointer draws nothing", asyn
   expect(rest.frames).toBe(0);
   expect(gpuObjects(await readCounts(page)), "letting the orbit go does not leave a trail of objects").toBeLessThanOrEqual(held);
 });
+
+test("paths of a page's own: nothing drawn at rest with them shown, and adding and taking them away over and over keeps the GPU objects flat", async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, "satellites");
+  await untilStill(page);
+  const space = (source: string): Promise<unknown> => page.locator("chikyu-space").evaluate((el, code) => (new Function("el", code)(el) as unknown), source);
+  const drawn = async (): Promise<number> => (await space("return el.stats.paths.drawn")) as number;
+  // one pass first, so the one mesh and its program exist before the count is taken: what is measured is what changing paths costs
+  await space(`el.setPaths([{ id: "stations:1", style: "favourite" }]); el.selectSatellite({ group: "stations", index: 0 })`);
+  await expect.poll(drawn, { timeout: 20_000 }).toBe(2);
+  await untilStill(page);
+  await space(`el.setPaths([])`);
+  await expect.poll(drawn, { timeout: 20_000 }).toBe(1);
+  await untilStill(page);
+  const cold = gpuObjects(await readCounts(page));
+
+  await space(`el.setPaths(Array.from({ length: 16 }, (_, i) => ({ id: "stations:" + i, style: i % 2 ? "favourite" : "hovered" })))`);
+  await expect.poll(drawn, { timeout: 20_000 }).toBe(17);
+  await untilStill(page);
+  const held = gpuObjects(await readCounts(page));
+  expect(held - cold, "sixteen paths and the chosen orbit are the one mesh: no object is added").toBe(0);
+  const rest = await bounded(page, 3000, "satellites");
+  expect(rest.draws, "nothing drawn at rest with the paths shown").toBe(0);
+  expect(rest.frames).toBe(0);
+  expect(rest.requests).toBeLessThanOrEqual(2);
+
+  for (let round = 0; round < 12; round += 1) {
+    await space(`el.setPaths(Array.from({ length: ${(round % 4) * 5} }, (_, i) => ({ id: "stations:" + i })))`);
+    await expect.poll(drawn, { timeout: 20_000 }).toBe(1 + (round % 4) * 5);
+    await space(`el.setPathStyles({ favourite: { width: ${2 + (round % 3)} } })`);
+  }
+  await space(`el.setPaths([]); el.selectSatellite(null)`);
+  await expect.poll(drawn, { timeout: 20_000 }).toBe(0);
+  await untilStill(page);
+  expect(gpuObjects(await readCounts(page)), "adding and taking paths away leaves no trail of objects").toBeLessThanOrEqual(cold);
+  const empty = await bounded(page, 1500, "satellites");
+  expect(empty.draws, "no path, nothing drawn").toBe(0);
+  expect(empty.frames).toBe(0);
+});

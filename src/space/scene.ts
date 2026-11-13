@@ -23,6 +23,7 @@ import { beginPlaceSprites, createPlaceSprites, type PlaceSpriteData, type Place
 import type { CountryFrame } from "../country-names/geometry.ts";
 import type { GeoPoint } from "../types.ts";
 import { ABOVE_MODEL_SHARE, aboveAxes, aboveModelShare, MODEL_HANDOVER_PX, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
+import type { PathHit } from "./paths.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { paintMinute } from "../paint/buffer.ts";
 import { createPaintTexture } from "../paint/texture.ts";
@@ -264,6 +265,8 @@ export interface SpaceModel {
    * draw used, how long a change takes (0 for reduced motion), and the ground the picture spans below the satellite as of the last draw.
    */
   rideFrame: { share: number | null; seat: number | null; fresh: boolean; ms: number; moving: boolean; share_: FrameEase; seat_: FrameEase; weight_: FrameEase; groundKm: { across: number; tall: number } | null };
+  /** The page's path under a point of the view (CSS pixels), within a radius (`paths`, and the chosen satellite's own orbit), if a draw has been made and one is there. */
+  pathAt: ((x: number, y: number, radius: number) => Omit<PathHit, "pointer"> | null) | null;
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
@@ -315,6 +318,7 @@ export const newSpaceModel = (): SpaceModel => ({
   beam: newBeamState(),
   route: newRouteState(),
   pick: null,
+  pathAt: null,
   placeSatellite: null,
   followModel: null,
   rideFrame: { share: null, seat: null, fresh: true, ms: 400, moving: false, share_: newEase(), seat_: newEase(), weight_: newEase(), groundKm: null },
@@ -953,9 +957,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               if (would * size.height >= MODEL_HANDOVER_PX) over = riding.target;
             }
             model.satellites.modelOver = over;
+            model.satellites.ridden = riding && typeof riding.target === "object" ? riding.target : null;
           }
-          layer?.update(model.time, model.speed, model.drawn?.radiusPx ?? 0);
+          layer?.update(model.time, model.speed, model.drawn?.radiusPx ?? 0, size);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
+          model.pathAt = layer ? (x, y, radius) => layer!.pathAt(x, y, camera, size, radius) : null;
 
           // the camera: looks at the focus body from the direction the sky was in when it was last moved, turned by yaw and tilt, as far as the zoom says; or, riding along, sits at the
           // body and looks at the Earth
@@ -1557,6 +1563,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           dropModel();
           layer?.dispose();
           model.pick = null;
+          model.pathAt = null;
           model.placeSatellite = null;
           model.tiles = null;
           tiles.dispose();

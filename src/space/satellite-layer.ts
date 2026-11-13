@@ -5,6 +5,8 @@ import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteRef, Satellites } from "../satellites/types.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import { satelliteEmphasis, type SatelliteFocus } from "./satellite-focus.ts";
+import { BUILT_IN_PATH_STYLES, capPaths, nearestLoop, resolvePathId, styleOf, styleTable, type PathHit, type PathInfo, type PathRequest, type PathStyle } from "./paths.ts";
+import { createPathRibbons, type RibbonPath } from "./path-ribbons.ts";
 
 type Three = ThreeParts;
 
@@ -41,13 +43,20 @@ export interface SatelliteState {
    */
   hover: { ref: SatelliteRef | null; fade: number; enabled: boolean; color: string; opacity: number };
   /**
+   * The extra paths a page asked for (`setPaths`), the look table (`setPathStyles`: the page's entries over the built-in ones), whether the chosen satellite's own orbit is drawn (`selected-path`), and a number that goes up at each change so the layer
+   * rewrites its buffers only when something changed. `info` is what the last draw resolved and kept: the paths drawn, in order; `dropped` how many the cap left out and `unresolved` how many matched no satellite.
+   */
+  paths: { requests: PathRequest[]; overrides: Record<string, Partial<PathStyle> | null>; selectedOn: boolean; version: number; info: PathInfo[]; dropped: number; unresolved: number };
+  /** Set at each draw by the view: the satellite a ride is on, whose own orbit is drawn in the `selected` look while `selected-path` is on. `null` when none rides a satellite. */
+  ridden: SatelliteRef | null;
+  /**
    * The pixel ceiling of a streak's length on the screen above the interpolation limit, in CSS pixels at the Earth's own distance (`satellite-streak-max`). A streak is also never longer than {@link STREAK_REACH} Earth radii, so it shrinks with the Earth.
    * 0 draws the whole stretch one frame spans, however long that is.
    */
   streakMax: number;
   /** Set at each draw by the view: the satellite a ride shows as its model while the model is big enough to read. Its ring (the chosen marker) and name are left off while this is so; its orbit line stays. Clears with the ride, or when the model has handed over to the mark. */
   modelOver: SatelliteRef | null;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; pathsDrawn: number; pathDraws: number };
 }
 
 /**
@@ -108,13 +117,13 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, pathsDrawn: 0, pathDraws: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
 const ORBIT_POINTS = 120;
 /** How bright the chosen satellite's orbit is. The orbit under the pointer is about a third of this, so the two are told apart at a glance. */
-export const SELECTED_PATH_OPACITY = 0.85;
+export const SELECTED_PATH_OPACITY = BUILT_IN_PATH_STYLES["selected"]!.opacity;
 /** The orbit under the pointer, before it fades. A page may set another with `--chikyu-hover-path-opacity`. */
 export const HOVER_PATH_OPACITY = SELECTED_PATH_OPACITY / 3;
 
@@ -324,11 +333,13 @@ export interface SatelliteLayer {
   /** Where one satellite of a shown group is on the screen as of the last update, or `null` when its group is not shown or it is not placed (its elements are too old). A satellite outside the picture or behind the camera is still returned, with `visible` false. */
   placeOf(ref: SatelliteRef, camera: THREE.Camera, size: { width: number; height: number }): SatelliteScreen | null;
   /** Place every shown group for `model.time` and the chosen satellite exactly. `earthPx` is the Earth's radius on the screen, so a dot grows as the view zooms in. */
-  update(time: number, speed: number, earthPx?: number): void;
+  update(time: number, speed: number, earthPx?: number, size?: { width: number; height: number }): void;
   /** Set the dot size from the Earth's radius on the screen for this frame, after the camera is known. */
   resize(earthPx: number): void;
   /** The satellite nearest to a point of the view (CSS pixels) within `radius`, if one is in front of the Earth. */
   pick(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): SatelliteRef | null;
+  /** The path nearest to a point of the view (CSS pixels) within `radius`, if one is drawn there and not hidden by the Earth: the extra paths and the chosen satellite's own. */
+  pathAt(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): Omit<PathHit, "pointer"> | null;
   /** Where the chosen satellite is in the view, if it is. */
   place(camera: THREE.Camera, size: { width: number; height: number }): { x: number; y: number } | null;
   /** The chosen satellite's position and velocity now (Earth radii, km/s), or false. */
@@ -377,15 +388,27 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   hoverLoop.renderOrder = 4;
   scene.add(hoverLoop);
   let hoverKey = "";
-  const selectedLine = { positions: new Float32Array(ORBIT_POINTS * 3), geometry: new three.BufferGeometry(), material: new three.LineBasicMaterial({ color: "#ffffff", transparent: true, opacity: SELECTED_PATH_OPACITY }) };
-  selectedLine.geometry.setAttribute("position", new three.BufferAttribute(selectedLine.positions, 3));
-  const selectedLoop = new three.LineLoop(selectedLine.geometry, selectedLine.material);
-  selectedLoop.frustumCulled = false;
-  selectedLoop.visible = false;
-  scene.add(selectedLoop);
-  let selectedKey = "";
-  let selectedAt = 0;
-  let selectedWall = 0;
+  // The page's paths and the chosen satellite's own orbit: one mesh, one draw call, buffers made once (see path-ribbons.ts).
+  const ribbons = createPathRibbons(three, scene);
+  interface PathSlot {
+    key: string;
+    info: PathInfo;
+    style: PathStyle;
+    positions: Float32Array;
+    screen: Float32Array;
+    seen: Uint8Array;
+    at: number;
+    wall: number;
+    /** The orbit could not be placed (its elements are too old): nothing to draw. */
+    empty: boolean;
+  }
+  let slots: PathSlot[] = [];
+  let slotsSignature = "";
+  let resolvedFor: readonly Satellites[] = [];
+  let resolvedVersion = -1;
+  let resolved: { request: PathRequest; ref: SatelliteRef | null }[] = [];
+  let pathDrawn = false;
+  let table: Record<string, PathStyle> = styleTable({});
 
   const drop = (entry: Drawn): void => {
     scene.remove(entry.points);
@@ -437,8 +460,96 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
 
   const find = (ref: SatelliteRef): Satellites | undefined => state.groups.get(ref.group)?.satellites;
 
+  const refKey = (ref: SatelliteRef): string => `${ref.group}:${ref.index}`;
+  const cleanRef = (ref: SatelliteRef | null): SatelliteRef | null => {
+    if (!ref) return null;
+    const group = state.groups.get(ref.group);
+    return group && ref.index >= 0 && ref.index < group.satellites.count && satelliteEmphasis(ref.group, group.visible, state.focus).drawn ? ref : null;
+  };
+
+  /**
+   * The paths to draw now: the page's (the last 16 that match a satellite, in order), then the chosen satellite's own orbit and the ridden one's in the `selected` look, last, so they lie over the rest. The orbits are
+   * computed once for a satellite and again only when the clock has moved half an hour and a second has passed, as the chosen orbit always was. The buffers are rewritten only when the list, a look or an orbit changed.
+   */
+  const syncPaths = (time: number, wall: number, chosen: SatelliteRef | null): void => {
+    const pathState = state.paths;
+    const sources = [...state.groups.values()].map((group) => group.satellites);
+    const same = sources.length === resolvedFor.length && sources.every((source, i) => source === resolvedFor[i]);
+    if (!same || resolvedVersion !== pathState.version) {
+      resolvedFor = sources;
+      resolvedVersion = pathState.version;
+      table = styleTable(pathState.overrides);
+      resolved = pathState.requests.map((request) => ({ request, ref: resolvePathId(request.id, state.groups) }));
+    }
+    // a satellite asked for twice is drawn once, in the place and look of the later request
+    const byRef = new Map<string, { request: PathRequest; ref: SatelliteRef }>();
+    for (const one of resolved) {
+      if (!one.ref) continue;
+      byRef.delete(refKey(one.ref));
+      byRef.set(refKey(one.ref), { request: one.request, ref: one.ref });
+    }
+    const matched = [...byRef.values()];
+    const capped = capPaths(matched);
+    const wanted: { id: number | string; ref: SatelliteRef; name: string; style: PathStyle }[] = [];
+    for (const one of capped.kept) {
+      const ref = cleanRef(one.ref);
+      if (!ref) continue;
+      const look = styleOf(one.request, table);
+      wanted.push({ id: one.request.id, ref, name: look.name, style: look.style });
+    }
+    if (pathState.selectedOn) {
+      const own = [chosen, state.ridden].map(cleanRef);
+      const seen = new Set<string>();
+      for (const ref of own) {
+        if (!ref || seen.has(refKey(ref))) continue;
+        seen.add(refKey(ref));
+        const norad = find(ref)?.sets[ref.index]?.NORAD_CAT_ID;
+        wanted.push({ id: norad ?? refKey(ref), ref, name: "selected", style: table["selected"]! });
+      }
+    }
+    const signature = wanted.map((w) => `${refKey(w.ref)}|${w.name}|${w.style.color}|${w.style.width}|${w.style.opacity}|${w.style.dash ? w.style.dash.join(",") : "-"}`).join(";");
+    let dirty = signature !== slotsSignature;
+    const old = new Map(slots.map((slot) => [slot.key, slot]));
+    let empty = 0;
+    const next: PathSlot[] = [];
+    for (const w of wanted) {
+      const key = `${refKey(w.ref)}|${w.name}`;
+      let slot = old.get(key);
+      const set = find(w.ref)!;
+      if (!slot) {
+        slot = { key, info: { id: w.id, ref: w.ref, style: w.name }, style: w.style, positions: new Float32Array(ORBIT_POINTS * 3), screen: new Float32Array(ORBIT_POINTS * 2), seen: new Uint8Array(ORBIT_POINTS), at: Number.NaN, wall: 0, empty: false };
+        dirty = true;
+      }
+      old.delete(key);
+      slot.info = { id: w.id, ref: w.ref, style: w.name };
+      slot.style = w.style;
+      if (Number.isNaN(slot.at) || (Math.abs(time - slot.at) > ORBIT_REFRESH_GAME_MS && wall - slot.wall > ORBIT_REFRESH_WALL_MS)) {
+        slot.at = time;
+        slot.wall = wall;
+        slot.positions.set(set.orbit(w.ref.index, time, ORBIT_POINTS).subarray(0, ORBIT_POINTS * 3));
+        slot.empty = slot.positions.every((v) => v === 0);
+        dirty = true;
+      }
+      if (slot.empty) empty += 1;
+      next.push(slot);
+    }
+    slots = next;
+    if (dirty) {
+      slotsSignature = signature;
+      ribbons.set(slots.filter((slot) => !slot.empty).map((slot): RibbonPath => ({ positions: slot.positions, style: slot.style })));
+    }
+    const own = wanted.filter((w) => w.name === "selected" && pathState.selectedOn);
+    pathState.info = slots.filter((slot) => !slot.empty).map((slot) => ({ ...slot.info }));
+    pathState.dropped = capped.dropped;
+    pathState.unresolved = resolved.length - matched.length + empty;
+    pathDrawn = ribbons.mesh.visible;
+    state.drawn.pathsDrawn = ribbons.count;
+    state.drawn.pathDraws = pathDrawn ? 1 : 0;
+    state.drawn.selectedOpacity = own.length > 0 ? own[0]!.style.opacity : 0;
+  };
+
   return {
-    update(time, speed, earthPx = 0) {
+    update(time, speed, earthPx = 0, size) {
       const started = performance.now();
       const tooFast = Math.abs(speed) > MAX_SATELLITE_SPEED;
       const step = Math.min(60_000, Math.max(1000, Math.abs(speed) * 1000));
@@ -588,6 +699,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         }
       }
 
+      if (size) ribbons.frame(size.width, size.height, radius);
       const chosen = state.selected;
       const chosenGroup = chosen ? state.groups.get(chosen.group) : undefined;
       const chosenDrawn = chosen !== null && chosenGroup !== undefined && satelliteEmphasis(chosen.group, chosenGroup.visible, state.focus).drawn;
@@ -600,24 +712,12 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         const over = state.modelOver !== null && state.modelOver.group === chosen.group && state.modelOver.index === chosen.index;
         selectedPoints.visible = !over;
         state.drawn.selectedRing = !over;
-        const key = `${chosen.group}:${chosen.index}`;
-        if (key !== selectedKey || (Math.abs(time - selectedAt) > ORBIT_REFRESH_GAME_MS && started - selectedWall > ORBIT_REFRESH_WALL_MS)) {
-          selectedKey = key;
-          selectedAt = time;
-          selectedWall = started;
-          selectedLine.positions.set(set.orbit(chosen.index, time, ORBIT_POINTS).subarray(0, ORBIT_POINTS * 3));
-          (selectedLine.geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
-        }
-        selectedLoop.visible = true;
         selectedMaterial.uniforms["size"]!.value = 14 * ratio();
-        state.drawn.selectedOpacity = selectedLine.material.opacity;
       } else {
         selectedPoints.visible = false;
         state.drawn.selectedRing = false;
-        selectedLoop.visible = false;
-        selectedKey = "";
-        state.drawn.selectedOpacity = 0;
       }
+      syncPaths(time, started, chosen !== null && set !== undefined && chosenDrawn ? chosen : null);
 
       // The faint orbit: one path at a time, computed once from the elements already loaded, hidden while it is the chosen satellite's own orbit.
       const hover = state.hover;
@@ -736,6 +836,38 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       return { x, y, visible: !behind && !hidden && edge === null, heightKm, edge, behind, occluded: hidden };
     },
 
+    pathAt(x, y, camera, size, radius) {
+      if (!(radius > 0)) return null;
+      const c = camera.position;
+      const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
+      const centreDepth = ortho ? view.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z : 0;
+      const loops: { xy: Float32Array; ok: Uint8Array; count: number }[] = [];
+      const drawn = slots.filter((slot) => !slot.empty);
+      // the topmost look is the last drawn, so on a tie the later slot wins: walk them in reverse
+      const order = drawn.map((slot, i) => ({ slot, i })).reverse();
+      for (const { slot } of order) {
+        for (let i = 0; i < ORBIT_POINTS; i += 1) {
+          world.set(slot.positions[i * 3]!, slot.positions[i * 3 + 1]!, slot.positions[i * 3 + 2]!).applyMatrix4(scene.matrixWorld);
+          projected.copy(world).project(camera);
+          slot.screen[i * 2] = ((projected.x + 1) / 2) * size.width;
+          slot.screen[i * 2 + 1] = ((1 - projected.y) / 2) * size.height;
+          let seen = projected.z <= 1 && projected.z >= -1 && Number.isFinite(projected.x) && Number.isFinite(projected.y);
+          if (seen) {
+            if (ortho) {
+              view.copy(world).applyMatrix4(camera.matrixWorldInverse);
+              seen = !earthHidesDisc(view.x, view.y, view.z, centreDepth);
+            } else seen = !earthHides(c, world);
+          }
+          slot.seen[i] = seen ? 1 : 0;
+        }
+        loops.push({ xy: slot.screen, ok: slot.seen, count: ORBIT_POINTS });
+      }
+      const best = nearestLoop(x, y, loops, radius);
+      if (!best) return null;
+      const slot = order[best.index]!.slot;
+      return { ...slot.info, ref: { ...slot.info.ref }, x: best.x, y: best.y, distancePx: best.distance };
+    },
+
     place(camera, size) {
       if (!selectedPoints.visible) return null;
       projected.set(selectedPosition[0]!, selectedPosition[1]!, selectedPosition[2]!).applyMatrix4(scene.matrixWorld).project(camera);
@@ -750,11 +882,10 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     dispose() {
       for (const entry of drawn.values()) drop(entry);
       drawn.clear();
-      scene.remove(selectedPoints, selectedLoop, hoverLoop);
+      scene.remove(selectedPoints, hoverLoop);
+      ribbons.dispose();
       selectedGeometry.dispose();
       selectedMaterial.dispose();
-      selectedLine.geometry.dispose();
-      selectedLine.material.dispose();
       hoverLine.geometry.dispose();
       hoverLine.material.dispose();
     },

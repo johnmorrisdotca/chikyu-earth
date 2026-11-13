@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Paths of a page's own, a quiet chosen orbit, and a hit test for a path line** (MODULES-1289). `selected-path="off"` (the property `selectedPath`) stops the package drawing the chosen satellite's own orbit; ring, name and ride stay. `setPaths(list)` (the property `paths`) draws up to 16 orbits at once, each `{ id, style }` (`id` a NORAD number or `group:index`, the last 16 kept), and `setPathStyles(table)` (the property `pathStyles`) changes the named looks `selected`, `hovered`, `favourite` and `path`, each a colour, a width of 0.5 to 8 px, an opacity and a dash: they differ by width and dash as well as colour. All the paths and the chosen orbit are one draw call, with a real width and dashes, and nothing is drawn at rest. `path-hit` (the property `pathHit`, 8 px, 0 to 40, off at 0; a touch has twice the reach, at least 16) makes `chikyu-path-hover` (a mouse) and `chikyu-path-click` (a press or a tap) say which path is under the pointer, `{ id, ref, style, x, y, distancePx, pointer }` with the same `ref` as `chikyu-satellite-click`; `pathAt(x, y, radiusPx?)` asks the same for any point. One press means one thing: a dot, then a path, then the sky. In a ride, the ridden satellite's own orbit is drawn in the `selected` look, and the hit test is off there unless `path-hit` is set. `stats.paths`. On both `<chikyu-space>` and `<chikyu-earth-realistic>`. The chosen satellite's orbit is now 2 px wide (the `selected` look; it was 1 px).
+
 ## 0.47.1 - 2026-11-13
 
 - **Two freeze tests no longer fail on a saturated machine** (MODULES-1319). The full-screen at-rest test and the ride-look hidden-tab test now wait for the page's own out-of-sight signal and count draws only once they have held still. Tests only; the package is unchanged.
