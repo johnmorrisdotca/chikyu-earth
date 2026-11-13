@@ -152,6 +152,19 @@ for (const look of LOOKS) {
           document.querySelector("#globe")!.scrollIntoView = () => undefined;
         });
         await expect.poll(async () => page.locator(ELEMENT[look]).evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(1000);
+        // the page's own observer is made after the renderer's, so when it says the element is out of view the renderer has been told too; on a machine throttled to a quarter of its speed that is long after the scroll
+        await page.locator(ELEMENT[look]).evaluate(
+          (el) =>
+            new Promise<void>((done) => {
+              const watch = new IntersectionObserver((entries) => {
+                if (!entries[entries.length - 1]!.isIntersecting) {
+                  watch.disconnect();
+                  done();
+                }
+              });
+              watch.observe(el);
+            }),
+        );
         // a frame asked for before the view went out of sight is drawn, rightly, however late a saturated machine gets to it: wait for the draws to hold still, then count (MODULES-1319)
         await drawsStill(page);
         const away = await bounded(page, 2500, look);
