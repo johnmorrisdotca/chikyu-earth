@@ -54,7 +54,17 @@ export function footprintAngle(heightKm: number, elevation = BEAM_ELEVATION): nu
  */
 export const footprintKm = (heightKm: number, elevation = BEAM_ELEVATION): number => EARTH_KM * footprintAngle(heightKm, elevation);
 
-/** The spot cells inside a footprint: where each one's middle is, and how large they are, in the footprint's own units (the footprint's radius is 1). */
+/**
+ * The spot cells inside a footprint: where each one's middle is, and how large they are, in the footprint's own units (the footprint's radius is 1).
+ *
+ * @example
+ * ```ts no-run
+ * import type { BeamCells } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const none: BeamCells = { lattice: [], pitch: 0, radius: 0 };
+ * console.log(none.lattice.length);
+ * ```
+ */
 export interface BeamCells {
   /** Each cell's middle on the lattice, in units of the distance between neighbours (the hexagonal pack: one at the middle, then rings of six, twelve, eighteen). */
   lattice: number[][];
@@ -113,7 +123,17 @@ export function beamCells(count: number, radiusKm: number, cellKm = 0): BeamCell
  */
 export const BEAM_ATTRIBUTES = ["beam", "beam-elevation", "beam-cells", "beam-cell-size", "beam-color", "beam-strength"] as const;
 
-/** What the attributes say: whether the beam is on, and its options. */
+/**
+ * What the attributes say: whether the beam is on, and its options.
+ *
+ * @example
+ * ```ts no-run
+ * import type { BeamOptions } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const options: BeamOptions = { on: true, elevation: 25, cells: 19, cellSize: 0, colour: "#8fd1ff", strength: 0.6 };
+ * console.log(options.cells);
+ * ```
+ */
 export interface BeamOptions {
   on: boolean;
   elevation: number;
@@ -123,7 +143,16 @@ export interface BeamOptions {
   strength: number;
 }
 
-/** The beam's colour when the page names none: a pale blue that reads on the day side and the night side. */
+/**
+ * The beam's colour when the page names none: a pale blue that reads on the day side and the night side.
+ *
+ * @example
+ * ```ts
+ * import { BEAM_COLOUR } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(BEAM_COLOUR);
+ * ```
+ */
 export const BEAM_COLOUR = "#8fd1ff";
 
 const number = (value: string | null, fallback: number, least: number, most: number): number => {

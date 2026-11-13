@@ -246,7 +246,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * large enough), or both with a bare attribute; `chikyu-borders-unavailable` is sent when the shapes cannot be loaded.
  *
  * `beam` draws a beam of light from the chosen satellite (the one marked, or the one ridden) down to the ground below it: a soft cone ending in a lit footprint, the circle from which the satellite is above
- * `beam-elevation` degrees (25), with `beam-cells` spot cells inside it (an illustration, never an operator's plan), `beam-cell-size`, `beam-color` and `beam-strength`; see {@link beam}.
+ * `beam-elevation` degrees (25), with `beam-cells` spot cells inside it (an illustration, never an operator's plan), `beam-cell-size`, `beam-color` and `beam-strength` (the property `beam` and its siblings, and `stats.beam`).
  *
  * `grid` draws the meridians and parallels on the Earth, and `country-names` names its countries, as on `<chikyu-earth-realistic>`: the names keep clear of the bodies', the places' and the
  * cities' names and stay on the Earth's disc; `chikyu-country-names-unavailable` is sent when the outlines cannot be loaded.

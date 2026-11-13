@@ -62,6 +62,7 @@ vec3 ground(vec2 p) {
 
 const CONE_VERT = /* glsl */ `
 attribute vec4 cone;
+attribute float shaft;
 uniform vec3 sat;
 uniform vec3 nadir;
 uniform vec3 e1;
@@ -69,12 +70,15 @@ uniform vec3 e2;
 uniform float lambda;
 uniform float pitch;
 uniform float circle;
+uniform float weights;
 varying float vT;
 varying float vFace;
 varying float vRay;
 varying float vDist;
+varying float vWeight;
 ${MAP}
-vec3 rim(float phi) { return ground(cone.zw * pitch + circle * vec2(cos(phi), sin(phi))); }
+// the footprint's own cone (shaft 0) or the thin one to a cell (shaft 1)
+vec3 rim(float phi) { return shaft > 0.5 ? ground(cone.zw * pitch + circle * vec2(cos(phi), sin(phi))) : ground(vec2(cos(phi), sin(phi))); }
 vec3 at(float t, float phi) { return mix(sat, rim(phi), t); }
 void main() {
   float t = cone.x;
@@ -87,27 +91,28 @@ void main() {
   vFace = abs(dot(n, normalize(v)));
   vT = t;
   vRay = cone.y;
+  vWeight = shaft > 0.5 ? weights : 0.42;
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }`;
 
 const CONE_FRAG = /* glsl */ `
 uniform vec3 colour;
 uniform float strength;
-uniform float weight;
 varying float vT;
 varying float vFace;
 varying float vRay;
 varying float vDist;
+varying float vWeight;
 void main() {
   float along = 0.06 + 0.94 * pow(1.0 - vT, 1.5);
   float body = 0.18 + 0.82 * pow(vFace, 0.8);
   float shafts = 0.82 + 0.18 * sin(vRay * 36.0);
   float near = smoothstep(0.004, 0.06, vDist);
-  float a = strength * weight * along * body * shafts * near;
+  float a = strength * vWeight * along * body * shafts * near;
   gl_FragColor = vec4(colour, a);
 }`;
 
-// A circle on the ground, or a ring round one, mapped from the footprint's own flat units onto the sphere.
+// The footprint itself (kinds 2 and 3) and the cells (kinds 0 and 1), each a filled disc and a soft ring, mapped from the footprint's flat units onto the sphere.
 const DISC_VERT = /* glsl */ `
 attribute vec4 disc;
 attribute vec2 pol;
@@ -118,38 +123,51 @@ uniform float lambda;
 uniform float pitch;
 uniform float circle;
 varying float vRho;
-varying float vKind;
+varying float vRing;
 varying float vBand;
+varying float vFill;
+varying float vShare;
 ${MAP}
 void main() {
+  bool foot = disc.w > 1.5;
+  vec2 q = vec2(cos(pol.y), sin(pol.y)) * pol.x;
+  vec2 p = foot ? q : disc.xy * pitch + circle * q;
   vRho = pol.x;
-  vKind = disc.w;
+  vRing = mod(disc.w, 2.0);
   vBand = disc.z;
-  gl_Position = projectionMatrix * viewMatrix * vec4(ground(disc.xy * pitch + circle * pol.x * vec2(cos(pol.y), sin(pol.y))), 1.0);
+  vFill = foot ? 0.1 : 0.16;
+  vShare = foot ? 0.95 : 0.7;
+  gl_Position = projectionMatrix * viewMatrix * vec4(ground(p), 1.0);
 }`;
 
 const DISC_FRAG = /* glsl */ `
 uniform vec3 colour;
 uniform float strength;
-uniform float fillShare;
-uniform float ringShare;
 varying float vRho;
-varying float vKind;
+varying float vRing;
 varying float vBand;
+varying float vFill;
+varying float vShare;
 void main() {
-  float ring = ringShare * sin(3.14159265 * clamp(vBand, 0.0, 1.0));
-  float fill = fillShare * (0.55 + 0.45 * vRho);
-  float a = strength * (vKind > 0.5 ? ring : fill);
+  float ring = vShare * sin(3.14159265 * clamp(vBand, 0.0, 1.0));
+  float fill = vFill * (0.55 + 0.45 * vRho);
+  float a = strength * (vRing > 0.5 ? ring : fill);
   gl_FragColor = vec4(colour, a);
 }`;
 
-/** The cones: for each lattice point, a strip from the apex (t = 0) to the rim (t = 1), every phi round. */
-function coneGeometry(three: ThreeParts, lattice: readonly (readonly number[])[], rows: number, segments: number): THREE.BufferGeometry {
+/** The cones: the footprint's own, then one thin one for each lattice point. Each is a strip from the apex (t = 0) to the rim (t = 1), every phi round. */
+function coneGeometry(three: ThreeParts, lattice: readonly (readonly number[])[]): THREE.BufferGeometry {
   const verts: number[] = [];
+  const shaft: number[] = [];
   const index: number[] = [];
-  for (const point of lattice) {
+  const add = (x: number, y: number, thin: number, rows: number, segments: number): void => {
     const base = verts.length / 4;
-    for (let r = 0; r <= rows; r += 1) for (let s = 0; s <= segments; s += 1) verts.push(r / rows, (s / segments) * Math.PI * 2, point[0]!, point[1]!);
+    for (let r = 0; r <= rows; r += 1) {
+      for (let s = 0; s <= segments; s += 1) {
+        verts.push(r / rows, (s / segments) * Math.PI * 2, x, y);
+        shaft.push(thin);
+      }
+    }
     for (let r = 0; r < rows; r += 1) {
       for (let s = 0; s < segments; s += 1) {
         const a = base + r * (segments + 1) + s;
@@ -157,16 +175,19 @@ function coneGeometry(three: ThreeParts, lattice: readonly (readonly number[])[]
         index.push(a, b, a + 1, a + 1, b, b + 1);
       }
     }
-  }
+  };
+  add(0, 0, 0, 10, CONE_SEGMENTS);
+  for (const point of lattice) add(point[0]!, point[1]!, 1, 6, 24);
   const geometry = new three.BufferGeometry();
   geometry.setAttribute("cone", new three.BufferAttribute(new Float32Array(verts), 4));
+  geometry.setAttribute("shaft", new three.BufferAttribute(new Float32Array(shaft), 1));
   geometry.setAttribute("position", new three.BufferAttribute(new Float32Array((verts.length / 4) * 3), 3));
   geometry.setIndex(index);
   return geometry;
 }
 
-/** Circles for the disc shader: each is a filled disc (kind 0) and a soft ring (kind 1) at the lattice point (x, y). */
-function discGeometry(three: ThreeParts, lattice: readonly (readonly number[])[]): THREE.BufferGeometry {
+/** The ground: the footprint's disc and ring (kinds 2 and 3), then each cell's (kinds 0 and 1). */
+function groundGeometry(three: ThreeParts, lattice: readonly (readonly number[])[]): THREE.BufferGeometry {
   const disc: number[] = [];
   const pol: number[] = [];
   const index: number[] = [];
@@ -175,12 +196,10 @@ function discGeometry(three: ThreeParts, lattice: readonly (readonly number[])[]
     pol.push(rho, phi);
     return pol.length / 2 - 1;
   };
-  for (const point of lattice) {
-    const [x, y] = [point[0]!, point[1]!];
-    // the fill: a fan of rings
-    const fill = push(x, y, 0, 0, 0);
+  const circleAt = (x: number, y: number, fillKind: number): void => {
+    const fill = push(x, y, fillKind, 0, 0);
     const first = pol.length / 2;
-    for (let r = 1; r <= DISC_RINGS; r += 1) for (let s = 0; s < DISC_SEGMENTS; s += 1) push(x, y, 0, (r / DISC_RINGS) * 0.985, (s / DISC_SEGMENTS) * Math.PI * 2);
+    for (let r = 1; r <= DISC_RINGS; r += 1) for (let s = 0; s < DISC_SEGMENTS; s += 1) push(x, y, fillKind, (r / DISC_RINGS) * 0.985, (s / DISC_SEGMENTS) * Math.PI * 2);
     for (let s = 0; s < DISC_SEGMENTS; s += 1) index.push(fill, first + s, first + ((s + 1) % DISC_SEGMENTS));
     for (let r = 1; r < DISC_RINGS; r += 1) {
       for (let s = 0; s < DISC_SEGMENTS; s += 1) {
@@ -191,13 +210,15 @@ function discGeometry(three: ThreeParts, lattice: readonly (readonly number[])[]
     }
     // the ring: a band just inside the edge, brightest in the middle of it
     const band = pol.length / 2;
-    for (const w of [0, 1]) for (let s = 0; s < DISC_SEGMENTS; s += 1) push(x, y, 1, 0.88 + 0.12 * w, (s / DISC_SEGMENTS) * Math.PI * 2, w);
+    for (const w of [0, 1]) for (let s = 0; s < DISC_SEGMENTS; s += 1) push(x, y, fillKind + 1, 0.88 + 0.12 * w, (s / DISC_SEGMENTS) * Math.PI * 2, w);
     for (let s = 0; s < DISC_SEGMENTS; s += 1) {
       const a = band + s;
       const b = band + ((s + 1) % DISC_SEGMENTS);
       index.push(a, a + DISC_SEGMENTS, b, b, a + DISC_SEGMENTS, b + DISC_SEGMENTS);
     }
-  }
+  };
+  circleAt(0, 0, 2);
+  for (const point of lattice) circleAt(point[0]!, point[1]!, 0);
   const geometry = new three.BufferGeometry();
   geometry.setAttribute("disc", new three.BufferAttribute(new Float32Array(disc), 4));
   geometry.setAttribute("pol", new three.BufferAttribute(new Float32Array(pol), 2));
@@ -226,40 +247,44 @@ export function createBeamLayer(three: ThreeParts, scene: THREE.Object3D, state:
     lambda: { value: 0 },
     colour: { value: new three.Color(state.colour) },
     strength: { value: state.strength },
+    pitch: { value: 0.2 },
+    circle: { value: 0.1 },
+    weights: { value: 0.3 },
   };
-  const common = { transparent: true, depthWrite: false, blending } as const;
-  const coneUniforms = { ...uniforms, pitch: { value: 0 }, circle: { value: 1 }, weight: { value: 0.42 } };
-  const coneMaterial = new three.ShaderMaterial({ vertexShader: CONE_VERT, fragmentShader: CONE_FRAG, uniforms: coneUniforms, side: three.DoubleSide, ...common });
-  const cone = new three.Mesh(coneGeometry(three, [[0, 0]], 10, CONE_SEGMENTS), coneMaterial);
-  const shaftUniforms = { ...uniforms, pitch: { value: 0.2 }, circle: { value: 0.1 }, weight: { value: 0.32 } };
-  const shaftMaterial = new three.ShaderMaterial({ vertexShader: CONE_VERT, fragmentShader: CONE_FRAG, uniforms: shaftUniforms, side: three.DoubleSide, ...common });
-  const footUniforms = { ...uniforms, pitch: { value: 0 }, circle: { value: 1 }, fillShare: { value: 0.1 }, ringShare: { value: 0.95 } };
-  const footMaterial = new three.ShaderMaterial({ vertexShader: DISC_VERT, fragmentShader: DISC_FRAG, uniforms: footUniforms, side: three.DoubleSide, ...common });
-  const foot = new three.Mesh(discGeometry(three, [[0, 0]]), footMaterial);
-  const cellUniforms = { ...uniforms, pitch: { value: 0.2 }, circle: { value: 0.1 }, fillShare: { value: 0.16 }, ringShare: { value: 0.7 } };
-  const cellMaterial = new three.ShaderMaterial({ vertexShader: DISC_VERT, fragmentShader: DISC_FRAG, uniforms: cellUniforms, side: three.DoubleSide, ...common });
-  let cells: THREE.Mesh | null = null;
-  let shafts: THREE.Mesh | null = null;
+  // forceSinglePass: a double-sided transparent material is drawn twice (back faces, then front); added light does not care about the order, so once is enough and the beam costs half the draw calls.
+  // Two draw calls in all: the cones (the footprint's own and the thin one to each cell), and the ground (the footprint's disc and ring and the cells').
+  const common = { transparent: true, depthWrite: false, blending, forceSinglePass: true, side: three.DoubleSide, uniforms } as const;
+  const coneMaterial = new three.ShaderMaterial({ vertexShader: CONE_VERT, fragmentShader: CONE_FRAG, ...common });
+  const groundMaterial = new three.ShaderMaterial({ vertexShader: DISC_VERT, fragmentShader: DISC_FRAG, ...common });
+  let cones: THREE.Mesh | null = null;
+  let ground: THREE.Mesh | null = null;
   let cellKey = "";
-  for (const part of [cone, foot]) {
-    part.frustumCulled = false;
-    part.renderOrder = order;
-    part.visible = false;
-    scene.add(part);
-  }
+  const make = (lattice: readonly (readonly number[])[]): void => {
+    for (const old of [cones, ground]) {
+      if (!old) continue;
+      scene.remove(old);
+      old.geometry.dispose();
+    }
+    cones = new three.Mesh(coneGeometry(three, lattice), coneMaterial);
+    ground = new three.Mesh(groundGeometry(three, lattice), groundMaterial);
+    for (const part of [cones, ground]) {
+      part.frustumCulled = false;
+      part.renderOrder = order;
+      part.visible = false;
+      scene.add(part);
+    }
+    state.stats.builds += 1;
+  };
   const stats = state.stats;
-  stats.builds += 1;
   const up = new three.Vector3(0, 1, 0);
   const side = new three.Vector3();
   return {
     sync(position) {
       const height = position ? Math.hypot(position[0], position[1], position[2]) : 0;
       const on = state.on && position !== null && height > 1;
-      cone.visible = on;
-      foot.visible = on;
-      if (cells) cells.visible = on;
-      if (shafts) shafts.visible = on;
       stats.shown = on;
+      if (cones) cones.visible = on;
+      if (ground) ground.visible = on;
       if (!on || !position) {
         stats.heightKm = 0;
         stats.radiusKm = 0;
@@ -270,6 +295,19 @@ export function createBeamLayer(three: ThreeParts, scene: THREE.Object3D, state:
       }
       const heightKm = (height - 1) * EARTH_KM;
       const lambda = footprintAngle(heightKm, state.elevation);
+      stats.heightKm = heightKm;
+      stats.radiusKm = footprintKm(heightKm, state.elevation);
+      stats.angleDegrees = (lambda * 180) / Math.PI;
+      stats.elevation = state.elevation;
+      // the cells: the geometry is made again only when their number changes (and the first time); their size follows the footprint
+      const wanted = beamCells(state.cells, stats.radiusKm, state.cellSize);
+      const key = `${wanted.lattice.length}`;
+      if (!cones || key !== cellKey) {
+        cellKey = key;
+        make(wanted.lattice);
+      }
+      cones!.visible = true;
+      ground!.visible = true;
       uniforms.sat.value.set(position[0], position[1], position[2]);
       uniforms.nadir.value.set(position[0] / height, position[1] / height, position[2] / height);
       side.copy(Math.abs(uniforms.nadir.value.y) > 0.99 ? side.set(1, 0, 0) : up).cross(uniforms.nadir.value).normalize();
@@ -278,53 +316,20 @@ export function createBeamLayer(three: ThreeParts, scene: THREE.Object3D, state:
       uniforms.lambda.value = lambda;
       uniforms.colour.value.set(state.colour);
       uniforms.strength.value = state.strength;
-      stats.heightKm = heightKm;
-      stats.radiusKm = footprintKm(heightKm, state.elevation);
-      stats.angleDegrees = (lambda * 180) / Math.PI;
-      stats.elevation = state.elevation;
-      // the cells: their geometry is made again only when their number changes; their size follows the footprint
-      const wanted = beamCells(state.cells, stats.radiusKm, state.cellSize);
-      const key = `${wanted.lattice.length}`;
-      if (key !== cellKey) {
-        cellKey = key;
-        for (const old of [cells, shafts]) {
-          if (!old) continue;
-          scene.remove(old);
-          old.geometry.dispose();
-        }
-        cells = null;
-        shafts = null;
-        if (wanted.lattice.length > 0) {
-          cells = new three.Mesh(discGeometry(three, wanted.lattice), cellMaterial);
-          shafts = new three.Mesh(coneGeometry(three, wanted.lattice, 6, 24), shaftMaterial);
-          for (const part of [cells, shafts]) {
-            part.frustumCulled = false;
-            part.renderOrder = order;
-            scene.add(part);
-          }
-          stats.builds += 1;
-        }
-      }
-      if (cells) cells.visible = true;
-      if (shafts) shafts.visible = true;
-      shaftUniforms.weight.value = 0.34 / Math.sqrt(Math.max(1, wanted.lattice.length / 7)); // many shafts add up at the satellite: each is dimmer the more there are
-      shaftUniforms.pitch.value = wanted.pitch;
-      shaftUniforms.circle.value = wanted.radius;
-      cellUniforms.pitch.value = wanted.pitch;
-      cellUniforms.circle.value = wanted.radius;
+      uniforms.pitch.value = wanted.pitch;
+      uniforms.circle.value = wanted.radius;
+      uniforms.weights.value = 0.34 / Math.sqrt(Math.max(1, wanted.lattice.length / 7)); // many shafts add up at the satellite: each is dimmer the more there are
       stats.cells = wanted.lattice.length;
       stats.cellRadiusKm = wanted.lattice.length > 0 ? wanted.radius * stats.radiusKm : 0;
     },
     dispose() {
-      for (const part of [cone, foot, cells, shafts]) {
+      for (const part of [cones, ground]) {
         if (!part) continue;
         scene.remove(part);
         part.geometry.dispose();
       }
       coneMaterial.dispose();
-      shaftMaterial.dispose();
-      footMaterial.dispose();
-      cellMaterial.dispose();
+      groundMaterial.dispose();
       stats.shown = false;
     },
   };
