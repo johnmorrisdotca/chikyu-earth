@@ -156,6 +156,12 @@ await step("node-satellites", () => {
   if (!/^ISS \(ZARYA\): \d+ km up, 7\.\d\d km\/s$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-catalogue-rows", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "catalogue-rows.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  const want = ["Hubble / ハッブル (HST)", "HST", "14"];
+  if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
+});
+
 await step("node-meteors", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "meteors.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
   if (!/^Perseids \(PER\): \d+\.\d an hour$/.test(out[0] ?? "")) throw new Error(`unexpected output: ${out.join("|")}`);
@@ -485,6 +491,7 @@ const FILES: Record<string, string[]> = {
   "typescript/sky-names.ts": ["docs/guides/sky-names.md", "docs/guides/ja/sky-names.md"],
   "node/server.mjs": ["docs/guides/typescript-and-node.md", "docs/guides/ja/typescript-and-node.md"],
   "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "node/catalogue-rows.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/meteors.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/meteor-strength.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/body-label.mjs": ["docs/guides/body-label.md", "docs/guides/ja/body-label.md"],
