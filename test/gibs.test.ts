@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAssetCache } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { GIBS_CREDIT, gibsGrid, gibsTiles, gridKey, gridKeys, gridPastExtent, gridTileAt, previousUtcDay, samplesAreBlank, utcDay } from "../src/door/index.ts";
-import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_NAMES, NODATA_BELOW, NODATA_FULL, knockOutNoData, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
+import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_NAMES, NODATA_BELOW, NODATA_FULL, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
 import { createTileSet, type TileSources } from "../src/realistic/tile-set.ts";
 import type { ThreeParts } from "../src/realistic/textures.ts";
 import type { TileCamera } from "../src/realistic/tiles.ts";
@@ -331,31 +331,16 @@ test("the default is the Landsat annual mosaic: its year is not searched for, it
   assert.doesNotMatch(today.info.credit.en, /GWELD/);
 });
 
-test("black is no data: a pixel is transparent at black, opaque from a dim picture, and a share between; the colours take the layer's gain", () => {
-  const pixels = new Uint8ClampedArray([0, 0, 0, 255, NODATA_BELOW, 0, 0, 255, NODATA_FULL, 0, 0, 255, 100, 120, 80, 255, 8, 8, 8, 255]);
-  const clear = knockOutNoData(pixels);
-  assert.equal(pixels[3], 0, "black");
-  assert.equal(pixels[7], 0, "at the lower limit");
-  assert.equal(pixels[11], 255, "at the upper limit");
-  assert.equal(pixels[15], 255, "a picture's own colour");
-  assert.ok(pixels[19]! > 0 && pixels[19]! < 255, "between: a share");
-  assert.equal(clear, 2 / 5);
-  assert.deepEqual([...pixels.subarray(12, 15)], [100, 120, 80], "no gain: unchanged");
-  const lit = new Uint8ClampedArray([200, 200, 200, 255, 0, 0, 0, 255]);
-  knockOutNoData(lit, [0.5, 0.25, 0]);
-  assert.deepEqual([...lit.subarray(0, 4)], [100, 50, 0, 255], "the gain of each channel");
-  assert.equal(lit[7], 0, "and black stays no data");
-  assert.equal(knockOutNoData(new Uint8ClampedArray(0)), 0);
-  // a layer with nearly black water: cleared by luminance, the sea (7, 25, 12) clear, a wooded slope (22, 54, 7) and a field (117, 126, 95) opaque
-  const land = new Uint8ClampedArray([7, 25, 12, 255, 22, 54, 7, 255, 117, 126, 95, 255, 8, 39, 6, 255]);
-  const share = knockOutNoData(land, undefined, [20, 32]);
-  assert.equal(land[3], 0, "sea");
-  assert.equal(land[7], 255, "wooded slope");
-  assert.equal(land[11], 255, "field");
-  assert.ok(land[15]! > 100 && land[15]! < 255, "a dark slope: partly clear, the picture under shows through");
-  assert.equal(share, 1 / 4);
+test("each layer says how its tiles are drawn: clear below a luminance, and a gain on the colours; the daily layers clear only the black of no data", () => {
+  const time = () => new Date("2026-11-13T12:00:00Z");
+  const landsat = gibsTiles({ time });
+  assert.deepEqual(landsat.look, { clear: [20, 32], gain: [0.76, 0.66, 0.55] }, "the sea of the mosaic is clear, and the colours are brought to ours");
+  const today = gibsTiles({ time, layer: "today" });
+  assert.deepEqual(today.look, { clear: [NODATA_BELOW, NODATA_FULL] }, "black is no data, nothing else is touched");
+  assert.ok(NODATA_BELOW < NODATA_FULL);
+  assert.equal(today.holes, true);
   assert.deepEqual(GIBS_LAYERS[GIBS_DEFAULT_LAYER]!.clear, [20, 32]);
-  const whole = new Uint8ClampedArray(64 * 4);
-  for (let i = 3; i < whole.length; i += 4) whole[i] = 255;
-  assert.equal(knockOutNoData(whole), 1, "a tile all black is all transparent");
+  // the gain was fitted over land: each channel under 1, red the least cut, blue the most (our pictures are darker and warmer)
+  const [r, g, b] = landsat.look!.gain!;
+  assert.ok(r > g && g > b && r < 1 && b > 0);
 });

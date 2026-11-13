@@ -59,6 +59,10 @@ export type EarthMapSource = TileSource<EarthMapPlace, number, ImageTile> & {
   grid?: MapGrid;
   /** True when the source's tiles may have transparent pixels (a place it has no data for), so the loader draws them blended and the picture underneath shows through. */
   holes?: boolean;
+  /**
+   * How the loader draws this source's tiles, on the graphics card: `clear` is the luminance (0 to 255) at or below which a pixel is wholly transparent and from which it is wholly opaque, and `gain` multiplies each colour. Left out, tiles are drawn as they are.
+   */
+  look?: { clear: readonly [number, number]; gain?: readonly [number, number, number] };
 };
 
 /**

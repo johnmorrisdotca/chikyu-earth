@@ -473,6 +473,9 @@ export function createTileSet(three: Three, parent: THREE.Group, shared: TileSha
         ...shared.extra,
         nightRect,
         tileAlpha: cover,
+        // the source's look: each colour multiplied, and clear below a luminance (the defaults leave a tile as it is: the clear range, in 0 to 1, lies below black)
+        tileGain: { value: entry.source.look?.gain ?? [1, 1, 1] },
+        tileClear: { value: entry.source.look ? [entry.source.look.clear[0] / 255, entry.source.look.clear[1] / 255] : [-2, -1] },
         rect: { value: gridRect(entry) },
         // a finer level sits a little higher, so two levels at once never fight for the same depth; a grid tile sits above the package's finest. All sit above the whole-Earth sphere's flat faces
         radius: { value: entry.gridLevel ? 1.0008 : 1.0004 + 0.0001 * (entry.id.level - 3) },

@@ -13,6 +13,8 @@ test.beforeEach(async ({ page }) => {
 
 const MAGENTA: [number, number, number] = [255, 0, 255];
 const BLACK: [number, number, number] = [0, 0, 0];
+/** What the Landsat mosaic shows for the sea: nearly black, a little green. */
+const SEA: [number, number, number] = [7, 25, 12];
 
 const png = (rgb: [number, number, number], blackLeft = false): Buffer => {
   const size = 64;
@@ -39,9 +41,9 @@ interface GibsLog {
 }
 
 /** Answer the imagery service locally. `mode` is what every tile does. */
-async function routeGibs(page: Page, mode: "ok" | "missing" | "blank" | "slow" | "swath", days?: (day: string) => boolean): Promise<GibsLog> {
+async function routeGibs(page: Page, mode: "ok" | "missing" | "blank" | "slow" | "swath" | "sea", days?: (day: string) => boolean): Promise<GibsLog> {
   const log: GibsLog = { urls: [] };
-  const picture = png(mode === "blank" ? BLACK : MAGENTA, mode === "swath");
+  const picture = png(mode === "blank" ? BLACK : mode === "sea" ? SEA : MAGENTA, mode === "swath");
   await page.route("https://gibs.earthdata.nasa.gov/**", async (route) => {
     log.urls.push(route.request().url());
     const day = /\/default\/(\d{4}-\d{2}-\d{2})\//.exec(route.request().url())?.[1];
@@ -264,4 +266,21 @@ test("by default the finer tiles are the Landsat mosaic: one year, no search, la
   expect(box.width).toBeGreaterThan(0);
   expect(magenta, `some of the line across is the Landsat tile's colour`).toBeGreaterThan(0);
   expect(black, "and none of it is the black of no data").toBe(0);
+});
+
+test("the sea of the Landsat mosaic, nearly black, is left clear: the package's own picture shows where it is", async ({ page }) => {
+  const gibs = await routeGibs(page, "sea");
+  await routeTiles(page);
+  await openEarth(page, `time=${NOON}&center=0,23`);
+  await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
+  await setView(page, await zoomFor(page, 8000));
+  await untilStill(page);
+  const own = await pixelAt(page, page.locator(EARTH), 0.5, 0.5);
+  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await expect.poll(async () => (await statsOf(page)).tiles.shown, { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect.poll(async () => gibs.urls.length, { timeout: 30_000 }).toBeGreaterThan(0);
+  await untilStill(page);
+  const now = await pixelAt(page, page.locator(EARTH), 0.5, 0.5);
+  expect((await statsOf(page)).tiles.failed, "a dark tile is a picture, not a failure").toBe(0);
+  for (let k = 0; k < 3; k += 1) expect(Math.abs(now[k]! - own[k]!), `channel ${k}: the package's own ${own} against ${now}`).toBeLessThanOrEqual(12);
 });

@@ -37,7 +37,7 @@ uniform sampler2D paintMap;
 uniform float paintNow;
 uniform float paintSpan;
 uniform float paintOn;
-${tile ? "uniform vec4 nightRect;\nuniform float tileAlpha;\nvarying vec2 vUvG;" : ""}
+${tile ? "uniform vec4 nightRect;\nuniform float tileAlpha;\nuniform vec3 tileGain;\nuniform vec2 tileClear;\nvarying vec2 vUvG;" : ""}
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorld;
@@ -50,6 +50,7 @@ void main() {
   float day = smoothstep(-0.10, 0.22, ndl);
   vec2 g = ${tile ? "vUvG" : "vUv"};
   vec4 texel = texture2D(dayMap, vUv);
+  ${tile ? "float keep = clamp((dot(texel.rgb, vec3(0.299, 0.587, 0.114)) - tileClear.x) / (tileClear.y - tileClear.x), 0.0, 1.0);\n  texel.rgb *= tileGain;" : "float keep = 1.0;"}
   vec3 albedo = texel.rgb;
   float water = texture2D(waterMap, g).r;
   albedo = pow(albedo, vec3(0.86)) * 1.08;
@@ -99,7 +100,7 @@ void main() {
     col = mix(col, vec3(1.0, 0.55, 0.12), clamp(show, 0.0, 0.92));
   }
 
-  gl_FragColor = vec4(col, ${tile ? "tileAlpha * texel.a" : "1.0"});
+  gl_FragColor = vec4(col, ${tile ? "tileAlpha * keep * texel.a" : "1.0"});
 }`;
 
 export const SURFACE_FRAG = surfaceFrag(false);

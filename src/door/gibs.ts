@@ -73,7 +73,7 @@ interface GibsLayer {
   /** For a layer with one picture a year: the years' times, as the service names them (`yyyy-mm-dd`), oldest first. The newest is the one used unless a page names another of them. */
   years?: readonly string[];
   /**
-   * For a layer that shows water as nearly black (the Landsat mosaics): the luminance (0 to 255) below which a pixel is clear and from which it is opaque, so the sea is left to the package's blue ocean and the picture is a land picture. Left out, only the black of no data is cleared.
+   * For a layer that shows water as nearly black (the Landsat mosaics): the luminance (0 to 255) below which a pixel is clear and from which it is opaque, so the sea is left to the package's blue ocean and the picture is a land picture. Left out, only the black of no data is cleared (`NODATA_BELOW` and `NODATA_FULL`).
    */
   clear?: readonly [number, number];
   /** Multiplies each colour, to bring the picture to the look of the package's own pictures (found by comparing them over land, see NOTICE.md). */
@@ -289,69 +289,13 @@ export interface GibsTilesOptions extends EarthTilesOptions {
   changed?: () => void;
 }
 
-/** Where a pixel's brightest channel is at or below this, the tile has no data there (the service paints it black): the pixel is wholly transparent. */
-export const NODATA_BELOW = 3;
-/** And from this up it is the picture's own: opaque. Between the two the pixel is more or less transparent, so the edge of a gap is not a hard black line. */
-export const NODATA_FULL = 14;
-
 /**
- * Turn a tile's black, the service's paint for a place it has no data for, into transparency, and bring the colours to the package's own look: a pixel is transparent when its brightest channel is at most `NODATA_BELOW`, opaque from
- * `NODATA_FULL`, and in between a share of that; each colour is multiplied by `gain` (left out: not changed). Changes `pixels` in place.
- *
- * @param pixels - RGBA bytes.
- * @param gain - Red, green and blue multipliers.
- * @param clear - Luminance limits to clear by instead of the brightest channel's (a layer whose water is nearly black).
- * @returns The share of pixels left wholly transparent, from 0 to 1.
- *
- * @example
- * ```ts
- * import { knockOutNoData } from "@johnmorrisdotca/chikyu-earth/door";
- *
- * const pixels = new Uint8ClampedArray([0, 0, 0, 255, 100, 120, 80, 255]);
- * console.log(knockOutNoData(pixels), pixels[3]);
- * ```
+ * Where a tile's luminance (0 to 255) is at or below this, the picture has no data there (the service paints it black) and the loader draws it clear; from `NODATA_FULL` it is opaque, and between the two a share, so the edge of a gap is not a hard
+ * black line. A layer may set its own limits (`clear`).
  */
-export function knockOutNoData(pixels: Uint8ClampedArray, gain?: readonly [number, number, number], clear?: readonly [number, number]): number {
-  let cleared = 0;
-  const count = pixels.length / 4;
-  for (let i = 0; i < pixels.length; i += 4) {
-    // the picture's own darkness: by luminance where the layer shows water as nearly black, else by the brightest channel (the service's black for no data)
-    const level = clear ? 0.299 * pixels[i]! + 0.587 * pixels[i + 1]! + 0.114 * pixels[i + 2]! : Math.max(pixels[i]!, pixels[i + 1]!, pixels[i + 2]!);
-    const low = clear ? clear[0] : NODATA_BELOW;
-    const high = clear ? clear[1] : NODATA_FULL;
-    const alpha = level <= low ? 0 : level >= high ? 1 : (level - low) / (high - low);
-    if (alpha === 0) cleared += 1;
-    if (gain) {
-      pixels[i] = pixels[i]! * gain[0];
-      pixels[i + 1] = pixels[i + 1]! * gain[1];
-      pixels[i + 2] = pixels[i + 2]! * gain[2];
-    }
-    pixels[i + 3] = Math.round(pixels[i + 3]! * alpha);
-  }
-  return count > 0 ? cleared / count : 0;
-}
-
-/** The tile after `knockOutNoData`, as a picture; the tile itself where the page has no canvas to do it on (nothing is lost but the transparency). */
-async function finishPicture(image: BitmapLike, gain?: readonly [number, number, number], clear?: readonly [number, number]): Promise<BitmapLike> {
-  const CanvasCtor = (globalThis as { OffscreenCanvas?: typeof OffscreenCanvas }).OffscreenCanvas;
-  if (typeof CanvasCtor !== "function" || typeof globalThis.createImageBitmap !== "function") return image;
-  try {
-    const width = image.width > 0 ? image.width : 512;
-    const height = image.height > 0 ? image.height : 512;
-    const canvas = new CanvasCtor(width, height);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return image;
-    ctx.drawImage(image as CanvasImageSource, 0, 0);
-    const data = ctx.getImageData(0, 0, width, height);
-    knockOutNoData(data.data, gain, clear);
-    ctx.putImageData(data, 0, 0);
-    const done = await createImageBitmap(canvas, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-    image.close?.();
-    return done;
-  } catch {
-    return image;
-  }
-}
+export const NODATA_BELOW = 3;
+/** The luminance from which a pixel is wholly opaque (see `NODATA_BELOW`). */
+export const NODATA_FULL = 14;
 
 const anySignal = (signals: AbortSignal[]): AbortSignal => (typeof AbortSignal.any === "function" ? AbortSignal.any(signals) : signals[0]!);
 
@@ -413,8 +357,7 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
       image.close?.();
       throw new Error(`The tile ${key} has no imagery`);
     }
-    const finished = await finishPicture(image, layer.gain, layer.clear);
-    return { width: finished.width > 0 ? finished.width : 512, height: finished.height > 0 ? finished.height : 512, image: finished } satisfies ImageTile;
+    return { width: image.width > 0 ? image.width : 512, height: image.height > 0 ? image.height : 512, image } satisfies ImageTile;
   };
   /** Look for the most recent day with imagery: the tile under the middle of the view, one day at a time, newest first, each given the usual two seconds. The answer, a day or none, is kept. */
   const lookFor = (settledKey: string, start: string, place: EarthMapPlace, detail: number): void => {
@@ -454,6 +397,8 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
     layer: "day",
     info: layer.credit ? { ...INFO, credit: { en: `${GIBS_CREDIT.en} ${layer.credit.en}`, ja: `${GIBS_CREDIT.ja}${layer.credit.ja}` } } : INFO,
     holes: true,
+    // the loader draws the tile with these on the graphics card: clear where it is dark, and each colour multiplied (nothing is done to the pixels on the processor)
+    look: { clear: layer.clear ?? [NODATA_BELOW, NODATA_FULL], ...(layer.gain ? { gain: layer.gain } : {}) },
     grid,
     need(place, detail) {
       if (gridLevelFor(grid, detail, 0) === undefined) return [];
