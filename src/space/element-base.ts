@@ -159,7 +159,11 @@ export interface RideOptions {
   look?: RideLook;
   /** Face this way as the ride opens (`face`). */
   face?: RideFace;
-  /** `outside` (the default, or the element's `ride-viewpoint`) shows the satellite: with `view: "from"` the camera is a little behind and above it (straight above it with `look: "down"`), and a satellite the page has no model for is drawn small from the package's own sketch of its kind. `inside` is the camera at the satellite, as before, and no sketch. A body is always ridden from inside. */
+  /** The radius of the ridden satellite's model as a share of the picture's height (0.02 to 1.2), for this ride: the element's `ride-model-share` when not given. Along the way it goes the default is 0.22, above the satellite 0.17 (its size at the lowest height). */
+  modelShare?: number;
+  /** Where the model's middle sits, as a share of the picture's height from the top (0.5 to 1.4: 0.5 the middle, 1 the bottom edge), for this ride along the way it goes: the element's `ride-model-seat` when not given; 0.86 by default. */
+  modelSeat?: number;
+  /** `outside` (the default, or the element\'s `ride-viewpoint`) shows the satellite: with `view: "from"` the camera is a little behind and above it (straight above it with `look: "down"`), and a satellite the page has no model for is drawn small from the package's own sketch of its kind. `inside` is the camera at the satellite, as before, and no sketch. A body is always ridden from inside. */
   viewpoint?: RideViewpoint;
   /** `distance` (the default, or the element's `ride-model-size`) lets the model of a satellite seen from above shrink as the camera rises and hand over to the ordinary mark, ring and name, between 1,000 and 2,000 km; `fixed` keeps one share of the picture at every height. */
   modelSize?: RideModelSize;
@@ -218,7 +222,17 @@ const TIME_EVENT_MS = 250;
  * Riding at a body looking at the Earth, the zoom only narrows the camera's field a little either way: 0.5 to 6.
  */
 const LIMITS = { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 };
-const RIDE_ZOOM = { "zoom-min": "0.5", "zoom-max": "6" };
+/** A number from an attribute, held between `min` and `max`; `null` when it is absent or not a number. */
+function readFrame(value: string | null, min: number, max: number): number | null {
+  if (value === null || value.trim() === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : null;
+}
+/** An option's number held between `min` and `max`, or `undefined` when it is not given. */
+function clampFrame(value: number | undefined, min: number, max: number): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined;
+}
+const RIDE_ZOOM = { "zoom-min": "0.5", "zoom-max": "40" };
 
 const readCentre = (value: string | null): GeoPoint | null => {
   if (!value) return null;
@@ -275,7 +289,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "follow", "follow-ease", "dim-occluded"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -556,6 +570,8 @@ export class ChikyuSpace extends HTMLElement {
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === "ride-viewpoint") this.#applyViewpoint();
     else if (name === "ride-model-size") this.#applyModelSize();
+    else if (name === "ride-model-share" || name === "ride-model-seat") this.#applyFrame();
+    else if (name === "ride-zoom") this.#applyRideZoom();
     else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
     else if (name === "time") this.time = readTime(value);
     else if (name === "speed") this.speed = this.#readSpeed();
@@ -1462,6 +1478,10 @@ export class ChikyuSpace extends HTMLElement {
     const model = this.#model;
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const wasRiding = model.ride !== null;
+    model.rideFrame.share = clampFrame(options.modelShare, 0.02, 1.2) ?? this.rideModelShare;
+    model.rideFrame.seat = clampFrame(options.modelSeat, 0.5, 1.4) ?? this.rideModelSeat;
+    model.rideFrame.ms = reduced ? 0 : 400;
+    model.rideFrame.fresh = true;
     if (target === null) {
       model.ride = null;
       model.rideTurn = 0;
@@ -1644,6 +1664,94 @@ export class ChikyuSpace extends HTMLElement {
     this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
   }
 
+  /**
+   * The radius of the ridden satellite's model as a share of the picture's height, 0.02 to 1.2 (the attribute `ride-model-share`), or `null` for the ride's own: 0.22 along the way it goes, 0.17 above the satellite (its size at the lowest height; `ride-model-size="distance"` still shrinks it as the ride rises).
+   * Set while riding it glides in 0.4 s (at once for a reader who asked for less motion). `stats.followModel.share` is the share in use.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideModelShare = 0.4;
+   * console.log(space.rideModelShare);
+   * ```
+   */
+  get rideModelShare(): number | null {
+    return readFrame(this.getAttribute("ride-model-share"), 0.02, 1.2);
+  }
+  set rideModelShare(value: number | null) {
+    if (value === null || !Number.isFinite(value)) this.removeAttribute("ride-model-share");
+    else this.setAttribute("ride-model-share", String(value));
+  }
+
+  /**
+   * Where the middle of the ridden model sits in a ride along the way it goes, as a share of the picture's height from the top, 0.5 to 1.4 (the attribute `ride-model-seat`; 0.5 the middle, 1 the bottom edge), or `null` for the ride's own (0.86). The camera moves to keep the satellite there.
+   * Set while riding it glides in 0.4 s (at once for a reader who asked for less motion). `stats.followModel.seat` is the seat in use.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideModelSeat = 1;
+   * console.log(space.rideModelSeat);
+   * ```
+   */
+  get rideModelSeat(): number | null {
+    return readFrame(this.getAttribute("ride-model-seat"), 0.5, 1.4);
+  }
+  set rideModelSeat(value: number | null) {
+    if (value === null || !Number.isFinite(value)) this.removeAttribute("ride-model-seat");
+    else this.setAttribute("ride-model-seat", String(value));
+  }
+
+  #applyFrame(): void {
+    const frame = this.#model.rideFrame;
+    frame.share = this.rideModelShare;
+    frame.seat = this.rideModelSeat;
+    frame.ms = prefersLessMotion() ? 0 : 400;
+    this.#schedule();
+    this.#gate?.request();
+  }
+
+  /**
+   * The zoom of a ride, 0.5 to 40 (the attribute `ride-zoom`): the field of view is 60 degrees over it from the satellite, so 40 looks at 1.5 degrees of the ground below. Set while riding the view glides in 0.4 s (at once for a reader who asked for less motion).
+   * It is the shared controls' zoom, so their pinch, wheel and keys move it too. `stats.ride.groundKm` says how many kilometres of ground the picture spans, to stop where the tiles stop being sharp.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideZoom = 8;
+   * console.log(space.rideZoom);
+   * ```
+   */
+  get rideZoom(): number {
+    return this.#model.view.zoom;
+  }
+  set rideZoom(value: number) {
+    if (Number.isFinite(value)) this.setAttribute("ride-zoom", String(value));
+  }
+
+  #applyRideZoom(): void {
+    const wanted = readFrame(this.getAttribute("ride-zoom"), 0.5, 40);
+    if (wanted === null) return;
+    const model = this.#model;
+    if (Math.abs(wanted - model.view.zoom) < 1e-9) return;
+    const pose = model.pose;
+    const glide = model.ride !== null && !prefersLessMotion() && pose.valid;
+    if (glide) model.transition = { start: performance.now(), duration: 400, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } };
+    const next = { yaw: model.view.yaw, tilt: model.view.tilt, zoom: wanted };
+    const controls = this.#controls();
+    if (controls) controls.set(next, true, "ride");
+    else this.setView(next);
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+  }
+
   #applyViewpoint(): void {
     const model = this.#model;
     const ride = model.ride;
@@ -1652,6 +1760,7 @@ export class ChikyuSpace extends HTMLElement {
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const pose = model.pose;
     model.ride = { ...ride, viewpoint: next };
+    model.rideFrame.ms = reduced ? 0 : 400;
     model.transition = !reduced && pose.valid ? { start: performance.now(), duration: 1200, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
     this.#last = performance.now();
     this.#schedule();
@@ -2031,7 +2140,7 @@ export class ChikyuSpace extends HTMLElement {
     time: number;
     lookups: number;
     satellites: SatelliteStats;
-    ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null };
+    ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null; groundKm: { across: number; tall: number } | null };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
     camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, the moons shown round a planet that is near and the moons held (shown, or gone from the view for less than four seconds), whether the Moon is the painter's (`moon`), and the bodies with finer map tiles on them (`tiles`). `mapped` is how many drawings are the painter's, with its pictures: a body out of the view, or too small to show its map, is a plain sphere and the painter is not asked for it. `pending` is how many pictures asked of the painter have not yet arrived, and one more while a gathered draw (reduced motion) waits for its second: while it is above 0 a draw is still to come that nothing but the view itself asked for. */
@@ -2043,7 +2152,7 @@ export class ChikyuSpace extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The followed satellite's model (`setSatellitePainter`), when one is drawn: where its middle is on the screen, in CSS pixels, as of the last draw; `null` otherwise. */
-    followModel: { x: number; y: number; shown: boolean; parts: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: readonly number[]; y: readonly number[]; z: readonly number[] } } | null;
+    followModel: { x: number; y: number; shown: boolean; parts: number; share: number; seat: number; weight: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: readonly number[]; y: readonly number[]; z: readonly number[] } } | null;
     /** The finer map tiles (`tiles`): the level wanted now (`null` while the package's own pictures are sharp enough), the tiles held and shown, and the fetches made. */
     tiles: TileStats;
     /**
@@ -2078,7 +2187,7 @@ export class ChikyuSpace extends HTMLElement {
       time: this.#model.time,
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
-      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null, facing: this.facing },
+      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null || this.#model.rideFrame.moving, facing: this.facing, groundKm: this.#model.rideFrame.groundKm },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons, held: this.#model.painted.held, moon: this.#model.painted.moon, tiles: this.#model.painted.tiles, mapped: this.#model.painted.mapped, pending: this.#model.painted.pending },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
