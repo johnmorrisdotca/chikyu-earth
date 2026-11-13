@@ -139,7 +139,7 @@ console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, v
 - `chikyu-path-hover` は、マウスが線に乗ったとき、別の線に移ったとき、離れたとき (そのとき `detail` は `null`) に出ます。タッチは止まらないので、出しません。
 - `chikyu-path-click` は、ドラッグでない押下かタップのときに出ます。どちらも `detail: { id, ref, style, x, y, distancePx, pointer }` を持ちます。`id` は渡したとおり、`ref` は `chikyu-satellite-click` と同じ `{ group, index }` なので、探し直す必要はありません。`style` は見た目の名前 (指定の中に書いたものは `custom`)、`x` と `y` は線上の最も近い点 (要素の中の CSS ピクセル)、`pointer` は `mouse`、`pen`、`touch` です。
 - `pathAt(x, y, radiusPx?)` は、ページが決めた点について同じことを答えます (届く範囲に線がなければ `null`)。
-- **1回の押下は1つの意味だけ**で、順番は次のとおりです。衛星の点 (`chikyu-satellite-click`)、線 (`chikyu-path-click`)、空 (`chikyu-sky-pick`)。点の下を通る線を押すと点のもの、星と交わる線を押すと線のもので、星には何も届きません。
+- **1回の押下は1つの意味だけ**で、どれが先かは `path-priority` (プロパティ `pathPriority`) で決まります。既定の `dots` では、衛星の点 (`chikyu-satellite-click`)、線 (`chikyu-path-click`)、空 (`chikyu-sky-pick`) の順です。点の下を通る線を押すと点のものになるので、点が線にひしめく「低い」レベルでは、線が聞こえないことがあります。`paths` では、まずページの一覧にある線の衛星か、選んだ (乗っている) 衛星自身の点 (その点は今までどおり先です)、次に線、次にそれ以外の点、最後に空です。ホバーも同じ順です。どちらでも、点か線が受けた押下は、その下の星には届きません。
 
 `stats.paths` は描かれているものを答えます: `{ requested, drawn, dropped, unresolved, selectedDrawn, draws, hover, hits }`。`draws` は0か1で、それ以上にはなりません。線と選んだ軌道は、1回の描画を分け合います。ページの例は、まずページです。
 

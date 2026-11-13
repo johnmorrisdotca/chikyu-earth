@@ -5,7 +5,11 @@ import type { SatelliteState } from "./satellite-layer.ts";
 import { capPaths, hitRadius, MAX_PATHS, readPathHit, styleTable, type PathHit, type PathRequest, type PathStyle } from "./paths.ts";
 
 /** The attributes the paths add to an element. */
-export const PATH_ATTRIBUTES = ["selected-path", "path-hit"] as const;
+export const PATH_ATTRIBUTES = ["selected-path", "path-hit", "path-priority"] as const;
+
+/** Which comes first under a pointer: a satellite's `dots` (the default), or `paths` (a path of the page's, unless the dot is of a satellite whose path is listed or that is chosen). Anything else is `dots`. */
+export type PathPriority = "dots" | "paths";
+export const readPathPriority = (value: string | null): PathPriority => (value === "paths" ? "paths" : "dots");
 
 /** What the element hands the paths. */
 export interface PathHost {
@@ -75,14 +79,22 @@ export function bindPaths(host: PathHost): PathControls {
     return found ? { ...found, pointer } : null;
   };
 
+  /** Whether a dot belongs to a satellite the page has made much of: one whose path is drawn (listed, or the chosen or ridden one's own), or the chosen one. Its dot is its own under either priority. */
+  const listed = (ref: SatelliteRef): boolean => state.paths.info.some((one) => one.ref.group === ref.group && one.ref.index === ref.index) || (state.selected?.group === ref.group && state.selected.index === ref.index) || (state.ridden?.group === ref.group && state.ridden.index === ref.index);
+  /** The path a pointer at a point is on, once the dots have had their say: under `dots` a dot hides the paths; under `paths` only a listed satellite's own dot does. */
+  const choose = (x: number, y: number, pointer: PathHit["pointer"]): PathHit | null => {
+    const dot = host.pick(x, y);
+    if (dot && (readPathPriority(element.getAttribute("path-priority")) === "dots" || listed(dot))) return null;
+    return at(x, y, undefined, pointer);
+  };
+
   const detail = (hit: PathHit): PathHit => ({ ...hit, ref: { ...hit.ref } });
   const sameHit = (a: PathHit | null, b: PathHit | null): boolean => (a === null && b === null) || (a !== null && b !== null && a.id === b.id && a.style === b.style && a.ref.group === b.ref.group && a.ref.index === b.ref.index);
 
   const apply = (): void => {
     queued = false;
     if (!point) return;
-    const dot = host.pick(point.x, point.y);
-    const hit = dot ? null : at(point.x, point.y, undefined, "mouse");
+    const hit = choose(point.x, point.y, "mouse");
     if (sameHit(hit, hovered)) {
       hovered = hit;
       return;
@@ -147,8 +159,7 @@ export function bindPaths(host: PathHost): PathControls {
     },
     at,
     press(x, y, pointer) {
-      if (host.pick(x, y)) return false;
-      const hit = at(x, y, undefined, pointer);
+      const hit = choose(x, y, pointer);
       if (!hit) return false;
       hits += 1;
       element.dispatchEvent(new CustomEvent("chikyu-path-click", { detail: detail(hit), bubbles: true, composed: true }));
