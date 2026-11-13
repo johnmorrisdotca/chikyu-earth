@@ -85,7 +85,7 @@ export const MOON_KEEP_MS = 4000;
 export const BODY_MAKE_PX = 6;
 export const BODY_LET_GO_PX = 3;
 export const BODY_KEEP_MS = MOON_KEEP_MS;
-/** For a reader who asked for reduced motion, the pictures that arrive within this time ask for one draw between them, and none if a draw is made meanwhile. */
+/** For a reader who asked for reduced motion, the pictures that arrive within this time of one that was drawn ask for one draw between them (none at all while the clock steps). */
 export const ARRIVAL_GATHER_MS = 1000;
 
 const PLAIN_COLOR = (name: string): string => (name === "Sun" ? "#ffb347" : (COLORS as Record<string, string>)[name] ?? "#9a948b");
@@ -519,23 +519,30 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
     async build({ three, width, height }: BuildContext<Three>): Promise<Scene3D> {
       let size = { width, height };
       let ended = false;
-      // Pictures arrive one by one (the Earth's maps, its finer tiles, a body's), each asking for a draw. For a reader who asked for reduced motion they are gathered: the ask is held for a second, and
-      // the draw is made only if none was made in that second (a clock that steps shows them in its own step), so at most one a second and none beside the steps.
-      let drawnAt = Number.NEGATIVE_INFINITY;
-      let askedAt = Number.NEGATIVE_INFINITY;
+      // Pictures arrive one by one (the Earth's maps, its finer tiles, a body's), each asking for a draw. For a reader who asked for reduced motion they are gathered, to at most one draw a second: while the clock steps
+      // (at least once a second) the next step shows them, so they ask for nothing; at rest, one after a quiet second is drawn at once and those that follow within the second ask for one draw when it ends.
+      let arrivalAt = Number.NEGATIVE_INFINITY;
       let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
       const arrivalDraw = (): void => {
         if (!(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)) {
           deps.invalidate();
           return;
         }
-        askedAt = performance.now();
+        // real time steps once a minute unless something rides, so it is gathered like rest
+        if (model.speed !== 0 && (model.speed !== 1 || model.ride !== null)) return;
         if (arrivalTimer !== undefined) return;
+        const now = performance.now();
+        if (now - arrivalAt >= ARRIVAL_GATHER_MS) {
+          arrivalAt = now;
+          deps.invalidate();
+          return;
+        }
         arrivalTimer = setTimeout(() => {
           arrivalTimer = undefined;
-          // while the clock steps, the step after the last picture to arrive shows it: nothing more to ask for; at rest, the draw is the picture's own
-          if (!ended && !(model.speed !== 0 && drawnAt >= askedAt)) deps.invalidate();
-        }, ARRIVAL_GATHER_MS);
+          if (ended) return;
+          arrivalAt = performance.now();
+          deps.invalidate();
+        }, arrivalAt + ARRIVAL_GATHER_MS - now);
       };
       const textures = await createTextureSet(three, LAYERS, {
         assets: deps.assets,
@@ -738,7 +745,6 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         scene,
         camera,
         update() {
-          drawnAt = performance.now();
           const fit = fitDistance(model.earth.size, size.width / Math.max(1, size.height));
           model.fit = fit;
           const frame = track.at(model.time);
