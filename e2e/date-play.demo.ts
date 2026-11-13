@@ -243,11 +243,17 @@ test("the realistic Earth held at 'now' (play=off) tells the page when its clock
   // a one-second interval: one late tick makes the next gap short on a busy machine (CI saw 1,206 ms then 794 ms), so the rate is checked over the whole run, where a second timer or a double send would show
   const span = log.at(-1)!.at - log[0]!.at;
   expect(log.length - 1, `no more than once a second (${log.length} in ${Math.round(span)} ms)`).toBeLessThanOrEqual(Math.round(span / 1000));
-  await page.locator("#when").fill("2026-06-21T12:00");
-  await page.locator("#when").dispatchEvent("change");
+  // the log is measured in the same turn of the page that gives the date: a one-second tick (running: true) between a count taken here and the date given there is the follow of the clock, not an extra telling (MODULES-1272)
+  const mark = await page.evaluate(() => {
+    const field = document.querySelector<HTMLInputElement>("#when")!;
+    const mark = (Reflect.get(window, "__timechange") as unknown[]).length;
+    field.value = "2026-06-21T12:00";
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    return mark;
+  });
   await page.waitForTimeout(2500);
   const after = (await page.evaluate(() => Reflect.get(window, "__timechange"))) as { running: boolean }[];
-  expect(after.slice(log.length).map((e) => e.running), "once, held, and nothing more").toEqual([false]);
+  expect(after.slice(mark).map((e) => e.running), "once, held, and nothing more").toEqual([false]);
 });
 
 test.describe("a reader who prefers reduced motion", () => {
