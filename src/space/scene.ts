@@ -182,7 +182,7 @@ export interface SpaceModel {
   /** Filled at each draw. */
   drawn: { frame: Frame; distance: number; radiusPx: number } | null;
   /** What the painter has made now: the Sun and planets with a drawing, the moons shown and the moons held (shown, or gone from the view for less than `MOON_KEEP_MS`), whether the Moon is the painter's, and the bodies with finer map tiles on them (set at each draw). */
-  painted: { bodies: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number };
+  painted: { bodies: number; moons: number; held: number; moon: boolean; tiles: number; mapped: number; pending: number };
   /** How many times astronomy-engine has been asked for a frame. */
   lookups: number;
   /** Game seconds a second (the clock's speed). */
@@ -244,7 +244,7 @@ export const newSpaceModel = (): SpaceModel => ({
   bodies: "",
   light: "sun",
   drawn: null,
-  painted: { bodies: 0, moons: 0, held: 0, moon: false, tiles: 0, mapped: 0 },
+  painted: { bodies: 0, moons: 0, held: 0, moon: false, tiles: 0, mapped: 0, pending: 0 },
   lookups: 0,
   speed: 1,
   ride: null,
@@ -537,9 +537,11 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           deps.invalidate();
           return;
         }
+        model.painted.pending += 1;
         arrivalTimer = setTimeout(() => {
           arrivalTimer = undefined;
           if (ended) return;
+          model.painted.pending -= 1;
           arrivalAt = performance.now();
           deps.invalidate();
         }, arrivalAt + ARRIVAL_GATHER_MS - now);
@@ -677,8 +679,20 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         };
         try {
           const made = (viaPainter ? painter : plainPainter).make(three, slot.name, { look, invalidate: () => (deps.onBodies?.(), arrivalDraw()), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
-          if (typeof (made as Promise<BodyDrawing>).then === "function") (made as Promise<BodyDrawing>).then(arrive, fail);
-          else arrive(made as BodyDrawing);
+          if (typeof (made as Promise<BodyDrawing>).then === "function") {
+            // a picture asked for and not yet here is counted, so a page (a test) can tell that more draws are still to come
+            model.painted.pending += 1;
+            (made as Promise<BodyDrawing>).then(
+              (drawing) => {
+                if (!ended) model.painted.pending -= 1;
+                arrive(drawing);
+              },
+              (error: unknown) => {
+                if (!ended) model.painted.pending -= 1;
+                fail(error);
+              },
+            );
+          } else arrive(made as BodyDrawing);
         } catch (error) {
           fail(error);
         }
@@ -1063,7 +1077,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           for (const held of moonSlots.values()) if (held.slot.drawing?.object.visible) paintedMoons += 1;
           let tiled = 0;
           for (const drawing of [sunSlot.drawing, moonSlot.drawing, ...[...planets.values()].map((p) => p.slot.drawing), ...[...moonSlots.values()].map((held) => held.slot.drawing)]) if (drawing?.tiles?.shown != null) tiled += 1;
-          model.painted = { bodies: paintedBodies, moons: paintedMoons, held: 0, moon: paintedMoon !== undefined, tiles: tiled, mapped: model.painted.mapped };
+          model.painted = { bodies: paintedBodies, moons: paintedMoons, held: 0, moon: paintedMoon !== undefined, tiles: tiled, mapped: model.painted.mapped, pending: model.painted.pending };
           // the followed satellite as a model, when the page has one for it: made once, placed where the satellite is, pointed the way it flies, sized to read and lit by the Sun
           const satellitePainter = deps.satellitePainter?.();
           const group = followed ? model.satellites.groups.get(followed.ref.group) : undefined;
@@ -1374,6 +1388,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           tiles.dispose();
           textures.dispose();
           ended = true;
+          model.painted.pending = 0;
           empty(sunSlot);
           empty(moonSlot);
           for (const held of moonSlots.values()) empty(held.slot);

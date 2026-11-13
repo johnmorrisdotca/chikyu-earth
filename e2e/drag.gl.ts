@@ -2,7 +2,7 @@
 // (the ground moves left to right, as the Earth turns west to east), and a ride can be dragged too. Real pointer events, real key presses, and the pictures compared: the ground's move
 // is found by sliding the middle of the first picture over the second (e2e/ground.ts). The flat globes, the realistic Earth and the space view are in follows.gl.ts, with the family's shared helper.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT, settle } from "./gl.ts";
+import { COUNT_SCRIPT, settle, untilArrived } from "./gl.ts";
 import { changedShare, dragBy, groundShift } from "./ground.ts";
 import { routeElements } from "./recorded.ts";
 
@@ -153,7 +153,7 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
     await other.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
     await rideSettled(other);
     await withoutTextLines(other);
-    await settle(other, 500);
+    await untilArrived(other);
     const shot = await other.locator(GLOBE).screenshot();
     await other.close();
     return shot;
@@ -172,6 +172,7 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
   // the address keeps the turn to the degree, so the picture it brings back is the one at the address's own numbers: put the first page there too, or the share of the picture that differs is the rounding (a fraction of a degree, a few pixels), not the address
   await page.locator(CONTROLS).evaluate((el, [yaw, tilt]) => Reflect.get(el, "controller").set({ yaw, tilt }, true), [Number(url.searchParams.get("yaw")), Number(url.searchParams.get("tilt"))] as const);
   await settle(page, 1500);
+  await untilArrived(page);
   const before = await picture(page);
 
   const again = await page.context().newPage();
@@ -180,7 +181,7 @@ test("the address keeps a ride's turn: it opens as it was left, a drag writes it
   await again.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
   await rideSettled(again);
   await withoutTextLines(again);
-  await settle(again, 500);
+  await untilArrived(again);
   const after = await again.locator(GLOBE).screenshot();
   expect(await changedShare(again, before, after), "the address brings the same picture back").toBeLessThan(0.03);
   await again.close();

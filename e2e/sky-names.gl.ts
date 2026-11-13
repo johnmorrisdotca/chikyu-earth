@@ -1,6 +1,7 @@
 // The names of the brightest stars and the constellations as faint lines, over the space view's sky (hoshi-stars' sky labels), in a real browser (Chromium, drawn in software): off unless an attribute asks for it, names that never overlap and are
 // in the page's language, none behind the Earth, a figure lit by the pointer, and nothing drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -138,17 +139,8 @@ test("nothing is drawn at rest, with names and lines on and the clock held", asy
       for (let frame = 0; frame < n; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
     }, count);
   const draws = (): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
-  // a new view (the smaller Earth, the turn to a richer sky) asks for sharper pictures, and each one is a draw, and the layer follows each: wait until the page has gone thirty frames with no draw at all
-  await expect
-    .poll(
-      async () => {
-        const before = await draws();
-        await frames(30);
-        return (await draws()) - before;
-      },
-      { timeout: 60_000, message: "the picture is at rest" },
-    )
-    .toBe(0);
+  // a new view (the smaller Earth, the turn to a richer sky) asks for sharper pictures and brings bodies into view, and each picture that arrives is a draw, and the layer follows each: wait until the page says none is still to come
+  await untilArrived(page);
   const drawn = (await skyOf(page)).renders;
   const picture = await draws();
   await frames(30);

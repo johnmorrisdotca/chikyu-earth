@@ -2,6 +2,7 @@
 import { COUNT_SCRIPT, readCounts, type GlCounts } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, type Locator, type Page } from "@playwright/test";
 import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
+import { ARRIVAL_GATHER_MS } from "../src/space/scene.ts";
 
 export { COUNT_SCRIPT, readCounts };
 
@@ -133,6 +134,29 @@ export async function untilStill(page: Page, timeout = 20_000): Promise<void> {
     const now = await readCounts(page);
     if (now.draws === before.draws && now.rafRequests === before.rafRequests) return;
     if (Date.now() > end) throw new Error(`still drawing ${timeout} ms after it was held: ${now.draws - before.draws} draws and ${now.rafRequests - before.rafRequests} frames asked for in the last second`);
+    before = now;
+  }
+}
+
+/**
+ * Wait until the space view has drawn everything that a change of its view brought, so a count of its draws afterwards counts only what comes later. A body that comes into view is made by the painter, and each picture that arrives asks
+ * for a draw, which a reader with less motion has gathered to one a `ARRIVAL_GATHER_MS` after the last: those draws land seconds after the change on a loaded machine, past any fixed wait (MODULES-1192, 1195).
+ * The element says what is still to come (`stats.bodies.pending`: pictures asked for and not yet here, and a gathered draw waiting for its second), and the draw count must then stay where it is for longer than that gather window,
+ * so the last frame already asked for has been drawn. If it never settles this fails after `timeout` ms: a view that keeps drawing is the bug that is there to find.
+ */
+export async function untilArrived(page: Page, timeout = 60_000): Promise<void> {
+  const read = (): Promise<{ draws: number; pending: number }> =>
+    page.locator("chikyu-space").evaluate((el) => {
+      const stats = Reflect.get(el, "stats") as { draws: number; bodies: { pending: number } };
+      return { draws: stats.draws, pending: stats.bodies.pending };
+    });
+  const end = Date.now() + timeout;
+  let before = await read();
+  for (;;) {
+    await page.waitForTimeout(ARRIVAL_GATHER_MS + 250);
+    const now = await read();
+    if (now.pending === 0 && before.pending === 0 && now.draws === before.draws) return;
+    if (Date.now() > end) throw new Error(`still drawing ${timeout} ms after the view changed: ${now.draws - before.draws} draws in the last ${ARRIVAL_GATHER_MS + 250} ms, ${now.pending} pictures or gathered draws still to come`);
     before = now;
   }
 }
