@@ -94,7 +94,7 @@ const readDrift = (value: string | null): number => (value !== null && Number.is
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -1228,8 +1228,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /**
    * The longest a satellite's streak may be on the screen, in CSS pixels (the attribute `satellite-streak-max`; 8 when the page says nothing; `0` or `off` for no cap). Above 60 times real time each satellite is drawn as a streak along its orbit
-   * for the stretch one frame spans, and at a fast clock that stretch is long: at an hour a second a low satellite would cross a tenth of the Earth in one frame. The cap is on the screen, so a low and a high satellite are drawn equally long
-   * and the streak keeps the look it has at 10 minutes a second at any speed, up to the cap. It follows the Earth's size on the screen, so zooming in does not stretch it. Pointing along the orbit and ending at the satellite, it is the same length at any frame rate. Off restores the whole stretch.
+   * for the stretch one frame spans, and at a fast clock that stretch is long: at an hour a second a low satellite would cross a tenth of the Earth in one frame. The cap is a length on the screen, so a low and a high satellite are drawn equally long, and the streak keeps the look it has at 10 minutes a second at any speed. It is the smaller of this number of pixels and 0.025 of the Earth's drawn radius (about 160 km of orbit, what a low satellite covers in a frame at 10 minutes a second), so as the Earth is drawn smaller the streak shrinks in proportion, to a dot, instead of staying as long on a small Earth as on a large one. The marks also lose weight on a small Earth: below a drawn radius of 150 pixels the streaks are fainter and the dark rim of the dots fades, gone at 40 pixels, and a crowd of satellites on a small Earth is drawn fainter in proportion so thousands of them do not wash it. Pointing along the orbit and ending at the satellite, it is the same length at any frame rate. Off restores the whole stretch.
    *
    * @example
    * ```ts
@@ -1399,7 +1398,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
   }
 
   // A press that does not turn the view (under 6 pixels) on a satellite tells the page, which chooses it with `selectSatellite` if it likes.

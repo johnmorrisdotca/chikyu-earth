@@ -17,7 +17,7 @@ interface Stats {
   contexts: number;
   canvas: { width: number; height: number; pixels: number };
   time: number;
-  satellites: { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+  satellites: { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 }
 const statsOf = (page: Page): Promise<Stats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as Stats);
 
@@ -231,7 +231,7 @@ test.describe("moving", () => {
   });
 
   test("at an hour a second the longest streak on the screen is the cap, as at 10 minutes a second, and off lets it run long", async ({ page }) => {
-    await open(page, "", "stations,starlink");
+    await open(page, "&earth-size=0.9", "stations,starlink");
     const longest = async (speed: number): Promise<number> => {
       await setSpeed(page, speed);
       await settle(page, 1200);
@@ -241,24 +241,127 @@ test.describe("moving", () => {
       return satellites.longestStreakPx;
     };
     expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "satelliteStreakMax"))).toBe(8);
+    const cap = (await statsOf(page)).satellites.earthPx * 0.025;
     const ten = await longest(600);
     const hour = await longest(3600);
     const day = await longest(86_400);
-    console.log(`longest streak: ${ten.toFixed(1)} px at 10 minutes a second, ${hour.toFixed(1)} px at an hour, ${day.toFixed(1)} px at a day`);
+    console.log(`longest streak: ${ten.toFixed(1)} px at 10 minutes a second, ${hour.toFixed(1)} px at an hour, ${day.toFixed(1)} px at a day, cap ${cap.toFixed(1)} px`);
     expect(ten, "10 minutes a second: a few pixels, under the cap").toBeGreaterThan(2);
-    expect(ten).toBeLessThanOrEqual(8.1);
-    expect(hour, "an hour a second: the cap, not a chord across the globe").toBeLessThanOrEqual(8.1);
-    expect(hour).toBeGreaterThan(7);
-    expect(day).toBeLessThanOrEqual(8.1);
-    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "satelliteStreakMax", 20));
-    expect(await page.locator(SPACE).evaluate((el) => el.getAttribute("satellite-streak-max"))).toBe("20");
-    expect(await longest(3600)).toBeLessThanOrEqual(20.2);
-    expect(await longest(3600)).toBeGreaterThan(19);
+    expect(ten).toBeLessThanOrEqual(cap + 0.1);
+    expect(hour, "an hour a second: the cap, not a chord across the globe").toBeLessThanOrEqual(cap + 0.1);
+    expect(hour).toBeGreaterThan(cap * 0.9);
+    expect(day).toBeLessThanOrEqual(cap + 0.1);
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "satelliteStreakMax", 3));
+    expect(await page.locator(SPACE).evaluate((el) => el.getAttribute("satellite-streak-max"))).toBe("3");
+    const three = await longest(3600);
+    expect(three, "a ceiling of 3 pixels binds below the share of the radius").toBeLessThanOrEqual(3.05);
+    expect(three).toBeGreaterThan(2.7);
     await page.locator(SPACE).evaluate((el) => el.setAttribute("satellite-streak-max", "off"));
     expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "satelliteStreakMax"))).toBe(0);
     const whole = await longest(3600);
     console.log(`satellite-streak-max off, an hour a second: ${whole.toFixed(1)} px`);
-    expect(whole, "no cap: the whole stretch of a frame").toBeGreaterThan(30);
+    expect(whole, "no cap: the whole stretch of a frame, about a seventh of the Earth's radius for a low satellite at an hour a second").toBeGreaterThan((await statsOf(page)).satellites.earthPx * 0.1);
+  });
+
+  // Looked at as a reader who asked for reduced motion is: the Earth's size changes at once, with no glide, so the two pictures of each pair show the same frame of the view
+  test.describe("on a small Earth", () => {
+    test.use({ reducedMotion: "reduce" });
+    test("the streaks shrink with the Earth, and thousands of marks do not darken a small one", async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, "&earth-size=0.9", "starlink");
+      await addMany(page, 16_000);
+      await expect.poll(async () => (await statsOf(page)).satellites.groups).toBe(2);
+      const show = (on: boolean): Promise<void> =>
+        page.locator(SPACE).evaluate((el, v) => {
+          for (const name of ["many", "starlink"]) (el as unknown as { showSatellites(g: string, on: boolean): void }).showSatellites(name, v);
+        }, on);
+      /** A picture of the element at one moment of the clock: the time is set again just before, so two pictures show the Earth turned the same. */
+      const shot = async (): Promise<string> => {
+        await page.locator(SPACE).evaluate((el, at) => Reflect.set(el, "time", Date.parse(at)), T);
+        await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+        return (await page.locator(SPACE).screenshot()).toString("base64");
+      };
+      /** How much brighter (negative) or darker the lit side of the Earth is with the satellites on than off, as a share of its luminance: the pixels where the picture without them is lit, inside the disc. */
+      const darkening = async (radius: number): Promise<number> => {
+        await show(true);
+        await settle(page, 300);
+        const on = await shot();
+        await show(false);
+        await settle(page, 300);
+        const off = await shot();
+        await show(true);
+        return page.evaluate(
+          async ([a, b, r]) => {
+            const load = (data: string): Promise<ImageData> =>
+              new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                  const canvas = document.createElement("canvas");
+                  canvas.width = img.width;
+                  canvas.height = img.height;
+                  const c = canvas.getContext("2d")!;
+                  c.drawImage(img, 0, 0);
+                  resolve(c.getImageData(0, 0, img.width, img.height));
+                };
+                img.src = `data:image/png;base64,${data}`;
+              });
+            const [withSats, without] = await Promise.all([load(a as string), load(b as string)]);
+            const cx = withSats.width / 2;
+            const cy = withSats.height / 2;
+            let sumOn = 0;
+            let sumOff = 0;
+            let n = 0;
+            for (let y = 0; y < withSats.height; y += 1) {
+              for (let x = 0; x < withSats.width; x += 1) {
+                if (Math.hypot(x - cx, y - cy) > (r as number) * 0.92) continue;
+                const k = (y * withSats.width + x) * 4;
+                const off = 0.2126 * without.data[k]! + 0.7152 * without.data[k + 1]! + 0.0722 * without.data[k + 2]!;
+                if (off < 70) continue;
+                sumOff += off;
+                sumOn += 0.2126 * withSats.data[k]! + 0.7152 * withSats.data[k + 1]! + 0.0722 * withSats.data[k + 2]!;
+                n += 1;
+              }
+            }
+            return n < 200 ? Number.NaN : (sumOff - sumOn) / sumOff;
+          },
+          [on, off, radius] as [string, string, number],
+        );
+      };
+      const results: { size: number; cap: number; longest: number; radius: number; weight: number; fade: number; dark600: number; dark1: number }[] = [];
+      for (const size of [0.9, 0.45, 0.18]) {
+        await page.locator(SPACE).evaluate((el, v) => Reflect.set(el, "earthSize", v), size);
+        await setSpeed(page, 3600);
+        await settle(page, 1500);
+        const hour = (await statsOf(page)).satellites;
+        await setSpeed(page, 600);
+        await settle(page, 1500);
+        const ten = (await statsOf(page)).satellites;
+        expect(ten.tooFast).toBe(true);
+        const cap = Math.min(8, 0.025 * ten.earthPx);
+        expect(ten.streakCapPx).toBeCloseTo(cap, 3);
+        expect(ten.longestStreakPx, `10 minutes a second at size ${size}`).toBeLessThanOrEqual(cap + 0.05);
+        expect(hour.longestStreakPx, `an hour a second at size ${size}: within the scaled cap`).toBeLessThanOrEqual(cap + 0.05);
+        expect(hour.longestStreakPx, `an hour a second at size ${size}: and as long as it`).toBeGreaterThan(cap * 0.85);
+        const dark600 = await darkening(ten.earthPx);
+        await setSpeed(page, 1);
+        await settle(page, 1200);
+        const dark1 = await darkening(ten.earthPx);
+        results.push({ size, cap, longest: hour.longestStreakPx, radius: ten.earthPx, weight: ten.weight, fade: ten.fade, dark600, dark1 });
+      }
+      console.log(results.map((r) => `size ${r.size}: Earth radius ${r.radius.toFixed(0)} px, weight ${r.weight.toFixed(2)}, cap ${r.cap.toFixed(2)} px, longest at an hour ${r.longest.toFixed(2)} px, darkening ${(r.dark600 * 100).toFixed(1)}% at 10 min/s, ${(r.dark1 * 100).toFixed(1)}% at real time`).join("\n"));
+      const [full, half, fifth] = results as [(typeof results)[number], (typeof results)[number], (typeof results)[number]];
+      expect(half.cap / full.cap, "half the Earth, half the streak").toBeCloseTo(0.5, 1);
+      expect(fifth.cap / full.cap, "a fifth of the Earth, a fifth of the streak").toBeCloseTo(0.2, 1);
+      expect(fifth.weight, "a small Earth has less weight").toBeLessThan(0.1);
+      for (const r of results) for (const d of [r.dark600, r.dark1]) expect(Number.isNaN(d), "enough lit pixels to measure").toBe(false);
+      // The lit side of the Earth with 16,000 satellites on against off, as a share of its luminance (negative: brighter, the streaks being light on a dark ground). Before this change it was 9%, 19% and 36% at 10 minutes a second
+      // at the three sizes and about 0% at real time. A whole Earth is drawn as it was; at a fifth of the size the marks change it by no more than 4% at 10 minutes a second and 1.5% at real time, and no size is more washed than the whole Earth.
+      expect(Math.abs(fifth.dark600), "a fifth of the Earth at 10 minutes a second").toBeLessThanOrEqual(0.04);
+      expect(Math.abs(fifth.dark1), "a fifth of the Earth at real time").toBeLessThanOrEqual(0.015);
+      expect(Math.abs(half.dark600), "half the Earth at 10 minutes a second: no more than the whole Earth plus 2%").toBeLessThanOrEqual(Math.abs(full.dark600) + 0.02);
+      expect(Math.abs(half.dark1), "half the Earth at real time").toBeLessThanOrEqual(0.025);
+      expect(Math.abs(fifth.dark600)).toBeLessThanOrEqual(Math.abs(full.dark600));
+    });
   });
 
   test("orbit tint changes the colours, and the dot size follows the zoom", async ({ page }) => {

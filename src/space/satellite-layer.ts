@@ -36,10 +36,46 @@ export interface SatelliteState {
   /** One group shown on its own. `null` leaves every group as the page set it. */
   focus: SatelliteFocus | null;
   /**
-   * The longest a streak may be on the screen above the interpolation limit, in CSS pixels at the Earth's own distance (`satellite-streak-max`). 0 draws the whole stretch one frame spans, however long that is.
+   * The pixel ceiling of a streak's length on the screen above the interpolation limit, in CSS pixels at the Earth's own distance (`satellite-streak-max`). A streak is also never longer than {@link STREAK_REACH} Earth radii, so it shrinks with the Earth.
+   * 0 draws the whole stretch one frame spans, however long that is.
    */
   streakMax: number;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
+}
+
+/**
+ * The longest a streak may be along its orbit, in Earth radii: 0.025, about 160 km, which is what a low satellite covers in a frame at 10 minutes a second (150 km). On the screen that is a share of the Earth's drawn radius, so a streak
+ * is a few millimetres when the Earth fills the view, half as long when the Earth is half as large, and a dot when the Earth is tiny. A cap of so many pixels alone would leave the same length on a small Earth, where it looks long.
+ */
+export const STREAK_REACH = 0.025;
+
+/** The Earth's drawn radius, in CSS pixels, below which the satellites' dark rims and streaks are faded out (no weight at 40) and from which they have their whole weight (150). */
+export const WEIGHT_FROM = 40;
+export const WEIGHT_FULL = 150;
+
+/** How much of its weight a mark has at an Earth `radiusPx` on the screen, from 0 to 1: a smooth step from {@link WEIGHT_FROM} to {@link WEIGHT_FULL}. Many small dark marks on a small Earth would blacken it. */
+export function markWeight(radiusPx: number): number {
+  const t = Math.min(1, Math.max(0, (radiusPx - WEIGHT_FROM) / (WEIGHT_FULL - WEIGHT_FROM)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * The share of the near side of a small Earth that the marks may cover at full strength before they are drawn fainter in proportion: a crowd of marks on a small Earth is a haze over it, not a set of satellites. Dots are lighter ink
+ * than streaks are (a dot is opaque and a streak a pixel wide), so they get the smaller share.
+ */
+export const CROWD_COVER_DOTS = 0.06;
+export const CROWD_COVER_STREAKS = 0.35;
+
+/**
+ * How strongly each mark is drawn so a crowd does not wash a small Earth, from 0 to 1: the share of the near side they would cover (`marks`, half of them on this side, each `area` square pixels, over the disc of an Earth `radiusPx` in radius),
+ * and `limit` over that when it is more. With `byWeight` (the default, for dots) it acts only as the Earth gets small (see {@link markWeight}): none at all from 150 pixels, so a whole Earth is drawn as it was however many satellites there are. Without it (streaks) the limit holds at every size: a streak is as wide as it is long, so the same number of satellites covers a half Earth twice over, and 16,000 of them leave a small Earth no more washed than a whole one.
+ */
+export function crowdFade(marks: number, area: number, radiusPx: number, limit: number, byWeight = true): number {
+  const disc = Math.PI * radiusPx * radiusPx;
+  if (!(disc > 0) || !(marks > 0)) return 1;
+  const cover = (0.5 * marks * area) / disc;
+  const crowd = cover <= limit ? 1 : limit / cover;
+  return byWeight ? 1 - (1 - crowd) * (1 - markWeight(radiusPx)) : crowd;
 }
 
 /** The longest a streak is by default: the stretch a low satellite covers in one frame at 10 minutes a second, on a whole Earth with a radius of about 300 pixels: a few millimetres on the screen. */
@@ -65,7 +101,7 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -90,6 +126,8 @@ const POINT_FRAG = /* glsl */ `
 uniform vec3 tint;
 uniform float ring;
 uniform float byClass;
+uniform float rim;
+uniform float fade;
 varying float vDim;
 varying vec3 vCls;
 void main() {
@@ -100,10 +138,10 @@ void main() {
     float a = smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d));
     gl_FragColor = vec4(ink, a * (1.0 - 0.7 * vDim));
   } else {
-    float rim = smoothstep(0.28, 0.42, d);
-    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rim);
+    float rimEdge = smoothstep(0.28, 0.42, d);
+    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rimEdge * rim);
     float a = smoothstep(0.50, 0.40, d);
-    gl_FragColor = vec4(colour, a * (1.0 - 0.7 * vDim));
+    gl_FragColor = vec4(colour, a * (1.0 - 0.7 * vDim) * fade);
   }
 }`;
 
@@ -261,7 +299,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   let basis = 0;
   let lastEarthPx = 0;
 
-  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
+  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 }, rim: { value: 1 }, fade: { value: 1 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
   const selectedGeometry = new three.BufferGeometry();
   selectedGeometry.setAttribute("position", new three.BufferAttribute(selectedPosition, 3));
@@ -343,8 +381,19 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       const span = tooFast ? speed * (1000 / 30) : 0;
       if (earthPx > 0) lastEarthPx = earthPx;
       const radius = earthPx > 0 ? earthPx : lastEarthPx > 0 ? lastEarthPx : 150;
-      // the cap is on the screen, so in Earth radii it is the pixels over the Earth's radius in pixels: a zoomed-out Earth allows a longer stretch of orbit than a zoomed-in one
-      const capLength = state.streakMax > 0 ? state.streakMax / radius : 0;
+      // the cap is a share of the Earth's drawn radius with a ceiling in pixels, so in Earth radii it is the pixels over the Earth's radius in pixels: a zoomed-out Earth allows a longer stretch of orbit than a zoomed-in one
+      const capLength = state.streakMax > 0 ? Math.min(STREAK_REACH, state.streakMax / radius) : 0;
+      const weight = markWeight(radius);
+      // how crowded the near side of the Earth is with marks: the dots at their size and, above the interpolation limit, the streaks (a pixel wide) at the longest they may be
+      let marks = 0;
+      let dotArea = 0;
+      for (const group of state.groups.values()) {
+        if (!group.visible) continue;
+        marks += group.satellites.count;
+        dotArea += group.satellites.count * (group.size * dotScale) ** 2;
+      }
+      const dotFade = marks > 0 ? crowdFade(marks, dotArea / marks, radius, CROWD_COVER_DOTS) : 1;
+      const streakFade = tooFast && capLength > 0 ? crowdFade(marks, Math.max(1, capLength * radius), radius, CROWD_COVER_STREAKS, false) : 1;
       let longest = 0;
       for (const [name, entry] of drawn) {
         if (state.groups.get(name)?.satellites !== entry.source) {
@@ -365,7 +414,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           const dim = new three.BufferAttribute(group.satellites.dimmed, 1);
           geometry.setAttribute("dim", dim);
           geometry.setAttribute("cls", new three.BufferAttribute(group.satellites.classColour, 3));
-          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
+          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 }, rim: { value: 1 }, fade: { value: 1 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
           const points = new Points(geometry, material);
           points.frustumCulled = false;
           points.renderOrder = 5;
@@ -419,7 +468,10 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           continue;
         }
         const dimmed = choice.dim > 0;
-        if (entry.streak) (entry.streak.material as { opacity?: number }).opacity = dimmed ? 0.3 : 0.95;
+        // the streaks are fainter and the dark rims of the dots fade as the Earth is drawn smaller, so thousands of marks do not darken a small Earth
+        if (entry.streak) (entry.streak.material as { opacity?: number }).opacity = (dimmed ? 0.3 : 0.95) * (0.4 + 0.6 * weight) * streakFade;
+        entry.material.uniforms["rim"]!.value = weight;
+        entry.material.uniforms["fade"]!.value = dotFade;
         if (tooFast) {
           // pinned whole at the first frame and when the time jumped (a date typed in, a scrub), so a place is never turned across days; after that a slice a frame, each satellite again about once a second,
           // so SGP4 never runs for the whole group (17,000 satellites take about 12 ms) in one frame
@@ -497,6 +549,10 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       state.drawn.placed = placed;
       state.drawn.segments = segments;
       state.drawn.longestStreakPx = longest;
+      state.drawn.streakCapPx = capLength * radius;
+      state.drawn.weight = weight;
+      state.drawn.fade = Math.min(dotFade, streakFade);
+      state.drawn.earthPx = radius;
       state.drawn.dotScale = dotScale;
       state.drawn.tooFast = tooFast;
       state.drawn.updateMs = performance.now() - started;
