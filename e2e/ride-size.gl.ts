@@ -11,6 +11,8 @@ test.beforeEach(({ page }) => routeElements(page));
 test.describe.configure({ mode: "serial" });
 
 const SPACE = "chikyu-space";
+// With RIDE_THROTTLE set the browser's CPU is slowed by that factor, for the repeats under load.
+const THROTTLE = Number(process.env.RIDE_THROTTLE ?? 0);
 const T0 = Date.parse("2026-11-02T18:00:00Z");
 interface Stats {
   draws: number;
@@ -28,6 +30,7 @@ async function open(page: Page): Promise<number> {
   await page.goto(`/chikyu-earth/?look=space&time=${new Date(T0).toISOString()}&speed=0&center=-60,-10&sats=stations`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
   await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
+  if (THROTTLE > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   await untilStill(page);
   // a station the demo has no stand-in model for, so the package's own drawing is what is drawn
   const index = await page.locator(SPACE).evaluate((el) => {
@@ -59,6 +62,33 @@ async function at(page: Page, index: number, km: number, size: "distance" | "fix
 }
 
 const radius = (s: Stats): number => s.followModel?.radiusPx ?? 0;
+
+/**
+ * Everything that can still arrive or be let go, as the page reports it: the sizes of the Earth's pictures in use, the finer tiles (level, shown, loading), the pictures of the bodies still to come, and how many assets are held.
+ * Two frames taken while this is the same are two frames of the same pictures, which is what the comparison below needs: a picture that landed between them (in CI, at 6,000 km) shows as pixels that differ everywhere.
+ */
+const arrivals = (page: Page): Promise<{ pending: number; sign: string }> =>
+  page.locator(SPACE).evaluate((el) => {
+    const s = Reflect.get(el, "stats") as { tiers: unknown; tiles: { level: number | null; shown: number; loading: number; held: number }; bodies: { pending: number; painted: number; mapped: number }; assets: { entries: number } };
+    return { pending: s.bodies.pending + s.tiles.loading, sign: JSON.stringify([s.tiers, s.tiles.level, s.tiles.shown, s.tiles.held, s.bodies.painted, s.bodies.mapped, s.assets.entries]) };
+  });
+/** Wait until nothing has changed for `reads` reads a second apart (more than `DOWNGRADE_AFTER_MS` for a count of 5: a picture let go is let go) and nothing is on its way. Returns what the pictures are. */
+async function arrived(page: Page, reads: number): Promise<string> {
+  let last = "";
+  let same = 0;
+  await expect
+    .poll(
+      async () => {
+        const now = await arrivals(page);
+        same = now.sign === last && now.pending === 0 ? same + 1 : 0;
+        last = now.sign;
+        return same >= reads;
+      },
+      { timeout: 60_000, intervals: [1000], message: "the pictures have all arrived and none is being let go" },
+    )
+    .toBe(true);
+  return last;
+}
 
 test("distance (the default): the model's radius falls with height: 17% of the picture at 150 km, less at 1,000 km, and none at 6,000 km where only the mark is", async ({ page }) => {
   const index = await open(page);
@@ -125,12 +155,15 @@ test("no part of the model is drawn outside its box, in either size mode: the fr
     const withModel = await at(page, index, km, mode, moment);
     expect(withModel.followModel?.shown, `${km} km: the model is drawn`).toBe(true);
     await untilStill(page);
+    // hold everything that can arrive or be let go before the first frame (TEST-RULES, pattern 5): the count read at the first quiet moment was not enough in CI
+    const pictures = await arrived(page, 5);
     const a = await shot();
     // the same frame with the model hidden: from inside, the view above shows a dot and no drawing of the satellite
     await page.locator(SPACE).evaluate((el) => el.setAttribute("ride-viewpoint", "inside"));
     const hidden = await at(page, index, km, mode, moment);
     expect(hidden.followModel, `${km} km: no model from inside`).toBeNull();
     await untilStill(page);
+    expect(await arrived(page, 2), `${mode} ${km} km: the pictures are the same for both frames`).toBe(pictures);
     const b = await shot();
     await page.locator(SPACE).evaluate((el) => el.setAttribute("ride-viewpoint", "outside"));
     mkdirSync(test.info().outputDir, { recursive: true });
@@ -154,8 +187,20 @@ test("no part of the model is drawn outside its box, in either size mode: the fr
         let differing = 0;
         let inside = 0;
         const margin = 3;
+        // The stations' own orbit lines (amber) are drawn from a path that the layer works out again after a minute of the page's time (and a slow machine takes a minute between the two frames), at the same moment but
+        // not at the same sub-pixel: they are not the model, so a pixel within 3 px of an amber one (the line moves a pixel or two, and is blended with the sky) in either frame is left out. The model is blue, cream and grey.
+        const amber = (img: ImageData, i: number): boolean => img.data[i]! > 55 && img.data[i + 1]! > 45 && img.data[i]! - img.data[i + 2]! > 30;
+        const skip = new Uint8Array(p.width * p.height);
         for (let y = 0; y < p.height; y += 1) {
           for (let x = 0; x < p.width; x += 1) {
+            const i = (y * p.width + x) * 4;
+            if (!amber(p, i) && !amber(q, i)) continue;
+            for (let dy = -3; dy <= 3; dy += 1) for (let dx = -3; dx <= 3; dx += 1) if (x + dx >= 0 && x + dx < p.width && y + dy >= 0 && y + dy < p.height) skip[(y + dy) * p.width + x + dx] = 1;
+          }
+        }
+        for (let y = 0; y < p.height; y += 1) {
+          for (let x = 0; x < p.width; x += 1) {
+            if (skip[y * p.width + x]) continue;
             const i = (y * p.width + x) * 4;
             const diff = Math.abs(p.data[i]! - q.data[i]!) + Math.abs(p.data[i + 1]! - q.data[i + 1]!) + Math.abs(p.data[i + 2]! - q.data[i + 2]!);
             if (diff < 12) continue;
