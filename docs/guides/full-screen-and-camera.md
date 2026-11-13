@@ -80,7 +80,7 @@ The realistic Earth is shaded from the NASA pictures the package already carries
 - **The clouds** throw a shadow on the ground, longer as the Sun gets low.
 - **The night.** City lights are warm and softly spread, and cloud dims them.
 
-`light="lit"` and `light="boost"` work as before.
+`light="lit"` and `light="boost"` work as before. A change of `light` to or from `lit` is a short cross-fade (300 ms: the night lights go out and, in the realistic view, the light turns to the camera's side, over a few frames that end by themselves, and nothing is drawn after them). A reader who asked for reduced motion gets the cut. `stats.lightFade` says where it is: `{ mix, fading }`, `mix` 0 for the true light and 1 for `lit`.
 
 ## Every satellite group at once
 

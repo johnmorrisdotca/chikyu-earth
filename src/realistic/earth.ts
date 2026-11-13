@@ -8,6 +8,8 @@ import type { SatelliteRef } from "../satellites/types.ts";
 import { HOME_VIEW, lookAt } from "../view.ts";
 import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "./air.ts";
 import { CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
+import { newLightFade, stepLightFade, type LightFade } from "./light-fade.ts";
+import { prefersLessMotion } from "../meteors/note.ts";
 import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
 import type { PathHit } from "../space/paths.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "../space/satellite-layer.ts";
@@ -81,6 +83,8 @@ export interface EarthModel {
   lights: boolean;
   /** How the Earth is lit (see `LightMode`). */
   light: LightMode;
+  /** The cross-fade between the true light and `lit`, stepped at each draw (src/realistic/light-fade.ts). */
+  lightFade: LightFade;
   /** How the camera is held (see `CameraMode`). */
   camera: CameraMode;
   /** How many times its real thickness the air is drawn, 1 to 5 (`AIR_THICKNESS_DEFAULT` until the element says otherwise); read at every draw. */
@@ -161,6 +165,7 @@ export const newModel = (): EarthModel => ({
   clouds: true,
   lights: true,
   light: "sun",
+  lightFade: newLightFade(),
   camera: "space",
   airThickness: AIR_THICKNESS_DEFAULT,
   cloudDrift: 0,
@@ -359,12 +364,23 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           const [sx, sy, sz] = unitVector(subsolarPoint(model.time));
           sunLocal.value.set(sx, sy, sz);
           sunDir.value.set(sx, sy, sz).applyEuler(turned.rotation);
-          if (model.light === "lit") sunDir.value.set(0, 0, 1);
+          const fade = stepLightFade(model.lightFade, model.light === "lit", performance.now(), prefersLessMotion());
+          // one more frame while it moves, and none once it has arrived
+          if (fade.fading) deps.invalidate();
+          if (fade.mix > 0) {
+            // between the true light and daylight from the camera's side: the direction is mixed, and a mix that cancels (the Sun straight behind) is the camera's side
+            const x = sunDir.value.x * (1 - fade.mix);
+            const y = sunDir.value.y * (1 - fade.mix);
+            const z = sunDir.value.z * (1 - fade.mix) + fade.mix;
+            const length = Math.hypot(x, y, z);
+            if (length > 1e-6) sunDir.value.set(x / length, y / length, z / length);
+            else sunDir.value.set(0, 0, 1);
+          }
           cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
           clouds.visible = model.clouds;
           atmosphere.uniforms["thick"]!.value = model.airThickness;
           glow.scale.setScalar(airTop(model.airThickness));
-          surface.uniforms["lights"]!.value = model.lights && model.light !== "lit" ? 1 : 0;
+          surface.uniforms["lights"]!.value = model.lights ? 1 - fade.mix : 0;
           surface.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
           const radius = discRadius(size.width, size.height, view.zoom);
           camera.left = (-size.width / 2 - view.panX) / radius;

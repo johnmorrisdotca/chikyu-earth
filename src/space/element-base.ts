@@ -2369,6 +2369,8 @@ export class ChikyuSpace extends HTMLElement {
     time: number;
     lookups: number;
     satellites: SatelliteStats;
+    /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
+    lightFade: { mix: number; fading: boolean };
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
     paths: PathStats;
     ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null; groundKm: { across: number; tall: number } | null };
@@ -2420,6 +2422,7 @@ export class ChikyuSpace extends HTMLElement {
       time: this.#model.time,
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
+      lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
       ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null || this.#model.rideFrame.moving, facing: this.facing, groundKm: this.#model.rideFrame.groundKm },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },

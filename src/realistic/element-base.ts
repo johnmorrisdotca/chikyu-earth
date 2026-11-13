@@ -1224,6 +1224,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     tiers: Record<EarthLayer, number>;
     tiles: TileStats;
     satellites: SatelliteStats;
+    /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
+    lightFade: { mix: number; fading: boolean };
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
     paths: PathStats;
     draws: number;
@@ -1258,6 +1260,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       state: this.#state,
       tiers: { ...this.#tiers },
       satellites: this.#satelliteStats(),
+      lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
       tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false },
       draws: stats?.draws ?? 0,
