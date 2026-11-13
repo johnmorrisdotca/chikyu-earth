@@ -4,6 +4,7 @@ import type * as THREE from "three";
 import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import type { SatelliteRef, Satellites } from "../satellites/types.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
+import { satelliteEmphasis, type SatelliteFocus } from "./satellite-focus.ts";
 
 type Three = ThreeParts;
 
@@ -17,6 +18,8 @@ export interface SatelliteStyle {
 export interface SatelliteGroupState extends SatelliteStyle {
   satellites: Satellites;
   visible: boolean;
+  /** How many of this group the last draw placed. 0 before the first draw and when the group is not drawn. */
+  placed?: number;
 }
 
 /** The part of the space view's model the satellites read and write. */
@@ -30,10 +33,12 @@ export interface SatelliteState {
   /** Written at each draw: satellites placed, whether the clock is too fast for the groups, and the milliseconds the last update took. */
   /** Colour each dot by its orbit class. Off by default: a group keeps the one colour it was given. */
   orbitTint: boolean;
+  /** One group shown on its own. `null` leaves every group as the page set it. */
+  focus: SatelliteFocus | null;
   drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -43,12 +48,13 @@ const ORBIT_REFRESH_WALL_MS = 1000;
 
 const POINT_VERT = /* glsl */ `
 uniform float size;
+uniform float groupDim;
 attribute float dim;
 attribute vec3 cls;
 varying float vDim;
 varying vec3 vCls;
 void main() {
-  vDim = dim;
+  vDim = max(dim, groupDim);
   vCls = cls;
   gl_PointSize = size;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -188,7 +194,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   let basis = 0;
   let lastGame = 0;
 
-  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 } }, transparent: true, depthWrite: false });
+  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
   const selectedGeometry = new three.BufferGeometry();
   selectedGeometry.setAttribute("position", new three.BufferAttribute(selectedPosition, 3));
@@ -289,7 +295,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           const dim = new three.BufferAttribute(group.satellites.dimmed, 1);
           geometry.setAttribute("dim", dim);
           geometry.setAttribute("cls", new three.BufferAttribute(group.satellites.classColour, 3));
-          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 } }, transparent: true, depthWrite: false });
+          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
           const points = new Points(geometry, material);
           points.frustumCulled = false;
           points.renderOrder = 5;
@@ -332,13 +338,18 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           }
           if (entry.streak) (entry.streak.geometry.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
         }
-        const show = group.visible;
+        const choice = satelliteEmphasis(name, group.visible, state.focus);
+        const show = choice.drawn;
+        entry.material.uniforms["groupDim"]!.value = choice.dim;
         entry.points.visible = show;
         if (!show) {
+          group.placed = 0;
           if (entry.streak) entry.streak.visible = false;
           for (const line of entry.lines) line.loop.visible = false;
           continue;
         }
+        const dimmed = choice.dim > 0;
+        if (entry.streak) (entry.streak.material as { opacity?: number }).opacity = dimmed ? 0.3 : 0.95;
         if (tooFast) {
           // pinned whole at the first frame and when the time jumped (a date typed in, a scrub), so a place is never turned across days; after that a slice a frame, each satellite again about once a second,
           // so SGP4 never runs for the whole group (17,000 satellites take about 12 ms) in one frame
@@ -365,6 +376,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           }
           for (const line of entry.lines) line.loop.visible = false;
           placed += n;
+          group.placed = n;
           if (entry.streak) segments += n;
         } else {
           if (entry.streak) entry.streak.visible = false;
@@ -377,13 +389,18 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
             entry.dim.needsUpdate = true;
           }
           placed += group.satellites.placed;
+          group.placed = group.satellites.placed;
           orbitsOf(entry, group, time, started);
+          const opacity = dimmed ? 0.15 : 0.45;
+          for (const line of entry.lines) (line.loop.material as { opacity?: number }).opacity = opacity;
         }
       }
 
       const chosen = state.selected;
+      const chosenGroup = chosen ? state.groups.get(chosen.group) : undefined;
+      const chosenDrawn = chosen !== null && chosenGroup !== undefined && satelliteEmphasis(chosen.group, chosenGroup.visible, state.focus).drawn;
       const set = chosen ? find(chosen) : undefined;
-      if (chosen && set && set.exact(chosen.index, time, tmp)) {
+      if (chosen && set && chosenDrawn && set.exact(chosen.index, time, tmp)) {
         selectedPosition[0] = tmp[0]!;
         selectedPosition[1] = tmp[1]!;
         selectedPosition[2] = tmp[2]!;

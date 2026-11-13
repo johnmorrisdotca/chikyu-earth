@@ -40,6 +40,7 @@ import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
+import { applySatelliteFocus, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
@@ -302,6 +303,8 @@ export class ChikyuSpace extends HTMLElement {
   #places: Record<BodyName, BodyPlace | null> | undefined;
   #chosenLabel: HTMLElement | undefined;
   #focusBeforeRide: BodyName = "Earth";
+  /** The yaw, tilt and zoom from before a satellite group was framed, put back when the focus is cleared. */
+  #focusView: { yaw: number; tilt: number; zoom: number } | null = null;
   #lostTold = false;
   #names: Partial<Record<BodyName, string>> = {};
   #hint = "choose to look at it";
@@ -1422,6 +1425,11 @@ export class ChikyuSpace extends HTMLElement {
     if (satellites === null) {
       groups.delete(group);
       if (this.#model.satellites.selected?.group === group) this.#model.satellites.selected = null;
+      if (this.#model.satellites.focus?.name === group) {
+        this.#model.satellites.focus = null;
+        this.#restoreFocusView();
+        this.dispatchEvent(new CustomEvent("chikyu-satellite-focus", { detail: { group: null, count: 0 }, bubbles: true, composed: true }));
+      }
     } else {
       const was = groups.get(group);
       groups.set(group, {
@@ -1448,9 +1456,59 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
-  /** The groups now set, with how many satellites each holds and whether it is shown. */
-  get satelliteGroups(): { name: string; count: number; visible: boolean }[] {
-    return [...this.#model.satellites.groups].map(([name, group]) => ({ name, count: group.satellites.count, visible: group.visible }));
+  /**
+   * The groups now set. `count` is how many satellites the group holds, `visible` is the shown state from `showSatellites` (a focus does not change it), `placed` is how many the last draw placed (0 when the group is not drawn) and `emphasis` is how a focus treats it: `focus`, `dim`, `hidden` or `plain` (no focus).
+   */
+  get satelliteGroups(): { name: string; count: number; visible: boolean; placed: number; emphasis: "focus" | "dim" | "hidden" | "plain" }[] {
+    return satelliteGroupRows(this.#model.satellites);
+  }
+
+  /** The group `focusSatelliteGroup` is showing on its own, or `null`. */
+  get focusedSatelliteGroup(): string | null {
+    return this.#model.satellites.focus?.name ?? null;
+  }
+
+  /**
+   * Show one group on its own. The others are drawn dimmer (`others: "dim"`, the default, through the same dimming an old element set uses) or not drawn (`"hide"`). `frame` (true by default) pulls the camera back, by this view's own zoom, until the group's orbits fit: the distance is the greatest apogee of the group, from each satellite's mean motion and eccentricity, and it stops at 8 Earth radii. `null` puts every group back to the shown state it had, and puts the camera back when it was moved. A name that `setSatellites` has not set returns `{ ok: false, reason: "not-set" }` and changes nothing. It does not throw. When the choice changes, `chikyu-satellite-focus` is sent with `{ group, count }`.
+   *
+   * @param name - The group's name, or `null` to clear the focus.
+   * @param options - `others` and `frame`.
+   * @returns `{ ok: true, group, count }` when the group is set (`group` is `null` and `count` is 0 when cleared). `{ ok: false, reason: "not-set" }` when it is not.
+   */
+  focusSatelliteGroup(name: string | null, options: { others?: SatelliteOthers; frame?: boolean } = {}): { ok: true; group: string | null; count: number } | { ok: false; reason: "not-set" } {
+    const answer = applySatelliteFocus(this.#model.satellites, name, options);
+    if (!answer.ok || answer.group === undefined || answer.count === undefined) return { ok: false, reason: "not-set" };
+    if (answer.group === null) this.#restoreFocusView();
+    else if (options.frame !== false) this.#frameSatelliteShell(answer.group);
+    if (answer.changed) this.dispatchEvent(new CustomEvent("chikyu-satellite-focus", { detail: { group: answer.group, count: answer.count }, bubbles: true, composed: true }));
+    this.#gate?.request();
+    return { ok: true, group: answer.group, count: answer.count };
+  }
+
+  /** The view's own zoom, far enough that the group's shell fills the picture. A ride is left, because the camera has to look at the Earth to see the shell. */
+  #frameSatelliteShell(name: string): void {
+    const group = this.#model.satellites.groups.get(name);
+    if (!group) return;
+    const box = this.getBoundingClientRect();
+    if (box.width < 2 || box.height < 2) return;
+    if (!this.#focusView) this.#focusView = { yaw: this.#model.view.yaw, tilt: this.#model.view.tilt, zoom: this.#model.view.zoom };
+    if (this.#model.ride) this.ride(null);
+    const zoom = zoomForPerspectiveShell(shellRadiusOf(group.satellites.sets), this.earthSize, box.width / box.height, LIMITS.zoomMin, LIMITS.zoomMax);
+    this.#moveView({ yaw: this.#model.view.yaw, tilt: this.#model.view.tilt, zoom });
+  }
+
+  /** Put back the yaw, tilt and zoom from before the shell was framed. */
+  #restoreFocusView(): void {
+    const saved = this.#focusView;
+    this.#focusView = null;
+    if (saved) this.#moveView(saved);
+  }
+
+  /** Hand a camera to the controls that are driving the view, or to the view itself when those are not there yet. */
+  #moveView(view: { yaw: number; tilt: number; zoom: number }): void {
+    const controls = this.#controls();
+    if (controls) controls.set(view, true, "satellites");
+    else this.setView(view, true);
   }
 
   /** Mark one satellite: a larger ring round it, its orbit drawn, and its name beside it. `null` lets it go. */

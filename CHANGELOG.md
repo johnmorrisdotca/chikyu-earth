@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **One satellite group at a time** (MODULES-1215). `focusSatelliteGroup(name, options)` on `<chikyu-space>` and `<chikyu-earth-realistic>` shows one group that has been set and deals with the others: `others` is `"dim"` (the default; the same dimming an old element set uses, so no new object) or `"hide"`. `frame` (true by default) pulls the camera back with the view's own zoom until the group's orbits fit. The distance is the greatest apogee, from mean motion and eccentricity, and it stops at 8 Earth radii. `null` restores each group's own shown state and the camera. A group that has not been set returns `{ ok: false, reason: "not-set" }` and changes nothing. `focusedSatelliteGroup` is the name or `null`. `satelliteGroups` adds `emphasis` and `placed`, and keeps `count`. `chikyu-satellite-focus` is sent with `{ group, count }` when the choice changes. Nothing is drawn at rest.
+
 ## 0.42.0 - 2026-11-13
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.

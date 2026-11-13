@@ -75,8 +75,8 @@ optional `moons(planet, ms)` places a planet's moons in planet radii and `looks`
 
 ## Satellites
 
-`element.setSatellites("stations", createSatellites(elements))` (from `@johnmorrisdotca/chikyu-earth/satellites`) draws satellites at the places SGP4 puts them, in one draw call a group; `showSatellites`, `selectSatellite`, `satelliteInfo`,
-the `chikyu-satellite-click` event and `stats.satellites` go with it. Elements come from your page, nothing is fetched. [satellites.md](satellites.md).
+`element.setSatellites("stations", createSatellites(elements))` (from `@johnmorrisdotca/chikyu-earth/satellites`) draws satellites at the places SGP4 puts them, in one draw call a group; `showSatellites`, `focusSatelliteGroup`, `selectSatellite`, `satelliteInfo`,
+the `chikyu-satellite-click` event and `stats.satellites` go with it. `focusSatelliteGroup` shows one group and dims or hides the others. Elements come from your page, nothing is fetched. [satellites.md](satellites.md).
 
 ## Riding along
 

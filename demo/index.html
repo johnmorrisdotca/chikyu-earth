@@ -177,9 +177,16 @@
                 <p class="fam-fine" id="scale-note" hidden data-say="scaleNote">Compressed scale: every direction is real, but distances are squeezed (the Moon is drawn 10 Earth radii away, it is 60) and the Sun and planets are drawn larger than life. Switch to True scale to see how empty space is.</p>
               </div>
               <div class="box" data-box="satellites">
-                <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are: press a group to switch it on or off. Press a dot, or find one by name, to see how high and fast it goes and its orbit; the Ride row puts the camera on it. A group shows how old its elements are." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。グループを押すと、表示と非表示が切り替わります。点を押すか、名前で探すと、高さと速さ、軌道がわかります。「いっしょに移動」の行で、カメラをその衛星に載せられます。">
+                <div class="fam-row" id="sat-controls" role="group" aria-label="Satellites" data-say-label="satellites" hidden data-help-en="Show real satellites where they are: press a group to switch it on or off. One group shows that group and dims or hides the others, and pulls the view out until its orbits fit. Press a dot, or find one by name, to see how high and fast it goes and its orbit; the Ride row puts the camera on it. A group shows how old its elements are." data-help-ja="本物の人工衛星を、その時刻の位置に表示します。グループを押すと、表示と非表示が切り替わります。「1つのグループ」は、そのグループを見せ、ほかをうすくするか隠し、軌道が入るところまで視点を引きます。点を押すか、名前で探すと、高さと速さ、軌道がわかります。「いっしょに移動」の行で、カメラをその衛星に載せられます。">
                   <span class="fam-label" data-say="satellites">Satellites</span>
                   <div class="group fam-seg" id="sat-groups" role="group" aria-label="Satellite groups" data-say-label="satGroups"></div>
+                  <span class="fam-label" data-say="satFocus">One group</span>
+                  <div class="group fam-seg" id="sat-focus" role="group" aria-label="One group" data-say-label="satFocus"></div>
+                  <span class="fam-label" data-say="satOthers">The others</span>
+                  <div class="group fam-seg" id="sat-others" role="group" aria-label="The others" data-say-label="satOthers">
+                    <button type="button" data-sat-others="dim" aria-pressed="true" data-say="satDimOthers">Dim</button>
+                    <button type="button" data-sat-others="hide" data-say="satHideOthers">Hide</button>
+                  </div>
                   <span class="fam-label" data-say="satFind">Find</span>
                   <div class="group fam-seg" role="group" aria-label="Find" data-say-label="satFind">
                     <button type="button" data-sat-find="25544" data-say="sat_iss">ISS</button>
