@@ -9,3 +9,4 @@ export { ABOVE_MODEL_KM, ABOVE_MODEL_SHARE, aboveAxes, aboveModelShare, MODEL_FA
 export { genericSatellite, satelliteKind, type SatelliteKind } from "./generic-satellite.ts";
 export { BEAM_ATTRIBUTES, BEAM_COLOUR, BEAM_ELEVATION, beamCells, footprintAngle, footprintKm, readBeam, type BeamCells, type BeamOptions } from "../beam/geometry.ts";
 export type { BeamStats } from "../beam/layer.ts";
+export { RIDE_PATH_FADE_KM } from "./path-ribbons.ts";

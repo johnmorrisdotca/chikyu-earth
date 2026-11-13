@@ -130,7 +130,7 @@ console.log(space.placeSatellite({ group: "stations", index: 0 })); // { x, y, v
 - **`setPaths(list)`** (プロパティ `paths`) は、最大16本の `{ id, style }` を受け取ります。`id` は NORAD 番号か `group:index` (`stations:0`)、`style` は見た目の名前か、一部だけの見た目 `{ color, width, opacity, dash }` です。それより長い一覧は、最後の16本 (新しいもの) を残し、残りは `stats.paths.dropped` に数えます。どの衛星にも合わない id は読み飛ばし、`stats.paths.unresolved` に数えます。`[]` で全部を消します。
 - **`setPathStyles(table)`** (プロパティ `pathStyles` は使われている表の全体) は、見た目を名前で変えます。組み込みの見た目は、色だけでなく太さと破線も違うので、色が分からなくても見分けられます。`selected` (白、2 px、実線)、`hovered` (白、1.5 px、長い破線)、`favourite` (琥珀色、1.75 px、短い破線)、`path` (白、1.5 px、実線。名前を指定しない線の見た目) です。ページの項目は、同じ名前の組み込みの上に重なります。`null` でその項目を外します。見た目は `{ color: CSS の色、width: 0.5〜8 CSS ピクセル、opacity: 0〜1、dash: [線, すきま] (CSS ピクセル)、実線は null }` です。破線の長さは、描かれた地球の大きさで軌道に沿って測るので、地球と一緒に大きくなり、小さくなります。
 - **`selected-path="off"`** (プロパティ `selectedPath`) は、選んだ衛星自身の軌道線をパッケージが描くのをやめます。輪と名前は残り、乗る動作もそのまま衛星を追います。線を描くときの見た目は表の `selected` なので、色や太さを変えたいだけなら、属性はそのままにして、その項目を設定します。選んだ軌道の幅は `selected` の2 pxになりました (以前は1 px)。
-- 衛星に乗っているとき、その衛星自身の軌道も `selected` の見た目で描かれます (`selected-path="off"` でなければ)。
+- 衛星に乗っているとき、その衛星自身の軌道も `selected` の見た目で描かれます (`selected-path="off"` でなければ)。軌道はカメラから伸びるように現れます。カメラの位置では見えず、経路に沿って `RIDE_PATH_FADE_KM` (300 km、`@johnmorrisdotca/chikyu-earth/space` から公開) のところで本来の見た目になるので、画面を断ち切る硬い線にはなりません。衛星に乗っているあいだは、軌道を描くグループのなかのその衛星自身の軌道線 (と、ISS のモジュールのように同じ軌道上にある物体の線) は描きません。経路がその代わりになるためで、`selected-path="off"` のときは線が1本もありません。グループのほかの線は残り、ライドが終わるとすべて戻ります。`stats.satellites.orbitLines` は、いま描いているグループの軌道線の数です。
 
 ### ポインターの下にある線
 

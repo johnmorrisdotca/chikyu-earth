@@ -94,7 +94,16 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
-/** The distance, in kilometres, over which the orbit of a satellite being ridden grows out of the camera: nothing at the camera, all of its look by this far along the path. */
+/**
+ * The distance, in kilometres, over which the orbit of a satellite being ridden grows out of the camera: nothing at the camera, all of its look by this far along the path (a smooth step in between).
+ *
+ * @example
+ * ```ts
+ * import { RIDE_PATH_FADE_KM } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(RIDE_PATH_FADE_KM); // 300
+ * ```
+ */
 export const RIDE_PATH_FADE_KM = 300;
 
 /** What one slot is told: the loop's points (3 numbers each, {@link PATH_POINTS} of them) and its look. */
