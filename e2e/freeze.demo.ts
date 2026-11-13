@@ -4,6 +4,7 @@
 import { canvasSize, COUNT_SCRIPT, gpuObjects, readCounts, withinPixelBudget } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
 import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
+import { SEA_RADIUS } from "../src/sea-names/geometry.ts";
 import { MOON_KEEP_MS } from "../src/space/scene.ts";
 import { untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
@@ -611,3 +612,29 @@ test("a thousand places, handed over and taken away over and over: one draw call
   expect(Math.max(...settled.slice(1)), "no more GPU objects after five rounds than after the second").toBeLessThanOrEqual(settled[1]!);
   expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
 });
+
+// Names of oceans, seas and continents (MODULES-1230): off by default they make nothing, and on they are DOM laid out with the frame the view already drew, so a view at rest draws nothing and asks for nothing.
+for (const look of ["realistic", "space"] as const) {
+  test(`the ${look} look names oceans, seas and continents: off it makes nothing, on it leaves nothing drawn at rest`, async ({ page }) => {
+    await open(page, look);
+    const element = page.locator(ELEMENT[look]);
+    const names = () => element.evaluate((el) => (Reflect.get(el, "stats") as { seaNames: { on: boolean; radius: number; names: number; renders: number } }).seaNames);
+    expect(await names(), "off unless asked for").toMatchObject({ on: false, names: 0, renders: 0 });
+    expect(await element.evaluate((el) => el.shadowRoot?.querySelector("#sea-names") !== null), "no box made while off").toBe(false);
+    await element.evaluate((el) => el.setAttribute("sea-names", ""));
+    for (const zoom of [1, 0.8, 0.6, 0.45]) {
+      await element.evaluate((el, z) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: z, panX: 0, panY: 0 }, true), zoom);
+      const { radius } = await names();
+      if (radius > 0 && radius < SEA_RADIUS) break;
+    }
+    await expect.poll(async () => (await names()).names, { timeout: 20_000, message: "a wide view names the oceans and continents" }).toBeGreaterThan(0);
+    await untilStill(page);
+    const rest = await bounded(page, 3000, look);
+    expect(rest.draws, "nothing drawn at rest with the names on").toBe(0);
+    expect(rest.frames).toBe(0);
+    expect(rest.requests).toBeLessThanOrEqual(2);
+    const laidOut = (await names()).renders;
+    await page.waitForTimeout(2000);
+    expect((await names()).renders, "the names are not laid out again at rest").toBe(laidOut);
+  });
+}
