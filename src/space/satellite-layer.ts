@@ -56,7 +56,7 @@ export interface SatelliteState {
   streakMax: number;
   /** Set at each draw by the view: the satellite a ride shows as its model while the model is big enough to read. Its ring (the chosen marker) and name are left off while this is so; its orbit line stays. Clears with the ride, or when the model has handed over to the mark. */
   modelOver: SatelliteRef | null;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; pathsDrawn: number; pathDraws: number };
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; pathsDrawn: number; pathDraws: number; estimated: number };
 }
 
 /**
@@ -117,7 +117,7 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, pathsDrawn: 0, pathDraws: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -166,14 +166,19 @@ void main() {
   float d = length(gl_PointCoord - vec2(0.5));
   if (d > 0.5) discard;
   vec3 ink = byClass > 0.5 ? vCls : tint;
+  // a dim of 1 is an old element set; above 1 is an estimate (estimate-far): lighter, and fainter than an old one, so the two are told apart
+  float estimated = step(1.5, vDim);
+  float old = min(vDim, 1.0);
+  ink = mix(ink, vec3(1.0), 0.5 * estimated);
+  float weak = (1.0 - 0.7 * old) * (1.0 - 0.45 * estimated);
   if (ring > 0.5) {
     float a = smoothstep(0.30, 0.38, d) * (1.0 - smoothstep(0.44, 0.5, d));
-    gl_FragColor = vec4(ink, a * (1.0 - 0.7 * vDim));
+    gl_FragColor = vec4(ink, a * weak);
   } else {
     float rimEdge = smoothstep(0.28, 0.42, d);
-    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rimEdge * rim);
+    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rimEdge * rim * (1.0 - 0.6 * estimated));
     float a = smoothstep(0.50, 0.40, d);
-    gl_FragColor = vec4(colour, a * (1.0 - 0.7 * vDim) * fade);
+    gl_FragColor = vec4(colour, a * weak * fade);
   }
 }`;
 
@@ -327,6 +332,8 @@ export interface SatelliteScreen {
   behind: boolean;
   /** The Earth hides the satellite: the line from the camera meets the globe before the satellite. False at the limb, in front, and when the satellite is only behind the camera. */
   occluded: boolean;
+  /** Its place is an estimate (`estimate-far`): the moment shown is beyond `maxAgeDays` from its elements. */
+  estimated: boolean;
 }
 
 export interface SatelliteLayer {
@@ -742,6 +749,9 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       state.drawn.hoverPath = hoverLoop.visible;
       state.drawn.hoverOpacity = hoverLoop.visible ? hoverLine.material.opacity : 0;
       state.drawn.placed = placed;
+      let estimated = 0;
+      for (const group of state.groups.values()) if (group.visible) estimated += group.satellites.estimatedCount;
+      state.drawn.estimated = estimated;
       state.drawn.segments = segments;
       state.drawn.longestStreakPx = longest;
       state.drawn.streakCapPx = capLength * radius;
@@ -833,7 +843,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           world.set(p[i]!, p[i + 1]!, p[i + 2]!).applyMatrix4(scene.matrixWorld);
         } else hidden = earthHides(c, world);
       }
-      return { x, y, visible: !behind && !hidden && edge === null, heightKm, edge, behind, occluded: hidden };
+      return { x, y, visible: !behind && !hidden && edge === null, heightKm, edge, behind, occluded: hidden, estimated: find(ref)?.estimated(ref.index) ?? false };
     },
 
     pathAt(x, y, camera, size, radius) {

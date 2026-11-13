@@ -34,10 +34,26 @@ export interface SatellitesOptions {
   maxAgeDays?: number;
   /** The age, in days, past which a satellite is drawn dimmer because its place is less exact (14 by default). */
   dimAfterDays?: number;
+  /**
+   * Keep placing a satellite beyond `maxAgeDays` from its element set, as an estimate (off by default): the same elements carried forward or back by the same SGP4 code, where the satellite would be had its orbit not changed.
+   * Never before its launch date or after its decay date when the elements carry them (`LAUNCH_DATE`, `DECAY_DATE`; else the launch year in `OBJECT_ID` marks the earliest), and a satellite that SGP4 cannot carry that far, or brings down below about 120 km, is left out.
+   */
+  estimateFar?: boolean;
 }
 
 type Rec = ReturnType<typeof json2satrec>;
 type Sample = { position: { x: number; y: number; z: number } | false; velocity: { x: number; y: number; z: number } | false } | null;
+
+/** A date from the catalogue (`2026-11-02`, or with a time), in milliseconds, or NaN. A bare date is taken as the start of that day UTC. */
+const dateOf = (text: string | undefined): number => {
+  const t = typeof text === "string" ? text.trim() : "";
+  if (t === "") return Number.NaN;
+  if (t.length <= 10) return Date.parse(`${t}T00:00:00Z`);
+  const iso = t.replace(" ", "T");
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
+};
+/** The height, in kilometres above the mean Earth radius, below which a satellite carried far from its elements is taken to have come down: SGP4 has nothing true to say there, and it is never drawn inside the Earth. */
+const LOWEST_ESTIMATE_KM = 120;
 
 const epochOf = (text: string): number => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`);
 
@@ -82,6 +98,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const recs: Rec[] = [];
   const usable: ElementSet[] = [];
   const epochs: number[] = [];
+  const launchOf: number[] = [];
+  const decayOf: number[] = [];
   const refused: RefusedElementSet[] = [];
   for (const set of sets) {
     const epoch = epochOf(set.EPOCH);
@@ -100,6 +118,12 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       recs.push(rec);
       usable.push(set);
       epochs.push(epoch);
+      // the earliest moment it can have been in orbit: its launch date, else the start of the year in its international designator; the latest: the end of its decay day
+      const launch = dateOf(set.LAUNCH_DATE);
+      const year = /^(\d{4})-\d{3}/.exec(set.OBJECT_ID ?? "");
+      launchOf.push(Number.isFinite(launch) ? launch : year ? Date.UTC(Number(year[1]), 0, 1) : Number.NEGATIVE_INFINITY);
+      const decay = dateOf(set.DECAY_DATE);
+      decayOf.push(Number.isFinite(decay) ? decay + ((set.DECAY_DATE ?? "").trim().length <= 10 ? DAY_MS - 1 : 0) : Number.POSITIVE_INFINITY);
     } catch (error) {
       refuse(error instanceof Error ? error.message : "SGP4 could not start from these elements");
     }
@@ -144,6 +168,16 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   let propagations = 0;
   let placed = 0;
   const timing = { lastBatchMs: 0, maxBatchMs: 0 };
+  let estimate = options.estimateFar === true;
+  let estimatedCount = 0;
+  /** Whether a satellite is placed at a moment: within `maxAgeDays` of its elements, or, when far moments are estimated, inside the time it was in orbit. */
+  const usableAt = (i: number, ms: number): boolean => {
+    if (estimate) return ms >= launchOf[i]! && ms <= decayOf[i]!;
+    return Math.abs(ms - epochs[i]!) <= maxAgeMs;
+  };
+  const isFar = (i: number, ms: number): boolean => estimate && Math.abs(ms - epochs[i]!) > maxAgeMs;
+  /** A carried-far position that is down in the air or inside the Earth is no estimate (Earth radii). */
+  const tooLow = (x: number, y: number, z: number): boolean => Math.hypot(x, y, z) < 1 + LOWEST_ESTIMATE_KM / EARTH_RADIUS_KM;
   const pinned = new Float32Array(n * 3);
   const pinOk = new Uint8Array(n);
   // when each satellite was last pinned (NaN: never), so a group can be pinned a slice at a time and `arc` turns each from its own pin
@@ -171,14 +205,14 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       // an eccentric orbit is placed by SGP4 at every frame by `arc` and never read from a pin
       if (skipEccentric && isEccentric[i] === 1) continue;
       const epoch = epochs[i]!;
-      if (Math.abs(ms - epoch) > maxAgeMs) {
+      if (!usableAt(i, ms)) {
         ok[i] = 0;
         continue;
       }
       propagations += 1;
       const result = sgp4(recs[i]!, (ms - epoch) / 60_000) as Sample;
       const p = result && result.position;
-      if (!p || !Number.isFinite(p.x)) {
+      if (!p || !Number.isFinite(p.x) || (isFar(i, ms) && tooLow(p.x / EARTH_RADIUS_KM, p.y / EARTH_RADIUS_KM, p.z / EARTH_RADIUS_KM))) {
         ok[i] = 0;
         continue;
       }
@@ -193,10 +227,11 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
 
   const exactAt = (index: number, ms: number, out: Float64Array): boolean => {
     const epoch = epochs[index];
-    if (epoch === undefined || Math.abs(ms - epoch) > maxAgeMs) return false;
+    if (epoch === undefined || !usableAt(index, ms)) return false;
     propagations += 1;
     const result = sgp4(recs[index]!, (ms - epoch) / 60_000) as Sample;
     if (!result || !result.position || !result.velocity || !Number.isFinite(result.position.x)) return false;
+    if (isFar(index, ms) && tooLow(result.position.x / EARTH_RADIUS_KM, result.position.y / EARTH_RADIUS_KM, result.position.z / EARTH_RADIUS_KM)) return false;
     out[0] = result.position.x / EARTH_RADIUS_KM;
     out[1] = result.position.z / EARTH_RADIUS_KM;
     out[2] = -result.position.y / EARTH_RADIUS_KM;
@@ -225,6 +260,23 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     get placed() {
       return placed;
     },
+    get estimateFar() {
+      return estimate;
+    },
+    set estimateFar(value) {
+      if (value === estimate) return;
+      estimate = value;
+      // what was placed was placed under the other rule: place everything again, and draw each satellite's look again
+      ready = false;
+      pinnedCount = 0;
+      pinMsOf.fill(Number.NaN);
+      dimmed.fill(0);
+      dimVersion += 1;
+    },
+    get estimatedCount() {
+      return estimatedCount;
+    },
+    estimated: (index) => dimmed[index] === 2 && shown[index] === 1,
     pin(ms, first = 0, count = n) {
       if (n === 0) return;
       const from = Math.max(0, Math.min(n, Math.floor(first)));
@@ -250,7 +302,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       let count = 0;
       for (let i = 0; i < n; i += 1) {
         const k = i * 3;
-        const dim = Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
+        const dim = isFar(i, ms) ? 2 : Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
         if (dim !== dimmed[i]) {
           dimmed[i] = dim;
           dimVersion += 1;
@@ -313,6 +365,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         count += 1;
       }
       placed = count;
+      estimatedCount = 0;
+      for (let i = 0; i < n; i += 1) if (dimmed[i] === 2 && shown[i] === 1) estimatedCount += 1;
       return count;
     },
     setStep(ms) {
@@ -349,7 +403,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       let count = 0;
       for (let i = 0; i < n; i += 1) {
         const k = i * 3;
-        const dim = Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
+        const dim = isFar(i, ms) ? 2 : Math.abs(ms - epochs[i]!) > dimAfterMs ? 1 : 0;
         if (dim !== dimmed[i]) {
           dimmed[i] = dim;
           dimVersion += 1;
@@ -368,6 +422,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         }
       }
       placed = count;
+      estimatedCount = 0;
+      for (let i = 0; i < n; i += 1) if (dimmed[i] === 2 && shown[i] === 1) estimatedCount += 1;
     },
     visible: (index) => shown[index] === 1,
     exact: exactAt,
@@ -393,6 +449,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
         objectId: set.OBJECT_ID,
         epochMs: epochs[index]!,
         ageDays: (ms - epochs[index]!) / DAY_MS,
+        estimated: isFar(index, ms),
+        estimatedDays: Math.abs(ms - epochs[index]!) / DAY_MS,
         altitudeKm: Math.hypot(one[0]!, one[1]!, one[2]!) * EARTH_RADIUS_KM - EARTH_RADIUS_KM,
         speedKmS: Math.hypot(one[3]!, one[4]!, one[5]!),
         periodMinutes: 1440 / set.MEAN_MOTION,

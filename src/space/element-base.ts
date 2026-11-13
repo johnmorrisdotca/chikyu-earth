@@ -201,7 +201,7 @@ export interface Riding {
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; estimated: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -297,7 +297,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "selected-path", "path-hit", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "selected-path", "path-hit", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -668,6 +668,7 @@ export class ChikyuSpace extends HTMLElement {
       this.#gate?.request();
     } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
     else if (name === "selected-path") this.#pathControls?.sync();
+    else if (name === "estimate-far") this.#applyEstimate();
     else if (name === "path-hit") {
       /* read at each press and move */
     }
@@ -1965,6 +1966,7 @@ export class ChikyuSpace extends HTMLElement {
         orbits: (style.orbits ?? was?.orbits ?? false) && satellites.count <= MAX_ORBIT_GROUP,
         visible: was?.visible ?? true,
       });
+      if (typeof this.hasAttribute === "function" && this.hasAttribute("estimate-far")) satellites.estimateFar = this.estimateFar;
     }
     // a group's index may now be a different satellite, so a cached name for that ref is no longer its name
     this.#satLabelCache.clear();
@@ -2065,6 +2067,41 @@ export class ChikyuSpace extends HTMLElement {
     const found = ref ? this.#model.satellites.groups.get(ref.group) : undefined;
     this.#model.satellites.selected = ref && found && ref.index >= 0 && ref.index < found.satellites.count ? { group: ref.group, index: ref.index } : null;
     if (this.#chosenLabel) this.#chosenLabel.hidden = true;
+    this.#gate?.request();
+  }
+
+  /**
+   * Keep placing satellites that are far from their element sets, as an estimate (the attribute `estimate-far`, off unless set; `estimate-far="off"` is off). A satellite is left out when the moment shown is more than `maxAgeDays` (30) from its elements; on, it is carried forward or back by the same SGP4 code
+   * instead, and drawn lighter than a dimmed one. **An estimate is where the satellite would be if its orbit had not changed since the elements were taken.** It is worst for low orbits (drag changes them within days, and a manoeuvre moves the satellite along its path, so after weeks the estimate can be far along the orbit from the truth, and a satellite that has re-entered is not there at all) and for a long time away; a high orbit changes slowly and is close for months. Never before a satellite's launch or after its decay when its elements carry `LAUNCH_DATE` and `DECAY_DATE` (else the year of its `OBJECT_ID` is the earliest);
+   * one SGP4 cannot carry that far, or brings down below about 120 km, is left out and is not counted as placed. Each estimated satellite is `estimated: true`, with `estimatedDays`, in `placeSatellite`, `satelliteInfo`, `chikyu-satellite-visibility` and `chikyu-satellite-click`, and `stats.satellites.estimated` counts them.
+   * It applies to every group, those the page made with `createSatellites(sets, { estimateFar: true })` too.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space";
+   *
+   * const farFromToday = (space: ChikyuSpace): void => {
+   *   space.estimateFar = true;
+   *   space.addEventListener("chikyu-satellite-click", (event) => console.log((event as CustomEvent).detail.estimated, (event as CustomEvent).detail.estimatedDays));
+   * };
+   * console.log(typeof farFromToday);
+   * ```
+   */
+  get estimateFar(): boolean {
+    return this.hasAttribute("estimate-far") && this.getAttribute("estimate-far") !== "off";
+  }
+  set estimateFar(value: boolean) {
+    if (value) this.setAttribute("estimate-far", "");
+    else this.removeAttribute("estimate-far");
+  }
+  /** What an event says of a satellite's place: whether it is an estimate, and how far the moment shown is from its elements' own, in days. */
+  #estimateOf(ref: SatelliteRef): { estimated: boolean; estimatedDays: number } {
+    const info = this.#model.satellites.groups.get(ref.group)?.satellites.info(ref.index, this.#model.time);
+    return { estimated: info?.estimated ?? false, estimatedDays: info?.estimatedDays ?? 0 };
+  }
+  #applyEstimate(): void {
+    const on = this.estimateFar;
+    for (const group of this.#model.satellites.groups.values()) group.satellites.estimateFar = on;
     this.#gate?.request();
   }
 
@@ -2256,12 +2293,12 @@ export class ChikyuSpace extends HTMLElement {
     for (const m of marks) {
       const key = `${m.ref.group}:${m.ref.index}`;
       now.set(key, m.visible);
-      if (this.#markSeen.get(key) !== m.visible && (this.#markSeen.has(key) || m.visible)) this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: m.ref, visible: m.visible }, bubbles: true, composed: true }));
+      if (this.#markSeen.get(key) !== m.visible && (this.#markSeen.has(key) || m.visible)) this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: m.ref, visible: m.visible, ...this.#estimateOf(m.ref) }, bubbles: true, composed: true }));
     }
     for (const [key, was] of this.#markSeen) {
       if (!now.has(key) && was) {
         const [group, index] = key.split(":");
-        this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: { group: group!, index: Number(index) }, visible: false }, bubbles: true, composed: true }));
+        this.dispatchEvent(new CustomEvent("chikyu-satellite-visibility", { detail: { ref: { group: group!, index: Number(index) }, visible: false, ...this.#estimateOf({ group: group!, index: Number(index) }) }, bubbles: true, composed: true }));
       }
     }
     this.#markSeen = now;
@@ -2416,7 +2453,7 @@ export class ChikyuSpace extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, selectedRing: drawn.selectedRing, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, selectedRing: drawn.selectedRing, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity, estimated: drawn.estimated };
   }
 
   // --- the game clock ----------------------------------------------------------------------------------------------------------------------------
@@ -2540,7 +2577,7 @@ export class ChikyuSpace extends HTMLElement {
     const satellite = this.#model.pick?.(x, y, 12);
     if (satellite) {
       claimPress(event);
-      this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite) }, bubbles: true, composed: true }));
+      this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite), ...this.#estimateOf(satellite) }, bubbles: true, composed: true }));
       return;
     }
     if (this.#pathControls?.press(x, y, pointerOf(event))) {

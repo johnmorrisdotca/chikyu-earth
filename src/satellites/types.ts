@@ -55,6 +55,10 @@ export interface ElementSet {
   COUNTRY_CODE?: string;
   /** The owner's code, as the other catalogue writes it (the same codes), when the source carries it. */
   OWNER?: string;
+  /** The day it was launched (`2026-11-02`), as CelesTrak's satellite catalogue writes it, when the source carries it: with `estimateFar` a satellite is never placed before it. */
+  LAUNCH_DATE?: string;
+  /** The day it decayed or re-entered, when it has: with `estimateFar` a satellite is never placed after it. */
+  DECAY_DATE?: string;
 }
 
 /**
@@ -80,6 +84,10 @@ export interface SatelliteInfo {
   epochMs: number;
   /** Days between the elements' moment and the moment asked about (negative before it). */
   ageDays: number;
+  /** The moment asked about is beyond `maxAgeDays` from the elements, so the place is an estimate (`estimateFar`): where it would be had its orbit not changed. */
+  estimated: boolean;
+  /** How far the moment asked about is from the elements' own, in days, whichever way (0 or more): for a card that says "estimated, 36 days from its last tracking". */
+  estimatedDays: number;
   /** Height above the mean Earth radius (6371 km) at that moment. */
   altitudeKm: number;
   /** Speed against the stars, kilometres a second. */
@@ -166,6 +174,12 @@ export interface Satellites {
   visible(index: number): boolean;
   /** How many of them the last `at` or `arc` placed. */
   readonly placed: number;
+  /** Place satellites beyond `maxAgeDays` from their elements as an estimate (`estimateFar`, off by default). Setting it places everything again at the next draw. */
+  estimateFar: boolean;
+  /** How many satellites the last `at` or `arc` placed as an estimate. */
+  readonly estimatedCount: number;
+  /** True if satellite `index` was placed by the last `at` or `arc` as an estimate: its moment is beyond `maxAgeDays` from its elements. */
+  estimated(index: number): boolean;
   /** The newest element epoch in the group, in milliseconds since the Unix epoch, or 0 when it is empty. The date of the data. */
   readonly newestEpochMs: number;
   /** Red, green and blue, from 0 to 1, of each satellite's orbit class, 3 numbers a satellite. It does not change. */
