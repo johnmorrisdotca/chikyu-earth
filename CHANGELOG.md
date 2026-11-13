@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.47.0 - 2026-11-13
 
 - **The demo's Find box keeps a Japanese query.** A name in kana or kanji used to be dropped before the catalogue was asked, so `ハッブル` found nothing. It now asks the catalogue, and a satellite the package knows by a short name is listed by that name (Hubble, not only HST).
 - **A satellite hidden by the Earth** (MODULES-1243). `placeSatellite` adds `occluded`: true when the line from the camera meets the Earth before the satellite, false in front, false at the limb, and false when the satellite is only behind the camera (`behind` is unchanged). The package's own satellite names, stations included, are drawn at 45 percent opacity with no ring while occluded, and restored as the satellite comes out. `dim-occluded="off"` (the property `dimOccluded`, on by default) leaves those names out. `earthHides` is the same test, for a page that places its own names.

@@ -7,6 +7,15 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.47: names and a faint orbit on hover, hidden satellites dimmed
+
+Two new attributes of `<chikyu-space>` and `<chikyu-earth-realistic>` are on by default, so a page that sets nothing changes in two ways.
+
+- A mouse resting on a satellite now shows its name and draws its orbit faintly (`hover-path` and `names-on-hover`, both on). A touch does not rest, so it changes nothing. You do not want it: set `names-on-hover="off"` (the faint orbit follows it unless `hover-path` is set) or `hover-path="off"`.
+- The name of a satellite the Earth hides is now drawn dimmed, with no ring (`dim-occluded`, on). Before, that name was left out. You want the old behaviour: set `dim-occluded="off"`.
+- `follow` on `<chikyu-space>` is 0 by default, which is how the camera always held the stars: nothing changes unless you set it.
+- Ride along: the satellite's model is drawn a little larger and a little higher by default (radius 0.22 of the picture's height, centre at 0.86 of it, was 0.17 and 0.90) so the body and a good part of a wing are in view; `ride-model-share="0.17"` and `ride-model-seat="0.9"` give the old framing.
+
 ## To 0.46.5: a satellite seen from above shrinks as the ride rises
 
 In a ride above a satellite (`view: "above"`) the model of the satellite was drawn at 17 per cent of the picture's height from any height, so from 6,000 km it was a block hundreds of kilometres across. It now keeps that size up to 150 km, shrinks as the camera rises and is gone by 2,000 km, where the ordinary mark (ring and name) takes over.
