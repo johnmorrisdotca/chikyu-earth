@@ -533,8 +533,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         if (arrivalTimer !== undefined) return;
         arrivalTimer = setTimeout(() => {
           arrivalTimer = undefined;
-          // the last picture to arrive is on a draw that began after it: nothing more to ask for
-          if (!ended && drawnAt < askedAt) deps.invalidate();
+          // while the clock steps, the step after the last picture to arrive shows it: nothing more to ask for; at rest, the draw is the picture's own
+          if (!ended && !(model.speed !== 0 && drawnAt >= askedAt)) deps.invalidate();
         }, ARRIVAL_GATHER_MS);
       };
       const textures = await createTextureSet(three, LAYERS, {
