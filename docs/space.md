@@ -30,7 +30,7 @@ The pictures are the Earth's and the Moon's (`dist/textures/`, 1.85 MB in all); 
 </script>
 ```
 
-The element carries the drag, pinch, wheel and keys itself, with a zoom range of one millionth to 2.5 (0.5 to 6 while riding from a body), so the bar is only for buttons and the address; `zoom-min` and `zoom-max` change the range. The zoom goes out far enough because the camera sits `3.4 / zoom` Earth radii from the Earth's centre: zoom 1 shows the Earth, 0.1 shows
+The element carries the drag, pinch, wheel and keys itself, with a zoom range of one millionth to 2.5 (0.5 to 40 while riding from a body), so the bar is only for buttons and the address; `zoom-min` and `zoom-max` change the range. The zoom goes out far enough because the camera sits `3.4 / zoom` Earth radii from the Earth's centre: zoom 1 shows the Earth, 0.1 shows
 the Moon's neighbourhood, 0.005 the planets. `sky.zoomFor("moon" | "sun" | "inner" | "solar-system" | "earth")` gives the zoom that shows each part of the sky at the
 current scale and moment (`controller.set({ zoom }, true, "jump")` goes there). Yaw and tilt turn the camera round the Earth (a drag right or up moves the Earth's surface right or up); it is fixed to the stars, so the Earth
 turns under it as time runs.

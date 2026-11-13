@@ -31,7 +31,7 @@ Zoom draws no more pixels: the canvas is a fixed size, inside the renderer's cap
 | `<chikyu-earth-realistic>` | 0.1 to 5 times | The package's own pictures are 4096 pixels across at most, sharp to about 3 times and still good to 5. |
 | `<chikyu-earth-realistic tiles="...">` | 0.1 to 40 times, once the tile set is found | The finest tile level is 32768 pixels across, 8 times the widest picture (a set that stops at level 4, 16384 across, gives 20). If the tiles are not found it stays at 5. See [the tiles guide](earth-tiles.md). |
 | `<chikyu-space>` | one millionth to 2.5 times | The zoom is the camera's distance, so the whole solar system takes a millionth of Fit and the planets and their distances are all in reach. Close in, 2.5 times is as far as the Earth's 4096 pixel picture and the bodies' textures stay sharp. |
-| `<chikyu-space>` riding from a body | 0.5 to 6 times | The camera is at the body; zoom only narrows or widens its field a little. Wider than half is a fish-eye, and past 6 times the Earth's pictures blur. The range is back to the one above when the ride stops. |
+| `<chikyu-space>` riding from a body | 0.5 to 40 times | The camera is at the body; zoom only narrows or widens its field a little. Wider than half is a fish-eye, and past 6 times the Earth's pictures blur (a ride from a satellite goes to 40 times, 1.5 degrees of the ground below it: `ride-zoom`). The range is back to the one above when the ride stops. |
 
 All of them tilt to either pole (`tilt-max` 90). A page changes a range with `zoom-min` and `zoom-max` on the element (they win over the element's own, and over a range the element sets while it works), and `tilt-max` and `roll-max` the same way:
 

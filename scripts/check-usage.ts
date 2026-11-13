@@ -389,7 +389,7 @@ await step("ride", async () => {
       return stats.ride.riding && height > 380 && height < 470;
     }, undefined, { timeout: 20_000 });
     await page.waitForFunction(() => (Reflect.get(document.querySelector("chikyu-space")!, "controller") as { limits: { zoomMin: number } }).limits.zoomMin === 0.5, undefined, { timeout: 5000 });
-    await checkHands(page, { selector: "chikyu-space", read: readElement(page, "chikyu-space"), tall: true, limits: { zoomMin: 0.5, zoomMax: 6 } });
+    await checkHands(page, { selector: "chikyu-space", read: readElement(page, "chikyu-space"), tall: true, limits: { zoomMin: 0.5, zoomMax: 40 } });
   });
 });
 
