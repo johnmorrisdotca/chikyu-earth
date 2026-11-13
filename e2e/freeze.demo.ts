@@ -210,6 +210,8 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
   const settled: number[] = [];
+  // what a round rides: the ISS in the even rounds, the Moon in the odd
+  const ridden = (round: number): "ISS" | "Moon" => (round % 2 === 0 ? "ISS" : "Moon");
   for (let round = 0; round < 6; round += 1) {
     await look("Realistic");
     await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
@@ -226,7 +228,7 @@ test("changing the look over and over gives back what it took: GPU objects stay 
     // Earth large and held 8 fewer (106 against 114), so a round's count depended on whether the page or the click came first.
     await atRest(page);
     // the camera on the ISS and off it again, as a reader would
-    await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: round % 2 === 0 ? "ISS" : "Moon", exact: true }).dispatchEvent("click");
+    await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: ridden(round), exact: true }).dispatchEvent("click");
     // the satellites are drawn at least once (their buffers are made by the first draw), and what the last place needed is let go, before the objects are counted
     await atRest(page);
     const counted = await readCounts(page);
@@ -235,10 +237,11 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   }
   console.log(`live GPU objects after each round: ${settled.join(", ")}`);
   // The first round only warms the page up (the first shaders and the satellites' first draw come after the first count in software drawing), so the baseline is the second.
-  // A round on the ISS holds the satellite's model (a ride is outside by default, MODULES-1236: the demo's stand-in is made of 16 meshes), a round on the Moon holds none, so each round is held to the round two before it
-  // (the same ride): the first, a warm-up, is not a baseline, and rounds 1 and 2 are the baselines of the Moon and the ISS.
-  for (let round = 3; round < settled.length; round += 1) {
-    expect(settled[round]!, `round ${round + 1} holds no more GPU objects than round ${round - 1}, give or take three.js's own fixtures`).toBeLessThanOrEqual(settled[round - 2]! + 8);
+  // A round on the ISS holds the satellite's model (a ride is outside by default, MODULES-1236: the demo's stand-in is made of 16 meshes) and a round on the Moon holds none, so each is held to the fixed baseline of its own
+  // ride: the first round is a warm-up, round 1 (the Moon) and round 2 (the ISS) are the baselines, and no later round may hold more than its baseline, give or take three.js's own fixtures.
+  const baseline = { ISS: settled[2]!, Moon: settled[1]! };
+  for (let round = 1; round < settled.length; round += 1) {
+    expect(settled[round]!, `round ${round + 1} (${ridden(round)}) holds no more GPU objects than its baseline, give or take three.js's own fixtures`).toBeLessThanOrEqual(baseline[ridden(round)] + 8);
   }
 
   await look("Thick");
