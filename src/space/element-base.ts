@@ -1459,6 +1459,17 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
+  /**
+   * Ring and name these satellites, besides any group `labelSatellites` names. Pass an empty list to take them off. One draw, then nothing at rest.
+   *
+   * @param refs - The satellites, by group and index, as `setSatellites` knows them.
+   */
+  ringSatellites(refs: readonly SatelliteRef[]): void {
+    this.#model.satellites.pinned = refs.map((ref) => ({ group: ref.group, index: ref.index }));
+    this.#gate?.request();
+    this.#gate?.soon();
+  }
+
   /** The groups whose satellites are ringed and named now (`labelSatellites`). */
   get labelledSatellites(): string[] {
     return [...this.#model.satellites.marked];

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.
+- **Satellites nearest a place, a point in the sky, or another satellite** (MODULES-652). `nearest`, `within` and `closeApproach` in `@johnmorrisdotca/chikyu-earth/satellites` answer from the group's SGP4 positions (`exact`), once per call and never on a timer. `by: "space"` returns kilometres with a rough uncertainty (1 km at the epoch, and 1 km more for each day the elements have aged). `by: "sky"` returns the angle in degrees. A satellite straight overhead is its height away. `ringSatellites` on `<chikyu-space>` rings the ones a page names. One call places each satellite once: about 0.15 ms for one, so a few thousand is on the order of a second.
 
 ## 0.42.0 - 2026-11-12
 

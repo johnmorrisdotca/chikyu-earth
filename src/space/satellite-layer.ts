@@ -25,13 +25,15 @@ export interface SatelliteState {
   selected: SatelliteRef | null;
   /** The groups whose members are ringed and named (`labelSatellites`): the scene tells the page where each is, at every draw. */
   marked: Set<string>;
+  /** Satellites ringed besides a whole group: the nearest ones a page asked to mark. Empty unless set. */
+  pinned: SatelliteRef[];
   /** Written at each draw: satellites placed, whether the clock is too fast for the groups, and the milliseconds the last update took. */
   /** Colour each dot by its orbit class. Off by default: a group keeps the one colour it was given. */
   orbitTint: boolean;
   drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), orbitTint: false, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
