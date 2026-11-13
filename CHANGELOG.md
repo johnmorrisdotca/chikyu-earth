@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A short cross-fade when `light` changes to or from `lit`.** The Earth's night lights, and in the realistic view the direction of its light, move between the two looks over 300 ms instead of cutting, in the frames of one loop that ends by itself (nothing is drawn at rest). A reader who asked for reduced motion gets the cut. `stats.lightFade` is `{ mix, fading }`.
+
 ## 0.49.0 - 2026-11-13
 
 - **Satellites far from today, as an estimate** (MODULES-1296). `estimate-far` (the property `estimateFar`, or `createSatellites(sets, { estimateFar: true })`; off by default) keeps placing a satellite beyond 30 days from its elements: the same elements carried forward or back by the same SGP4 code, drawn lighter than a dimmed one, with `estimated: true` and `estimatedDays` (how far the moment is from the elements', in days) in `placeSatellite`, `satelliteInfo` and the details of `chikyu-satellite-click` and `chikyu-satellite-visibility`, and `stats.satellites.estimated`. The docs say what an estimate is (where it would be had its orbit not changed) and where it is worst (low orbits, months away). Never before an element set's `LAUNCH_DATE` (else the year of its `OBJECT_ID`) or after its `DECAY_DATE`, both new optional fields that `parseElements` keeps; a satellite SGP4 cannot carry that far, or brings below about 120 km, is left out and not counted as placed.
