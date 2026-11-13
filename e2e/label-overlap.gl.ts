@@ -2,6 +2,7 @@
 // no label box of one layer touches a label box of another, on the space view and on the realistic Earth, and nothing is drawn at rest. The layers keep to a fixed order: places (with the satellites), markers, cities, stars.
 import { expect, test, type Page } from "@playwright/test";
 import { PLACES as DEMO_PLACES } from "../demo/places.ts";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -43,6 +44,8 @@ const crossings = (all: Label[]): string[] => {
 };
 const drawsOf = (page: Page, tag: string): Promise<number> => page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 async function atRest(page: Page, tag: string): Promise<void> {
+  // the space view makes its bodies after the draw that showed them, and each picture that arrives is a draw of its own (gathered to one a second for less motion): rest is after the last, which the page says
+  if (tag === "chikyu-space") return untilArrived(page);
   await expect
     .poll(
       async () => {

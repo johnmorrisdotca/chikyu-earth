@@ -2,6 +2,7 @@
 // place, in the page's language, none on the far side, never overlapping, more tiers as the Earth grows on the screen, and nothing drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
 import { cityTiersFor } from "../src/cities/geometry.ts";
+import { untilArrived } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 test.use({ reducedMotion: "reduce" });
@@ -117,6 +118,8 @@ for (const [name, tag, look] of [
     test("nothing is drawn at rest, with the names on and the clock held", async ({ page }) => {
       await go(page, "&city-names=40");
       await expect.poll(async () => (await statsOf(page, tag)).names, { timeout: 30_000 }).toBeGreaterThan(0);
+      // the space view makes its bodies after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+      if (tag === "chikyu-space") await untilArrived(page);
       await page.evaluate(async () => {
         for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
       });

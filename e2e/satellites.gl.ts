@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { readFileSync } from "node:fs";
-import { COUNT_SCRIPT, alive, counts, ownClock, settle, steppingOnly, timed } from "./gl.ts";
+import { COUNT_SCRIPT, alive, counts, ownClock, settle, steppingOnly, timed, untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -133,7 +133,8 @@ test("a satellite behind the Earth cannot be pressed", async ({ page }) => {
 test("paused with 6,000 satellites on: nothing is drawn, no frame asked for, no SGP4", async ({ page }) => {
   await open(page, "", "stations,starlink");
   await addMany(page);
-  await settle(page, 800);
+  // the bodies the view shows are made after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+  await untilArrived(page);
   const s0 = await statsOf(page);
   const rest = await measure(page, 3500);
   console.log(`6,000 satellites paused: ${rest.glDraws} GL draw calls, ${rest.requests} frames asked for, ${rest.propagations.toFixed(0)} SGP4 calls a second; the first batch took ${s0.satellites.maxBatchMs.toFixed(1)} ms`);

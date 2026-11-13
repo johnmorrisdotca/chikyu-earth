@@ -1,6 +1,7 @@
 // Riding above a satellite (`ride(ref, { view: "above" })`): the camera on the line from the Earth's centre through the satellite, looking straight down at it with the way it is going at the top of the picture; the satellite stays in the middle of the picture
 // while the clock moves it along its orbit and the Earth turns beneath; the zoom changes the height. Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.use({ reducedMotion: "reduce" });
@@ -17,20 +18,9 @@ interface Where {
   height: number;
   place: { x: number; y: number; visible: boolean; heightKm: number } | null;
 }
-const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 async function atRest(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await draws(page);
-        await page.evaluate(async () => {
-          for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-        });
-        return (await draws(page)) - before;
-      },
-      { timeout: 60_000, message: "the view is at rest" },
-    )
-    .toBe(0);
+  // a view's bodies are made after the draw that showed them and each picture that arrives is a draw of its own (gathered to one a second for less motion): rest is after the last, which the page says (MODULES-1192)
+  await untilArrived(page);
 }
 const where = (page: Page): Promise<Where> =>
   page.locator(SPACE).evaluate((el) => {

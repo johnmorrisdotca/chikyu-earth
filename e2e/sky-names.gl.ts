@@ -189,18 +189,8 @@ test("riding along the ISS, with the Earth 70 degrees across, no star is named o
   let stars = 0;
   for (const yaw of [0, 100, 200, 300, 400, 500]) {
     await page.locator("kazoku-view-controls").evaluate((el, v) => (el as unknown as { controller: { set(view: unknown, final: boolean, why: string): void } }).controller.set({ yaw: ((v + 180) % 360) - 180, tilt: 0, zoom: 1 }, true, "test"), yaw);
-    await expect
-      .poll(
-        async () => {
-          const before = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
-          await page.evaluate(async () => {
-            for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-          });
-          return (await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws)) - before;
-        },
-        { timeout: 60_000, message: "the view is at rest" },
-      )
-      .toBe(0);
+    // the turn brings bodies into view: their pictures arrive in draws of their own, and rest is after the last
+    await untilArrived(page);
     // what the layer says and what is on the page, read in one go (so a scroll or a draw between the readings cannot change them), from the picture's own top left: the named stars' own points, the labels' boxes, the camera
     const seen = await page.locator(SPACE).evaluate((el) => {
       const own = el.getBoundingClientRect();

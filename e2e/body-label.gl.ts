@@ -1,7 +1,7 @@
 // The name written on the Earth (the family's body label), in a real browser (Chromium, drawn in software): off unless `body-label` is set, drawn on the globe so the picture changes, in the page's language, taken away again, hidden while the Earth is small,
 // the same in the space view, and nothing drawn at rest. The time is held, so the picture only changes when the name does.
 import { expect, test, type Page } from "@playwright/test";
-import { EARTH, openEarth } from "./gl.ts";
+import { EARTH, openEarth, untilArrived } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 // the demo opens still for a reader who prefers reduced motion (no Auto-turn), so the picture only changes when the name does
@@ -59,7 +59,8 @@ for (const [name, tag, open] of [
       // the property is the attributes: the family's plain names
       expect(await page.locator(tag).evaluate((el) => [el.getAttribute("body-label"), el.getAttribute("body-label-strength")])).toEqual(["painted", "1"]);
       expect(await page.locator(tag).evaluate((el) => Reflect.get(el, "bodyLabel"))).toEqual({ look: "painted", strength: 1, repeat: "once", latitude: 0, facing: true });
-      // nothing is drawn at rest: thirty frames of the page's own and the draw count has not moved
+      // nothing is drawn at rest: thirty frames of the page's own and the draw count has not moved. The space view makes its bodies after the draw that showed them: rest is after the last picture
+      if (tag === "chikyu-space") await untilArrived(page);
       const draws = await page.locator(tag).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
       await page.evaluate(async () => {
         for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));

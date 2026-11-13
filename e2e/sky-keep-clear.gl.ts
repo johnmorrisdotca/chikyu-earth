@@ -1,6 +1,7 @@
 // Places the page keeps clear of the sky's names: a block of the page's own text laid over the element. No name box touches it, whether it is given by the property `keepClear` (an element, or a rectangle) or by the attribute `keep-clear` (a selector), the names
 // come back when it is taken away, a block that is resized is read again, and nothing is drawn at rest. Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.use({ reducedMotion: "reduce" });
@@ -15,18 +16,8 @@ interface Box {
 }
 const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 async function atRest(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await draws(page);
-        await page.evaluate(async () => {
-          for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-        });
-        return (await draws(page)) - before;
-      },
-      { timeout: 60_000, message: "the view is at rest" },
-    )
-    .toBe(0);
+  // a view's bodies are made after the draw that showed them and each picture that arrives is a draw of its own (gathered to one a second for less motion): rest is after the last, which the page says (MODULES-1192)
+  await untilArrived(page);
 }
 const names = (page: Page): Promise<Box[]> =>
   page.locator(SPACE).evaluate((el) =>

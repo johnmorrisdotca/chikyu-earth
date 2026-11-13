@@ -218,20 +218,8 @@ test.describe("the controls' Auto-turn", () => {
     await settle(page, 800);
     // the view opening sets off draws that wait on timers of their own (the larger Earth pictures let go after DOWNGRADE_AFTER_MS, a moon out of sight kept MOON_KEEP_MS) and refinements that arrive late: wait the timers out, then count only once nothing has been drawn for two seconds running, so none can fall in the window (the allowance of one draw in it is unchanged)
     await page.waitForTimeout(Math.max(DOWNGRADE_AFTER_MS, MOON_KEEP_MS) + 500);
-    let seen = (await statsOf(page)).draws;
-    let quiet = 0;
-    await expect
-      .poll(
-        async () => {
-          await page.waitForTimeout(1000);
-          const now = (await statsOf(page)).draws;
-          quiet = now === seen ? quiet + 1 : 0;
-          seen = now;
-          return quiet;
-        },
-        { timeout: 60_000, message: "the picture is at rest before the count" },
-      )
-      .toBeGreaterThanOrEqual(2);
+    // and the pictures that arrive are draws of their own: the count starts after the last, which the page says (MODULES-1192)
+    await untilArrived(page);
     const before = await statsOf(page);
     const c0 = await counts(page);
     await page.waitForTimeout(8000);

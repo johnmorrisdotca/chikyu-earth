@@ -1,6 +1,7 @@
 // Which constellation a reader is on or has picked, and the optional names of the constellations, over the space view's sky: `chikyu-constellation-hover` and `chikyu-constellation-pick` with their `detail`, the lit figure's name at the middle of
 // the part of it in view and clear of the Earth, the property `constellation`, the keyboard, and the layer `constellation-names` (off unless asked for; in the page's language; no name over the Earth, a star name or another). Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 import { onEarth, type Camera } from "./sky-geometry.ts";
 
@@ -23,18 +24,8 @@ const sky = (page: Page): Promise<Sky> => page.locator(SPACE).evaluate((el) => (
 const events = (page: Page): Promise<Seen[]> => page.evaluate(() => (Reflect.get(window, "__sky") as Seen[]).slice());
 const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 async function atRest(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await draws(page);
-        await page.evaluate(async () => {
-          for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-        });
-        return (await draws(page)) - before;
-      },
-      { timeout: 60_000, message: "the view is at rest" },
-    )
-    .toBe(0);
+  // a view's bodies are made after the draw that showed them and each picture that arrives is a draw of its own (gathered to one a second for less motion): rest is after the last, which the page says (MODULES-1192)
+  await untilArrived(page);
 }
 
 /** Opens the space view with the lines on, the Earth made small and the view turned until at least `least` figures are in it. */

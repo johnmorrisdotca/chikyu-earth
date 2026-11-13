@@ -122,18 +122,23 @@ export async function steppingOnly(page: Page, hold: () => Promise<void>, go: ()
 }
 
 /**
- * Wait until nothing is drawn or asked for any more: the draw and frame-request counts are the same one second apart. Holding a clock (or stopping the controls' turn) leaves one last frame
+ * Wait until nothing is drawn or asked for any more: the draw and frame-request counts are the same one gather window (`ARRIVAL_GATHER_MS` and a quarter second) apart, and the space view has no picture of a body still to come. Holding a clock (or stopping the controls' turn) leaves one last frame
  * already queued, and that frame is drawn, rightly; on a loaded machine (software GL) it can land more than a second later. A test of "nothing is drawn while held" takes its first reading
  * after this, so it measures rest, not that last frame. If frames keep coming, this fails after `timeout` ms: that is the bug it is there to find.
  */
 export async function untilStill(page: Page, timeout = 20_000): Promise<void> {
   const end = Date.now() + timeout;
-  let before = await readCounts(page);
+  // a space view also says how many pictures of its bodies are still to come (`stats.bodies.pending`): each is a draw that nothing but the view itself asked for, so rest is not before the last (MODULES-1192)
+  const read = async (): Promise<{ draws: number; rafRequests: number; pending: number }> => ({
+    ...(await readCounts(page)),
+    pending: (await page.locator("chikyu-space").count()) ? await page.locator("chikyu-space").first().evaluate((el) => (Reflect.get(el, "stats") as { bodies: { pending: number } }).bodies.pending) : 0,
+  });
+  let before = await read();
   for (;;) {
-    await page.waitForTimeout(1000);
-    const now = await readCounts(page);
-    if (now.draws === before.draws && now.rafRequests === before.rafRequests) return;
-    if (Date.now() > end) throw new Error(`still drawing ${timeout} ms after it was held: ${now.draws - before.draws} draws and ${now.rafRequests - before.rafRequests} frames asked for in the last second`);
+    await page.waitForTimeout(ARRIVAL_GATHER_MS + 250);
+    const now = await read();
+    if (now.draws === before.draws && now.rafRequests === before.rafRequests && now.pending === 0 && before.pending === 0) return;
+    if (Date.now() > end) throw new Error(`still drawing ${timeout} ms after it was held: ${now.draws - before.draws} draws and ${now.rafRequests - before.rafRequests} frames asked for in the last ${ARRIVAL_GATHER_MS + 250} ms, ${now.pending} pictures still to come`);
     before = now;
   }
 }

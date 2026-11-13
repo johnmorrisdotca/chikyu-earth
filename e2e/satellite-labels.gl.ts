@@ -2,6 +2,7 @@
 // every member of the group is ringed and named in the page's language, names never overlap, a satellite behind the Earth is not ringed and the page is told once when one comes into view or goes out,
 // the page can ask where a satellite is (and whether it is hidden) instead of working it out itself, and nothing is drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -147,6 +148,8 @@ test("nothing is drawn at rest: the places layer is not drawn again while the vi
   await expect
     .poll(async () => (await placesStats(page)).renders > before.renders && (await camera()).some((value, axis) => Math.abs(value - before.camera[axis]!) > 1e-9), { timeout: 30_000, message: "a draw that shows the new view" })
     .toBe(true);
+  // the bodies the view shows are made after the draw that showed them, and each picture that arrives is a draw of its own (gathered to one a second for less motion), and the layer is laid out with each draw: the baseline is taken after the last (MODULES-1192)
+  await untilArrived(page);
   const drawn = (await placesStats(page)).renders;
   await page.evaluate(async () => {
     for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));

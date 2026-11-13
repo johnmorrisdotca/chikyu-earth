@@ -1,6 +1,6 @@
 // The painter is asked for a body (and so loads and holds its pictures) only when the body is in the view and big enough to show its map (MODULES-1192): an Earth view loads none of the far planets' pictures and shows no
 // CC BY line; going to Jupiter makes Jupiter and credits Nestaeric; coming back lets it go; the GPU objects are flat across the moves, and nothing is drawn at rest. Chromium, drawn in software.
-import { alive, COUNT_SCRIPT, readCounts, settle } from "./gl.ts";
+import { alive, COUNT_SCRIPT, readCounts, settle, untilArrived } from "./gl.ts";
 import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
@@ -32,16 +32,8 @@ async function open(page: Page): Promise<void> {
 }
 /** Nothing changing: no draw for a while. */
 async function still(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = (await readCounts(page)).draws;
-        await page.waitForTimeout(1500);
-        return (await readCounts(page)).draws - before;
-      },
-      { timeout: 60_000, message: "the view is at rest" },
-    )
-    .toBe(0);
+  // the bodies that come into view are made after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last, which the page says (MODULES-1192)
+  await untilArrived(page);
 }
 const body = async (page: Page, name: string): Promise<void> => {
   await page.locator(SPACE).evaluate((el, n) => Reflect.set(el, "body", n), name);

@@ -2,7 +2,7 @@
 // by day and by night, the regions only once the Earth is large enough and only for the countries in view, the element still drawing with no error when the shapes cannot be loaded, and nothing
 // drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT, readCounts } from "./gl.ts";
+import { COUNT_SCRIPT, readCounts, untilArrived } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 test.use({ reducedMotion: "reduce" });
@@ -115,7 +115,8 @@ for (const [name, look] of [
         console.log(`${look} ${when}: ${drawn.changed} pixels changed, ${drawn.warm} of them the borders' yellow; ${stats.countries} segments`);
         expect(drawn.changed, "lines over Europe").toBeGreaterThan(400);
         expect(drawn.warm / drawn.changed, "and they are the borders' colour").toBeGreaterThan(0.6);
-        // at rest with the borders on, nothing is drawn
+        // at rest with the borders on, nothing is drawn. // the space view makes its bodies after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+        if (tag === "chikyu-space") await untilArrived(page);
         const before = await readCounts(page);
         await page.waitForTimeout(2000);
         expect((await readCounts(page)).draws - before.draws, "no draw at rest").toBe(0);

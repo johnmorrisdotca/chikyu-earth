@@ -1,6 +1,7 @@
 // The sky is behind the Earth: no constellation line, star ring or star name is drawn over the Earth's disc or its air, in the space view and in a ride (a camera 1,150 km up sees the Earth 110 degrees across, and the limb is an arc across the picture), on the lit side and on the
 // night side. The cover is geometric (the ray through a pixel against the Earth's angular radius), never the brightness of the pixel. And the sky's labels never rise above a page's own content: the element is a stacking context. Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 import { onEarth, type Camera } from "./sky-geometry.ts";
 
@@ -20,21 +21,10 @@ interface Seen {
   figures: number;
 }
 
-const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 /** Waits until the page has gone thirty frames with no draw: the picture and the layer are at rest. */
 async function atRest(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await draws(page);
-        await page.evaluate(async () => {
-          for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-        });
-        return (await draws(page)) - before;
-      },
-      { timeout: 60_000, message: "the view is at rest" },
-    )
-    .toBe(0);
+  // a view's bodies are made after the draw that showed them and each picture that arrives is a draw of its own (gathered to one a second for less motion): rest is after the last, which the page says (MODULES-1192)
+  await untilArrived(page);
 }
 
 async function read(page: Page): Promise<Seen> {

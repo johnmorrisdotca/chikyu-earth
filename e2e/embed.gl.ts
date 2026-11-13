@@ -1,7 +1,7 @@
 // The embed page on the realistic look: one WebGL context, a canvas inside its budget, nothing drawn once it rests.
 import { fitDistance } from "../src/space/scene.ts";
 import { expect, test } from "@playwright/test";
-import { COUNT_SCRIPT, counts, EARTH, NOON, ownClock, settle, statsOf, timed } from "./gl.ts";
+import { COUNT_SCRIPT, counts, EARTH, NOON, ownClock, settle, statsOf, timed, untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -44,6 +44,8 @@ test("the space embed is one context, a capped canvas, no controls, fetches only
   expect(await page.locator("button, input, select").count(), "no controls in the page").toBe(0);
   expect(await page.locator(SPACE).evaluate((el) => el.shadowRoot!.querySelectorAll(".sp-label:not([hidden])").length), "no names unless asked for").toBe(0);
   expect(asked.every((path) => path.startsWith("/chikyu-earth/"))).toBe(true);
+  // the bodies the view shows are made after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+  await untilArrived(page);
   const before = await counts(page);
   await page.waitForTimeout(3000);
   const after = await counts(page);
@@ -102,6 +104,8 @@ test("the space embed can show the stations and the Starlink satellites, in one 
   expect(stats.canvas.pixels).toBeLessThanOrEqual(6_000_000);
   expect(await page.locator(SPACE).evaluate((el) => (el as unknown as { selectedSatellite: { group: string } | null }).selectedSatellite?.group)).toBe("stations");
   expect(asked.every((path) => path.startsWith("/chikyu-earth/"))).toBe(true);
+  // the bodies the view shows are made after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+  await untilArrived(page);
   const before = await counts(page);
   await page.waitForTimeout(3000);
   const after = await counts(page);
@@ -124,6 +128,8 @@ test("the space embed can ride along with the ISS: one context, the camera at th
   expect(height).toBeGreaterThan(380);
   expect(height).toBeLessThan(470);
   expect(await page.locator("button, input, select").count()).toBe(0);
+  // the bodies the view shows are made after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+  await untilArrived(page);
   const before = await counts(page);
   await page.waitForTimeout(3000);
   expect((await counts(page)).draws, "nothing drawn at rest").toBe(before.draws);

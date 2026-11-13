@@ -2,7 +2,7 @@
 // by night and finer when the Earth is large, the names at their countries in the page's language, never on the far side, on the Earth's disc, never over one another or over the names of
 // cities, places, stars and bodies, and nothing drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT, readCounts } from "./gl.ts";
+import { COUNT_SCRIPT, readCounts, untilArrived } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 test.use({ reducedMotion: "reduce" });
@@ -145,7 +145,8 @@ for (const [name, look] of [
         console.log(`${look} ${when}: the grid changed ${drawn} pixels, ${grid.segments} segments, fine ${grid.fine}`);
         expect(drawn, "lines over the Earth").toBeGreaterThan(800);
         expect(grid.builds, "the lines were made once").toBe(1);
-        // at rest with the grid on, nothing is drawn
+        // at rest with the grid on, nothing is drawn. // the space view makes its bodies after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+        if (tag === "chikyu-space") await untilArrived(page);
         const before = await readCounts(page);
         await page.waitForTimeout(2000);
         expect((await readCounts(page)).draws - before.draws, "no draw at rest").toBe(0);
@@ -226,7 +227,8 @@ for (const [name, look] of [
       await expect.poll(async () => (await names(page, tag)).some((one) => one.kind === "country" && /[぀-ヿ一-鿿]/.test(one.text)), { message: "written again in Japanese" }).toBe(true);
       await still(page, tag);
       await check("ja");
-      // at rest with the names on, nothing is drawn
+      // at rest with the names on, nothing is drawn. // the space view makes its bodies after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last (MODULES-1192)
+      if (tag === "chikyu-space") await untilArrived(page);
       const before = await readCounts(page);
       const renders = (await statsOf<Names>(page, tag, "countryNames")).renders;
       await page.waitForTimeout(2000);

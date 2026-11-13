@@ -1,6 +1,7 @@
 // Follow a large satellite as a 3D model, in a real browser (Chromium, drawn in software): the followed ISS is drawn as the page's model, locked in the middle of the picture for a whole orbit while the Earth turns beneath,
 // the page can list the large satellites it has a model for and hop between them, and nothing is drawn at rest. The demo's models are made-up stand-ins (demo/station-models.ts); the package ships none.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -87,9 +88,8 @@ test("nothing is drawn at rest while a model is followed and the clock holds", a
   await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
   await expect.poll(() => modelAt(page), { timeout: 60_000 }).not.toBeNull();
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride.gliding), { timeout: 30_000 }).toBe(false);
-  await page.evaluate(async () => {
-    for (let frame = 0; frame < 10; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-  });
+  // the bodies the view shows are made after the draw that showed them, and each picture that arrives is a draw of its own: rest is after the last
+  await untilArrived(page);
   const draws = await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
   await page.evaluate(async () => {
     for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));

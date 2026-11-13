@@ -1,6 +1,7 @@
 // Riding above a satellite at 150 km: the ground is laid with the finer map tiles of the level that height needs, only those under the camera; high up none are asked for, they are freed when the camera rises again,
 // and nothing is drawn at rest. A made-up tile set (every tile one flat colour for its level), nothing is downloaded. Chromium, drawn in software.
 import { expect, test, type Page } from "@playwright/test";
+import { untilArrived } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 import { routeTiles } from "./tiles-fixture.ts";
 
@@ -15,20 +16,9 @@ interface Tiles {
   requested: number;
 }
 const tiles = (page: Page): Promise<Tiles> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { tiles: Tiles }).tiles);
-const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 async function atRest(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await draws(page);
-        await page.evaluate(async () => {
-          for (let frame = 0; frame < 30; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-        });
-        return (await draws(page)) - before;
-      },
-      { timeout: 60_000, message: "the view is at rest" },
-    )
-    .toBe(0);
+  // a view's bodies are made after the draw that showed them and each picture that arrives is a draw of its own (gathered to one a second for less motion): rest is after the last, which the page says (MODULES-1192)
+  await untilArrived(page);
 }
 const rideAt = (page: Page, distanceKm: number): Promise<void> =>
   page.locator(SPACE).evaluate((el, km) => {
