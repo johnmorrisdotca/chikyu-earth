@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.46.6 - 2026-11-13
 
 - **A beam from the chosen satellite to the ground below it** (MODULES-1309). `beam` on `<chikyu-space>` (off unless set; the property `beam`) draws a soft, additive cone of light from the satellite marked with `selectSatellite`, or the one ridden, down to its footprint on the ground: a lit ring and a faint fill, the circle from which the satellite is above `beam-elevation` degrees (25), worked from its height (`footprintAngle`, `footprintKm`), cut off by the limb, in Ride along and Ride above as well. `beam-cells` (up to 91) adds spot cells in a hexagonal pack, each with a thin shaft of light (an illustration, not any operator's plan), `beam-cell-size`, `beam-color` and `beam-strength` set the look; `stats.beam` says the footprint's radius in kilometres. It is part of the draw that moves the satellite: nothing at rest, nothing rebuilt on a clock step, no shimmer. Guide: `docs/guides/beam.md` (and its Japanese twin), and a "Satellite beam" button in the demo.
 
