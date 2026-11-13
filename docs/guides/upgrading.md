@@ -7,6 +7,14 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.44: a ride shows the satellite
+
+A ride of a satellite (`ride(ref)`) now has the camera a little outside the satellite, behind and above it, with the satellite in the picture. It was at the satellite.
+
+- You want the camera at the satellite, as before: set `ride-viewpoint="inside"` on the element (property `rideViewpoint`), or pass `{ viewpoint: "inside" }` to `ride`.
+- You ride a body (the Moon, a planet), or have not looked at the picture: nothing changes there.
+- You use `view: "follow"` or `"above"` and have no satellite model: the satellite is now a small drawing of the package's own, not a dot. `viewpoint: "inside"` keeps the dot.
+
 ## To 0.34: no location asked for on load
 
 `<chikyu-earth>` and `<chikyu-earth-realistic>` no longer ask the browser where the reader is when they open with no `center`: they open on 0,0. A page asks only after the reader asks for it.

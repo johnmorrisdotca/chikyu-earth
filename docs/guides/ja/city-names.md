@@ -27,3 +27,15 @@ description: "リアルな地球と宇宙の見た目の上に、kuni の都市�
 - **インストールされていないとき。** kuni (バージョン1.6.1以降) がなければ、理由を添えた `chikyu-city-names-unavailable` イベントが送られ、名前は描かれません。
 
 純粋な計算の部分は、ブラウザーがなくても使えます。`@johnmorrisdotca/chikyu-earth/realistic` の `layoutCities`、`cityTiersFor`、`cityRank`、`cityNameText`、`readCityNames` を使うと、場所が画面のどこに来るかを答えられる視点であれば、どんなものにも名前を配置できます。
+
+## 海と大陸の名前
+
+`sea-names` を `<chikyu-earth>`、`<chikyu-earth-realistic>`、`<chikyu-space>` に付けると、画面の地球が小さいあいだは大洋と大陸の名前を出し、半径が 280 ピクセル以上になると海や湾も出します。付けない限り出ません。開いた水面の名前は、ページが求めたときだけ出すためです。属性だけを書くと付きます。プロパティは `seaNames` です。水の名前は文字のあいだを空けて書きます。都市の名前が先に置かれ、1つしか入らない場所は都市が使います。止まっているあいだは描き直しません。
+
+```ts
+import { SEA_RADIUS, seaNamesFor } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+console.log(seaNamesFor(120).some((one) => one.id === "pacific-ocean"));
+console.log(seaNamesFor(120).some((one) => one.id === "sea-of-japan"));
+console.log(SEA_RADIUS);
+```

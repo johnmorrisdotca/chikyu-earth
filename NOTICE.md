@@ -8,7 +8,9 @@ The country boundaries are **Natural Earth** (https://www.naturalearthdata.com),
 admin-0 countries, which Natural Earth places in the **public domain**
 (https://www.naturalearthdata.com/about/terms-of-use/). They reach this package through **chizu**
 (https://github.com/johnmorrisdotca/chizu, MIT, by John Morris), whose `world-geo` entry
-(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime. The demo's passes page draws its small world map
+(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime.
+
+The names of oceans, seas, gulfs, bays and continents (`src/sea-names/`) use the same Natural Earth terms, read 2026-11-13 at https://www.naturalearthdata.com/about/terms-of-use/: "All versions of Natural Earth raster + vector map data found on this website are in the public domain. You may use the maps in any manner, including modifying the content and design, electronic dissemination, and offset printing." The label point for each name is this package's own: the sample inside the published 1:110m geography shape that sits nearest that shape's centre. The shapes themselves are not in this package. The English and Japanese names are the names published with those shapes (the Japanese names are also credited by Natural Earth to Wikidata, CC0). A few Japanese names are waiting on a review: `オーストラリア大陸`, `南アメリカ`, `北アメリカ`, `南極大陸`, `珊瑚海`. The demo's passes page draws its small world map
 from a simplified copy of the same outlines (each ring thinned in the browser to within half a map unit, about half the points): a derived drawing of the same public-domain data.
 
 ## Borders
@@ -31,6 +33,12 @@ The grid (`grid`, `src/grid/`) is drawn from numbers alone: meridians and parall
 Each outline's English name, Japanese name and country code come from **chizu**'s `world-geo`, whose names are
 **kuni**'s (https://github.com/johnmorrisdotca/kuni, also by John Morris) and Unicode CLDR's
 (https://www.unicode.org/license.txt) and Wikidata's (CC0). chizu's own NOTICE.md has the terms.
+
+## City names for the "you are here" marker
+
+The names `here-city` puts on a `here` marker (the capitals, the cities of a million, those of 100,000 and the smaller towns of one or two countries, `src/markers/here-city.ts`) are read at run time from **kuni**'s
+`/cities` (https://github.com/johnmorrisdotca/kuni, MIT, also by John Morris), which builds them from Wikidata's structured data (CC0, https://www.wikidata.org/wiki/Wikidata:Licensing) and Natural Earth's populated
+places (public domain); kuni's own NOTICE.md has the terms and the dates they were read. This package adds no source of its own and stores no city. Read 2026-11-13.
 
 ## The realistic Earth's pictures
 
@@ -91,6 +99,8 @@ Starlink satellite kept (2,231 of 11,155), within the same usage policy, credite
 (about 17:07 UTC), within CelesTrak's usage policy (https://celestrak.org/usage-policy.php, read 2026-11-02: one download per update per list, nothing fetched at a visitor's request), with every fifth Starlink satellite
 kept (2,232 of 11,156), as numbers only. CelesTrak states no licence or credit rule for the data; it is credited on the demo page, and the demo shows the age of the elements. The tier is "grey" in John's
 terms: a snapshot with credit, never a live fetch. The catalogue (`src/satellites/catalogue.ts`) holds names, NORAD numbers and orbit kinds, which are facts, and lines written for this package in its own words (English and Japanese); nothing is copied from NASA, ESA, Wikipedia or any other page. docs/satellite-sources.md has every source's terms, read 2026-11-03.
+
+The other names a catalogue row lists (`aka` on `catalogueRows`) are taken from this package's own catalogue and short names (`src/satellites/names.ts`), read 2026-11-13. Where a short name is shown (Hubble, the ISS, Tiangong), the catalogue's own name is the other name (HST, ISS (ZARYA), CSS (TIANHE)). A designation written in parentheses in that name is listed too (ZARYA, TIANHE, JPSS-1, JPSS-2, GLAST, MTG-I1, AO-7, AO-73, SO-50, AO-85). Nothing was added from any other list. A satellite with no short Japanese name uses its English name in Japanese as well: Sentinel-2A is written the same way. The hiragana readings on those rows are this package's own readings of the Japanese words already in the catalogue, for a search box, read 2026-11-13.
 
 The same build may take a group's element sets from **Space-Track.org** (https://www.space-track.org, U.S. Space Command) when CelesTrak has left the group more than 12 hours old, at most once a day, through its API with John Morris's own account (the login is a repository secret, never in a file). The group's file and `manifest.json` say `"source": "spacetrack"` and the demo says so under the globe. The citation is **"Data from Space-Track.org (USSPACECOM)"**. Terms: the documentation page https://www.space-track.org/documentation, section "Redistribution of Basic SSA Information", read 2026-11-08: "USSPACECOM has provided express blanket approval for transfer/redistribution of basic SSA data and services accessed via www.Space-Track.org conditioned on appropriate citation." Basic SSA data are "Two-Line Elements (TLEs) and Orbital Mean-element Messages (OMMs); SATCAT; and Satellite Decay and Reentry Data." (The page needs a browser; the section was read through a page-reading tool, which returned each sentence in quoted pieces. TODO: John or a browser check of the section's wording.) The page gives no citation form, so this sentence is the package's own. The package ships none of these element sets.
 

@@ -4,6 +4,7 @@
 import { canvasSize, COUNT_SCRIPT, gpuObjects, readCounts, withinPixelBudget } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
 import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
+import { SEA_RADIUS } from "../src/sea-names/geometry.ts";
 import { MOON_KEEP_MS } from "../src/space/scene.ts";
 import { untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
@@ -106,9 +107,9 @@ for (const look of LOOKS) {
         const turning = await bounded(page, 3000, look);
         expect(turning.callbacks).toBeGreaterThan(5);
         expect(turning.frames, "frames drawn").toBeLessThanOrEqual(turning.callbacks + 3);
-        // above the ISS the demo's stand-in model is drawn beside the scene (a draw call for each mesh it is made of, as the scene says), and nothing else is allowed more
-        const parts = look === "above" ? await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: { parts: number } | null }).followModel?.parts ?? 0) : 0;
-        if (look === "above") expect(parts, "the model is drawn").toBeGreaterThan(0);
+        // above the ISS, and riding it (outside by default), the demo's stand-in model is drawn beside the scene (a draw call for each mesh it is made of, as the scene says), and nothing else is allowed more
+        const parts = look === "above" || look === "ride" ? await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: { parts: number } | null }).followModel?.parts ?? 0) : 0;
+        if (look === "above" || look === "ride") expect(parts, "the model is drawn").toBeGreaterThan(0);
         expect(turning.draws, "GL draw calls for each frame drawn").toBeLessThanOrEqual(Math.max(1, turning.frames) * (40 + parts));
         expect(turning.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(turning.callbacks + 3);
         expect(turning.outstanding, "one request waiting at a time").toBeLessThanOrEqual(3);
@@ -210,6 +211,8 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   await expect(page.locator("chikyu-earth svg")).toBeVisible();
   const look = (name: string) => page.getByRole("button", { name, exact: true }).click();
   const settled: number[] = [];
+  // what a round rides: the ISS in the even rounds, the Moon in the odd
+  const ridden = (round: number): "ISS" | "Moon" => (round % 2 === 0 ? "ISS" : "Moon");
   for (let round = 0; round < 6; round += 1) {
     await look("Realistic");
     await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 60_000 });
@@ -226,7 +229,7 @@ test("changing the look over and over gives back what it took: GPU objects stay 
     // Earth large and held 8 fewer (106 against 114), so a round's count depended on whether the page or the click came first.
     await atRest(page);
     // the camera on the ISS and off it again, as a reader would
-    await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: round % 2 === 0 ? "ISS" : "Moon", exact: true }).dispatchEvent("click");
+    await page.getByRole("group", { name: "Ride along" }).getByRole("button", { name: ridden(round), exact: true }).dispatchEvent("click");
     // the satellites are drawn at least once (their buffers are made by the first draw), and what the last place needed is let go, before the objects are counted
     await atRest(page);
     const counted = await readCounts(page);
@@ -235,7 +238,12 @@ test("changing the look over and over gives back what it took: GPU objects stay 
   }
   console.log(`live GPU objects after each round: ${settled.join(", ")}`);
   // The first round only warms the page up (the first shaders and the satellites' first draw come after the first count in software drawing), so the baseline is the second.
-  expect(Math.max(...settled.slice(1)), "no more GPU objects after six rounds than after the second, give or take three.js's own fixtures").toBeLessThanOrEqual(settled[1]! + 8);
+  // A round on the ISS holds the satellite's model (a ride is outside by default, MODULES-1236: the demo's stand-in is made of 16 meshes) and a round on the Moon holds none, so each is held to the fixed baseline of its own
+  // ride: the first round is a warm-up, round 1 (the Moon) and round 2 (the ISS) are the baselines, and no later round may hold more than its baseline, give or take three.js's own fixtures.
+  const baseline = { ISS: settled[2]!, Moon: settled[1]! };
+  for (let round = 1; round < settled.length; round += 1) {
+    expect(settled[round]!, `round ${round + 1} (${ridden(round)}) holds no more GPU objects than its baseline, give or take three.js's own fixtures`).toBeLessThanOrEqual(baseline[ridden(round)] + 8);
+  }
 
   await look("Thick");
   await expect(page.locator("chikyu-space")).toHaveCount(0);
@@ -604,3 +612,29 @@ test("a thousand places, handed over and taken away over and over: one draw call
   expect(Math.max(...settled.slice(1)), "no more GPU objects after five rounds than after the second").toBeLessThanOrEqual(settled[1]!);
   expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
 });
+
+// Names of oceans, seas and continents (MODULES-1230): off by default they make nothing, and on they are DOM laid out with the frame the view already drew, so a view at rest draws nothing and asks for nothing.
+for (const look of ["realistic", "space"] as const) {
+  test(`the ${look} look names oceans, seas and continents: off it makes nothing, on it leaves nothing drawn at rest`, async ({ page }) => {
+    await open(page, look);
+    const element = page.locator(ELEMENT[look]);
+    const names = () => element.evaluate((el) => (Reflect.get(el, "stats") as { seaNames: { on: boolean; radius: number; names: number; renders: number } }).seaNames);
+    expect(await names(), "off unless asked for").toMatchObject({ on: false, names: 0, renders: 0 });
+    expect(await element.evaluate((el) => el.shadowRoot?.querySelector("#sea-names") !== null), "no box made while off").toBe(false);
+    await element.evaluate((el) => el.setAttribute("sea-names", ""));
+    for (const zoom of [1, 0.8, 0.6, 0.45]) {
+      await element.evaluate((el, z) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: z, panX: 0, panY: 0 }, true), zoom);
+      const { radius } = await names();
+      if (radius > 0 && radius < SEA_RADIUS) break;
+    }
+    await expect.poll(async () => (await names()).names, { timeout: 20_000, message: "a wide view names the oceans and continents" }).toBeGreaterThan(0);
+    await untilStill(page);
+    const rest = await bounded(page, 3000, look);
+    expect(rest.draws, "nothing drawn at rest with the names on").toBe(0);
+    expect(rest.frames).toBe(0);
+    expect(rest.requests).toBeLessThanOrEqual(2);
+    const laidOut = (await names()).renders;
+    await page.waitForTimeout(2000);
+    expect((await names()).renders, "the names are not laid out again at rest").toBe(laidOut);
+  });
+}

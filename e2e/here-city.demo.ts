@@ -63,7 +63,7 @@ for (const [tag, look] of [
     expect(await el.evaluate((node) => (Reflect.get(node, "places") as { label?: string }[])[0]?.label), "places keeps the page's label").toBe("You are here");
 
     await el.evaluate((node) => node.setAttribute("lang", "ja"));
-    await expect.poll(() => shownNames(el)).toContain("東京都");
+    await expect.poll(() => shownNames(el)).toContain("東京");
 
     await untilStill(page);
     const rest = await counts(page);
@@ -83,3 +83,15 @@ for (const [tag, look] of [
     await expect.poll(() => shownNames(el)).toEqual(["You are here"]);
   });
 }
+
+test("a town under 100,000 is named", async ({ page }) => {
+  test.setTimeout(120_000);
+  const el = await open(page, "chikyu-earth-realistic", "realistic");
+  await el.evaluate((node) => {
+    node.setAttribute("center", "132.5606,33.2233");
+    Reflect.set(node, "places", [{ id: "here", lon: 132.5606, lat: 33.2233, label: "You are here", kind: "here" }]);
+    Reflect.set(node, "hereCity", true);
+  });
+  await expect.poll(() => shownNames(el), { timeout: 40_000 }).toContain("Uwajima");
+  expect(await shownNames(el)).not.toContain("Matsuyama");
+});

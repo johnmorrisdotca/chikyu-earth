@@ -1,5 +1,5 @@
 // Loads kuni's cities once, when `here-city` is on and a `here` place is set, and names those places. Nothing is loaded while it is off, and nothing is asked again at rest.
-import { HERE_CITY_TIERS, hereCityLabels, type HereCitySource } from "./here-city.ts";
+import { HERE_CITY_TIERS, chooseHereCity, hereCountries, type HereCitySource, type HereTown } from "./here-city.ts";
 import type { Place } from "./places.ts";
 
 export interface HereCityHost {
@@ -21,6 +21,8 @@ export interface HereCityOptions {
   onError?(error: unknown): void;
   /** The city list. The default is kuni's capitals, cities of a million and cities of 100,000, loaded only when a `here` place asks. */
   load?(): Promise<HereCitySource>;
+  /** One country's cities, every tier. The default is kuni's `citiesOf`, once per country. */
+  towns?(country: string): Promise<readonly HereTown[] | null>;
 }
 
 const defaultLoad = async (): Promise<HereCitySource> => {
@@ -28,18 +30,31 @@ const defaultLoad = async (): Promise<HereCitySource> => {
   return loadCities(...HERE_CITY_TIERS);
 };
 
+const defaultTowns = async (country: string): Promise<readonly HereTown[] | null> => {
+  const { citiesOf } = await import("@johnmorrisdotca/kuni/cities");
+  return citiesOf(country);
+};
+
+const cityText = (name: { en: string; ja?: string; jaShort?: string }, lang: "en" | "ja"): string => {
+  const ja = lang === "ja" ? (name.jaShort || name.ja) : undefined;
+  return ja || name.en;
+};
+
 /**
  * The namer for one element. `load` runs at most once, and only after `setLimit` is a number and `named` is given a `here` place.
  */
 export function createHereCity(options: HereCityOptions): HereCityHost {
   const load = options.load ?? defaultLoad;
+  const townsOf = options.towns ?? defaultTowns;
   let limit: false | number = false;
   let source: HereCitySource | null = null;
   let loading = false;
+  const townCache = new Map<string, readonly HereTown[]>();
+  const townWait = new Map<string, Promise<void>>();
   let failed = false;
   let gone = false;
   let generation = 0;
-  let cache: { places: readonly Place[]; lang: "en" | "ja"; limit: number; source: HereCitySource; out: readonly Place[] } | undefined;
+  let cache: { places: readonly Place[]; lang: "en" | "ja"; limit: number; source: HereCitySource; towns: number; out: readonly Place[] } | undefined;
 
   const changed = (): void => {
     cache = undefined;
@@ -48,6 +63,32 @@ export function createHereCity(options: HereCityOptions): HereCityHost {
   // The family's language chooser tells the document. The name is worked out again once, and the element draws that change.
   const onLanguage = (): void => queueMicrotask(changed);
   if (typeof document !== "undefined") document.addEventListener("kazoku-languagechange", onLanguage);
+
+  const askTowns = (codes: readonly string[]): void => {
+    let started = false;
+    for (const code of codes) {
+      if (townCache.has(code) || townWait.has(code)) continue;
+      started = true;
+      const job = Promise.resolve()
+        .then(() => townsOf(code))
+        .then(
+          (list) => {
+            if (!townCache.has(code)) townCache.set(code, list ?? []);
+          },
+          (error: unknown) => {
+            if (!townCache.has(code)) townCache.set(code, []);
+            options.onError?.(error);
+          },
+        )
+        .finally(() => {
+          townWait.delete(code);
+        });
+      townWait.set(code, job.then(() => undefined));
+    }
+    if (started) void Promise.all([...townWait.values()]).then(() => {
+      if (!gone) changed();
+    });
+  };
 
   const ensure = (): void => {
     if (loading || source || failed || gone) return;
@@ -92,8 +133,26 @@ export function createHereCity(options: HereCityOptions): HereCityHost {
         return places;
       }
       const lang = options.language();
-      if (cache && cache.places === places && cache.lang === lang && cache.limit === limit && cache.source === source) return cache.out;
-      const hits = new Map(hereCityLabels(places, source, { lang, maxKm: limit }).map((hit) => [hit.index, hit]));
+      const wanted = new Set<string>();
+      for (const place of places) {
+        if (place.kind !== "here") continue;
+        for (const code of hereCountries({ lat: place.lat, lon: place.lon }, source, limit)) wanted.add(code);
+      }
+      askTowns([...wanted]);
+      if ([...wanted].some((code) => !townCache.has(code))) return places;
+      if (cache && cache.places === places && cache.lang === lang && cache.limit === limit && cache.source === source && cache.towns === townCache.size) return cache.out;
+      const hits = new Map<number, { id: string; label: string }>();
+      for (const [index, place] of places.entries()) {
+        if (place.kind !== "here") continue;
+        const point = { lat: place.lat, lon: place.lon };
+        const codes = hereCountries(point, source, limit);
+        const towns = codes.flatMap((code) => townCache.get(code) ?? []);
+        const chosen = chooseHereCity(point, source.nearest(point, { maxKm: limit }), towns, limit);
+        if (!chosen) continue;
+        const label = cityText(chosen.name, lang).trim().slice(0, 80);
+        if (!label) continue;
+        hits.set(index, { id: chosen.id, label });
+      }
       let changed = false;
       const out = places.map((place, index) => {
         const hit = hits.get(index);
@@ -102,14 +161,14 @@ export function createHereCity(options: HereCityOptions): HereCityHost {
         return { ...place, label: hit.label };
       });
       const labelled = changed ? out : places;
-      cache = { places, lang, limit, source, out: labelled };
+      cache = { places, lang, limit, source, towns: townCache.size, out: labelled };
       return labelled;
     },
     refresh() {
       changed();
     },
     get stats() {
-      return { on: limit !== false, maxKm: limit === false ? 0 : limit, loaded: source !== null, pending: loading };
+      return { on: limit !== false, maxKm: limit === false ? 0 : limit, loaded: source !== null, pending: loading || townWait.size > 0 };
     },
     dispose() {
       gone = true;

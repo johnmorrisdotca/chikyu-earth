@@ -1,5 +1,6 @@
 // A small curated catalogue of satellites worth following: the groups the demo offers as buttons and the famous ones by name. Facts (names, NORAD numbers, orbit types) and our own words;
 // no orbital elements are here, and nothing is fetched. The elements come from the page (see docs/satellite-sources.md for the sources and their terms).
+import { SHORT_NAMES } from "./names.ts";
 
 /**
  * What kind of orbit a satellite or a group is in: `leo` (low, below 2,000 km), `meo` (medium, up to about 35,000 km: the navigation satellites), `geo` (about 35,786 km up, where a satellite goes round once
@@ -271,7 +272,117 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
 const squash = (text: string): string => text.toUpperCase().replace(/[^A-Z0-9]+/g, "");
 
 /**
- * Find catalogue entries by name, group name or NORAD number: "hubble", "hst", "25544" or "weather". Matching ignores case, spaces and punctuation, and a name that starts with the text comes before one that only has it inside.
+ * Hiragana readings of the Japanese names already in this catalogue, for a page that indexes by sound.
+ * A name that is already kana or Latin has none. These are this package's own readings (NOTICE.md).
+ */
+const READINGS: Readonly<Record<string, string>> = {
+  宇宙ステーション: "うちゅうステーション",
+  有名な衛星: "ゆうめいなえいせい",
+  科学衛星: "かがくえいせい",
+  地球観測: "ちきゅうかんそく",
+  気象衛星: "きしょうえいせい",
+  静止衛星: "せいしえいせい",
+  北斗: "ほくと",
+  アマチュア無線: "あまちゅあむせん",
+  天宮: "てんぐう",
+};
+
+const GROUPS_BY_ID = new Map(SATELLITE_GROUPS.map((group) => [group.id, group]));
+
+/** English and Japanese names. The reading is present only when it adds kana for a name that is not already kana. */
+function rowNames(en: string, ja: string): { en: string; ja: string; reading?: string } {
+  const reading = READINGS[ja];
+  return reading !== undefined && reading !== ja ? { en, ja, reading } : { en, ja };
+}
+
+/**
+ * Other names already written on the catalogue entry: the catalogue's own name when a short name is shown instead, and a designation written in parentheses.
+ * Nothing is added that is not in that name. See NOTICE.md.
+ */
+function akaOf(entry: CatalogueEntry): string[] | undefined {
+  const short = SHORT_NAMES[entry.noradId];
+  const en = short?.en ?? entry.name;
+  const ja = short?.ja ?? en;
+  const extras: string[] = [];
+  const add = (name: string): void => {
+    const trimmed = name.trim();
+    if (trimmed === "" || trimmed === en || trimmed === ja || extras.includes(trimmed)) return;
+    extras.push(trimmed);
+  };
+  if (short) add(entry.name);
+  const paren = /\(([^)]+)\)/.exec(entry.name);
+  if (paren?.[1]) add(paren[1]);
+  return extras.length > 0 ? extras : undefined;
+}
+
+/**
+ * One plain row a page can index, for its own search box. No DOM: a group or a satellite, with both languages on every row.
+ *
+ * @example
+ * ```ts
+ * import type { CatalogueRow } from "@johnmorrisdotca/chikyu-earth/satellites";
+ *
+ * const row: CatalogueRow = { kind: "group", id: "weather", names: { en: "Weather", ja: "気象衛星" }, orbit: "mixed" };
+ * console.log(row.names.ja);
+ * ```
+ */
+export interface CatalogueRow {
+  /** `group` for a button's group, `satellite` for one named satellite. */
+  kind: "satellite" | "group";
+  /** The group's id, or the satellite's NORAD number as a string. */
+  id: string;
+  /** The NORAD catalogue number. Only a satellite has one. */
+  noradId?: number;
+  /**
+   * Names in both languages. `ja` is the short Japanese name where {@link SHORT_NAMES} has one, and otherwise the English name:
+   * a name such as Sentinel-2A is written the same way in Japanese. `reading` is hiragana for a Japanese name that is not already kana.
+   */
+  names: { en: string; ja: string; reading?: string };
+  /** The group's id. Only a satellite has one. */
+  group?: string;
+  orbit: OrbitKind;
+  /** Other names already written in the catalogue, such as HST for Hubble. Absent when there are none. */
+  aka?: readonly string[];
+}
+
+/**
+ * Plain rows for every group and every catalogue satellite, for a page to index. Both languages are on every row: `lang` says which language the page is showing and does not drop the other, so one index serves either.
+ * A satellite's Japanese name comes from {@link SHORT_NAMES} where that has one, and is otherwise the English name.
+ *
+ * @param lang - `en` or `ja`, the language the page is showing. Omit it for the same rows.
+ * @returns The groups in their own order, then the satellites in catalogue order.
+ * @example
+ * ```ts
+ * import { catalogueRows } from "@johnmorrisdotca/chikyu-earth/satellites";
+ *
+ * const hubble = catalogueRows("ja").find((row) => row.noradId === 20580);
+ * console.log(hubble?.names.ja, hubble?.aka?.join(", "));
+ * ```
+ */
+export function catalogueRows(lang?: "en" | "ja"): CatalogueRow[] {
+  if (lang !== undefined && lang !== "en" && lang !== "ja") throw new TypeError("catalogueRows lang is en or ja");
+  const groups: CatalogueRow[] = SATELLITE_GROUPS.map((group) => ({
+    kind: "group",
+    id: group.id,
+    names: rowNames(group.label, group.labelJa),
+    orbit: group.orbit,
+  }));
+  const satellites: CatalogueRow[] = CATALOGUE.map((entry) => {
+    const short = SHORT_NAMES[entry.noradId];
+    const en = short?.en ?? entry.name;
+    const ja = short?.ja ?? en;
+    const aka = akaOf(entry);
+    const row: CatalogueRow = { kind: "satellite", id: String(entry.noradId), noradId: entry.noradId, names: rowNames(en, ja), group: entry.group, orbit: entry.orbit };
+    if (aka) row.aka = aka;
+    return row;
+  });
+  return [...groups, ...satellites];
+}
+
+/**
+ * Find catalogue entries by name, group name, NORAD number, Japanese name or a group's Japanese label: "hubble", "hst", "25544", "weather" or "ハッブル".
+ * An English or numeric query ignores case, spaces and punctuation, as before. Kana and kanji are matched as typed: only letter case and character width are folded (NFKC), and that same width fold is applied before the English comparison.
+ * A name that starts with the text comes before one that only has it inside.
  *
  * @param text - What the reader typed.
  * @param limit - The most entries to give back (8 by default).
@@ -281,17 +392,27 @@ const squash = (text: string): string => text.toUpperCase().replace(/[^A-Z0-9]+/
  * import { findInCatalogue } from "@johnmorrisdotca/chikyu-earth/satellites";
  *
  * console.log(findInCatalogue("sentinel 2").map((entry) => entry.name));
+ * console.log(findInCatalogue("ハッブル").map((entry) => entry.name));
  * ```
  */
 export function findInCatalogue(text: string, limit = 8): CatalogueEntry[] {
-  const wanted = squash(text);
-  if (!wanted) return [];
+  const source = text.normalize("NFKC");
+  const wanted = squash(source);
+  const folded = source.toLowerCase().trim();
+  const japanese = /[぀-ヿ一-鿿]/.test(source);
+  if (!wanted && !japanese) return [];
   const starts: CatalogueEntry[] = [];
   const inside: CatalogueEntry[] = [];
   for (const entry of CATALOGUE) {
     const name = squash(entry.name);
-    if (String(entry.noradId) === wanted || name.startsWith(wanted)) starts.push(entry);
-    else if (name.includes(wanted) || squash(entry.group).includes(wanted) || squash(entry.about).includes(wanted)) inside.push(entry);
+    const englishStart = wanted !== "" && (String(entry.noradId) === wanted || name.startsWith(wanted));
+    const englishInside = wanted !== "" && (name.includes(wanted) || squash(entry.group).includes(wanted) || squash(entry.about).includes(wanted));
+    const jaName = japanese ? (SHORT_NAMES[entry.noradId]?.ja ?? entry.name).normalize("NFKC").toLowerCase() : "";
+    const labelJa = japanese ? (GROUPS_BY_ID.get(entry.group)?.labelJa ?? "").normalize("NFKC").toLowerCase() : "";
+    const jaStart = japanese && folded !== "" && jaName.startsWith(folded);
+    const jaInside = japanese && folded !== "" && (jaName.includes(folded) || labelJa.includes(folded));
+    if (englishStart || jaStart) starts.push(entry);
+    else if (englishInside || jaInside) inside.push(entry);
   }
   return [...starts, ...inside].slice(0, limit);
 }

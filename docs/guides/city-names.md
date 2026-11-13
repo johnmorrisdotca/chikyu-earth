@@ -27,3 +27,15 @@ The names are the most populous first, with a capital of a country counted for 2
 - **Not installed.** Without kuni (version 1.6.1 or later) `chikyu-city-names-unavailable` is sent with the reason, and no name is drawn.
 
 The pure parts need no browser: `layoutCities`, `cityTiersFor`, `cityRank`, `cityNameText` and `readCityNames` in `@johnmorrisdotca/chikyu-earth/realistic` lay the names out for any view that can say where a place falls on the screen.
+
+## Oceans, seas and continents
+
+`sea-names` on `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` names the oceans and the continents while the Earth is small on the screen, and the seas, gulfs and bays once its radius is at least 280 pixels. It is off unless set, because a name on open water is a mark a page should ask for. A bare attribute is on. The property is `seaNames`. Water is written with space between the letters. A city name is placed first and keeps the space where only one name fits. Nothing is drawn at rest.
+
+```ts
+import { SEA_RADIUS, seaNamesFor } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+console.log(seaNamesFor(120).some((one) => one.id === "pacific-ocean"));
+console.log(seaNamesFor(120).some((one) => one.id === "sea-of-japan"));
+console.log(SEA_RADIUS);
+```

@@ -40,6 +40,8 @@ import { applyRoute } from "../route/layer.ts";
 import type { GridStats } from "../grid/layer.ts";
 import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/geometry.ts";
 import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
+import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
+import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
 import { createGate, frameCap, type Gate } from "./gate.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
@@ -65,7 +67,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + SEA_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -198,7 +200,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -234,6 +236,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #citiesStyle: CityNamesStyle = {};
   /** The names of the countries on the Earth (`country-names`), and the look of the names. */
   #countries: CountryHost | undefined;
+  #seas: SeaHost | undefined;
   #countriesStyle: CountryNamesStyle = {};
   #listeners = new Set<(pose: OverlayPose) => void>();
   #placeLayer: PlaceLayer | undefined;
@@ -323,6 +326,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-country-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
     });
     this.#countries.setStyle(this.#countriesStyle);
+    this.#seas = createSeaHost({
+      root,
+      attribute: (name) => this.getAttribute(name),
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+    });
     this.#played = false;
     this.#model.meteors.on = this.#meteorsAsked();
     this.#model.meteors.strength = readMeteorStrength(this.getAttribute("meteors-strength"));
@@ -448,6 +456,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#cities = undefined;
     this.#countries?.dispose();
     this.#countries = undefined;
+    this.#seas?.dispose();
+    this.#seas = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -480,6 +490,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#applyBodyLabel();
         this.#sky?.refresh();
         this.#cities?.refresh();
+        this.#seas?.refresh();
         this.#countries?.refresh();
         this.#here?.refresh();
       }
@@ -501,6 +512,11 @@ export class ChikyuEarthRealistic extends HTMLElement {
       if (applyRoute(this.#model.route, readRoute(value))) this.#gate?.soon();
     }
     else if ((CITY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#cities?.refresh();
+    else if ((SEA_NAMES_ATTRIBUTES as readonly string[]).includes(name)) {
+      this.#seas?.refresh();
+      this.#seaFrame();
+      this.#countryFrame();
+    }
     else if (name === "borders") {
       Object.assign(this.#model.borders, readBorders(value));
       this.#gate?.soon();
@@ -813,6 +829,27 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
+   * Names of oceans, seas and continents (the attribute `sea-names`). Off unless set: a bare attribute is on. Oceans and continents from far out, seas once the Earth is large on the screen. A city name keeps the space where both fit only one. Nothing is drawn again at rest.
+   *
+   * @example
+   * ```ts no-run
+   * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+   *
+   * const earth = document.querySelector("chikyu-earth-realistic") as ChikyuEarthRealistic;
+   * earth.seaNames = true;
+   * console.log(earth.seaNames);
+   * earth.seaNames = false;
+   * ```
+   */
+  get seaNames(): boolean {
+    return readSeaNames(this.getAttribute("sea-names"));
+  }
+  set seaNames(value: boolean) {
+    if (value) this.setAttribute("sea-names", "");
+    else this.removeAttribute("sea-names");
+  }
+
+  /**
    * Which borders are drawn (the attribute `borders`): the countries' at any size, and the regions' (provinces, states, prefectures) once the Earth is large enough on the screen to tell them apart.
    * Setting it writes the attribute: both sets as `borders="countries regions"`, one as its own word, none takes the attribute away.
    */
@@ -863,6 +900,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
    */
   #relayNames(cities: boolean, sky: boolean): void {
     if (cities && this.#nameFrame) this.#cities?.frame(this.#nameFrame, this.#boxesBeforeCities());
+    this.#seaFrame();
     this.#countryFrame();
     if (sky) this.#sky?.relayout();
   }
@@ -884,18 +922,25 @@ export class ChikyuEarthRealistic extends HTMLElement {
     out.length = 0;
     out.push(...(this.#placeLayer?.boxes ?? []));
     for (const boxes of this.#claims.values()) out.push(...boxes);
-    out.push(...(this.#cities?.boxes ?? []));
+    out.push(...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? []));
     return out;
   }
 
   /** The frame the names were last laid out on. */
   #nameFrame: CountryFrame | null = null;
 
-  /** Lays the countries' names out on the last frame, clear of the places' and the cities' names as they are now. */
+  /** Lays the ocean, sea and continent names out on the last frame, clear of the places' and the cities' names. A city that was placed first keeps the space. */
+  #seaFrame(): void {
+    const seas = this.#seas;
+    if (!seas || !this.#nameFrame) return;
+    seas.frame(this.#nameFrame, seas.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...[...this.#claims.values()].flat()] : []);
+  }
+
+  /** Lays the countries' names out on the last frame, clear of the places', the cities' and the sea names as they are now. */
   #countryFrame(): void {
     const countries = this.#countries;
     if (!countries || !this.#nameFrame) return;
-    countries.frame(this.#nameFrame, countries.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...[...this.#claims.values()].flat()] : []);
+    countries.frame(this.#nameFrame, countries.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? []), ...[...this.#claims.values()].flat()] : []);
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
@@ -1127,6 +1172,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     route: { on: boolean; kilometres: number; greatCircleKm: number; flightHours: number };
     /** The names of countries: whether `country-names` is set and the most it asks for, the countries loaded, the names shown at the last draw, how many times they were laid out, and whether the outlines could not be loaded. */
     countryNames: CountryNamesStats;
+    /** The names of oceans, seas and continents: whether `sea-names` is on, the Earth's radius on the screen, the names shown at the last draw, and how many times the layer was laid out. */
+    seaNames: SeaNamesStats;
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -1148,6 +1195,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       grid: { ...this.#model.grid.stats },
       route: { ...this.#model.route.stats },
       countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
+      seaNames: this.#seas?.stats ?? { on: false, radius: 0, names: 0, renders: 0 },
     };
   }
 
