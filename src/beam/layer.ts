@@ -19,7 +19,7 @@ const DISC_RINGS = 6;
  *
  * @example
  * ```ts no-run
- * import type { BeamStats } from "@johnmorrisdotca/chikyu-earth/space/element";
+ * import type { BeamStats } from "@johnmorrisdotca/chikyu-earth/space";
  *
  * const none: BeamStats = { shown: false, heightKm: 0, radiusKm: 0, angleDegrees: 0, elevation: 25, cells: 0, cellRadiusKm: 0, builds: 0, failed: false };
  * console.log(none);
