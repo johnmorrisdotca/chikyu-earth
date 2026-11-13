@@ -145,6 +145,11 @@ test("at the Low level a crowd of dots hides a path under the default and does n
   expect(told.ref).toEqual({ group: "stations", index: 2 });
   await untilStill(page);
 
+  // the press moved the pointer onto the path, so it was already told of it: go away, and come again
+  await page.mouse.move(box.x + 4, box.y + 4);
+  await page.evaluate(async () => {
+    for (let frame = 0; frame < 4; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
   await clearLog(page);
   await page.mouse.move(box.x + crowd.x + 1, box.y + crowd.y);
   await expect.poll(async () => (await logOf(page)).some((entry) => entry.type === "chikyu-path-hover" && entry.detail !== null), { timeout: 20_000 }).toBe(true);
