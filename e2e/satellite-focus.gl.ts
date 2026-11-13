@@ -151,7 +151,11 @@ test("a group the page hid is drawn, and kept moving, while it is the one in foc
   await page.goto(`/chikyu-earth/?look=space&center=-100,40&sats=gps&speed=1`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
   await expect.poll(async () => (await read(page)).groups.length, { timeout: 20_000 }).toBe(1);
-  await page.locator(SPACE).evaluate((el) => (el as unknown as { showSatellites(name: string, on: boolean): void }).showSatellites("gps", false));
+  await page.locator(SPACE).evaluate((el) => {
+    // time runs at the real rate: with no satellite on show it is drawn once a minute, with one on show about once a second
+    (el as unknown as { speed: number }).speed = 1;
+    (el as unknown as { showSatellites(name: string, on: boolean): void }).showSatellites("gps", false);
+  });
   await expect.poll(async () => (await read(page)).groups[0]?.placed).toBe(0);
   await page.locator(SPACE).evaluate((el) => (el as unknown as { focusSatelliteGroup(name: string): unknown }).focusSatelliteGroup("gps"));
   await expect.poll(async () => (await read(page)).groups[0]?.placed, { timeout: 20_000 }).toBeGreaterThan(0);
