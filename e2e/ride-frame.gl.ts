@@ -83,17 +83,19 @@ test("a change is one draw and then rest, and the zoom narrows the ground: more 
   await rideAlong(page);
   await step(page);
   const draws = async (): Promise<number> => (await statsOf(page)).draws;
-  let last = Infinity;
-  for (const zoom of [2, 4, 8, 16, 40]) {
+  // warm-up: the closest zoom first, so the pictures it asks for have arrived; the steps below only ask for smaller ones, so each change is the one draw it makes and not the arrivals a closer view waits for
+  const closest = await change(page, (el, z) => Reflect.set(el, "rideZoom", z), 40);
+  let last = closest.ride.groundKm!.tall;
+  expect(closest.camera.fov, "the field of view is 60 over the zoom").toBeCloseTo(60 / 40, 3);
+  for (const zoom of [16, 8, 4, 2, 1]) {
     const before = await draws();
     await page.locator(SPACE).evaluate((el, z) => Reflect.set(el, "rideZoom", z), zoom);
     await expect.poll(draws, { timeout: 30_000, message: "a draw after the change" }).toBeGreaterThan(before);
-    // the change itself is one draw (two with the gate's second); the pictures a closer view asks for arrive after it, each a draw of its own, and are waited for before the ground is read
     expect((await draws()) - before, `zoom ${zoom}: the change is one draw (or two with the gate's second)`).toBeLessThanOrEqual(2);
     await untilStill(page);
     const s = await statsOf(page);
     const tall = s.ride.groundKm!.tall;
-    expect(tall, `zoom ${zoom}: the ground spanned is smaller`).toBeLessThan(last);
+    expect(tall, `zoom ${zoom}: less zoom, more ground`).toBeGreaterThan(last);
     last = tall;
     expect(s.camera.fov, `zoom ${zoom}: the field of view is 60 over it`).toBeCloseTo(60 / zoom, 3);
     // at rest: nothing more is drawn
@@ -103,9 +105,9 @@ test("a change is one draw and then rest, and the zoom narrows the ground: more 
     });
     expect(await draws(), `zoom ${zoom}: nothing is drawn at rest`).toBe(rest);
   }
-  const wide = (await change(page, (el, z) => Reflect.set(el, "rideZoom", z), 1)).ride.groundKm!;
+  const wide = (await statsOf(page)).ride.groundKm!;
   expect(wide.across / wide.tall, "across over tall is the picture's aspect").toBeGreaterThan(1);
-  expect(last, "at 40 times the ground is a few kilometres: a tile level's size").toBeLessThan(wide.tall / 30);
+  expect(closest.ride.groundKm!.tall, "at 40 times the ground is a few kilometres: a tile level's size").toBeLessThan(wide.tall / 30);
 });
 
 test.describe("gliding", () => {
