@@ -86,6 +86,8 @@ export function createRouteLayer(three: ThreeParts, parent: THREE.Object3D, stat
         line.visible = false;
         return;
       }
+      // let the renderer free the buffer of the line it had, so changing the route leaves the GPU objects as they were
+      geometry.dispose();
       geometry.setAttribute("position", new three.BufferAttribute(positions, 3));
       geometry.computeBoundingSphere();
       line.visible = true;
