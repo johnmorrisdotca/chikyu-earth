@@ -8,7 +8,9 @@ The country boundaries are **Natural Earth** (https://www.naturalearthdata.com),
 admin-0 countries, which Natural Earth places in the **public domain**
 (https://www.naturalearthdata.com/about/terms-of-use/). They reach this package through **chizu**
 (https://github.com/johnmorrisdotca/chizu, MIT, by John Morris), whose `world-geo` entry
-(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime. The demo's passes page draws its small world map
+(`@johnmorrisdotca/chizu/world-geo`) holds them as longitude and latitude; nothing is fetched at runtime.
+
+The names of oceans, seas, gulfs, bays and continents (`src/sea-names/`) use the same Natural Earth terms, read 2026-11-13 at https://www.naturalearthdata.com/about/terms-of-use/: "All versions of Natural Earth raster + vector map data found on this website are in the public domain. You may use the maps in any manner, including modifying the content and design, electronic dissemination, and offset printing." The label point for each name is this package's own: the sample inside the published 1:110m geography shape that sits nearest that shape's centre. The shapes themselves are not in this package. The English and Japanese names are the names published with those shapes (the Japanese names are also credited by Natural Earth to Wikidata, CC0). A few Japanese names are waiting on a review: `オーストラリア大陸`, `南アメリカ`, `北アメリカ`, `南極大陸`, `珊瑚海`. The demo's passes page draws its small world map
 from a simplified copy of the same outlines (each ring thinned in the browser to within half a map unit, about half the points): a derived drawing of the same public-domain data.
 
 ## Borders

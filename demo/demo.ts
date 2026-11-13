@@ -813,6 +813,7 @@ if (flat && controls && stage) {
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("city-names") !== null) element.setAttribute("city-names", address.get("city-names")!);
+      if (address.get("sea-names") !== null) element.setAttribute("sea-names", address.get("sea-names")!);
       if (address.get("borders") === "on") element.setAttribute("borders", "");
       if (address.get("grid") === "on") element.setAttribute("grid", "");
       if (address.get("country-names") === "on") element.setAttribute("country-names", "");
@@ -901,6 +902,7 @@ if (flat && controls && stage) {
       if (address.get("meteors-strength")) element.setAttribute("meteors-strength", address.get("meteors-strength")!);
       if (address.get("air-thickness")) element.setAttribute("air-thickness", address.get("air-thickness")!);
       if (address.get("city-names") !== null) element.setAttribute("city-names", address.get("city-names")!);
+      if (address.get("sea-names") !== null) element.setAttribute("sea-names", address.get("sea-names")!);
       if (address.get("borders") === "on") element.setAttribute("borders", "");
       if (address.get("grid") === "on") element.setAttribute("grid", "");
       if (address.get("country-names") === "on") element.setAttribute("country-names", "");
@@ -1195,6 +1197,16 @@ if (flat && controls && stage) {
     }
     address.set("city-names", on ? "24" : null);
   });
+  const seaNames = document.querySelector<HTMLButtonElement>("#sea-names");
+  seaNames?.addEventListener("click", () => {
+    const on = seaNames.getAttribute("aria-pressed") !== "true";
+    seaNames.setAttribute("aria-pressed", String(on));
+    for (const element of [flat, real, space]) {
+      if (on) element?.setAttribute("sea-names", "");
+      else element?.removeAttribute("sea-names");
+    }
+    address.set("sea-names", on ? "on" : null);
+  });
   // The borders (`borders=on` in the address): chizu's country borders on the realistic Earth and the space view, and the regions' where the page has them; off by default.
   const borders = document.querySelector<HTMLButtonElement>("#borders");
   borders?.addEventListener("click", () => {
@@ -1411,6 +1423,10 @@ if (flat && controls && stage) {
   if (opened["meteors-strength"] !== undefined) markStrength(readMeteorStrength(opened["meteors-strength"]));
   if (opened["air-thickness"] === "1") airTrue?.setAttribute("aria-pressed", "true");
   if (opened["city-names"] !== undefined) cityNames?.setAttribute("aria-pressed", "true");
+  if (opened["sea-names"] !== null && opened["sea-names"] !== undefined) {
+    flat.setAttribute("sea-names", opened["sea-names"]);
+    document.querySelector("#sea-names")?.setAttribute("aria-pressed", "true");
+  }
   if (opened["borders"] === "on") borders?.setAttribute("aria-pressed", "true");
   if (opened["grid"] === "on") document.querySelector("#grid")?.setAttribute("aria-pressed", "true");
   if (opened["country-names"] === "on") document.querySelector("#country-names")?.setAttribute("aria-pressed", "true");

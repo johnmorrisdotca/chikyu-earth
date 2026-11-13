@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Names of oceans, seas and continents** (MODULES-1230). `sea-names` on `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` (off by default; the property `seaNames`) names the oceans and the continents while the Earth is small on the screen, and the seas, gulfs and bays once its radius is at least 280 pixels (`SEA_RADIUS`). Water is written with space between the letters. A city name is placed first and keeps the space where only one name fits. Nothing is drawn again at rest. `seaNamesFor` and `layoutSeaNames` are in `@johnmorrisdotca/chikyu-earth/realistic`.
+
 ## 0.42.0 - 2026-11-13
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.
