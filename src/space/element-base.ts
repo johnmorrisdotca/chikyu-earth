@@ -993,7 +993,7 @@ export class ChikyuSpace extends HTMLElement {
   /** Lays the places on the picture just drawn, clear of the bodies' names shown beside it. */
   #drawPlaces(view: PlaceView): void {
     const layer = this.#placeLayer;
-    if (!layer || (this.#placeList.length === 0 && this.#marks.length === 0 && layer.stats.shown === 0 && layer.stats.rings === 0)) return;
+    if (!layer || (this.#placeList.length === 0 && this.#marks.length === 0 && layer.stats.shown === 0 && layer.stats.rings === 0 && layer.stats.satelliteNames === 0)) return;
     layer.frame(view, this.#bodyNameBoxes(), this.#marks, this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
     this.#notePlacesLost();
   }
