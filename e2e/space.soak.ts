@@ -5,9 +5,9 @@ import { COUNT_SCRIPT, alive, counts, settle } from "./gl.ts";
 import { listPrograms, PROGRAMS_SCRIPT } from "./programs.ts";
 import { routeElements } from "./recorded.ts";
 
-const MINUTES = Number(process.env.SOAK_MINUTES ?? 1);
+const MINUTES = Number(process.env.SOAK_MINUTES ?? 10);
 // With SOAK_THROTTLE set the browser's CPU is slowed by that factor, for the repeats under load.
-const THROTTLE = Number(process.env.SOAK_THROTTLE ?? 4);
+const THROTTLE = Number(process.env.SOAK_THROTTLE ?? 0);
 // A reader who asked for reduced motion gets one step a second; the soak is for everyone else, at the full 30 frames a second.
 test.use({ reducedMotion: "no-preference" });
 test.beforeEach(({ page }) => routeElements(page));
