@@ -863,6 +863,8 @@ if (flat && controls && stage) {
       // the clock runs only while Play is on; a held space view draws nothing
       element.setAttribute("speed", clock.play ? String(clock.speed) : "0");
       if (address.get("meteors") === "on") element.setAttribute("meteors", "");
+      if (address.get("beam") === "on") element.setAttribute("beam", "selected");
+      if (address.get("beam-cells")) element.setAttribute("beam-cells", address.get("beam-cells")!);
       if (address.get("star-names")) element.setAttribute("star-names", address.get("star-names")!);
       if (address.get("constellation-lines")) element.setAttribute("constellation-lines", address.get("constellation-lines")!);
       for (const name of ["constellation-names", "constellation-culture"] as const) if (address.get(name) !== null) element.setAttribute(name, address.get(name)!);
@@ -1179,6 +1181,38 @@ if (flat && controls && stage) {
     if (space) space.meteors = on;
     address.set("meteors", on ? "on" : null);
   });
+
+  // The beam from the chosen satellite to the ground (`beam=on` in the address, with `beam-cells`): the space view draws it for the satellite marked or ridden.
+  const beam = document.querySelector<HTMLButtonElement>("#beam");
+  const cellButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-beam-cells]")];
+  const markCells = (value: number): void => {
+    for (const b of cellButtons) b.classList.toggle("on", Number(b.dataset["beamCells"]) === value);
+  };
+  const applyBeam = (): void => {
+    if (!space) return;
+    const on = beam?.getAttribute("aria-pressed") === "true";
+    if (on) space.setAttribute("beam", "selected");
+    else space.removeAttribute("beam");
+    const cells = Number(address.get("beam-cells") ?? 0);
+    if (cells > 0) space.setAttribute("beam-cells", String(cells));
+    else space.removeAttribute("beam-cells");
+  };
+  if (address.get("beam") === "on") beam?.setAttribute("aria-pressed", "true");
+  markCells(Number(address.get("beam-cells") ?? 0));
+  beam?.addEventListener("click", () => {
+    const on = beam.getAttribute("aria-pressed") !== "true";
+    beam.setAttribute("aria-pressed", String(on));
+    address.set("beam", on ? "on" : null);
+    applyBeam();
+  });
+  for (const b of cellButtons) {
+    b.addEventListener("click", () => {
+      const value = Number(b.dataset["beamCells"]);
+      markCells(value);
+      address.set("beam-cells", value > 0 ? String(value) : null);
+      applyBeam();
+    });
+  }
 
   // How strongly they are drawn (`meteors-strength` in the address, 0 to 1; the elements' own default, 1, is the whole look and writes nothing).
   const strengthButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-meteor-strength]")];
