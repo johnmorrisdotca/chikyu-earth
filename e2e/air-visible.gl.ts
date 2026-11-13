@@ -1,7 +1,7 @@
 // The air at whole-Earth zoom (MODULES-904): drawn 3 times its real thickness unless a page says otherwise, with a line that says so, and `air-thickness="1"` draws it true.
 // On the realistic Earth and in the space view alike; the glow is measured from the pixels, on the desk and at a phone's width with the light air.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT, settle, statsOf } from "./gl.ts";
+import { COUNT_SCRIPT, settle } from "./gl.ts";
 
 const EARTH = "chikyu-earth-realistic";
 const SPACE = "chikyu-space";
