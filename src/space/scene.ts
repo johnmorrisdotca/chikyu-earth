@@ -436,6 +436,8 @@ export interface SpaceDeps {
   onLabelError?: (error: unknown) => void;
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
+  /** Where the satellite under the pointer is, or null. Called at each draw while one is under the pointer (and once when it is let go). */
+  onHover?: (place: { x: number; y: number; visible: boolean } | null) => void;
   /** Where each member of a labelled group is on the screen at this draw (the groups of `model.satellites.marked`); an empty list once when the last group is let go. */
   onSatelliteMarks?: (marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[]) => void;
   /** Called at the end of a draw while the camera is moving from one ride to another, so the next frame is asked for (at the page's frame cap). */
@@ -742,6 +744,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       };
 
       let layer: SatelliteLayer | undefined;
+      let hoverShown = false;
       const rideState = new Float64Array(6);
       let selectedShown = false;
       const camera = new three.PerspectiveCamera(FOV, width / Math.max(1, height), 0.05, 1000);
@@ -1365,6 +1368,14 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const at = model.satellites.selected ? layer.place(camera, size) : null;
             if (at || selectedShown) deps.onSelected(at);
             selectedShown = at !== null;
+          }
+          if (layer && deps.onHover) {
+            const hover = model.satellites.hover;
+            const ref = hover.enabled && hover.ref && hover.fade > 0 ? hover.ref : null;
+            const at = ref ? layer.placeOf(ref, camera, size) : null;
+            const place = at ? { x: at.x, y: at.y, visible: at.visible } : null;
+            if (place || hoverShown) deps.onHover(place);
+            hoverShown = place !== null;
           }
           // the meteors, on the Earth: made the first time they are switched on, and asking for their own next draw while a streak is alive or one is due
           if (model.meteors.on && !meteors) meteors = createMeteorLayer(three, earth, model.meteors);

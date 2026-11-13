@@ -14,6 +14,7 @@ import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForOrthographicShell, type SatelliteOthers } from "../space/satellite-focus.ts";
+import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "../space/satellite-hover.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import type { Credit, DataSource } from "../data-door.ts";
@@ -68,7 +69,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + SEA_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + SEA_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -94,7 +95,7 @@ const readDrift = (value: string | null): number => (value !== null && Number.is
 /** The quickest a satellite goes round, degrees a second (a low orbit: 88 minutes). */
 const SATELLITE_RATE = 360 / (88 * 60);
 const SATELLITE_COLORS = ["#ffd54f", "#7fd4ff", "#ff8fa3", "#9ef0a8"];
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -194,7 +195,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "hover-path", "names-on-hover"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -244,6 +245,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #hands: ElementControls | undefined;
   /** The view from before a satellite group was framed, put back when the focus is cleared. */
   #focusView: GlobeView | null = null;
+  /** The name and the faint orbit while the pointer rests on a satellite. */
+  #hover: SatelliteHover | undefined;
   #reach: string | null = null;
   /** The page has set a `speed` since the element came into the page: for a reader who prefers reduced motion, that is the Play that lets meteors start. */
   #played = false;
@@ -388,6 +391,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       },
       onPlaceRings: (drawn) => this.#ringsDrawn(drawn),
       onSatellitesError: (error) => this.dispatchEvent(new CustomEvent("chikyu-satellites-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
+      onHover: (place) => this.#hover?.follow(place),
       paint: {
         data: () => this.#paint.data,
         width: this.#paint.width,
@@ -416,11 +420,27 @@ export class ChikyuEarthRealistic extends HTMLElement {
     // before the shared hands (which hear it after this): a plain wheel in an immersive view zooms
     this.addEventListener("wheel", this.#wheel, { capture: true, passive: false });
     this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
+    this.#hover = bindSatelliteHover({
+      element: this,
+      state: this.#model.satellites,
+      pick: (x, y) => this.#model.pick?.(x, y, 12) ?? null,
+      place: (ref) => this.placeSatellite(ref),
+      name: (ref) => this.satelliteInfo(ref)?.name,
+      selected: () => this.selectedSatellite,
+      request: () => this.#gate?.soon(),
+      labelParent: () => this.#overlay ?? null,
+      pathOn: () => hoverPathOn(this.getAttribute("hover-path"), this.getAttribute("names-on-hover")),
+      namesOn: () => namesHoverOn(this.getAttribute("names-on-hover")),
+      style: () => hoverStyleOf(this),
+    });
+    this.#hover.sync();
     this.#startTick();
     document.addEventListener("visibilitychange", this.#onVisible);
   }
 
   disconnectedCallback(): void {
+    this.#hover?.stop();
+    this.#hover = undefined;
     this.removeEventListener("pointerdown", this.#take);
     this.removeEventListener("pointerdown", this.#down);
     this.removeEventListener("wheel", this.#wheel, { capture: true });
@@ -520,7 +540,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "satellite-tint") {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.soon();
-    }
+    } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
   }
 
@@ -1263,6 +1283,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
         this.#restoreFocusView();
         this.dispatchEvent(new CustomEvent("chikyu-satellite-focus", { detail: { group: null, count: 0 }, bubbles: true, composed: true }));
       }
+      if (this.#model.satellites.hover.ref?.group === group) {
+        this.#model.satellites.hover.ref = null;
+        this.#model.satellites.hover.fade = 0;
+      }
     } else {
       const was = groups.get(group);
       groups.set(group, {
@@ -1344,11 +1368,39 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else this.setView(view, true);
   }
 
+  /**
+   * Draw a faint orbit while the pointer rests on a satellite. On unless `hover-path="off"`. Left unset, it is on when `names-on-hover` is on.
+   * The colour and the opacity are the custom properties `--chikyu-hover-path` and `--chikyu-hover-path-opacity`.
+   */
+  get hoverPath(): boolean {
+    return hoverPathOn(this.getAttribute("hover-path"), this.getAttribute("names-on-hover"));
+  }
+  set hoverPath(value: boolean) {
+    if (value) this.setAttribute("hover-path", "");
+    else this.setAttribute("hover-path", "off");
+  }
+
+  /** Show a satellite's name while the pointer rests on it. On unless `names-on-hover="off"`. A touch does not rest, so it shows nothing. */
+  get namesOnHover(): boolean {
+    return namesHoverOn(this.getAttribute("names-on-hover"));
+  }
+  set namesOnHover(value: boolean) {
+    if (value) this.removeAttribute("names-on-hover");
+    else this.setAttribute("names-on-hover", "off");
+  }
+
   /** Mark one satellite: a larger ring round it and its orbit drawn. `null` lets it go. */
   selectSatellite(ref: SatelliteRef | null): void {
     const found = ref ? this.#model.satellites.groups.get(ref.group) : undefined;
     this.#model.satellites.selected = ref && found && ref.index >= 0 && ref.index < found.satellites.count ? { group: ref.group, index: ref.index } : null;
     this.#gate?.soon();
+  }
+
+  /**
+   * Where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm }` in CSS pixels from the view's top left, `visible` meaning it is inside the box and not behind the Earth. `null` when its group is not set or not shown, it cannot be placed, or it is behind the camera.
+   */
+  placeSatellite(ref: SatelliteRef): { x: number; y: number; visible: boolean; heightKm: number } | null {
+    return this.#model.placeSatellite?.(ref) ?? null;
   }
 
   /** The satellite marked by `selectSatellite` or by a press on it, if any. */
@@ -1374,7 +1426,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity };
   }
 
   // A press that does not turn the view (under 6 pixels) on a satellite tells the page, which chooses it with `selectSatellite` if it likes.

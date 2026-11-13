@@ -638,3 +638,39 @@ for (const look of ["realistic", "space"] as const) {
     expect((await names()).renders, "the names are not laid out again at rest").toBe(laidOut);
   });
 }
+
+test("twenty hovers add no GPU objects, and a still pointer draws nothing", async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, "satellites");
+  await untilStill(page);
+  const cold = gpuObjects(await readCounts(page));
+  const spots = await page.locator("chikyu-space").evaluate((el) => {
+    const space = el as unknown as { satelliteGroups: { name: string; count: number }[]; placeSatellite(ref: { group: string; index: number }): { x: number; y: number; visible: boolean } | null };
+    const rect = el.getBoundingClientRect();
+    const count = space.satelliteGroups.find((group) => group.name === "stations")?.count ?? 0;
+    const found: { x: number; y: number }[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const at = space.placeSatellite({ group: "stations", index });
+      if (at?.visible) found.push({ x: rect.left + at.x, y: rect.top + at.y });
+    }
+    return found;
+  });
+  expect(spots.length, "stations are on the screen").toBeGreaterThan(0);
+  const pointAt = async (index: number): Promise<void> => {
+    const at = spots[index % spots.length]!;
+    await page.locator("chikyu-space").dispatchEvent("pointermove", { clientX: at.x, clientY: at.y, pointerType: "mouse", bubbles: true });
+  };
+  await pointAt(0);
+  await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { hoverPath: boolean } }).satellites.hoverPath), { timeout: 20_000 }).toBe(true);
+  const held = gpuObjects(await readCounts(page));
+  expect(held - cold, "the faint orbit is one line").toBeLessThanOrEqual(4);
+  for (let i = 0; i < 20; i += 1) await pointAt(i);
+  await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { hoverPath: boolean } }).satellites.hoverPath)).toBe(true);
+  expect(gpuObjects(await readCounts(page)), "twenty hovers reuse the one line").toBe(held);
+  await page.locator("chikyu-space").dispatchEvent("pointerleave");
+  await untilStill(page);
+  const rest = await bounded(page, 1500, "satellites");
+  expect(rest.draws, "a still pointer, and none under it, draws nothing").toBe(0);
+  expect(rest.frames).toBe(0);
+  expect(gpuObjects(await readCounts(page)), "letting the orbit go does not leave a trail of objects").toBeLessThanOrEqual(held);
+});

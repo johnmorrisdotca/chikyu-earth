@@ -9,7 +9,7 @@ import { HOME_VIEW, lookAt } from "../view.ts";
 import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "./air.ts";
 import { CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
 import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
-import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteState } from "../space/satellite-layer.ts";
+import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "../space/satellite-layer.ts";
 import type { Layer } from "./tiers.ts";
 import { createTextureSet, type ThreeParts } from "./textures.ts";
 import { createTileSet, type TileSet, type TileSources } from "./tile-set.ts";
@@ -98,6 +98,8 @@ export interface EarthModel {
   tiles: TileSet | null;
   /** The satellite at a point of the view (CSS pixels), within a radius, once a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
+  /** Where a satellite of a shown group is on the screen as of the last draw, or `null`. */
+  placeSatellite: ((ref: SatelliteRef) => SatelliteScreen | null) | null;
   /** The pixel ratio the textures are chosen for. */
   ratio(): number;
   /** Meteors seen from space (src/meteors/layer.ts): off unless the element switches them on. */
@@ -139,6 +141,8 @@ export interface EarthDeps {
   onDraw?: () => void;
   /** Told at every draw where the disc is, for what is laid over it (markers). */
   onPose?: (pose: { lon: number; lat: number; radius: number; cx: number; cy: number; width: number; height: number }) => void;
+  /** Where the satellite under the pointer is, or null. Called at each draw while one is under the pointer (and once when it is let go). */
+  onHover?: (place: { x: number; y: number; visible: boolean } | null) => void;
   /** The rings the places' layer wants drawn in one draw call, read right after `onPose`. */
   placeSprites?: () => PlaceSpriteData | null;
   /** Told once, when the rings of the places that are not markers of their own were first wanted: whether the picture can draw them (false when the three.js parts handed over lack `Points`). */
@@ -163,6 +167,7 @@ export const newModel = (): EarthModel => ({
   drawn: null,
   tiles: null,
   pick: null,
+  placeSatellite: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
   meteors: newMeteorState(),
   bodyLabel: newBodyLabelState(),
@@ -322,6 +327,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       inertial.add(spun);
       scene.add(inertial);
       let layer: SatelliteLayer | undefined;
+      let hoverShown = false;
       // far enough in front that a geostationary satellite (6.6 radii out) is never behind the camera: an orthographic picture is the same from anywhere on the line
       const camera = new three.OrthographicCamera(-1, 1, 1, -1, 1, 120);
       camera.position.set(0, 0, 50);
@@ -372,6 +378,15 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           }
           layer?.update(model.time, model.speed, radius);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
+          model.placeSatellite = layer ? (ref) => layer!.placeOf(ref, camera, size) : null;
+          if (layer && deps.onHover) {
+            const hover = model.satellites.hover;
+            const ref = hover.enabled && hover.ref && hover.fade > 0 ? hover.ref : null;
+            const at = ref ? layer.placeOf(ref, camera, size) : null;
+            const place = at ? { x: at.x, y: at.y, visible: at.visible } : null;
+            if (place || hoverShown) deps.onHover(place);
+            hoverShown = place !== null;
+          }
           model.drawn = { view: { ...view }, time: model.time, radius, centre: { ...centre } };
           textures.sync(radius * model.ratio());
           tiles.sync({ lon: look.lon, lat: look.lat, width: size.width, height: size.height, panX: view.panX, panY: view.panY, radius }, [sunDir.value.x, sunDir.value.y, sunDir.value.z], true, model.ratio());
@@ -467,6 +482,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
         dispose() {
           layer?.dispose();
           model.pick = null;
+          model.placeSatellite = null;
           clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
