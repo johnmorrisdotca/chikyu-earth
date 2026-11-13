@@ -122,9 +122,9 @@ test.describe("a reader with no motion preference", () => {
     // The element stops when it leaves the screen. Wait until it says so (draws and frame requests hold still), not for a fixed 800 ms, which on a busy machine was still inside the last frames.
     await untilStill(page);
     const before = await counts(page);
-    await untilStill(page);
+    // then watch for 2.5 s: untilStill would return at the first second that holds still, a window too short to catch a draw about once a second
+    await page.waitForTimeout(2500);
     const after = await counts(page);
-    console.log(`out of sight: ${before.draws} draws and ${before.rafRequests} frames, then ${after.draws} draws and ${after.rafRequests} frames`);
     expect(after.draws).toBe(before.draws);
     expect(after.rafRequests).toBe(before.rafRequests);
   });
