@@ -24,6 +24,12 @@ interface Place {
 const draws = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { draws: number }).draws);
 const placeOf = (page: Page, index: number): Promise<Place | null> =>
   page.locator(SPACE).evaluate((el, i) => (el as unknown as { placeSatellite(ref: unknown): Place | null }).placeSatellite({ group: "stations", index: i }), index);
+/** Rest after a turn that brought new bodies into view: their pictures are made after the draw that showed them, so the first quiet can be the gap before one arrives. Wait it out, then be still again. */
+async function restAfterTurn(page: Page): Promise<void> {
+  await untilStill(page);
+  await page.waitForTimeout(3000);
+  await untilStill(page);
+}
 const rings = (page: Page): Promise<number> => page.locator(SPACE).evaluate((el) => [...el.shadowRoot!.querySelectorAll("i.pl-sat")].filter((node) => !(node as HTMLElement).hidden).length);
 
 test("a ring asked for out of view is there on the first draw that shows the satellite, then nothing is drawn", async ({ page }) => {
@@ -66,7 +72,7 @@ test("a ring asked for out of view is there on the first draw that shows the sat
     expect(await rings(page), "the ring is on the draw that brings the satellite in").toBe(1);
     expect(place.edge, "in the picture it is not past an edge").toBeNull();
     expect(place.behind).toBe(false);
-    await untilStill(page);
+    await restAfterTurn(page);
     const settled = await draws(page);
     await untilStill(page);
     expect(await draws(page), "nothing more is drawn once the ring is up").toBe(settled);
