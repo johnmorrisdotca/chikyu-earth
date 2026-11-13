@@ -287,6 +287,8 @@ export interface GibsTilesOptions extends EarthTilesOptions {
   date?: string;
   /** Called when the default rule has found its day, so the view draws again and asks for the tiles. */
   changed?: () => void;
+  /** How many milliseconds a tile is given to arrive (`GIBS_SLOW_MS`, 2000, when left out). A page on a slow link can give it longer. */
+  slowMs?: number;
 }
 
 /**
@@ -344,7 +346,7 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
     if (!parts || !day || !level) throw new RangeError(`"${key}" is not the key of a tile`);
     if (!gridOnEarth(level, parts.col, parts.row, grid.extent)) throw new RangeError(`"${key}" is off the Earth`);
     const url = `${TILE_URL}/${layer.id}/default/${day}/${layer.matrix}/${parts.level}/${parts.row}/${parts.col}.jpg`;
-    const timer = AbortSignal.timeout(GIBS_SLOW_MS);
+    const timer = AbortSignal.timeout(options.slowMs && options.slowMs > 0 ? options.slowMs : GIBS_SLOW_MS);
     let response: Response;
     try {
       response = await get(url, { mode: "cors", signal: anySignal([signal, timer]) });
@@ -436,12 +438,13 @@ export function createFinerHolder(time: () => Date, changed?: () => void): { sou
   return {
     source(read, ownOnly) {
       if (ownOnly || read("tiles-finer") !== "gibs") return undefined;
-      const next = `${read("tiles-finer-layer") ?? ""}\n${read("tiles-finer-date") ?? ""}`;
+      const next = `${read("tiles-finer-layer") ?? ""}\n${read("tiles-finer-date") ?? ""}\n${read("tiles-finer-timeout") ?? ""}`;
       if (held && key === next) return held;
       key = next;
       const layer = read("tiles-finer-layer");
       const date = read("tiles-finer-date");
-      held = gibsTiles({ time, ...(changed ? { changed } : {}), ...(layer ? { layer } : {}), ...(date ? { date } : {}) });
+      const slow = Number(read("tiles-finer-timeout"));
+      held = gibsTiles({ time, ...(changed ? { changed } : {}), ...(slow > 0 ? { slowMs: slow } : {}), ...(layer ? { layer } : {}), ...(date ? { date } : {}) });
       return held;
     },
   };

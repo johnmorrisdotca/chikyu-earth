@@ -269,7 +269,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "ride-viewpoint"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -596,7 +596,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-streak-max") {
       this.#model.satellites.streakMax = readStreakMax(value);
       this.#gate?.request();
-    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date") this.#gate?.request();
+    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
     if (name === "lang") this.#showFinerCredit();

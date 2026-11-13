@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAssetCache } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { GIBS_CREDIT, gibsGrid, gibsTiles, gridKey, gridKeys, gridPastExtent, gridTileAt, previousUtcDay, samplesAreBlank, utcDay } from "../src/door/index.ts";
+import { createFinerHolder } from "../src/door/gibs.ts";
+import { GIBS_SLOW_MS } from "../src/door/gibs.ts";
 import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_NAMES, NODATA_BELOW, NODATA_FULL, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
 import { createTileSet, type TileSources } from "../src/realistic/tile-set.ts";
 import type { ThreeParts } from "../src/realistic/textures.ts";
@@ -343,4 +345,29 @@ test("each layer says how its tiles are drawn: clear below a luminance, and a ga
   // the gain was fitted over land: each channel under 1, red the least cut, blue the most (our pictures are darker and warmer)
   const [r, g, b] = landsat.look!.gain!;
   assert.ok(r > g && g > b && r < 1 && b > 0);
+});
+
+test("a tile is given two seconds, or the time the page says, before it is left", async () => {
+  const waited: number[] = [];
+  const never = (url: string, init?: RequestInit): Promise<Response> =>
+    new Promise((_resolve, reject) => {
+      const started = Date.now();
+      init?.signal?.addEventListener("abort", () => {
+        waited.push(Date.now() - started);
+        reject(new Error(`left ${url}`));
+      });
+    });
+  const quick = gibsTiles({ time: () => new Date("2026-11-13T12:00:00Z"), slowMs: 60, fetch: never });
+  const key = quick.need({ lonMin: -1, lonMax: 1, latMin: -1, latMax: 1, layer: "day" }, 327_680)[0]!;
+  await assert.rejects(() => quick.load(key, new AbortController().signal));
+  assert.ok(waited[0]! >= 40 && waited[0]! < 1000, `left after ${waited[0]} ms, for a page that said 60`);
+  const hold = createFinerHolder(() => new Date("2026-11-13T12:00:00Z"));
+  const attrs: Record<string, string> = { "tiles-finer": "gibs" };
+  const read = (name: string): string | null => attrs[name] ?? null;
+  const first = hold.source(read, false);
+  assert.ok(first);
+  assert.equal(hold.source(read, false), first, "the same source while the attributes are the same");
+  attrs["tiles-finer-timeout"] = "9000";
+  assert.notEqual(hold.source(read, false), first, "a new timeout makes a new source");
+  assert.equal(GIBS_SLOW_MS, 2000);
 });

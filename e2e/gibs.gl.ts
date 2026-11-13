@@ -88,6 +88,7 @@ test("closer than the package's own tiles, the page asks the imagery service and
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
     el.setAttribute("tiles-finer-layer", "today");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -118,6 +119,7 @@ test("a missing tile and a slow tile leave the coarser picture and are not asked
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
     el.setAttribute("tiles-finer-layer", "today");
     el.setAttribute("tiles-finer-date", "previous-day");
   });
@@ -160,6 +162,7 @@ test("a black tile is treated as no imagery, and the coarser picture stays", asy
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
     el.setAttribute("tiles-finer-layer", "today");
     el.setAttribute("tiles-finer-date", "previous-day");
   });
@@ -181,6 +184,7 @@ test("the default rule steps back a day at a time, one tile each, to the most re
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
     el.setAttribute("tiles-finer-layer", "today");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -205,6 +209,7 @@ test("with no picture in ten days the page asks ten times, then nothing, and the
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
     el.setAttribute("tiles-finer-layer", "today");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -225,6 +230,7 @@ test("a tile that is partly black, a gap between two passes of the satellite, is
   await openEarth(page, `time=${NOON}&center=0,23`);
   await page.locator(EARTH).evaluate((el) => {
     el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
     el.setAttribute("tiles-finer-layer", "today");
   });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
@@ -243,7 +249,10 @@ test("by default the finer tiles are the Landsat mosaic: one year, no search, la
   const gibs = await routeGibs(page, "swath");
   await routeTiles(page);
   await openEarth(page, `time=${NOON}&center=0,23`);
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
+  });
   await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
   expect(gibs.urls).toEqual([]);
   await setView(page, await zoomFor(page, 8000));
@@ -276,7 +285,10 @@ test("the sea of the Landsat mosaic, nearly black, is left clear: the package's 
   await setView(page, await zoomFor(page, 8000));
   await untilStill(page);
   const own = await pixelAt(page, page.locator(EARTH), 0.5, 0.5);
-  await page.locator(EARTH).evaluate((el) => el.setAttribute("tiles-finer", "gibs"));
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
+  });
   await expect.poll(async () => (await statsOf(page)).tiles.shown, { timeout: 30_000 }).toBeGreaterThan(0);
   await expect.poll(async () => gibs.urls.length, { timeout: 30_000 }).toBeGreaterThan(0);
   await untilStill(page);

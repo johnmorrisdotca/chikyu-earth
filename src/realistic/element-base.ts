@@ -195,7 +195,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -469,7 +469,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "lights") this.lights = value !== "off";
     else if (name === "light") this.light = readLight(value);
     else if (name === "live-seconds") this.#startTick();
-    else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date") this.#gate?.soon();
+    else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.soon();
     else if (name === "data") {
       this.#door.book.ownOnly(value === "own");
       this.#gate?.soon();
@@ -1044,7 +1044,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /**
    * Finer imagery than the package's own tiles, read by the browser from NASA's imagery service. `gibs` turns it on; anything else, or leaving it out, leaves it off. The picture is NASA's Landsat annual true-colour mosaic (30 m, no cloud, land only, the year 2000), laid over the package's picture only where the view is closer than the package's own tiles; where it has no data (the sea, Antarctica, the far north) the package's picture stays. A tile that is slow or missing leaves the coarser picture in place.
-   * `tiles-finer-layer` is `landsat` (the default), `today` (the daily MODIS Terra picture, with its clouds, for the most recent day that has one, looked for from the day before the moment on show back at most 10 days, one tile a day) or another layer's id. `tiles-finer-date` names a year of the Landsat mosaic by its date (`1990-06-01`), or, for a daily layer, is `latest` (the default), `previous-day`, `shown` or one day `yyyy-mm-dd`.
+   * `tiles-finer-layer` is `landsat` (the default), `today` (the daily MODIS Terra picture, with its clouds, for the most recent day that has one, looked for from the day before the moment on show back at most 10 days, one tile a day) or another layer's id. `tiles-finer-date` names a year of the Landsat mosaic by its date (`1990-06-01`), or, for a daily layer, is `latest` (the default), `previous-day`, `shown` or one day `yyyy-mm-dd`. `tiles-finer-timeout` is how many milliseconds a tile is given to arrive before it is left (2000 when the page says nothing).
    */
   get tilesFiner(): string | null {
     return this.getAttribute("tiles-finer") === "gibs" ? "gibs" : null;
