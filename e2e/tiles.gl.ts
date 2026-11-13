@@ -91,6 +91,7 @@ test("tiles of a place left are kept a few seconds, so going back asks for nothi
   await expect.poll(async () => (await statsOf(page)).tiles.requested, { timeout: 30_000 }).toBeGreaterThan(here);
   await expect.poll(async () => (await statsOf(page)).tiles.loading, { timeout: 30_000 }).toBe(0);
   await expect.poll(async () => (await statsOf(page)).tiles.shown, { timeout: 30_000 }).toBeGreaterThan(2);
+  await settle(page, 800); // the tiles of a place come in waves (nothing is loading between two of them): the count to compare with is the whole place's
   const away = (await statsOf(page)).tiles;
   expect(away.held, "the place left is still held").toBeGreaterThan(away.shown);
   expect(away.held, "within the limit").toBeLessThanOrEqual(48);
