@@ -94,9 +94,9 @@ jobs:
         id: tiles
         with:
           path: .cache/earth-tiles-out
-          key: earth-tiles-${{ hashFiles('scripts/make-earth-tiles.py', 'scripts/earth-tiles-sources.json') }}
-      - name: NASA's source maps, about 670 MB (kept while the list of sources is the same, so a change to the cutting script downloads nothing)
-        if: steps.tiles.outputs.cache-hit != 'true'
+          key: earth-tiles-${{ vars.EARTH_TILES_ALL == 'yes' && 'all' || 'base' }}-${{ hashFiles('scripts/make-earth-tiles.py', 'scripts/earth-tiles-sources.json') }}
+      - name: NASA's source maps for the finest levels, 688 MB (only with EARTH_TILES_ALL; kept while the list of sources is the same, so a change to the cutting script downloads nothing)
+        if: steps.tiles.outputs.cache-hit != 'true' && vars.EARTH_TILES_ALL == 'yes'
         timeout-minutes: 10
         uses: actions/cache@v6
         with:

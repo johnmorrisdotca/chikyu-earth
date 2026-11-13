@@ -5,6 +5,7 @@ import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { wideCss } from "@johnmorrisdotca/kazoku-ui/wide-layout";
 import { publishThumbnails, thumbnailHead } from "./family-thumbnail.mjs";
+import { publishedManifest, type TileManifest } from "./tiles-gate.ts";
 import { renderEmbed, renderIndex, renderKids, renderPasses, renderPassesEmbed } from "./page.ts";
 
 const at = (path: string) => new URL(`../${path}`, import.meta.url).pathname;
@@ -41,20 +42,9 @@ if (existsSync(at(".cache/earth-tiles-out/manifest.json"))) {
   // The levels above the ones the published packages' loaders read (day 5, night 4) are published only when EARTH_TILES_ALL=yes (the Pages workflow passes the repository variable of that name). A loader before the one
   // that reads the manifest's levels (chikyu-earth up to 0.43) would take a manifest with a level 5, want it, and fetch the level 4 tile for each quarter of it: a wrong picture. So a pyramid with finer levels is
   // published whole only once the sites that read it have the newer loader; until then the manifest and the folders stop at day 4 and night 3, as they always did.
-  if (process.env.EARTH_TILES_ALL !== "yes") {
-    const manifestPath = at("site/tiles/manifest.json");
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { layers: Record<string, { levels: { level: number; tiles: number; bytes: number }[]; tiles: number; bytes: number }> };
-    const OLD_TOP: Record<string, number> = { day: 4, night: 3 };
-    for (const [name, layer] of Object.entries(manifest.layers)) {
-      const top = OLD_TOP[name];
-      if (top === undefined) continue;
-      for (const entry of layer.levels.filter((one) => one.level > top)) await rm(at(`site/tiles/${name}/${entry.level}`), { recursive: true, force: true });
-      layer.levels = layer.levels.filter((one) => one.level <= top);
-      layer.tiles = layer.levels.reduce((sum, one) => sum + one.tiles, 0);
-      layer.bytes = layer.levels.reduce((sum, one) => sum + one.bytes, 0);
-    }
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 1)}\n`, "utf8");
-  }
+  const trimmed = publishedManifest(JSON.parse(readFileSync(at("site/tiles/manifest.json"), "utf8")) as TileManifest, process.env.EARTH_TILES_ALL === "yes");
+  for (const folder of trimmed.remove) await rm(at(`site/tiles/${folder}`), { recursive: true, force: true });
+  if (trimmed.remove.length > 0) await writeFile(at("site/tiles/manifest.json"), `${JSON.stringify(trimmed.manifest, null, 1)}\n`, "utf8");
 } else {
   await mkdir(at("site/tiles"), { recursive: true });
   await writeFile(at("site/tiles/manifest.json"), JSON.stringify({ tileSize: 512, layers: {} }), "utf8");

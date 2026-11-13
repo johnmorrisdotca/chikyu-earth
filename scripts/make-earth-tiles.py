@@ -14,6 +14,8 @@ Every map is 2:1 equirectangular (longitude -180 to 180 across, latitude 90 down
 enlarging it. The whole-picture sources reach level 4 (the day map, 21600 wide) and level 3 (the night map, 13500 wide). The full-resolution maps (500 m, 86400 x 43200)
 are published as eight panels, A1 to D2 (four across, two down, 21600 x 21600 each), and the levels above the whole picture come from them: day level 5 (32768 wide),
 night level 4 (16384 wide). Neither goes higher (`maxLevel`), and a level is never built from a source that does not fill it.
+Those panel levels are built (and the 652 MB of panels downloaded) only when EARTH_TILES_ALL=yes, the same switch that makes the Pages site publish them (scripts/site.ts); without it the script
+makes the pyramid the published packages' loaders read (day 0 to 4, night 0 to 3), from the two whole pictures alone, and its manifest is what it always was.
 
 Each level is resized from the whole source in one go (Lanczos), never from tile to tile, so neighbouring tiles agree on their shared edge. The source is padded
 with its own far edge before resizing, so the antimeridian (column 0 and the last column are the same meridian) has no seam; the poles are the top and bottom
@@ -52,13 +54,27 @@ with open(os.path.join(HERE, "earth-tiles-sources.json"), encoding="utf8") as so
     SOURCES = json.load(sources_file)
 
 
-def download(url: str, path: str) -> None:
+RETRY_WAITS = (5, 20)
+
+
+def download(url: str, path: str, opener=urllib.request.urlopen, sleep=time.sleep) -> None:
+    """Fetch a file into `path`, three tries with a longer wait before each retry (NASA's server answers an odd 5xx or drops a connection now and then). A half file is never left at `path`."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     partial = path + ".part"
     req = urllib.request.Request(url, headers={"User-Agent": "chikyu-earth make-earth-tiles"})
-    with urllib.request.urlopen(req, timeout=300) as response, open(partial, "wb") as file:
-        shutil.copyfileobj(response, file)
-    os.replace(partial, path)
+    for attempt in range(len(RETRY_WAITS) + 1):
+        try:
+            with opener(req, timeout=300) as response, open(partial, "wb") as file:
+                shutil.copyfileobj(response, file)
+            os.replace(partial, path)
+            return
+        except (OSError, ValueError) as error:  # URLError, HTTPError, timeouts and dropped connections are OSErrors
+            if os.path.exists(partial):
+                os.remove(partial)
+            if attempt == len(RETRY_WAITS):
+                raise SystemExit(f"{url}: {error} (after {attempt + 1} tries)")
+            print(f"  {url}: {error}; trying again in {RETRY_WAITS[attempt]} s", flush=True)
+            sleep(RETRY_WAITS[attempt])
 
 
 def fetch(name: str, cache: str, panel: str = "") -> str:
@@ -217,7 +233,12 @@ def write_manifest(out: str, layers: dict, tile: int = TILE) -> None:
         file.write("\n")
 
 
-def build(cache: str, out: str, names: list) -> None:
+def panel_levels(built: int, max_level: int, all_levels: bool) -> list:
+    """The levels to build from the panels, given how many levels the whole picture gave: none unless every level is asked for (EARTH_TILES_ALL=yes)."""
+    return list(range(built, max_level + 1)) if all_levels else []
+
+
+def build(cache: str, out: str, names: list, all_levels: bool = False) -> None:
     started = time.time()
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(out)
@@ -227,10 +248,10 @@ def build(cache: str, out: str, names: list) -> None:
         print(f"{name}: levels from the whole picture", flush=True)
         with Image.open(fetch(name, cache)) as opened:
             image = opened.convert("RGB")
-        entries = build_layer(image, name, out, source["quality"], max_level=source["maxLevel"])
+        entries = build_layer(image, name, out, source["quality"], max_level=source["maxLevel"] if all_levels else 99)
         whole = image.width
         del image
-        above = [level for level in range(len(entries), source["maxLevel"] + 1)]
+        above = panel_levels(len(entries), source["maxLevel"], all_levels)
         if above:
             print(f"{name}: levels {above[0]} to {above[-1]} from the eight panels", flush=True)
             paths = {key: fetch(name, cache, key) for key in source["panels"]}
@@ -239,8 +260,9 @@ def build(cache: str, out: str, names: list) -> None:
         layers[name]["source"] = source["url"]
         layers[name]["sourceSha256"] = source["sha256"]
         layers[name]["sourceWidth"] = whole
-        layers[name]["panelSources"] = {key: {"url": panel["url"], "sha256": panel["sha256"]} for key, panel in source["panels"].items()}
-        layers[name]["panelWidth"] = PANEL_SIZE * len(PANEL_COLUMNS)
+        if above:
+            layers[name]["panelSources"] = {key: {"url": panel["url"], "sha256": panel["sha256"]} for key, panel in source["panels"].items()}
+            layers[name]["panelWidth"] = PANEL_SIZE * len(PANEL_COLUMNS)
         print(f"{name}: {layers[name]['tiles']} tiles, {layers[name]['bytes'] / 1048576:.1f} MB", flush=True)
     write_manifest(out, layers)
     total = sum(layer["bytes"] for layer in layers.values())
@@ -304,6 +326,7 @@ def selftest() -> None:
             assert worst <= 2, f"level {level}: differs from the rolled reference by {worst}"
         assert layer["tiles"] == 2 + 8 + 32, layer["tiles"]
         panels_selftest(tile, base)
+        plan_selftest()
     finally:
         shutil.rmtree(out, ignore_errors=True)
     print("make-earth-tiles selftest: ok")
@@ -346,6 +369,59 @@ def panels_selftest(tile: int, base: int) -> None:
         shutil.rmtree(out, ignore_errors=True)
 
 
+def plan_selftest() -> None:
+    """The panel levels are planned only when every level is asked for, and a download is tried three times with a growing wait, then given up."""
+    assert panel_levels(5, 5, False) == [] and panel_levels(4, 4, False) == []
+    assert panel_levels(5, 5, True) == [5] and panel_levels(4, 4, True) == [4] and panel_levels(3, 5, True) == [3, 4, 5]
+
+    class Answer:
+        def __init__(self, body: bytes):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self, size: int = -1) -> bytes:
+            body, self.body = self.body, b""
+            return body
+
+    folder = tempfile.mkdtemp(prefix="earth-tiles-download-selftest-")
+    try:
+        path = os.path.join(folder, "a.jpg")
+        calls = []
+        waits = []
+
+        def flaky(request, timeout):
+            calls.append(1)
+            if len(calls) < 3:
+                raise OSError("connection reset")
+            return Answer(b"picture")
+
+        download("https://example.invalid/a.jpg", path, opener=flaky, sleep=waits.append)
+        assert len(calls) == 3 and waits == [5, 20], (calls, waits)
+        assert open(path, "rb").read() == b"picture" and not os.path.exists(path + ".part")
+        calls.clear()
+        waits.clear()
+        dead = os.path.join(folder, "b.jpg")
+
+        def down(request, timeout):
+            calls.append(1)
+            raise OSError("gone")
+
+        try:
+            download("https://example.invalid/b.jpg", dead, opener=down, sleep=waits.append)
+        except SystemExit as stopped:
+            assert "after 3 tries" in str(stopped), stopped
+        else:
+            raise AssertionError("a download that always fails was not given up")
+        assert len(calls) == 3 and waits == [5, 20] and not os.path.exists(dead) and not os.path.exists(dead + ".part")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def main(argv: list) -> None:
     command = argv[1] if len(argv) > 1 else ""
     if command == "selftest":
@@ -355,7 +431,7 @@ def main(argv: list) -> None:
         cache = options.get("--cache", os.path.join(ROOT, ".cache", "earth-tiles"))
         out = options.get("--out", os.path.join(ROOT, ".cache", "earth-tiles-out"))
         names = options.get("--layers", "day,night").split(",")
-        build(cache, out, names)
+        build(cache, out, names, os.environ.get("EARTH_TILES_ALL") == "yes")
     else:
         raise SystemExit(__doc__)
 
