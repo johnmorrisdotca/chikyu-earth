@@ -437,7 +437,7 @@ export interface SpaceDeps {
   /** Where the chosen satellite is on the screen, or null. Called at each draw while a satellite is chosen (and once when it is let go). */
   onSelected?: (place: { x: number; y: number } | null) => void;
   /** Where each member of a labelled group is on the screen at this draw (the groups of `model.satellites.marked`); an empty list once when the last group is let go. */
-  onSatelliteMarks?: (marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[]) => void;
+  onSatelliteMarks?: (marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number; occluded: boolean }[]) => void;
   /** Called at the end of a draw while the camera is moving from one ride to another, so the next frame is asked for (at the page's frame cap). */
   onMoving?: () => void;
   /** The target of the ride could not be placed at this draw. */
@@ -1227,7 +1227,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           model.placeSatellite = layer ? (ref) => layer!.placeOf(ref, camera, size) : null;
           if (deps.onSatelliteMarks) {
             if (layer && (model.satellites.marked.size > 0 || model.satellites.pinned.length > 0)) {
-              const marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[] = [];
+              const marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number; occluded: boolean }[] = [];
               for (const name of model.satellites.marked) {
                 const group = model.satellites.groups.get(name);
                 if (!group) continue;

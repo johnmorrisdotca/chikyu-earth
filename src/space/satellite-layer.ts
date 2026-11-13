@@ -175,7 +175,39 @@ export function edgeBeyondCamera(x: number, y: number): ScreenEdge {
 }
 
 /**
- * Where a satellite is on the screen now: in CSS pixels from the view's top left (which may lie outside the box), whether it can be seen, which edge it lies beyond, whether it is behind the camera, and how high it is.
+ * Whether the Earth hides a satellite. The Earth is the unit sphere at the origin. True when the line from the camera to the satellite meets that sphere before it arrives. A graze at the limb is not hidden (the line only touches the sphere), and neither is a satellite in front of the Earth. This is not the test for a satellite behind the camera.
+ *
+ * @param camera - The camera, in the same units as the sphere (Earth radii).
+ * @param satellite - The satellite, in those units.
+ * @returns True when the globe is in the way.
+ *
+ * @example
+ * ```ts
+ * import { earthHides } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const camera = { x: 0, y: 0, z: 4 };
+ * console.log(earthHides(camera, { x: 0, y: 0, z: 1.2 }));
+ * console.log(earthHides(camera, { x: 0, y: 0, z: -1.2 }));
+ * ```
+ */
+export function earthHides(camera: { x: number; y: number; z: number }, satellite: { x: number; y: number; z: number }): boolean {
+  const px = satellite.x - camera.x;
+  const py = satellite.y - camera.y;
+  const pz = satellite.z - camera.z;
+  const len2 = px * px + py * py + pz * pz;
+  if (!(len2 > 0)) return false;
+  const t = Math.max(0, Math.min(1, -(camera.x * px + camera.y * py + camera.z * pz) / len2));
+  const nx = camera.x + px * t;
+  const ny = camera.y + py * t;
+  const nz = camera.z + pz * t;
+  return nx * nx + ny * ny + nz * nz < 0.998;
+}
+
+/** An orthographic view: the satellite is behind the Earth's disc when it is further than the centre and inside the disc. A graze at the limb (just inside radius 1) is not hidden. */
+const earthHidesDisc = (right: number, up: number, depth: number, centreDepth: number): boolean => depth < centreDepth && right * right + up * up < 0.996;
+
+/**
+ * Where a satellite is on the screen now: in CSS pixels from the view's top left (which may lie outside the box), whether it can be seen, which edge it lies beyond, whether it is behind the camera, whether the Earth hides it, and how high it is.
  *
  * @example
  * ```ts
@@ -196,6 +228,8 @@ export interface SatelliteScreen {
   edge: ScreenEdge | null;
   /** The satellite is behind the camera. The picture would put it on the opposite side, so `edge` is taken from the camera's own axes. */
   behind: boolean;
+  /** The Earth hides the satellite: the line from the camera meets the globe before the satellite. False at the limb, in front, and when the satellite is only behind the camera. */
+  occluded: boolean;
 }
 
 export interface SatelliteLayer {
@@ -505,19 +539,8 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           if (d > bestD) continue;
           if (ortho) {
             view.copy(world).applyMatrix4(camera.matrixWorldInverse);
-            if (view.z < centreDepth && view.x * view.x + view.y * view.y < 0.996) continue;
-          } else {
-            // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
-            const px = world.x - c.x;
-            const py = world.y - c.y;
-            const pz = world.z - c.z;
-            const len2 = px * px + py * py + pz * pz;
-            const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
-            const nx = c.x + px * t;
-            const ny = c.y + py * t;
-            const nz = c.z + pz * t;
-            if (nx * nx + ny * ny + nz * nz < 0.998) continue;
-          }
+            if (earthHidesDisc(view.x, view.y, view.z, centreDepth)) continue;
+          } else if (earthHides(c, world)) continue;
           best = { group: name, index: i };
           bestD = d;
         }
@@ -555,22 +578,11 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           const up = view.y;
           const depth = view.z;
           const centreDepth = world.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z;
-          hidden = depth < centreDepth && right * right + up * up < 0.996;
+          hidden = earthHidesDisc(right, up, depth, centreDepth);
           world.set(p[i]!, p[i + 1]!, p[i + 2]!).applyMatrix4(scene.matrixWorld);
-        } else {
-          // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
-          const px = world.x - c.x;
-          const py = world.y - c.y;
-          const pz = world.z - c.z;
-          const len2 = px * px + py * py + pz * pz;
-          const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
-          const nx = c.x + px * t;
-          const ny = c.y + py * t;
-          const nz = c.z + pz * t;
-          hidden = nx * nx + ny * ny + nz * nz < 0.998;
-        }
+        } else hidden = earthHides(c, world);
       }
-      return { x, y, visible: !behind && !hidden && edge === null, heightKm, edge, behind };
+      return { x, y, visible: !behind && !hidden && edge === null, heightKm, edge, behind, occluded: hidden };
     },
 
     place(camera, size) {
