@@ -1149,7 +1149,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           // the ringed satellites first, so their names are laid out with the places' in this same draw
           model.placeSatellite = layer ? (ref) => layer!.placeOf(ref, camera, size) : null;
           if (deps.onSatelliteMarks) {
-            if (layer && model.satellites.marked.size > 0) {
+            if (layer && (model.satellites.marked.size > 0 || model.satellites.pinned.length > 0)) {
               const marks: { ref: SatelliteRef; x: number; y: number; visible: boolean; heightKm: number }[] = [];
               for (const name of model.satellites.marked) {
                 const group = model.satellites.groups.get(name);
@@ -1159,6 +1159,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                   const at = layer.placeOf(ref, camera, size);
                   if (at) marks.push({ ref, ...at });
                 }
+              }
+              for (const ref of model.satellites.pinned) {
+                if (marks.length >= MAX_MARKED) break;
+                if (marks.some((mark) => mark.ref.group === ref.group && mark.ref.index === ref.index)) continue;
+                const at = layer.placeOf(ref, camera, size);
+                if (at) marks.push({ ref, ...at });
               }
               marksTold = true;
               deps.onSatelliteMarks(marks);

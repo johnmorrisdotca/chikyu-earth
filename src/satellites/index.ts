@@ -1,5 +1,6 @@
 // The satellites' pure parts: orbital elements in, positions out (SGP4 by satellite.js, an optional peer). They import on a server. The space view takes a group with `setSatellites`.
 export { createSatellites, type SatellitesOptions } from "./track.ts";
+export { NEAREST_COUNT, closeApproach, nearest, overheadKm, within, type Neighbour, type NearestOptions, type NearestTarget } from "./nearest.ts";
 export { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED } from "./limits.ts";
 export type { ElementSet, RefusedElementSet, SatelliteInfo, SatelliteRef, Satellites } from "./types.ts";
 export { SHORT_NAMES } from "./names.ts";

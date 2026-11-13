@@ -19,6 +19,7 @@ import type { BodyPainter } from "../src/space/index.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 import { catalogueEntry, findInCatalogue, SATELLITE_GROUPS, type SatelliteGroupInfo } from "../src/satellites/catalogue.ts";
+import { nearest } from "../src/satellites/nearest.ts";
 import type { RideTarget } from "../src/space/element.ts";
 import { planetPainter } from "./planet-painter.ts";
 import { discRadius } from "../src/realistic/earth.ts";
@@ -305,10 +306,15 @@ if (flat && controls && stage) {
     chosen = ref;
     const host = satHost();
     const info = ref && host ? host.satelliteInfo(ref) : undefined;
+    const group = ref ? made.get(ref.group) : undefined;
+    const near = ref && group && host ? nearest(group, { satellite: ref.index }, { date: msOf(host), by: "space", count: 5 }) : [];
     if (satInfo) {
       satInfo.hidden = !info;
-      satInfo.textContent = info ? describeSatellite(info) : "";
+      const list = near.map((one) => `${one.name} ${Math.round(one.distance?.kilometres ?? 0)} km`).join(", ");
+      satInfo.textContent = info ? `${describeSatellite(info)}${list ? ` ${say("satNearest", { list })}` : ""}` : "";
     }
+    if (space && ref) space.ringSatellites(near.map((one) => ({ group: ref.group, index: one.index })));
+    else if (space && !ref) space.ringSatellites([]);
     if (paintRow) paintRow.hidden = !info;
     address.set("sat", info ? String(info.noradId) : null);
   };
