@@ -26,6 +26,8 @@ async function open(page: Page, element: string, look: string): Promise<void> {
   await page.goto(`/chikyu-earth/?look=${look}&time=2026-06-21T12:00Z&speed=0&center=10,20`);
   await page.locator(`${element}[data-state=live]`).waitFor({ timeout: 60_000 });
   await expect.poll(async () => (await statsOf(page, element)).draws).toBeGreaterThan(0);
+  // the demo's controls turn the view; held, the view is still and the fade is the only thing that can draw
+  await page.locator("kazoku-view-controls").evaluate((el) => (el as unknown as { pause(): void }).pause());
   if (THROTTLE > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   await untilStill(page);
   await freezeClock(page);
@@ -54,14 +56,15 @@ for (const { name, element, look } of LOOKS) {
         await page.clock.runFor(ms);
         seen.push((await statsOf(page, element)).lightFade.mix);
       }
-      // 60, 150, 240, 300, 360 ms after the change
+      // 60, 150, 240, 300 and 360 ms after the change
       expect(seen[0]!, "60 ms in: on its way").toBeGreaterThan(0);
       expect(seen[0]!).toBeLessThan(0.5);
       expect(seen[1]!, "half way at 150 ms").toBeGreaterThan(0.3);
       expect(seen[1]!).toBeLessThan(0.7);
       for (let i = 1; i < seen.length; i += 1) expect(seen[i]!, `step ${i}: it only goes on`).toBeGreaterThanOrEqual(seen[i - 1]!);
-      expect(seen[3]!, "arrived by 300 ms").toBe(1);
-      expect(seen[4]).toBe(1);
+      // the fade is timed from the first frame after the change, up to a frame (16 ms) after it: nearly there at 300 ms, arrived by 360
+      expect(seen[3]!, "nearly arrived at 300 ms").toBeGreaterThan(0.9);
+      expect(seen[4], "arrived by 360 ms").toBe(1);
       const arrived = await statsOf(page, element);
       expect(arrived.lightFade.fading).toBe(false);
       expect(arrived.draws - before, "the fade is frames of its own, not one jump").toBeGreaterThanOrEqual(3);
@@ -75,7 +78,7 @@ for (const { name, element, look } of LOOKS) {
       const back = await setLight(page, element, "sun");
       await page.clock.runFor(150);
       const half = (await statsOf(page, element)).lightFade.mix;
-      expect(half, "half way down at 150 ms").toBeGreaterThan(0.3);
+      expect(half, "about half way down at 150 ms").toBeGreaterThan(0.3);
       expect(half).toBeLessThan(0.7);
       await page.clock.runFor(300);
       const down = await statsOf(page, element);
@@ -92,7 +95,7 @@ for (const { name, element, look } of LOOKS) {
       const middle = (await statsOf(page, element)).lightFade.mix;
       expect(middle).toBeGreaterThan(0.3);
       await setLight(page, element, "sun");
-      await page.clock.runFor(30);
+      await page.clock.runFor(100);
       const turned = (await statsOf(page, element)).lightFade.mix;
       expect(turned, "it is going down from the middle").toBeLessThan(middle);
       expect(turned, "and did not jump to the end").toBeGreaterThan(0.1);
