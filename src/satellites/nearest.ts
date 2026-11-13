@@ -104,7 +104,7 @@ function groundKm(place: GeoPoint, heightM = 0): Vec {
 }
 
 /** `exact`'s position (Earth radii, the view's axes) as kilometres fixed to the Earth. The same turn as `groundUnder`. */
-export function fixedKm(x: number, y: number, z: number, ms: number): Vec {
+function fixedKm(x: number, y: number, z: number, ms: number): Vec {
   const theta = greenwichSidereal(ms) * RAD;
   const sin = Math.sin(theta);
   const cos = Math.cos(theta);
@@ -142,14 +142,16 @@ interface Placed {
   uncertaintyKm: number;
 }
 
+/** An element set's epoch, milliseconds since the Unix epoch; a text with no zone is read as UTC. */
+const epochOf = (text: string): number => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`);
+
 function placedAt(group: Satellites, ms: number): Placed[] {
   const out: Placed[] = [];
   const buf = new Float64Array(6);
   for (let index = 0; index < group.count; index += 1) {
     if (!group.exact(index, ms, buf)) continue;
     const set = group.sets[index]!;
-    const epoch = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(set.EPOCH) ? set.EPOCH : `${set.EPOCH}Z`);
-    out.push({ index, name: set.OBJECT_NAME, noradId: set.NORAD_CAT_ID, at: fixedKm(buf[0]!, buf[1]!, buf[2]!, ms), uncertaintyKm: uncertaintyOf((ms - epoch) / 86_400_000) });
+    out.push({ index, name: set.OBJECT_NAME, noradId: set.NORAD_CAT_ID, at: fixedKm(buf[0]!, buf[1]!, buf[2]!, ms), uncertaintyKm: uncertaintyOf((ms - epochOf(set.EPOCH)) / 86_400_000) });
   }
   return out;
 }
@@ -241,8 +243,10 @@ export function within(group: Satellites, target: NearestTarget, radius: number,
 }
 
 /**
- * The closest the two satellites come between `from` and `to`, sampled every `stepMs` (60 seconds when left out). The uncertainty is how much nearer the samples on either side were, so a closer moment between samples is inside it.
- * Two SGP4 calls a sample. It does not run again by itself.
+ * The closest the two satellites come between `from` and `to`. The span is sampled every `stepMs` (60 seconds when left out), and the moment of the closest sample is then refined between its two neighbours,
+ * to a tenth of a second, because two satellites close in at several kilometres a second and the closest sample alone can be hundreds of kilometres too far. The uncertainty is the elements' own: the
+ * square root of the sum of the squares of the two satellites' rough uncertainties (1 km, and 1 km more for each day the elements have aged at that moment), not a published covariance.
+ * Two SGP4 calls a sample, and about 20 more for the refinement. It does not run again by itself.
  *
  * @param group - The satellites.
  * @param a - The index of one satellite.
@@ -250,7 +254,7 @@ export function within(group: Satellites, target: NearestTarget, radius: number,
  * @param from - The start, milliseconds since the Unix epoch.
  * @param to - The end.
  * @param stepMs - The sample step, at least 1000.
- * @returns The closest sample, or null when either satellite cannot be placed.
+ * @returns The closest moment, or null when either satellite cannot be placed.
  *
  * @example
  * ```ts
@@ -262,25 +266,38 @@ export function within(group: Satellites, target: NearestTarget, radius: number,
  */
 export function closeApproach(group: Satellites, a: number, b: number, from: number, to: number, stepMs = 60_000): { at: number; kilometres: number; uncertaintyKm: number } | null {
   const step = Math.max(1000, stepMs);
-  const samples: { at: number; kilometres: number }[] = [];
   const bufA = new Float64Array(6);
   const bufB = new Float64Array(6);
+  const apart = (at: number): number | null => (group.exact(a, at, bufA) && group.exact(b, at, bufB) ? hypot(sub(fixedKm(bufA[0]!, bufA[1]!, bufA[2]!, at), fixedKm(bufB[0]!, bufB[1]!, bufB[2]!, at))) : null);
+  const samples: { at: number; kilometres: number }[] = [];
   for (let at = from; at <= to; at += step) {
-    if (!group.exact(a, at, bufA) || !group.exact(b, at, bufB)) continue;
-    samples.push({ at, kilometres: hypot(sub(fixedKm(bufA[0]!, bufA[1]!, bufA[2]!, at), fixedKm(bufB[0]!, bufB[1]!, bufB[2]!, at))) });
+    const kilometres = apart(at);
+    if (kilometres !== null) samples.push({ at, kilometres });
   }
   if (samples.length === 0) return null;
-  let best = samples[0]!;
   let atBest = 0;
-  for (const [i, sample] of samples.entries()) {
-    if (sample.kilometres < best.kilometres) {
-      best = sample;
-      atBest = i;
-    }
+  for (const [i, sample] of samples.entries()) if (sample.kilometres < samples[atBest]!.kilometres) atBest = i;
+  let best = samples[atBest]!;
+  // between the neighbours of the closest sample the distance falls and then rises: a ternary search for the lowest point
+  let low = Math.max(from, (samples[atBest - 1] ?? best).at);
+  let high = Math.min(to, (samples[atBest + 1] ?? best).at);
+  while (high - low > 100) {
+    const left = low + (high - low) / 3;
+    const right = high - (high - low) / 3;
+    const dl = apart(left);
+    const dr = apart(right);
+    if (dl === null || dr === null) break;
+    if (dl < dr) high = right;
+    else low = left;
   }
-  const beside = [samples[atBest - 1]?.kilometres, samples[atBest + 1]?.kilometres].filter((n): n is number => n !== undefined);
-  const uncertaintyKm = beside.length === 0 ? 0 : Math.max(0, Math.min(...beside) - best.kilometres);
-  return { at: best.at, kilometres: best.kilometres, uncertaintyKm };
+  const mid = Math.round((low + high) / 2);
+  const refined = apart(mid);
+  if (refined !== null && refined < best.kilometres) best = { at: mid, kilometres: refined };
+  const age = (index: number): number => {
+    const epoch = epochOf(group.sets[index]!.EPOCH);
+    return uncertaintyOf((best.at - epoch) / 86_400_000);
+  };
+  return { at: best.at, kilometres: best.kilometres, uncertaintyKm: Math.hypot(age(a), age(b)) };
 }
 
 /**
