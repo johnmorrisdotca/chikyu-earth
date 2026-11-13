@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
 import { MOON_KEEP_MS } from "../src/space/scene.ts";
-import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed } from "./gl.ts";
+import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed, untilStill } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -119,10 +119,12 @@ test.describe("a reader with no motion preference", () => {
       document.body.prepend(spacer);
     });
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(800);
+    // The element stops when it leaves the screen. Wait until it says so (draws and frame requests hold still), not for a fixed 800 ms, which on a busy machine was still inside the last frames.
+    await untilStill(page);
     const before = await counts(page);
-    await page.waitForTimeout(2500);
+    await untilStill(page);
     const after = await counts(page);
+    console.log(`out of sight: ${before.draws} draws and ${before.rafRequests} frames, then ${after.draws} draws and ${after.rafRequests} frames`);
     expect(after.draws).toBe(before.draws);
     expect(after.rafRequests).toBe(before.rafRequests);
   });
