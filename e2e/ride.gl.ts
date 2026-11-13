@@ -249,8 +249,6 @@ test("a reader who asked for reduced motion gets a jump and one step a second", 
   expect((await statsOf(page)).ride.gliding, "no glide").toBe(false);
   // the ride's own draws (pictures let go, pictures arriving) are not the clock's steps: count the steps alone
   await steppingOnly(page, () => setSpeed(page, 0), () => setSpeed(page, 60), async () => (await statsOf(page)).draws);
-  // a body that comes big enough to see as the clock turns the view is made then (MODULES-1192), and its pictures arrive in a burst of draws (eight in the first half second here): those are not steps either
-  await passTime(page, 3000);
   const m = await measure(page, 4000);
   console.log(`riding the ISS at 60x with reduced motion: ${m.frames.toFixed(2)} frames a second`);
   expect(m.frames).toBeLessThanOrEqual(1.6);

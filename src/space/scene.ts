@@ -85,6 +85,8 @@ export const MOON_KEEP_MS = 4000;
 export const BODY_MAKE_PX = 6;
 export const BODY_LET_GO_PX = 3;
 export const BODY_KEEP_MS = MOON_KEEP_MS;
+/** For a reader who asked for reduced motion, the pictures that arrive within this time ask for one draw between them, and none if a draw is made meanwhile. */
+export const ARRIVAL_GATHER_MS = 1000;
 
 const PLAIN_COLOR = (name: string): string => (name === "Sun" ? "#ffb347" : (COLORS as Record<string, string>)[name] ?? "#9a948b");
 /**
@@ -516,11 +518,28 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
     key: "chikyu-earth:space",
     async build({ three, width, height }: BuildContext<Three>): Promise<Scene3D> {
       let size = { width, height };
+      let ended = false;
+      // Pictures arrive one by one (the Earth's maps, its finer tiles, a body's), each asking for a draw. For a reader who asked for reduced motion they are gathered: the ask is held for a second, and
+      // the draw is made only if none was made in that second (a clock that steps shows them in its own step), so at most one a second and none beside the steps.
+      let drawnAt = Number.NEGATIVE_INFINITY;
+      let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
+      const arrivalDraw = (): void => {
+        if (!(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+          deps.invalidate();
+          return;
+        }
+        if (arrivalTimer !== undefined) return;
+        const askedAt = performance.now();
+        arrivalTimer = setTimeout(() => {
+          arrivalTimer = undefined;
+          if (!ended && drawnAt < askedAt) deps.invalidate();
+        }, ARRIVAL_GATHER_MS);
+      };
       const textures = await createTextureSet(three, LAYERS, {
         assets: deps.assets,
         textureBase: deps.textureBase,
         cap: deps.cap,
-        invalidate: deps.invalidate,
+        invalidate: arrivalDraw,
         ...(deps.onError ? { onError: deps.onError } : {}),
         ...(deps.onTier ? { onTier: deps.onTier } : {}),
       });
@@ -565,7 +584,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         three,
         earth as unknown as THREE.Group,
         { sunDir: sunEarth, lights: earthMaterial.uniforms["lights"] as { value: number }, boost: earthMaterial.uniforms["boost"] as { value: number }, ortho: earthMaterial.uniforms["ortho"] as { value: number }, water: uniform.water, night: uniform.night, extra: { cloudMap: uniform.clouds, sunLocal, cloudShift } },
-        { assets: deps.assets, sources: () => deps.sources?.() ?? {}, cap: deps.cap, invalidate: deps.invalidate, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
+        { assets: deps.assets, sources: () => deps.sources?.() ?? {}, cap: deps.cap, invalidate: arrivalDraw, ...(deps.onTiles ? { onManifest: deps.onTiles } : {}) },
       );
       model.tiles = tiles;
       const clouds = new three.Mesh(grid, cloudMaterial);
@@ -587,7 +606,6 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       scene.add(earth, clouds, glow, moon);
 
       // the Sun, the planets and the moons are made by the painter, one slot each: a slot is filled again when the look changes, and may be filled later (a painter may be slow)
-      let ended = false;
       interface Slot {
         name: string;
         drawing: BodyDrawing | undefined;
@@ -637,7 +655,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           scene.add(made.object);
           tally();
           deps.onBodies?.();
-          deps.invalidate();
+          arrivalDraw();
         };
         const fail = (error: unknown): void => {
           if (ended || slot.token !== token) return;
@@ -649,7 +667,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
         };
         try {
-          const made = (viaPainter ? painter : plainPainter).make(three, slot.name, { look, invalidate: () => (deps.onBodies?.(), deps.invalidate()), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
+          const made = (viaPainter ? painter : plainPainter).make(three, slot.name, { look, invalidate: () => (deps.onBodies?.(), arrivalDraw()), ratio: model.ratio(), maxTexture: deps.cap(), mapped: true });
           if (typeof (made as Promise<BodyDrawing>).then === "function") (made as Promise<BodyDrawing>).then(arrive, fail);
           else arrive(made as BodyDrawing);
         } catch (error) {
@@ -718,6 +736,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         scene,
         camera,
         update() {
+          drawnAt = performance.now();
           const fit = fitDistance(model.earth.size, size.width / Math.max(1, size.height));
           model.fit = fit;
           const frame = track.at(model.time);
@@ -1331,6 +1350,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
         dispose() {
           if (releaseTimer !== undefined) clearTimeout(releaseTimer);
           if (bodyTimer !== undefined) clearTimeout(bodyTimer);
+          if (arrivalTimer !== undefined) clearTimeout(arrivalTimer);
           if (meteorTimer !== undefined) clearTimeout(meteorTimer);
           meteors?.dispose();
           nameOn?.dispose();
