@@ -191,10 +191,12 @@ test("toggling the beam and its cells leaves the GPU's objects where they were",
 // The pictures for the docs and the release notes: outside and in a ride, on the night side and the day side, at the desk and on a phone. The day side is seen from further off than the night side: the closest
 // views of the Earth's day side need the finer tiles, which the tests do not serve (WITHOUT_TILES), so the base map is what shows.
 const SHOTS = [
-  { name: "beam-outside-night", time: "2026-11-02T06:00Z", view: "follow", distanceKm: 1800, yaw: -30, tilt: 72, cells: 37 },
-  { name: "beam-outside-day", time: "2026-11-02T18:00Z", view: "follow", distanceKm: 2500, yaw: 40, tilt: 70, cells: 19 },
+  { name: "beam-outside-night", time: "2026-11-02T06:00Z", view: "follow", distanceKm: 1800, yaw: -30, tilt: 72, cells: 19 },
+  { name: "beam-grazing-night", time: "2026-11-02T06:00Z", view: "follow", distanceKm: 1500, yaw: 180, tilt: 15, cells: 7 },
+  { name: "beam-outside-day", time: "2026-11-02T18:00Z", view: "follow", distanceKm: 2500, yaw: 40, tilt: 70, cells: 7 },
+  { name: "beam-far-night", time: "2026-11-02T06:00Z", view: "follow", distanceKm: 20000, yaw: 30, tilt: 50, cells: 7 },
   { name: "beam-ride-above-night", time: "2026-11-02T06:00Z", view: "above", distanceKm: 0, yaw: 0, tilt: 0, cells: 19 },
-  { name: "beam-ride-along-day", time: "2026-11-02T18:00Z", view: "from", distanceKm: 0, yaw: 0, tilt: 0, cells: 19, look: "down" },
+  { name: "beam-ride-along-day", time: "2026-11-02T18:00Z", view: "from", distanceKm: 0, yaw: 0, tilt: 0, cells: 7, look: "down" },
 ] as const;
 for (const size of [{ label: "desk", width: 1280, height: 900 }, { label: "phone", width: 390, height: 844 }]) {
   for (const shot of SHOTS) {

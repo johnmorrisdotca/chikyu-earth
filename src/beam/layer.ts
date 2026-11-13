@@ -71,6 +71,8 @@ uniform float lambda;
 uniform float pitch;
 uniform float circle;
 uniform float weights;
+uniform float cone0;
+uniform float thin;
 varying float vT;
 varying float vFace;
 varying float vRay;
@@ -78,7 +80,7 @@ varying float vDist;
 varying float vWeight;
 ${MAP}
 // the footprint's own cone (shaft 0) or the thin one to a cell (shaft 1)
-vec3 rim(float phi) { return shaft > 0.5 ? ground(cone.zw * pitch + circle * vec2(cos(phi), sin(phi))) : ground(vec2(cos(phi), sin(phi))); }
+vec3 rim(float phi) { return shaft > 0.5 ? ground(cone.zw * pitch + circle * thin * vec2(cos(phi), sin(phi))) : ground(vec2(cos(phi), sin(phi))); }
 vec3 at(float t, float phi) { return mix(sat, rim(phi), t); }
 void main() {
   float t = cone.x;
@@ -91,7 +93,7 @@ void main() {
   vFace = abs(dot(n, normalize(v)));
   vT = t;
   vRay = cone.y;
-  vWeight = shaft > 0.5 ? weights : 0.42;
+  vWeight = shaft > 0.5 ? weights : cone0;
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }`;
 
@@ -104,15 +106,17 @@ varying float vRay;
 varying float vDist;
 varying float vWeight;
 void main() {
-  float along = 0.06 + 0.94 * pow(1.0 - vT, 1.5);
-  float body = 0.18 + 0.82 * pow(vFace, 0.8);
-  float shafts = 0.82 + 0.18 * sin(vRay * 36.0);
+  // brightest at the satellite, fading towards the ground; soft at the edges (a shaft is thickest through its middle), and a little streaked round
+  float along = 0.04 + 0.96 * pow(1.0 - vT, 1.7);
+  float body = 0.1 + 0.9 * pow(vFace, 1.4);
+  float streaks = 0.88 + 0.12 * sin(vRay * 36.0);
   float near = smoothstep(0.004, 0.06, vDist);
-  float a = strength * vWeight * along * body * shafts * near;
+  float a = strength * vWeight * along * body * streaks * near;
   gl_FragColor = vec4(colour, a);
 }`;
 
-// The footprint itself (kinds 2 and 3) and the cells (kinds 0 and 1), each a filled disc and a soft ring, mapped from the footprint's flat units onto the sphere.
+// The footprint itself (kinds 2 and 3) and the cells (kinds 0 and 1), each a faint fill with a soft inner glow and a thin bright line, mapped from the footprint's flat units onto the sphere.
+// The line is drawn in a band either side of the edge and shaped in pixels (from how fast the radius changes across the screen), so it is as thin on a small cell as on the whole footprint.
 const DISC_VERT = /* glsl */ `
 attribute vec4 disc;
 attribute vec2 pol;
@@ -124,7 +128,6 @@ uniform float pitch;
 uniform float circle;
 varying float vRho;
 varying float vRing;
-varying float vBand;
 varying float vFill;
 varying float vShare;
 ${MAP}
@@ -134,9 +137,8 @@ void main() {
   vec2 p = foot ? q : disc.xy * pitch + circle * q;
   vRho = pol.x;
   vRing = mod(disc.w, 2.0);
-  vBand = disc.z;
-  vFill = foot ? 0.1 : 0.16;
-  vShare = foot ? 0.95 : 0.7;
+  vFill = foot ? 0.05 : 0.04;
+  vShare = foot ? 1.0 : 0.8;
   gl_Position = projectionMatrix * viewMatrix * vec4(ground(p), 1.0);
 }`;
 
@@ -145,14 +147,19 @@ uniform vec3 colour;
 uniform float strength;
 varying float vRho;
 varying float vRing;
-varying float vBand;
 varying float vFill;
 varying float vShare;
 void main() {
-  float ring = vShare * sin(3.14159265 * clamp(vBand, 0.0, 1.0));
-  float fill = vFill * (0.55 + 0.45 * vRho);
-  float a = strength * (vRing > 0.5 ? ring : fill);
-  gl_FragColor = vec4(colour, a);
+  float a;
+  if (vRing > 0.5) {
+    float d = (vRho - 1.0) / max(fwidth(vRho), 1e-5);
+    float line = 1.0 - smoothstep(0.35, 1.1, abs(d));
+    float glow = d < 0.0 ? 0.34 * exp(d / 7.0) : 0.2 * exp(-d / 4.0);
+    a = vShare * min(1.0, line + glow);
+  } else {
+    a = vFill * (0.25 + 0.75 * pow(clamp(vRho, 0.0, 1.0), 5.0));
+  }
+  gl_FragColor = vec4(colour, strength * a);
 }`;
 
 /** The cones: the footprint's own, then one thin one for each lattice point. Each is a strip from the apex (t = 0) to the rim (t = 1), every phi round. */
@@ -210,7 +217,7 @@ function groundGeometry(three: ThreeParts, lattice: readonly (readonly number[])
     }
     // the ring: a band just inside the edge, brightest in the middle of it
     const band = pol.length / 2;
-    for (const w of [0, 1]) for (let s = 0; s < DISC_SEGMENTS; s += 1) push(x, y, fillKind + 1, 0.88 + 0.12 * w, (s / DISC_SEGMENTS) * Math.PI * 2, w);
+    for (const w of [0, 1]) for (let s = 0; s < DISC_SEGMENTS; s += 1) push(x, y, fillKind + 1, 0.82 + 0.36 * w, (s / DISC_SEGMENTS) * Math.PI * 2, w);
     for (let s = 0; s < DISC_SEGMENTS; s += 1) {
       const a = band + s;
       const b = band + ((s + 1) % DISC_SEGMENTS);
@@ -250,6 +257,8 @@ export function createBeamLayer(three: ThreeParts, scene: THREE.Object3D, state:
     pitch: { value: 0.2 },
     circle: { value: 0.1 },
     weights: { value: 0.3 },
+    cone0: { value: 0.42 },
+    thin: { value: 0.5 },
   };
   // forceSinglePass: a double-sided transparent material is drawn twice (back faces, then front); added light does not care about the order, so once is enough and the beam costs half the draw calls.
   // Two draw calls in all: the cones (the footprint's own and the thin one to each cell), and the ground (the footprint's disc and ring and the cells').
@@ -318,7 +327,9 @@ export function createBeamLayer(three: ThreeParts, scene: THREE.Object3D, state:
       uniforms.strength.value = state.strength;
       uniforms.pitch.value = wanted.pitch;
       uniforms.circle.value = wanted.radius;
-      uniforms.weights.value = 0.34 / Math.sqrt(Math.max(1, wanted.lattice.length / 7)); // many shafts add up at the satellite: each is dimmer the more there are
+      // the shafts are the beam's body when there are cells (the footprint's own cone is then a faint haze); each is dimmer the more there are, since they add up at the satellite
+      uniforms.weights.value = 0.7 / Math.sqrt(Math.max(1, wanted.lattice.length / 7));
+      uniforms.cone0.value = wanted.lattice.length > 0 ? 0.12 : 0.42;
       stats.cells = wanted.lattice.length;
       stats.cellRadiusKm = wanted.lattice.length > 0 ? wanted.radius * stats.radiusKm : 0;
     },
