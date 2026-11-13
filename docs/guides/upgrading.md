@@ -7,6 +7,11 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.48: the chosen orbit is thicker, and paths of your own
+
+- The orbit the package draws for the chosen satellite (and the ridden one) is now 2 px wide, where it was 1 px: it is the `selected` look of the new table of path looks. To have the old line, `setPathStyles({ selected: { width: 1 } })`; to draw it yourself, set `selected-path="off"` (the property `selectedPath`), and ring, name and ride stay.
+- New, and nothing to do: `setPaths` draws up to 16 orbits of your own in one call, `setPathStyles` changes their looks, `path-hit` and the events `chikyu-path-hover` and `chikyu-path-click` say which path the pointer is on. A press on a path is no longer heard by the sky (a star or a figure under it), as a press on a satellite's dot never was.
+
 ## To 0.47: names and a faint orbit on hover, hidden satellites dimmed
 
 Two new attributes of `<chikyu-space>` and `<chikyu-earth-realistic>` are on by default, so a page that sets nothing changes in two ways.
