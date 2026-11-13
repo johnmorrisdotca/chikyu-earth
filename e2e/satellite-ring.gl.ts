@@ -10,6 +10,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 const SPACE = "chikyu-space";
+// With RING_THROTTLE set the browser's CPU is slowed by that factor, for the repeats under load.
+const THROTTLE = Number(process.env.RING_THROTTLE ?? 0);
 const EDGES = ["top", "right", "bottom", "left"];
 
 interface Place {
@@ -36,6 +38,7 @@ test("a ring asked for out of view is there on the first draw that shows the sat
   test.setTimeout(90_000);
   await page.goto(`/chikyu-earth/?look=space&time=2026-11-02T18:00Z&speed=0&center=-100,40&sats=stations`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor({ timeout: 60_000 });
+  if (THROTTLE > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "satelliteGroups") as { count: number }[])[0]?.count ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
   await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: 2.4 }, true));
   await expect.poll(async () => draws(page)).toBeGreaterThan(0);
@@ -64,12 +67,27 @@ test("a ring asked for out of view is there on the first draw that shows the sat
 
   let shown = false;
   for (let step = 1; step <= 9 && !shown; step += 1) {
-    const before = await draws(page);
-    await page.locator(SPACE).evaluate((el, yaw) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw, tilt: 0, zoom: 2.4 }, true), step * 40);
-    await expect.poll(async () => draws(page), { timeout: 15_000 }).toBeGreaterThan(before);
-    const place = await placeOf(page, index);
+    // The turn, the first draw that shows it and what that draw left (the satellite's place and the rings) are read in ONE call in the page: the draw count was read in one call and the place in the next, and on a busy machine a draw
+    // of the step before landed in between, so the place was read at the old view and the step that had the satellite in it was passed over (TEST-RULES, pattern 1). The page's own last-drawn camera says which draw it is.
+    const turned = await page.locator(SPACE).evaluate(
+      async (el, [yaw, i]) => {
+        const space = el as unknown as { setView(v: unknown, final: boolean): void; placeSatellite(ref: unknown): Place | null };
+        const pose = (): string => (Reflect.get(el, "stats") as { camera: { quaternion: number[] } }).camera.quaternion.join(",");
+        const was = pose();
+        space.setView({ yaw, tilt: 0, zoom: 2.4 }, true);
+        const end = performance.now() + 15_000;
+        while (pose() === was) {
+          if (performance.now() > end) return null;
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+        return { place: space.placeSatellite({ group: "stations", index: i }), rings: [...el.shadowRoot!.querySelectorAll("i.pl-sat")].filter((node) => !(node as HTMLElement).hidden).length };
+      },
+      [step * 40, index] as const,
+    );
+    expect(turned, "a draw shows the turned view").not.toBeNull();
+    const place = turned!.place;
     if (!place?.visible) continue;
-    expect(await rings(page), "the ring is on the draw that brings the satellite in").toBe(1);
+    expect(turned!.rings, "the ring is on the draw that brings the satellite in").toBe(1);
     expect(place.edge, "in the picture it is not past an edge").toBeNull();
     expect(place.behind).toBe(false);
     await restAfterTurn(page);
