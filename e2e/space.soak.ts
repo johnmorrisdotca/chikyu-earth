@@ -43,16 +43,19 @@ async function sample(page: Page, t0: number) {
 }
 
 /** Back to the opening state: paused at the Earth, the larger pictures freed. */
-async function rest(page: Page): Promise<void> {
+async function rest(page: Page, opening: { orbits: unknown; labels: unknown }): Promise<void> {
   // in sight: a view out of sight draws nothing, and what is let go is let go at a draw
   await page.locator(SPACE).scrollIntoViewIfNeeded();
-  await page.locator(SPACE).evaluate((el) => {
+  await page.locator(SPACE).evaluate((el, o) => {
     Reflect.set(el, "speed", 0);
     Reflect.set(el, "scale", "compressed");
+    // the walk toggles the orbit lines and the labels: the opening view has them as the page opened them, and the count at rest is only comparable with the same layers on
+    Reflect.set(el, "orbits", o.orbits);
+    Reflect.set(el, "labels", o.labels);
     // the time it opened at: the moons of Saturn and Jupiter are in the view or not by where they are on that day, so the count at rest is only comparable on the same day
     Reflect.set(el, "time", Date.parse("2026-11-02T18:00:00Z"));
     (el as unknown as { setSatellites(n: string, g: null): void; selectSatellite(r: null): void }).selectSatellite(null);
-  });
+  }, opening);
   await removeMany(page);
   await rideButton(page, "Stop").click();
   // looking at the Earth, not at whichever body the walk left it on: a body in view keeps its shader, so the count at rest is only comparable with the same body in view
@@ -114,6 +117,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     await settle(page, 1500);
   }
 
+  const opening = await page.locator(SPACE).evaluate((el) => ({ orbits: Reflect.get(el, "orbits") as unknown, labels: Reflect.get(el, "labels") as unknown }));
   const t0 = Date.now();
   const end = t0 + MINUTES * 60_000;
   const warmAt = t0 + Math.min(60_000, MINUTES * 15_000);
@@ -156,7 +160,7 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     if (n % 4 === 1) await page.locator(SPACE).evaluate((el, i) => (el as unknown as { selectSatellite(r: unknown): void }).selectSatellite(i % 5 === 0 ? null : { group: "starlink", index: i % 400 }), n);
     await page.waitForTimeout(400 + Math.floor(random() * 400));
     if (!warm && Date.now() >= warmAt) {
-      await rest(page);
+      await rest(page, opening);
       warm = await sample(page, t0);
       samples.push(warm);
       console.log(`warm  ${JSON.stringify(warm)}`);
@@ -168,18 +172,20 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
     }
   }
 
-  await rest(page);
+  await rest(page, opening);
   const last = await sample(page, t0);
   console.log(`final ${JSON.stringify(last)}`);
   const drawsPerSecond = (last.draws - warm!.draws) / (last.at - warm!.at);
   console.log(`space soak ${MINUTES} min: ${step} steps, heap ${warm!.heapMB} -> ${last.heapMB} MB, GPU objects ${warm!.all} -> ${last.all}, ${drawsPerSecond.toFixed(2)} frames a second after warm-up`);
   expect(last.heapMB - warm!.heapMB, "JS heap grew").toBeLessThanOrEqual(4);
-  // The same view, settled, holds no more than it did at the start. Not exactly the same: a body made and let go (MODULES-1192) leaves the count in the view where its history put it, and the walk's last stop is not the
-  // walk's first (the counts at the opening view settled at 63, 66 and 69 buffers in different runs, every one steady for five seconds), so a count that came out lower than at the start is not a fault; one that grew is.
+  // The same view, settled, holds what it held at the start, give or take what the path to it leaves: the made set is the same (`stats.bodies`, settled in `rest`), but the opening view has come out at 63, 66, 69 and 72 buffers and at 8 and
+  // 9 programs in different runs, each steady for five seconds (a shader or a geometry kept from a body seen on the way). So no count may grow past that band; a body let go without its geometry disposed takes the one-minute soak from 60 textures to 87
+  // and from 330 GPU objects to 416, far outside it.
+  const band = { buffers: 6, programs: 1, all: 9 };
   expect(last.textures, "textures").toBeLessThanOrEqual(warm!.textures);
-  expect(last.buffers, "buffers").toBeLessThanOrEqual(warm!.buffers);
-  expect(last.programs, "programs").toBeLessThanOrEqual(warm!.programs);
-  expect(last.all, "GPU objects").toBeLessThanOrEqual(warm!.all);
+  expect(last.buffers, "buffers").toBeLessThanOrEqual(warm!.buffers + band.buffers);
+  expect(last.programs, "programs").toBeLessThanOrEqual(warm!.programs + band.programs);
+  expect(last.all, "GPU objects").toBeLessThanOrEqual(warm!.all + band.all);
   expect(Math.max(...samples.map((s) => s.canvasMP)), "canvas megapixels").toBeLessThanOrEqual(6);
   expect(drawsPerSecond, "frames a second").toBeLessThanOrEqual(30);
   expect((await statsOf(page)).contexts, "WebGL contexts made").toBe(1);
