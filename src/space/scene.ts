@@ -522,16 +522,18 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       // Pictures arrive one by one (the Earth's maps, its finer tiles, a body's), each asking for a draw. For a reader who asked for reduced motion they are gathered: the ask is held for a second, and
       // the draw is made only if none was made in that second (a clock that steps shows them in its own step), so at most one a second and none beside the steps.
       let drawnAt = Number.NEGATIVE_INFINITY;
+      let askedAt = Number.NEGATIVE_INFINITY;
       let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
       const arrivalDraw = (): void => {
         if (!(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)) {
           deps.invalidate();
           return;
         }
+        askedAt = performance.now();
         if (arrivalTimer !== undefined) return;
-        const askedAt = performance.now();
         arrivalTimer = setTimeout(() => {
           arrivalTimer = undefined;
+          // the last picture to arrive is on a draw that began after it: nothing more to ask for
           if (!ended && drawnAt < askedAt) deps.invalidate();
         }, ARRIVAL_GATHER_MS);
       };
