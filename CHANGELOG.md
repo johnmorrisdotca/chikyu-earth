@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.46.4 - 2026-11-13
 
 - **Cloud-free ground from NASA's Landsat mosaic** (MODULES-1263). `tiles-finer="gibs"` now reads NASA's Landsat annual true-colour mosaic (`Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual`, 30 m, no cloud, land only, the year 2000) instead of a daily picture, which was often solid cloud over the ground. It is off unless a page sets it. Streets, fields and rivers show at 150 km where our level 5 is a blur. The daily MODIS Terra picture stays as `tiles-finer-layer="today"`; `landsat` is the default's short name. The mosaic has one picture a year, so no day is searched for; `tiles-finer-date` names another year it has (1984, 1985, 1988 to 1990, 1998, 1999). Where it has no data (the oceans, Antarctica, the far north, a tile that is all black) our own tiles stay, silently. Tiles now carry transparency: black and nearly black pixels (no data, and the mosaic's sea) are clear, so our blue sea and our picture show through, and a daily picture's black wedges between passes are no longer drawn black. The colours are brought to the look of our own pictures by a gain fitted over six places on land (0.76, 0.66, 0.55), so the finer land does not look like a sticker. The credit line adds the Landsat data's own line. The grid support takes the 31.25 m matrix (levels 0 to 11). It is old (2000) and made of separate scenes, so a straight scene edge shows here and there.
 
