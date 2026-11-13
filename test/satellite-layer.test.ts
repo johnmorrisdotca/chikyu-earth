@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSatelliteLayer, newSatelliteState } from "../src/space/satellite-layer.ts";
+import { createSatelliteLayer, DEFAULT_STREAK_MAX, newSatelliteState, readStreakMax } from "../src/space/satellite-layer.ts";
 import { createSatellites, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
 import { madeUp } from "./madeup-elements.ts";
 
@@ -176,4 +176,52 @@ test("focusing one group dims the other through the dim uniform, hiding draws it
   assert.equal(stations?.material?.uniforms?.["groupDim"]?.value, 0);
   assert.equal(gps?.visible, false, "clearing the focus hides a group the page had hidden");
   assert.equal(local.children.length, made, "dimming and hiding add no object");
+});
+
+/** The longest streak, in CSS pixels, after a run of frames `frameMs` of wall time apart at `speed`, with the Earth `radius` pixels across its radius and the cap `max`. */
+const longestAfter = (speed: number, frameMs: number, radius: number, max: number): number => {
+  const state = newSatelliteState();
+  state.streakMax = max;
+  const round = stations.filter((set) => set.ECCENTRICITY < 0.02);
+  state.groups.set("stations", { satellites: createSatellites(round), color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  for (let frame = 0; frame < 4; frame += 1) layer.update(time + frame * speed * frameMs, speed, radius);
+  return state.drawn.longestStreakPx;
+};
+
+test("the streak is the same length whether the frames come every 33 or every 200 milliseconds, capped or not", () => {
+  for (const [speed, max] of [[120, DEFAULT_STREAK_MAX], [600, DEFAULT_STREAK_MAX], [3600, DEFAULT_STREAK_MAX], [86_400, DEFAULT_STREAK_MAX], [120, 0], [3600, 0]] as const) {
+    const quick = longestAfter(speed, 33, 300, max);
+    const slow = longestAfter(speed, 200, 300, max);
+    assert.ok(quick > 0, `${speed} times: a streak is drawn`);
+    assert.ok(Math.abs(quick - slow) / quick < 0.001, `${speed} times, cap ${max}: ${quick.toFixed(3)} px at 33 ms against ${slow.toFixed(3)} px at 200 ms`);
+  }
+});
+
+test("the longest streak on the screen is the same at an hour and a day a second as the cap, and keeps the 10-minutes-a-second look", () => {
+  const ten = longestAfter(600, 33, 300, DEFAULT_STREAK_MAX);
+  assert.ok(ten > 5 && ten <= DEFAULT_STREAK_MAX, `10 minutes a second on a whole Earth: ${ten.toFixed(1)} px`);
+  assert.equal(ten, longestAfter(600, 33, 300, 0), "the cap does not touch the 10-minutes-a-second look");
+  for (const speed of [3600, 86_400]) {
+    const capped = longestAfter(speed, 33, 300, DEFAULT_STREAK_MAX);
+    assert.ok(Math.abs(capped - DEFAULT_STREAK_MAX) < 0.02 * DEFAULT_STREAK_MAX, `${speed} times: ${capped.toFixed(2)} px against a cap of ${DEFAULT_STREAK_MAX}`);
+    assert.ok(longestAfter(speed, 33, 300, 0) > 3 * DEFAULT_STREAK_MAX, `${speed} times with no cap: the stretch is long`);
+  }
+  assert.ok(Math.abs(longestAfter(3600, 33, 150, DEFAULT_STREAK_MAX) - DEFAULT_STREAK_MAX) < 0.2, "a smaller Earth on the screen: the same pixels");
+  assert.ok(Math.abs(longestAfter(3600, 33, 900, DEFAULT_STREAK_MAX) - DEFAULT_STREAK_MAX) < 0.2, "a larger Earth on the screen: the same pixels");
+  assert.ok(Math.abs(longestAfter(3600, 33, 300, 20) - 20) < 0.4, "a page that asks for 20 pixels gets 20");
+});
+
+test("satellite-streak-max reads a number of pixels, off or 0 for none, and anything else is the default", () => {
+  assert.equal(readStreakMax(null), DEFAULT_STREAK_MAX);
+  assert.equal(readStreakMax(""), DEFAULT_STREAK_MAX);
+  assert.equal(readStreakMax("12"), 12);
+  assert.equal(readStreakMax("2.5"), 2.5);
+  assert.equal(readStreakMax("0"), 0);
+  assert.equal(readStreakMax("off"), 0);
+  assert.equal(readStreakMax(" OFF "), 0);
+  assert.equal(readStreakMax("-3"), DEFAULT_STREAK_MAX);
+  assert.equal(readStreakMax("wide"), DEFAULT_STREAK_MAX);
+  assert.equal(newSatelliteState().streakMax, DEFAULT_STREAK_MAX);
 });

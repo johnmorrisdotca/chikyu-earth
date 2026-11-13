@@ -228,6 +228,80 @@ test("a streak ends where SGP4 puts the satellite and starts where it was one fr
   }
 });
 
+test("a streak is never longer than the cap, whatever the clock: the same at 10 minutes, an hour and a day a second, and shorter where the stretch is shorter", () => {
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const group = createSatellites([base]);
+  const km = 6371;
+  const ms = Date.parse(`${base.EPOCH}Z`) + 3_600_000;
+  const positions = new Float32Array(3);
+  const segments = new Float32Array(6);
+  const cap = 8 / 300;
+  const length = (span: number, max: number): number => {
+    group.pin(ms);
+    group.arc(ms, span, positions, segments, max);
+    return Math.hypot(segments[3]! - segments[0]!, segments[4]! - segments[1]!, segments[5]! - segments[2]!);
+  };
+  const frame = (speed: number): number => speed * (1000 / 30);
+  const whole = (speed: number): number => length(frame(speed), 0);
+  const at = (speed: number): number => length(frame(speed), cap);
+  const near = (a: number, b: number): boolean => Math.abs(a - b) / b < 0.01;
+  assert.ok(whole(120) < cap, `2 minutes a second: ${(whole(120) * km).toFixed(1)} km, under the cap`);
+  assert.ok(near(at(120), whole(120)), "shorter than the cap, so the cap changes nothing");
+  assert.ok(whole(600) < cap, `10 minutes a second: ${(whole(600) * km).toFixed(0)} km, under the cap`);
+  assert.ok(near(at(600), whole(600)), "the look at 10 minutes a second is kept");
+  for (const speed of [3600, 86_400]) {
+    assert.ok(whole(speed) > cap * 4, `${speed} times: the whole stretch is long, ${(whole(speed) * km).toFixed(0)} km`);
+    assert.ok(near(at(speed), cap), `${speed} times: capped at ${(cap * km).toFixed(0)} km, drawn ${(at(speed) * km).toFixed(0)} km`);
+  }
+  assert.ok(near(at(3600), at(86_400)), "an hour a second and a day a second are the same length");
+  assert.equal(whole(86_400) > 0, true);
+  // the cap at zero, below zero or not a number is no cap
+  for (const none of [0, -1, Number.NaN]) assert.ok(near(length(frame(3600), none), whole(3600)), `a cap of ${none} is no cap`);
+});
+
+test("a capped streak ends at the satellite and points back along its motion, forwards and backwards, and never cuts through the Earth", () => {
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const group = createSatellites([base, { ...base, NORAD_CAT_ID: 2, INCLINATION: 140, RA_OF_ASC_NODE: 200, MEAN_MOTION: 13, ECCENTRICITY: 0.001 }]);
+  const ms = Date.parse(`${base.EPOCH}Z`) + 3_600_000;
+  const positions = new Float32Array(6);
+  const segments = new Float32Array(12);
+  const velocity = new Float64Array(6);
+  for (const speed of [3600, -3600, 86_400]) {
+    group.pin(ms);
+    group.arc(ms, speed * (1000 / 30), positions, segments, 8 / 300);
+    for (let i = 0; i < 2; i += 1) {
+      const w = i * 6;
+      assert.deepEqual([...segments.subarray(w + 3, w + 6)], [...positions.subarray(i * 3, i * 3 + 3)], "the end is the satellite");
+      assert.ok(group.exact(i, ms, velocity));
+      const back = [segments[w]! - positions[i * 3]!, segments[w + 1]! - positions[i * 3 + 1]!, segments[w + 2]! - positions[i * 3 + 2]!];
+      const along = back[0]! * velocity[3]! + back[1]! * velocity[4]! + back[2]! * velocity[5]!;
+      assert.ok(speed > 0 ? along < 0 : along > 0, `speed ${speed}: the start is behind the satellite on a forward clock, ahead of it on a backward one`);
+      const middle = [(segments[w]! + segments[w + 3]!) / 2, (segments[w + 1]! + segments[w + 4]!) / 2, (segments[w + 2]! + segments[w + 5]!) / 2];
+      assert.ok(Math.hypot(...(middle as [number, number, number])) > 1.05, `speed ${speed}: the middle of the streak is above the Earth, not through it`);
+    }
+  }
+});
+
+test("a highly eccentric orbit is capped too, by the speed SGP4 gives it, whether it is fast at its low point or slow at its high one", () => {
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const molniya = { ...base, NORAD_CAT_ID: 9, OBJECT_NAME: "MOLNIYA", MEAN_MOTION: 2.00614, ECCENTRICITY: 0.74, INCLINATION: 63.4, ARG_OF_PERICENTER: 270, MEAN_ANOMALY: 0, BSTAR: 0, MEAN_MOTION_DOT: 0 };
+  const group = createSatellites([molniya]);
+  const t0 = Date.parse(`${molniya.EPOCH}Z`);
+  const positions = new Float32Array(3);
+  const segments = new Float32Array(6);
+  const cap = 8 / 300;
+  const span = 3600 * (1000 / 30);
+  for (const age of [0, 3 * 3_600_000, 6 * 3_600_000]) {
+    group.pin(t0);
+    group.arc(t0 + age, span, positions, segments, 0);
+    const whole = Math.hypot(segments[3]! - segments[0]!, segments[4]! - segments[1]!, segments[5]! - segments[2]!);
+    group.arc(t0 + age, span, positions, segments, cap);
+    const capped = Math.hypot(segments[3]! - segments[0]!, segments[4]! - segments[1]!, segments[5]! - segments[2]!);
+    assert.ok(capped <= cap * 1.02, `${age} ms: ${capped.toFixed(4)} against a cap of ${cap.toFixed(4)}`);
+    assert.ok(capped > cap * 0.9 || capped >= whole * 0.99, `${age} ms: capped to the cap, or whole when that is shorter`);
+  }
+});
+
 test("a highly eccentric orbit is SGP4 itself on every frame: its streak is the real stretch of the orbit, not a turn at the mean motion", () => {
   const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
   const molniya = { ...base, NORAD_CAT_ID: 9, OBJECT_NAME: "MOLNIYA", MEAN_MOTION: 2.00614, ECCENTRICITY: 0.74, INCLINATION: 63.4, ARG_OF_PERICENTER: 270, MEAN_ANOMALY: 0, BSTAR: 0, MEAN_MOTION_DOT: 0 };

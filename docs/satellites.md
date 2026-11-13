@@ -18,6 +18,10 @@ is dimmer, and says how long ago the files were downloaded.
 Positions are in the space view's axes (TEME's x, z, -y: x to the vernal equinox, y north) in Earth radii (6371 km), which is the Earth's own frame there: a unit test checks that a satellite's longitude from these axes and the
 scene's sidereal time agrees with satellite.js's own geodetic longitude within 0.02 degree, and an end-to-end test centres the view under the ISS and finds it in the middle.
 
+## How long a streak is
+
+Above 60 times real time the stretch one frame spans grows with the clock: a low satellite covers about 150 km at 10 minutes a second, 900 km at an hour and 21,000 km at a day, which is a long chord across the globe. `satellite-streak-max` (CSS pixels, 8 by default, `off` or `0` for none) caps it. The cap is a length on the screen and not seconds of travel: speeds differ with height (about 7.7 km/s at 420 km, 3 km/s at 36,000 km), so seconds would draw a high satellite less than half as long as a low one, and pixels draw both alike. In Earth radii the cap is the pixels over the Earth's radius in pixels, so it follows the zoom, and for each satellite it becomes a turn of cap over its height (an orbit placed by SGP4 itself uses the speed SGP4 gives, as a shorter stretch of time). The stretch is one frame at 30 a second whatever the frames really take, so the length does not depend on the frame rate. `Satellites.arc` takes the cap as its last argument in Earth radii. Tested in `test/satellites.test.ts` (10 minutes, an hour and a day a second; shorter than the cap at 2 minutes), `test/satellite-layer.test.ts` (33 ms and 200 ms frames give one length) and `e2e/satellites.gl.ts` (the longest streak on the screen at an hour a second).
+
 ## What is drawn
 
 One `THREE.Points` a group (one draw call), a shader that draws a soft round dot of a fixed size in CSS pixels; a chosen satellite gets a ring and its orbit (one revolution, 120 points, in order along the path); a group of

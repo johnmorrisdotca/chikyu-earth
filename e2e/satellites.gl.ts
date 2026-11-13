@@ -17,7 +17,7 @@ interface Stats {
   contexts: number;
   canvas: { width: number; height: number; pixels: number };
   time: number;
-  satellites: { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
+  satellites: { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number };
 }
 const statsOf = (page: Page): Promise<Stats> => page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats") as Stats);
 
@@ -228,6 +228,37 @@ test.describe("moving", () => {
     expect(held.tooFast).toBe(false);
     expect(held.segments, "a held clock draws dots, not streaks").toBe(0);
     expect(held.placed).toBeGreaterThan(2000);
+  });
+
+  test("at an hour a second the longest streak on the screen is the cap, as at 10 minutes a second, and off lets it run long", async ({ page }) => {
+    await open(page, "", "stations,starlink");
+    const longest = async (speed: number): Promise<number> => {
+      await setSpeed(page, speed);
+      await settle(page, 1200);
+      const { satellites } = await statsOf(page);
+      expect(satellites.tooFast).toBe(true);
+      expect(satellites.segments, "a streak for every satellite drawn").toBe(satellites.placed);
+      return satellites.longestStreakPx;
+    };
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "satelliteStreakMax"))).toBe(8);
+    const ten = await longest(600);
+    const hour = await longest(3600);
+    const day = await longest(86_400);
+    console.log(`longest streak: ${ten.toFixed(1)} px at 10 minutes a second, ${hour.toFixed(1)} px at an hour, ${day.toFixed(1)} px at a day`);
+    expect(ten, "10 minutes a second: a few pixels, under the cap").toBeGreaterThan(2);
+    expect(ten).toBeLessThanOrEqual(8.1);
+    expect(hour, "an hour a second: the cap, not a chord across the globe").toBeLessThanOrEqual(8.1);
+    expect(hour).toBeGreaterThan(7);
+    expect(day).toBeLessThanOrEqual(8.1);
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "satelliteStreakMax", 20));
+    expect(await page.locator(SPACE).evaluate((el) => el.getAttribute("satellite-streak-max"))).toBe("20");
+    expect(await longest(3600)).toBeLessThanOrEqual(20.2);
+    expect(await longest(3600)).toBeGreaterThan(19);
+    await page.locator(SPACE).evaluate((el) => el.setAttribute("satellite-streak-max", "off"));
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "satelliteStreakMax"))).toBe(0);
+    const whole = await longest(3600);
+    console.log(`satellite-streak-max off, an hour a second: ${whole.toFixed(1)} px`);
+    expect(whole, "no cap: the whole stretch of a frame").toBeGreaterThan(30);
   });
 
   test("orbit tint changes the colours, and the dot size follows the zoom", async ({ page }) => {

@@ -35,10 +35,37 @@ export interface SatelliteState {
   orbitTint: boolean;
   /** One group shown on its own. `null` leaves every group as the page set it. */
   focus: SatelliteFocus | null;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
+  /**
+   * The longest a streak may be on the screen above the interpolation limit, in CSS pixels at the Earth's own distance (`satellite-streak-max`). 0 draws the whole stretch one frame spans, however long that is.
+   */
+  streakMax: number;
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number };
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
+/** The longest a streak is by default: the stretch a low satellite covers in one frame at 10 minutes a second, on a whole Earth with a radius of about 300 pixels: a few millimetres on the screen. */
+export const DEFAULT_STREAK_MAX = 8;
+
+/** Read `satellite-streak-max`: a number of CSS pixels, `off` or 0 for no cap, and the default for nothing, a negative number or anything else. */
+export function readStreakMax(value: string | null): number {
+  if (value === null || value.trim() === "") return DEFAULT_STREAK_MAX;
+  const text = value.trim().toLowerCase();
+  if (text === "off") return 0;
+  const number = Number(text);
+  return Number.isFinite(number) && number >= 0 ? number : DEFAULT_STREAK_MAX;
+}
+
+/** The longest streak, in CSS pixels, among the first `count` of `segments` (6 numbers each), with the Earth's radius `earthPx` on the screen: a length in Earth radii times the radius. */
+export function longestStreak(segments: Float32Array, count: number, earthPx: number): number {
+  let longest = 0;
+  for (let i = 0; i < count; i += 1) {
+    const w = i * 6;
+    const length = Math.hypot(segments[w + 3]! - segments[w]!, segments[w + 4]! - segments[w + 1]!, segments[w + 5]! - segments[w + 2]!);
+    if (length > longest) longest = length;
+  }
+  return longest * earthPx;
+}
+
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -232,7 +259,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   const view = new three.Vector3();
   const ink = new three.Color();
   let basis = 0;
-  let lastGame = 0;
+  let lastEarthPx = 0;
 
   const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
@@ -312,10 +339,13 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       const step = Math.min(60_000, Math.max(1000, Math.abs(speed) * 1000));
       if (basis === 0 && earthPx > 0) basis = earthPx;
       const dotScale = basis > 0 && earthPx > 0 ? Math.min(2.5, Math.max(0.45, Math.sqrt(earthPx / basis))) : 1;
-      const frameMs = speed * (1000 / 30);
-      const since = lastGame === 0 ? frameMs : time - lastGame;
-      const span = tooFast ? (Math.abs(since) > 0 && Math.abs(since) < Math.abs(frameMs) * 4 ? since : frameMs) : 0;
-      lastGame = time;
+      // One frame at the pace the picture is held to (30 a second), whatever the frames really take: a streak that grew with a slow frame would grow with a slow computer
+      const span = tooFast ? speed * (1000 / 30) : 0;
+      if (earthPx > 0) lastEarthPx = earthPx;
+      const radius = earthPx > 0 ? earthPx : lastEarthPx > 0 ? lastEarthPx : 150;
+      // the cap is on the screen, so in Earth radii it is the pixels over the Earth's radius in pixels: a zoomed-out Earth allows a longer stretch of orbit than a zoomed-in one
+      const capLength = state.streakMax > 0 ? state.streakMax / radius : 0;
+      let longest = 0;
       for (const [name, entry] of drawn) {
         if (state.groups.get(name)?.satellites !== entry.source) {
           drop(entry);
@@ -404,7 +434,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           }
           entry.pinWall = started;
           entry.pinTime = time;
-          const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions);
+          const n = group.satellites.arc(time, span, entry.positions, entry.streakPositions, capLength);
           entry.attribute.needsUpdate = true;
           if (entry.streak) {
             entry.streakAttribute.needsUpdate = true;
@@ -417,7 +447,10 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           for (const line of entry.lines) line.loop.visible = false;
           placed += n;
           group.placed = n;
-          if (entry.streak) segments += n;
+          if (entry.streak) {
+            segments += n;
+            longest = Math.max(longest, longestStreak(entry.streakPositions, total, radius));
+          }
         } else {
           if (entry.streak) entry.streak.visible = false;
           entry.pinWall = 0;
@@ -463,6 +496,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       }
       state.drawn.placed = placed;
       state.drawn.segments = segments;
+      state.drawn.longestStreakPx = longest;
       state.drawn.dotScale = dotScale;
       state.drawn.tooFast = tooFast;
       state.drawn.updateMs = performance.now() - started;
