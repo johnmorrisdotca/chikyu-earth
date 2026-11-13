@@ -19,6 +19,7 @@ import { beginPlaceSprites, createPlaceSprites, type PlaceSpriteData, type Place
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
 import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
+import { createRouteLayer, newRouteState, type RouteLayer, type RouteState } from "../route/layer.ts";
 import { pointOnEarth } from "./tiles.ts";
 import { paintMinute } from "../paint/buffer.ts";
 import { createPaintTexture } from "../paint/texture.ts";
@@ -107,6 +108,8 @@ export interface EarthModel {
   borders: BorderState;
   /** The meridians and parallels (src/grid/layer.ts): off unless the element switches them on. */
   grid: GridState;
+  /** A route between two places (src/route/layer.ts): off unless the element sets it. */
+  route: RouteState;
 }
 
 export interface EarthDeps {
@@ -165,6 +168,7 @@ export const newModel = (): EarthModel => ({
   bodyLabel: newBodyLabelState(),
   borders: newBorderState(),
   grid: newGridState(),
+  route: newRouteState(),
 });
 
 /**
@@ -328,6 +332,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       let borders: BorderLayer | null = null;
       const placeRings: { sprites: PlaceSprites | null; tried: boolean } = { sprites: null, tried: false };
       let gridLayer: GridLayer | null = null;
+      let routeLayer: RouteLayer | null = null;
 
       return {
         scene,
@@ -432,6 +437,15 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             }
           }
           gridLayer?.sync(radius);
+          if ((model.route.ends || routeLayer) && !routeLayer && !model.route.failed) {
+            try {
+              routeLayer = createRouteLayer(three, turned, model.route);
+            } catch (error) {
+              model.route.failed = true;
+              console.warn(error instanceof Error ? error.message : error);
+            }
+          }
+          routeLayer?.sync();
           if (deps.paint) {
             const changed = deps.paint.step(model.time);
             paint.sync(deps.paint.on(), changed);
@@ -459,6 +473,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
           borders?.dispose();
           placeRings.sprites?.dispose();
           gridLayer?.dispose();
+          routeLayer?.dispose();
           model.tiles = null;
           tiles.dispose();
           textures.dispose();

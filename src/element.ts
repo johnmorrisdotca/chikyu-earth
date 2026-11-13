@@ -3,6 +3,7 @@
 import { carryControls, type ElementControls, type ViewController } from "@johnmorrisdotca/kazoku-ui/view-controls";
 import { adoptStyles } from "./adopt.ts";
 import { globe } from "./globe.ts";
+import { readRoute, routeLeg, routeText, type RouteLeg } from "./route.ts";
 import { cleanStyle } from "./styles.ts";
 import { globeBaseScale, HOME_VIEW, lookAt } from "./view.ts";
 import type { OverlayHost, OverlayPose } from "./markers/layer.ts";
@@ -39,7 +40,7 @@ const STYLE = ":host{display:block;position:relative;isolation:isolate}.holder s
  * ```
  */
 export class ChikyuEarth extends HTMLElement {
-  static observedAttributes = ["center", "look", "style", "size", "graticule"];
+  static observedAttributes = ["center", "look", "style", "size", "graticule", "route"];
 
   #centre: GeoPoint = { lon: 0, lat: 0 };
   #view: GlobeView = { ...HOME_VIEW };
@@ -59,6 +60,24 @@ export class ChikyuEarth extends HTMLElement {
   /** Where the view is centred now: the `center` attribute, else 0,0. The element never asks the browser where the reader is. */
   get centre(): GeoPoint {
     return { ...this.#centre };
+  }
+
+  /**
+   * A route between two places (the attribute `route`, `lon,lat,lon,lat`). Null, the default, draws none. The line is the WGS84 geodesic, split at the date line.
+   * Setting the property writes the attribute. Nothing is drawn again at rest: the line is part of the picture, which is drawn when the view or the route changes.
+   */
+  get route(): { from: GeoPoint; to: GeoPoint } | null {
+    return readRoute(this.getAttribute("route"));
+  }
+  set route(value: { from: GeoPoint; to: GeoPoint } | null) {
+    if (!value) this.removeAttribute("route");
+    else this.setAttribute("route", routeText(value));
+  }
+
+  /** The distance, bearings and flight-time estimate for `route`, or null when none is set. The flight time assumes 900 km/h. */
+  get routeInfo(): RouteLeg | null {
+    const route = this.route;
+    return route ? routeLeg(route.from, route.to) : null;
   }
 
   /** A box laid over the globe for markers (see `@johnmorrisdotca/chikyu-earth/markers`): where it is, the pose of the last drawing, and a way to hear the next. */
@@ -174,7 +193,7 @@ export class ChikyuEarth extends HTMLElement {
     this.#liveAt = performance.now();
     const size = Number(this.getAttribute("size")) || 320;
     const style = cleanStyle(this.getAttribute("look") ?? this.getAttribute("style"));
-    const svg = globe({ size, style, centre: this.#centre, view: this.#view, graticule: this.hasAttribute("graticule") });
+    const svg = globe({ size, style, centre: this.#centre, view: this.#view, graticule: this.hasAttribute("graticule"), route: readRoute(this.getAttribute("route")) });
     const root = this.#ensureShell();
     root.querySelector(".holder")!.innerHTML = svg;
     this.#drawn = { ...this.#view };

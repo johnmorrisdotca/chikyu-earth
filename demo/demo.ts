@@ -713,6 +713,66 @@ if (flat && controls && stage) {
     });
   }
 
+  const routeFrom = document.querySelector<HTMLSelectElement>("#route-from");
+  const routeTo = document.querySelector<HTMLSelectElement>("#route-to");
+  const routeNote = document.querySelector<HTMLElement>("#route-note");
+  const routeCities: [string, string][] = [
+    ["Tokyo", "fav_Tokyo"],
+    ["Toronto", "fav_Toronto"],
+    ["London", "fav_London"],
+    ["São Paulo", "fav_SaoPaulo"],
+    ["Sydney", "fav_Sydney"],
+    ["Cairo", "fav_Cairo"],
+  ];
+  function fillRouteChoices(): void {
+    for (const select of [routeFrom, routeTo]) {
+      if (!select) continue;
+      const current = select.value;
+      select.replaceChildren();
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = say("routeNone");
+      select.append(none);
+      for (const [name, key] of routeCities) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = say(key);
+        select.append(option);
+      }
+      if ([...select.options].some((option) => option.value === current)) select.value = current;
+    }
+  }
+  function showRoute(): void {
+    const from = PLACES.find((place) => place.id === `city:${routeFrom?.value ?? ""}`);
+    const to = PLACES.find((place) => place.id === `city:${routeTo?.value ?? ""}`);
+    const text = from && to && from.id !== to.id ? `${from.lon},${from.lat},${to.lon},${to.lat}` : null;
+    for (const element of [flat, real, space]) {
+      if (!element) continue;
+      if (text) element.setAttribute("route", text);
+      else element.removeAttribute("route");
+    }
+    const info = text ? flat?.routeInfo : null;
+    if (routeNote) {
+      routeNote.hidden = !info;
+      if (info) {
+        const whole = Math.floor(info.flightHours);
+        const minutes = Math.round((info.flightHours - whole) * 60);
+        routeNote.textContent = say("routeNote", { km: info.kilometres.toFixed(0), start: info.initialBearing.toFixed(0), end: info.finalBearing.toFixed(0), hours: `${whole}:${String(minutes).padStart(2, "0")}` });
+      }
+    }
+    address.set("from", routeFrom?.value ? routeFrom.value : null);
+    address.set("to", routeTo?.value ? routeTo.value : null);
+  }
+  fillRouteChoices();
+  if (routeFrom) routeFrom.value = address.get("from") ?? "";
+  if (routeTo) routeTo.value = address.get("to") ?? "";
+  for (const select of [routeFrom, routeTo]) select?.addEventListener("change", () => showRoute());
+  document.addEventListener("kazoku-languagechange", () => queueMicrotask(() => {
+    fillRouteChoices();
+    showRoute();
+  }));
+  showRoute();
+
   async function enterSpace(): Promise<boolean> {
     const [{ setThreeLoader, setBodyPainter, setSatellitePainter }, { stationModels }] = await Promise.all([import("../src/space/element.ts"), import("./station-models.ts")]);
     setThreeLoader(() => import("./three-subset.ts"));
@@ -788,6 +848,7 @@ if (flat && controls && stage) {
       stage!.append(element);
       barFor(element);
       space = element;
+      showRoute();
       element.addEventListener("chikyu-ride-face", () => {
         rideFace = space?.facing ?? null;
         address.set("face", space?.facing ?? null);
@@ -868,6 +929,7 @@ if (flat && controls && stage) {
       stage!.append(element);
       barFor(element);
       real = element;
+      showRoute();
       // whose data is on the screen: the credit line of the realistic Earth, in the page's language (the data door); `?data=own` ignores every outside source
       if (address.get("data") === "own") element.setAttribute("data", "own");
       const doorLine = document.querySelector<HTMLElement>("#door-credit");

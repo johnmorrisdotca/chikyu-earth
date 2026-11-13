@@ -20,6 +20,8 @@ import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost,
 import { BORDER_ATTRIBUTES, readBorders, type BorderSets } from "../borders/lines.ts";
 import type { BorderData, BorderStats } from "../borders/layer.ts";
 import { GRID_ATTRIBUTES, readGrid } from "../grid/lines.ts";
+import { readRoute, routeLeg, routeText, type RouteLeg } from "../route.ts";
+import { applyRoute } from "../route/layer.ts";
 import type { GridStats } from "../grid/layer.ts";
 import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/geometry.ts";
 import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
@@ -259,7 +261,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "bodies-credit", "satellite-tint", "tiles"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "tiles"];
 
   #model: SpaceModel = newSpaceModel();
   #paint = createPaintState();
@@ -546,6 +548,8 @@ export class ChikyuSpace extends HTMLElement {
     } else if (name === "place-groups" && this.#placeLayer) {
       this.#placeLayer.grouping = readPlaceGroups(value);
       this.#gate?.request();
+    } else if (name === "route") {
+      if (applyRoute(this.#model.route, readRoute(value))) this.#gate?.request();
     }
     else if ((CITY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#cities?.refresh();
     else if (name === "borders") {
@@ -778,6 +782,24 @@ export class ChikyuSpace extends HTMLElement {
     if (!layer) return;
     layer.set(this.#here?.named(this.#placeList) ?? this.#placeList);
     this.#gate?.request();
+  }
+
+  /**
+   * A route between two places (the attribute `route`, `lon,lat,lon,lat`). Null, the default, draws none. The line is the WGS84 geodesic, split at the date line, and it turns with the Earth.
+   * Setting the property writes the attribute. Nothing is drawn again at rest: the line is drawn with the picture, and only when the route or the view changes.
+   */
+  get route(): { from: GeoPoint; to: GeoPoint } | null {
+    return readRoute(this.getAttribute("route"));
+  }
+  set route(value: { from: GeoPoint; to: GeoPoint } | null) {
+    if (!value) this.removeAttribute("route");
+    else this.setAttribute("route", routeText(value));
+  }
+
+  /** The distance, bearings and flight-time estimate for `route`, or null when none is set. The flight time assumes 900 km/h. */
+  get routeInfo(): RouteLeg | null {
+    const route = this.route;
+    return route ? routeLeg(route.from, route.to) : null;
   }
 
   /**
@@ -1636,6 +1658,8 @@ export class ChikyuSpace extends HTMLElement {
     borders: BorderStats;
     /** The grid: whether it was drawn at the last draw, whether every 15 degrees (else 30), its segments then, how many times its lines were made, and whether it could not be made. */
     grid: GridStats;
+    /** The route between two places: whether one is set, and its geodesic distance, great-circle distance and flight time at 900 km/h. */
+    route: { on: boolean; kilometres: number; greatCircleKm: number; flightHours: number };
     /** The names of countries: whether `country-names` is set and the most it asks for, the countries loaded, the names shown at the last draw, how many times they were laid out, and whether the outlines could not be loaded. */
     countryNames: CountryNamesStats;
   } {
@@ -1664,6 +1688,7 @@ export class ChikyuSpace extends HTMLElement {
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
       grid: { ...this.#model.grid.stats },
+      route: { ...this.#model.route.stats },
       countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
     };
   }
