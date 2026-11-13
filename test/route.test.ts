@@ -28,10 +28,11 @@ test("the equator to the pole is the WGS84 quarter meridian, 10001.966 km", () =
 test("Tokyo to London, the geodesic, the bearings and the flight time (kuni 1.6.1, read 2026-11-13)", () => {
   const leg = routeLeg(TOKYO, LONDON);
   assert.ok(leg?.exact);
-  assert.equal(leg.kilometres.toFixed(3), "9582.320");
-  assert.equal(leg.initialBearing.toFixed(2), "336.26");
-  assert.equal(leg.finalBearing.toFixed(2), "211.65");
-  assert.equal(leg.flightHours.toFixed(4), "10.6470");
+  // GeographicLib 2.1 (Karney's geodesic, WGS84) for the same two places, read 2026-11-13: 9582.317519 km, 336.263635 and 211.653406 degrees
+  assert.ok(Math.abs(leg.kilometres - 9582.317519) < 0.001, String(leg.kilometres));
+  assert.ok(Math.abs(leg.initialBearing - 336.263635) < 0.0005, String(leg.initialBearing));
+  assert.ok(Math.abs(leg.finalBearing - 211.653406) < 0.0005, String(leg.finalBearing));
+  assert.ok(Math.abs(leg.flightHours - 9582.317519 / FLIGHT_SPEED_KM_H) < 1e-6);
   assert.ok(Math.abs(leg.kilometres - leg.greatCircleKm) < 40);
   const points = routePoints(TOKYO, LONDON, 5);
   assert.equal(points.length, 5);
@@ -39,6 +40,21 @@ test("Tokyo to London, the geodesic, the bearings and the flight time (kuni 1.6.
   assert.deepEqual(points[4], LONDON);
   assert.ok(Math.abs(points[2]!.lat - leg.midpoint.lat) < 1e-9);
   assert.ok(Math.abs(points[2]!.lon - leg.midpoint.lon) < 1e-9);
+});
+
+test("Vincenty's test pair, Flinders Peak to Buninyong, agrees with Karney's geodesic to a tenth of a millimetre", () => {
+  // The pair Geoscience Australia and Vincenty (1975) use; the values are GeographicLib 2.1's for WGS84, read 2026-11-13: 54972.271139 m, azimuths 306.868159 and 307.173631 (the book's 54972.271 m is on GRS80)
+  const flinders = { lon: 144 + 25 / 60 + 29.5244 / 3600, lat: -(37 + 57 / 60 + 3.7203 / 3600) };
+  const buninyong = { lon: 143 + 55 / 60 + 35.3839 / 3600, lat: -(37 + 39 / 60 + 10.1561 / 3600) };
+  const leg = routeLeg(flinders, buninyong);
+  assert.ok(leg?.exact);
+  assert.ok(Math.abs(leg.kilometres * 1000 - 54972.271139) < 1e-3, String(leg.kilometres * 1000));
+  assert.ok(Math.abs(leg.initialBearing - 306.868159) < 1e-5, String(leg.initialBearing));
+  assert.ok(Math.abs(leg.finalBearing - 307.173631) < 1e-5, String(leg.finalBearing));
+});
+
+test("Sydney to Los Angeles is 12063.191 km (GeographicLib 2.1, read 2026-11-13)", () => {
+  assert.ok(Math.abs((routeLeg(SYDNEY, LOS_ANGELES)?.kilometres ?? 0) - 12063.190949) < 0.001);
 });
 
 test("Sydney to Los Angeles is split at the date line", () => {
@@ -57,4 +73,21 @@ test("a place on itself, a bad place, and the attribute", () => {
   assert.equal(readRoute("no"), null);
   assert.equal(readRoute(null), null);
   assert.equal(routeText({ from: { lon: 1, lat: 2 }, to: { lon: 3, lat: 4 } }), "1,2,3,4");
+});
+
+test("two places nearly opposite have a route of evenly spaced points from one to the other", () => {
+  // Vincenty's formula does not converge here, so the route is the great circle
+  const from = { lon: 0, lat: 0 };
+  const to = { lon: 179.5, lat: 0.3 };
+  const leg = routeLeg(from, to);
+  assert.equal(leg?.exact, false);
+  const points = routePoints(from, to, 5);
+  assert.equal(points.length, 5);
+  assert.deepEqual(points[0], from);
+  assert.deepEqual(points[4], to);
+  const step = (leg?.greatCircleKm ?? 0) / 4;
+  for (let i = 1; i < 5; i += 1) {
+    const apart = greatCircleKm(points[i - 1]!, points[i]!) ?? 0;
+    assert.ok(Math.abs(apart - step) < 1, `${i}: ${apart} against ${step}`);
+  }
 });

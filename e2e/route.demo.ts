@@ -25,7 +25,7 @@ test("the line globe, the realistic Earth and the space view draw Tokyo to Londo
     const path = el.shadowRoot?.querySelector("path[stroke='#7df9ff']")?.getAttribute("d") ?? "";
     return { km: info.kilometres, bearing: info.initialBearing, hours: info.flightHours, path };
   });
-  expect(line.km).toBeCloseTo(9582.033, 2);
+  expect(line.km).toBeCloseTo(9582.031, 2);
   expect(line.bearing).toBeCloseTo(336.27, 1);
   expect(line.hours).toBeCloseTo(10.647, 2);
   expect(line.path.length).toBeGreaterThan(20);
@@ -35,7 +35,7 @@ test("the line globe, the realistic Earth and the space view draw Tokyo to Londo
   await page.locator("chikyu-earth-realistic[data-state=live]").waitFor({ timeout: 90_000 });
   await expect.poll(async () => earth.evaluate((el) => (Reflect.get(el, "stats") as { route: { on: boolean; kilometres: number } }).route.on)).toBe(true);
   const km = await earth.evaluate((el) => (Reflect.get(el, "stats") as { route: { kilometres: number } }).route.kilometres);
-  expect(km).toBeCloseTo(9582.033, 2);
+  expect(km).toBeCloseTo(9582.031, 2);
   await untilStill(page);
   const rest = await counts(page);
   await untilStill(page);
@@ -45,7 +45,7 @@ test("the line globe, the realistic Earth and the space view draw Tokyo to Londo
   await page.getByRole("button", { name: "Space", exact: true }).click();
   const space = page.locator("chikyu-space");
   await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 90_000 });
-  await expect.poll(async () => space.evaluate((el) => (Reflect.get(el, "stats") as { route: { kilometres: number } }).route.kilometres)).toBeCloseTo(9582.033, 2);
+  await expect.poll(async () => space.evaluate((el) => (Reflect.get(el, "stats") as { route: { kilometres: number } }).route.kilometres)).toBeCloseTo(9582.031, 2);
   await untilStill(page);
   const held = await counts(page);
   await untilStill(page);

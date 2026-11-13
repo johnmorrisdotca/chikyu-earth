@@ -148,7 +148,7 @@ function vincentyInverse(from: GeoPoint, to: GeoPoint): Solved | null {
     const sinAlpha = (cosU1 * cosU2 * sinLambda) / sinSigma;
     cosSqAlpha = 1 - sinAlpha * sinAlpha;
     cos2SigmaM = cosSqAlpha === 0 ? 0 : cosSigma - (2 * sinU1 * sinU2) / cosSqAlpha;
-    const C = (WGS84_F / 16) * cosSqAlpha * (2 + WGS84_F * (4 - 3 * cosSqAlpha));
+    const C = (WGS84_F / 16) * cosSqAlpha * (4 + WGS84_F * (4 - 3 * cosSqAlpha));
     const next = L + (1 - C) * WGS84_F * sinAlpha * (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
     if (Math.abs(next - lambda) < 1e-12) {
       lambda = next;
@@ -205,10 +205,19 @@ function vincentyDirect(from: GeoPoint, bearingDeg: number, metres: number): Geo
   const cosSigma = Math.cos(sigma);
   const lat = Math.atan2(sinU1 * cosSigma + cosU1 * sinSigma * Math.cos(alpha1), (1 - WGS84_F) * Math.hypot(sinAlpha, sinU1 * sinSigma - cosU1 * cosSigma * Math.cos(alpha1)));
   const lambda = Math.atan2(sinSigma * Math.sin(alpha1), cosU1 * cosSigma - sinU1 * sinSigma * Math.cos(alpha1));
-  const C = (WGS84_F / 16) * cosSqAlpha * (2 + WGS84_F * (4 - 3 * cosSqAlpha));
+  const C = (WGS84_F / 16) * cosSqAlpha * (4 + WGS84_F * (4 - 3 * cosSqAlpha));
   const L = lambda - (1 - C) * WGS84_F * sinAlpha * (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
   return { lon: wrap180(from.lon + L / RAD), lat: lat / RAD };
 }
+
+/** The place `angle` radians along the great circle that leaves `from` on `bearingDeg`, on a sphere. */
+const sphereDirect = (from: GeoPoint, bearingDeg: number, angle: number): GeoPoint => {
+  const lat1 = from.lat * RAD;
+  const bearing = bearingDeg * RAD;
+  const lat = Math.asin(Math.max(-1, Math.min(1, Math.sin(lat1) * Math.cos(angle) + Math.cos(lat1) * Math.sin(angle) * Math.cos(bearing))));
+  const lon = from.lon * RAD + Math.atan2(Math.sin(bearing) * Math.sin(angle) * Math.cos(lat1), Math.cos(angle) - Math.sin(lat1) * Math.sin(lat));
+  return { lon: wrap180(lon / RAD), lat: lat / RAD };
+};
 
 const sphericalBearings = (from: GeoPoint, to: GeoPoint): { initial: number; final: number } => {
   const y1 = Math.sin((to.lon - from.lon) * RAD) * Math.cos(to.lat * RAD);
@@ -265,15 +274,11 @@ export function routePoints(from: GeoPoint, to: GeoPoint, count = 64): GeoPoint[
   const leg = routeLeg(from, to);
   if (!leg) return [];
   const n = Math.max(2, Math.floor(count));
-  if (!leg.exact || leg.kilometres === 0) {
-    if (leg.kilometres === 0) return [from, to];
-    const step = (leg.greatCircleKm / MEAN_RADIUS_KM / RAD) / (n - 1);
-    const walked = trackSteps(from, to, Math.max(step, 1e-6));
-    if (walked.length === n) return walked;
-    return Array.from({ length: n }, (_, i) => {
-      const at = trackSteps(from, to, (leg.greatCircleKm / MEAN_RADIUS_KM / RAD) * (i / (n - 1) || 1));
-      return at[Math.min(1, at.length - 1)] ?? from;
-    });
+  if (leg.kilometres === 0) return [from, to];
+  if (!leg.exact) {
+    // nearly opposite places: the great circle, by the spherical direct problem from the initial bearing, so there are exactly `n` points, evenly spaced
+    const angle = leg.greatCircleKm / MEAN_RADIUS_KM;
+    return Array.from({ length: n }, (_, i) => (i === 0 ? { lon: from.lon, lat: from.lat } : i === n - 1 ? { lon: to.lon, lat: to.lat } : sphereDirect(from, leg.initialBearing, (angle * i) / (n - 1))));
   }
   const out: GeoPoint[] = [];
   for (let i = 0; i < n; i += 1) out.push(i === n - 1 ? { lon: to.lon, lat: to.lat } : vincentyDirect(from, leg.initialBearing, (leg.kilometres * 1000 * i) / (n - 1)));
