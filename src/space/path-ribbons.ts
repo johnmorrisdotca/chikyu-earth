@@ -19,6 +19,9 @@ attribute vec2 corner;
 attribute vec4 ink;
 attribute vec4 look;
 attribute float span;
+attribute float grow;
+varying vec3 vWorld;
+varying float vGrow;
 varying vec4 vInk;
 varying float vEdge;
 varying float vHalf;
@@ -28,13 +31,23 @@ void main() {
   mat4 m = projectionMatrix * modelViewMatrix;
   vec4 a = m * vec4(position, 1.0);
   vec4 b = m * vec4(other, 1.0);
-  float near = 0.01;
+  vec3 wa = position;
+  vec3 wb = other;
+  // a path that grows out of the camera is drawn right up to it (the camera of a ride is a few kilometres from the craft); the others stop 64 km short of it, as they always have
+  float near = grow > 0.0 ? 0.00002 : 0.01;
   if (a.w < near && b.w < near) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
-  if (a.w < near) a = mix(a, b, (near - a.w) / (b.w - a.w));
-  else if (b.w < near) b = mix(b, a, (near - b.w) / (a.w - b.w));
+  if (a.w < near) {
+    float t = (near - a.w) / (b.w - a.w);
+    a = mix(a, b, t);
+    wa = mix(wa, wb, t);
+  } else if (b.w < near) {
+    float t = (near - b.w) / (a.w - b.w);
+    b = mix(b, a, t);
+    wb = mix(wb, wa, t);
+  }
   vec2 hres = res * 0.5;
   vec2 sa = a.xy / a.w * hres;
   vec2 sb = b.xy / b.w * hres;
@@ -49,6 +62,8 @@ void main() {
   vec2 at = s + normal * corner.y * reach;
   gl_Position = vec4(at / hres * p.w, p.z, p.w);
   vInk = ink;
+  vWorld = atB ? wb : wa;
+  vGrow = grow;
   vEdge = corner.y * reach;
   vHalf = look.x * 0.5;
   vAlong = (look.w + (atB ? span : 0.0)) * dashScale;
@@ -56,6 +71,8 @@ void main() {
 }`;
 
 const FRAG = /* glsl */ `
+varying vec3 vWorld;
+varying float vGrow;
 varying vec4 vInk;
 varying float vEdge;
 varying float vHalf;
@@ -69,15 +86,23 @@ void main() {
     float inside = m < vDash.x ? min(m, vDash.x - m) : -min(m - vDash.x, period - m);
     cover *= clamp(inside + 0.5, 0.0, 1.0);
   }
+  // a path being ridden grows out of the camera: the distance is the point's own on the chord (the loop is 120 points, some 350 km apart, so a fade taken at the ends alone would not reach nothing at the craft)
+  float grown = vGrow > 0.0 ? smoothstep(0.0, vGrow, distance(vWorld, cameraPosition)) : 1.0;
+  cover *= grown;
   if (cover <= 0.0) discard;
   gl_FragColor = vec4(vInk.rgb, vInk.a * cover);
   #include <colorspace_fragment>
 }`;
 
+/** The distance, in kilometres, over which the orbit of a satellite being ridden grows out of the camera: nothing at the camera, all of its look by this far along the path. */
+export const RIDE_PATH_FADE_KM = 300;
+
 /** What one slot is told: the loop's points (3 numbers each, {@link PATH_POINTS} of them) and its look. */
 export interface RibbonPath {
   positions: Float32Array;
   style: PathStyle;
+  /** Earth radii from the camera over which the path fades in (nothing at the camera, all of its opacity at this distance); 0 or missing draws it at its look everywhere. */
+  fade?: number;
 }
 
 export interface PathRibbons {
@@ -100,6 +125,7 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
   const ink = new Float32Array(verts * 4);
   const look = new Float32Array(verts * 4);
   const span = new Float32Array(verts);
+  const grow = new Float32Array(verts);
   const index = new Uint16Array(PATH_SLOTS * PATH_POINTS * 6);
   for (let q = 0; q < PATH_SLOTS * PATH_POINTS; q += 1) {
     const v = q * 4;
@@ -114,6 +140,7 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
     ink: new three.BufferAttribute(ink, 4),
     look: new three.BufferAttribute(look, 4),
     span: new three.BufferAttribute(span, 1),
+    grow: new three.BufferAttribute(grow, 1),
   };
   for (const [name, attribute] of Object.entries(attributes)) geometry.setAttribute(name, attribute);
   geometry.setAttribute("corner", new three.BufferAttribute(corner, 2));
@@ -133,7 +160,7 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
     set(paths) {
       count = Math.min(PATH_SLOTS, paths.length);
       for (let p = 0; p < count; p += 1) {
-        const { positions, style } = paths[p]!;
+        const { positions, style, fade = 0 } = paths[p]!;
         colour.set(style.color);
         // the arc length at each point, in Earth radii, for the dashes
         let along = 0;
@@ -164,6 +191,7 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
             look[v * 4 + 2] = style.dash ? style.dash[1] : 0;
             look[v * 4 + 3] = along;
             span[v] = length;
+            grow[v] = fade;
           }
           along += length;
         }

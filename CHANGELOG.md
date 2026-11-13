@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **The ridden satellite's own orbit grows out of the camera.** In Ride along the orbit ahead, seen edge-on, was a hard bright stroke. Its opacity now rises from nothing at the camera to the path's whole look about 300 km along it (a smooth rise, worked out in the ribbon shader from each point's distance to the camera: no extra draw, nothing drawn at rest, and every other path unchanged). The ribbon now reaches the camera for it instead of stopping 64 km short. While a satellite is ridden the group's own orbit line for it is not drawn, nor the lines of objects on the same orbit (the modules of the ISS), because the ribbon draws its path in the `selected` look; with `selected-path` off the ridden satellite has no orbit line, which is what that switch means. The other satellites keep their lines, and all of them come back when the ride ends. `stats.satellites.orbitLines` counts the group orbit lines drawn.
+- **A test that a painter's model brings no light of its own** (MODULES-1293). The ISS model test now counts the lights each live GL program was made for and wants every lit one made for the scene's one Sun; with the strip switched off it fails. Test only.
+
 ## 0.50.0 - 2026-11-13
 
 - **The catalogue search folds kana** (MODULES-1268). `findInCatalogue` folds hiragana to katakana and small kana to full-size on both sides of the comparison (and half-width katakana by NFKC), so `はっぶる` finds `ハッブル`, in satellite names and group labels; the long-vowel mark is left alone. `foldKana(text)` is the same fold, exported from `@johnmorrisdotca/chikyu-earth/satellites` for a page's own search box.

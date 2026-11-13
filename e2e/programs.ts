@@ -29,11 +29,17 @@ export const PROGRAMS_SCRIPT = (): void => {
     for (let i = 0; i < text.length; i += 1) h = (h * 31 + text.charCodeAt(i)) | 0;
     return `${(h >>> 0).toString(16)}:${text.length}`;
   };
+  // the lights a program was made for: the sum of the sizes of the light arrays in its fragment text (three writes the number of lights of the draw into the text it hands to the driver)
+  const lightsOf = (text: string): number => [...text.matchAll(/(?:directionalLights|pointLights|spotLights|hemisphereLights|rectAreaLights)\[ (\d+) \]/g)].reduce((sum, one) => sum + Number(one[1]), 0);
+  Reflect.set(window, "__lightCounts", () => [...live].map((program) => Math.max(0, ...(attached.get(program) ?? []).map((shader) => lightsOf(sources.get(shader) ?? "")))));
   Reflect.set(window, "__programs", () => [...live].map((program) => (attached.get(program) ?? []).map((shader) => hash(sources.get(shader) ?? "")).join("+")).sort());
 };
 
 /** The programs alive now, sorted. */
 export const listPrograms = (page: Page): Promise<string[]> => page.evaluate(() => (Reflect.get(window, "__programs") as () => string[])());
+
+/** For each program alive now, how many lights it was made for (0 for one that is not lit). A scene with one Sun makes every lit program for one light. */
+export const lightCounts = (page: Page): Promise<number[]> => page.evaluate(() => (Reflect.get(window, "__lightCounts") as () => number[])());
 
 /** The programs that are in the list more than once. */
 export const duplicates = (list: readonly string[]): string[] => [...new Set(list.filter((one, i) => list.indexOf(one) !== i))];

@@ -1,10 +1,10 @@
 // A satellite model made by a page's painter must not bring a light of its own into the scene (MODULES-1293): the demo's painted ISS carries one, and while it was drawn every lit material (the clouds, the plain bodies) got a second program of the
 // same text, kept until it was let go. The scene owns the Sun's light now; the model's own is switched off and its look worn by the scene's. Here: ride the ISS from outside until its model is drawn, and no program is in the list twice, and the ones
-// that were there before are there once. The page's clock is the test's own (`speed=0`). The picture of the model is written to the test's output folder, to compare with one made before the strip.
+// that were there before are there once. Last, every lit program alive is made for one light (the Sun's): three writes the number of lights into a program's text, so a model that kept a light of its own would show a program for two. The page's clock is the test's own (`speed=0`). The picture of the model is written to the test's output folder, to compare with one made before the strip.
 import { expect, test, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { COUNT_SCRIPT, untilStill } from "./gl.ts";
-import { duplicates, listPrograms, PROGRAMS_SCRIPT } from "./programs.ts";
+import { duplicates, lightCounts, listPrograms, PROGRAMS_SCRIPT } from "./programs.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -37,6 +37,10 @@ test("riding the ISS from outside until its model is drawn adds no program: none
   const after = await listPrograms(page);
   expect(duplicates(after), "no program is kept twice for two numbers of lights").toEqual([]);
   for (const one of before) expect(after, "a program that was there is still there").toContain(one);
+  // The mark of a light the model brought: three makes a lit program for the number of lights in the draw, so a model with a light of its own makes its materials (and, a draw later, the clouds') for two. Every lit program is for the scene's one Sun.
+  const lit = (await lightCounts(page)).filter((n) => n > 0);
+  expect(lit.length, "lit programs are alive, so the count below is not of nothing").toBeGreaterThan(0);
+  expect([...new Set(lit)], "every lit program is made for one light, the Sun's: the model's own light is not counted").toEqual([1]);
   await page.screenshot({ path: test.info().outputPath("iss-model-page.png") });
   writeFileSync(test.info().outputPath("iss-model.png"), await page.locator(SPACE).screenshot());
 });

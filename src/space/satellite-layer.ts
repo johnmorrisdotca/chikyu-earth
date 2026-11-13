@@ -6,7 +6,7 @@ import type { SatelliteRef, Satellites } from "../satellites/types.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import { satelliteEmphasis, type SatelliteFocus } from "./satellite-focus.ts";
 import { BUILT_IN_PATH_STYLES, capPaths, nearestLoop, resolvePathId, styleOf, styleTable, type PathHit, type PathInfo, type PathRequest, type PathStyle } from "./paths.ts";
-import { createPathRibbons, type RibbonPath } from "./path-ribbons.ts";
+import { createPathRibbons, RIDE_PATH_FADE_KM, type RibbonPath } from "./path-ribbons.ts";
 
 type Three = ThreeParts;
 
@@ -56,7 +56,7 @@ export interface SatelliteState {
   streakMax: number;
   /** Set at each draw by the view: the satellite a ride shows as its model while the model is big enough to read. Its ring (the chosen marker) and name are left off while this is so; its orbit line stays. Clears with the ride, or when the model has handed over to the mark. */
   modelOver: SatelliteRef | null;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; pathsDrawn: number; pathDraws: number; estimated: number };
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; orbitLines: number; pathsDrawn: number; pathDraws: number; estimated: number };
 }
 
 /**
@@ -117,11 +117,13 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, orbitLines: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
 const ORBIT_POINTS = 120;
+/** The Earth's radius in kilometres: the unit of a position is one radius. */
+const EARTH_KM = 6371;
 /** How bright the chosen satellite's orbit is. The orbit under the pointer is about a third of this, so the two are told apart at a glance. */
 export const SELECTED_PATH_OPACITY = BUILT_IN_PATH_STYLES["selected"]!.opacity;
 /** The orbit under the pointer, before it fades. A page may set another with `--chikyu-hover-path-opacity`. */
@@ -193,6 +195,8 @@ interface Drawn {
   dimVersion: number;
   lines: { loop: THREE.LineLoop; geometry: THREE.BufferGeometry; positions: Float32Array }[];
   linesAt: number;
+  /** The indexes of the lines left out while their satellite is ridden (its path is drawn in the selected look instead), none otherwise. */
+  hid: number[];
   linesWall: number;
   style: string;
   /** The streak drawn above the interpolation limit; none when the three.js parts handed over lack `LineSegments`, and the dots alone are drawn then. */
@@ -401,6 +405,8 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     key: string;
     info: PathInfo;
     style: PathStyle;
+    /** Earth radii over which the path grows out of the camera: the ridden satellite's own orbit; 0 for every other. */
+    fade: number;
     positions: Float32Array;
     screen: Float32Array;
     seen: Uint8Array;
@@ -433,7 +439,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     }
   };
 
-  const orbitsOf = (entry: Drawn, group: SatelliteGroupState, time: number, wall: number): void => {
+  const placeOrbits = (entry: Drawn, group: SatelliteGroupState, time: number, wall: number): void => {
     const wanted = group.orbits && group.satellites.count <= MAX_ORBIT_GROUP;
     if (!wanted) {
       for (const line of entry.lines) line.loop.visible = false;
@@ -463,6 +469,46 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     }
     entry.linesAt = time;
     entry.linesWall = wall;
+  };
+
+  /** The orbit of a line as a plane and a size: the unit normal of the plane (from two points a quarter of a loop apart) and the mean distance from the centre. */
+  const planeOf = (positions: Float32Array): { nx: number; ny: number; nz: number; r: number } => {
+    const q = (ORBIT_POINTS / 4) * 3;
+    const [ax, ay, az, bx, by, bz] = [positions[0]!, positions[1]!, positions[2]!, positions[q]!, positions[q + 1]!, positions[q + 2]!];
+    const [nx, ny, nz] = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+    const n = Math.hypot(nx, ny, nz) || 1;
+    return { nx: nx / n, ny: ny / n, nz: nz / n, r: (Math.hypot(ax, ay, az) + Math.hypot(bx, by, bz)) / 2 };
+  };
+  /** Two lines are one orbit when their planes are within half a degree and their sizes within 20 km: the modules of a station, each its own object, are one line drawn several times. */
+  const COPLANAR = Math.cos((0.5 * Math.PI) / 180);
+  const SAME_SIZE = 20 / EARTH_KM;
+
+  /**
+   * The group's own orbit lines, but not the ridden satellite's, nor any line that lies on it (the modules of a station are objects of their own with one orbit): its path is drawn by the ribbons in the `selected` look, with the fade
+   * out of the camera (and by nothing at all when the page has that off), and the line would lie over it as a hard stroke. The other satellites keep theirs, and the lines come back when the ride ends.
+   */
+  const orbitsOf = (entry: Drawn, group: SatelliteGroupState, name: string, time: number, wall: number): void => {
+    const ridden = state.ridden !== null && state.ridden.group === name ? state.ridden.index : -1;
+    const wanted = group.orbits && group.satellites.count <= MAX_ORBIT_GROUP;
+    placeOrbits(entry, group, time, wall);
+    const mine = ridden >= 0 ? entry.lines[ridden] : undefined;
+    const left: number[] = [];
+    if (mine) {
+      const own = planeOf(mine.positions);
+      entry.lines.forEach((line, i) => {
+        if (i === ridden) left.push(i);
+        else if (own.r > 0) {
+          const other = planeOf(line.positions);
+          if (other.r > 0 && Math.abs(other.nx * own.nx + other.ny * own.ny + other.nz * own.nz) > COPLANAR && Math.abs(other.r - own.r) < SAME_SIZE) left.push(i);
+        }
+      });
+    }
+    for (const i of entry.hid) {
+      const back = entry.lines[i];
+      if (back && !left.includes(i)) back.loop.visible = wanted && (group.satellites.visible(i) || back.positions.some((v) => v !== 0));
+    }
+    for (const i of left) entry.lines[i]!.loop.visible = false;
+    entry.hid = left;
   };
 
   const find = (ref: SatelliteRef): Satellites | undefined => state.groups.get(ref.group)?.satellites;
@@ -497,24 +543,27 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     }
     const matched = [...byRef.values()];
     const capped = capPaths(matched);
-    const wanted: { id: number | string; ref: SatelliteRef; name: string; style: PathStyle }[] = [];
+    const wanted: { id: number | string; ref: SatelliteRef; name: string; style: PathStyle; fade: number }[] = [];
     for (const one of capped.kept) {
       const ref = cleanRef(one.ref);
       if (!ref) continue;
       const look = styleOf(one.request, table);
-      wanted.push({ id: one.request.id, ref, name: look.name, style: look.style });
+      wanted.push({ id: one.request.id, ref, name: look.name, style: look.style, fade: 0 });
     }
     if (pathState.selectedOn) {
+      const ridingRef = cleanRef(state.ridden);
       const own = [chosen, state.ridden].map(cleanRef);
       const seen = new Set<string>();
       for (const ref of own) {
         if (!ref || seen.has(refKey(ref))) continue;
         seen.add(refKey(ref));
         const norad = find(ref)?.sets[ref.index]?.NORAD_CAT_ID;
-        wanted.push({ id: norad ?? refKey(ref), ref, name: "selected", style: table["selected"]! });
+        // the orbit of the satellite being ridden, seen from it, is a line from the craft to the edge of the picture: it grows out of the camera instead
+        const riding = ridingRef !== null && refKey(ridingRef) === refKey(ref);
+        wanted.push({ id: norad ?? refKey(ref), ref, name: "selected", style: table["selected"]!, fade: riding ? RIDE_PATH_FADE_KM / EARTH_KM : 0 });
       }
     }
-    const signature = wanted.map((w) => `${refKey(w.ref)}|${w.name}|${w.style.color}|${w.style.width}|${w.style.opacity}|${w.style.dash ? w.style.dash.join(",") : "-"}`).join(";");
+    const signature = wanted.map((w) => `${refKey(w.ref)}|${w.name}|${w.style.color}|${w.style.width}|${w.style.opacity}|${w.style.dash ? w.style.dash.join(",") : "-"}|${w.fade}`).join(";");
     let dirty = signature !== slotsSignature;
     const old = new Map(slots.map((slot) => [slot.key, slot]));
     let empty = 0;
@@ -524,12 +573,13 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       let slot = old.get(key);
       const set = find(w.ref)!;
       if (!slot) {
-        slot = { key, info: { id: w.id, ref: w.ref, style: w.name }, style: w.style, positions: new Float32Array(ORBIT_POINTS * 3), screen: new Float32Array(ORBIT_POINTS * 2), seen: new Uint8Array(ORBIT_POINTS), at: Number.NaN, wall: 0, empty: false };
+        slot = { key, info: { id: w.id, ref: w.ref, style: w.name }, style: w.style, fade: w.fade, positions: new Float32Array(ORBIT_POINTS * 3), screen: new Float32Array(ORBIT_POINTS * 2), seen: new Uint8Array(ORBIT_POINTS), at: Number.NaN, wall: 0, empty: false };
         dirty = true;
       }
       old.delete(key);
       slot.info = { id: w.id, ref: w.ref, style: w.name };
       slot.style = w.style;
+      slot.fade = w.fade;
       if (Number.isNaN(slot.at) || (Math.abs(time - slot.at) > ORBIT_REFRESH_GAME_MS && wall - slot.wall > ORBIT_REFRESH_WALL_MS)) {
         slot.at = time;
         slot.wall = wall;
@@ -543,7 +593,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     slots = next;
     if (dirty) {
       slotsSignature = signature;
-      ribbons.set(slots.filter((slot) => !slot.empty).map((slot): RibbonPath => ({ positions: slot.positions, style: slot.style })));
+      ribbons.set(slots.filter((slot) => !slot.empty).map((slot): RibbonPath => ({ positions: slot.positions, style: slot.style, fade: slot.fade })));
     }
     const own = wanted.filter((w) => w.name === "selected" && pathState.selectedOn);
     pathState.info = slots.filter((slot) => !slot.empty).map((slot) => ({ ...slot.info }));
@@ -618,7 +668,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
             streak.visible = false;
             scene.add(streak);
           }
-          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0, pinNext: 0 };
+          entry = { source: group.satellites, points, geometry, material, positions, attribute, dim, dimVersion: -1, lines: [], hid: [], linesAt: Number.NaN, linesWall: 0, style: "", streak, streakPositions, streakColours, streakAttribute, pinWall: 0, pinTime: 0, pinNext: 0 };
           drawn.set(name, entry);
         }
         const style = `${group.color}|${group.size}|${ratio()}|${dotScale}|${state.orbitTint ? 1 : 0}`;
@@ -700,12 +750,15 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           }
           placed += group.satellites.placed;
           group.placed = group.satellites.placed;
-          orbitsOf(entry, group, time, started);
+          orbitsOf(entry, group, name, time, started);
           const opacity = dimmed ? 0.15 : 0.45;
           for (const line of entry.lines) (line.loop.material as { opacity?: number }).opacity = opacity;
         }
       }
 
+      let lines = 0;
+      for (const entry of drawn.values()) for (const line of entry.lines) if (line.loop.visible) lines += 1;
+      state.drawn.orbitLines = lines;
       if (size) ribbons.frame(size.width, size.height, radius);
       const chosen = state.selected;
       const chosenGroup = chosen ? state.groups.get(chosen.group) : undefined;
