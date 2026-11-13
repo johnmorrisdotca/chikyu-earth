@@ -39,7 +39,8 @@ test("the horizon look tips the camera forward until the horizon is a little abo
 
 test("zoom narrows the view", () => {
   near(ridePose({ ...iss, zoom: 2 }).fov, RIDE_FOV / 2, 1e-9, "twice the zoom, half the field of view");
-  assert.equal(ridePose({ ...iss, zoom: 1000 }).fov, 5);
+  assert.equal(ridePose({ ...iss, zoom: 1000 }).fov, 1.5);
+  near(ridePose({ ...iss, zoom: 40 }).fov, RIDE_FOV / 40, 1e-9, "a zoom of 40, the most a ride takes, is a field of 1.5 degrees");
   assert.equal(ridePose({ ...iss, zoom: 0.0001 }).fov, 100);
   assert.equal(ridePose({ ...iss, tilt: 400, yaw: 400 }).forward.every(Number.isFinite), true);
 });

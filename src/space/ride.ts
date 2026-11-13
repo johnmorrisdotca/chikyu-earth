@@ -86,7 +86,7 @@ export function faceOffset(face: RideFace): { yaw: number; tilt: number } {
 }
 
 /**
- * The field of view, in degrees, of a riding camera at a zoom: the natural 60 divided by the zoom, held between 5 and 100.
+ * The field of view, in degrees, of a riding camera at a zoom: the natural 60 divided by the zoom, held between 1.5 and 100 (a zoom of 40, the most a ride takes, is 1.5 degrees).
  *
  * @param zoom - The shared controls' zoom.
  * @returns The field of view in degrees.
@@ -99,7 +99,7 @@ export function faceOffset(face: RideFace): { yaw: number; tilt: number } {
  * ```
  */
 export function rideFov(zoom: number): number {
-  return Math.min(100, Math.max(5, RIDE_FOV / Math.max(0.05, zoom)));
+  return Math.min(100, Math.max(1.5, RIDE_FOV / Math.max(0.05, zoom)));
 }
 
 /**
@@ -253,6 +253,7 @@ const OUTSIDE_LOW = 0.8;
  *
  * @param pose - The pose from `ridePose` for the camera at the satellite.
  * @param look - The look the pose was made with.
+ * @param low - How far below the middle of the picture the satellite is, as a share of half its height (0 the middle, 1 the bottom edge); by default 0.8 looking along and 0 looking down.
  * @returns The pose moved back from the satellite, with how far the camera is from it in Earth radii and how many degrees below the middle of the picture the satellite is.
  *
  * @example
@@ -264,10 +265,11 @@ const OUTSIDE_LOW = 0.8;
  * console.log(out.distance.toFixed(4), out.below.toFixed(1), out.pose.position.map((n) => n.toFixed(4)).join(","));
  * ```
  */
-export function outsidePose(pose: RidePose, look: RideLook): { pose: RidePose; distance: number; below: number } {
+export function outsidePose(pose: RidePose, look: RideLook, low?: number): { pose: RidePose; distance: number; below: number } {
   const height = Math.max(0, norm(pose.position) - 1);
   const distance = Math.max(1e-5, Math.min(OUTSIDE_KM / 6371, height * 0.5));
-  const below = look === "horizon" ? Math.atan(OUTSIDE_LOW * Math.tan((pose.fov / 2) * RAD)) : 0;
+  const lowNow = low ?? (look === "horizon" ? OUTSIDE_LOW : 0);
+  const below = Math.atan(Math.max(0, lowNow) * Math.tan((pose.fov / 2) * RAD));
   // the satellite is along the line of sight turned `below` down (towards the bottom of the picture): the camera is back along that line
   const line = add(scale(pose.forward, Math.cos(below)), scale(pose.up, -Math.sin(below)));
   return { pose: { ...pose, position: add(pose.position, scale(line, -distance)) }, distance, below: below / RAD };

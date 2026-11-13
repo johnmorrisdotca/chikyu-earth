@@ -79,8 +79,8 @@ test("Ride along: the model is at the bottom middle, part of it below the bottom
   const model = s.followModel!;
   expect(model?.shown, "the model is drawn").toBe(true);
   const box = (await page.locator(SPACE).boundingBox())!;
-  expect(model.y / box.height, "its middle is in the bottom third").toBeGreaterThan(2 / 3);
-  expect(model.box.top / box.height, "all of it is in the bottom third").toBeGreaterThan(2 / 3);
+  expect(model.y / box.height, "its middle is low in the picture").toBeGreaterThan(0.8);
+  expect(model.box.top / box.height, "the body and a good part of a wing are in the lower part (0.22 radius, centre at 0.86)").toBeGreaterThan(0.55);
   expect(model.box.bottom, "part of it is below the bottom edge").toBeGreaterThan(box.height);
   expect(Math.abs(model.x / box.width - 0.5), "in the middle sideways").toBeLessThan(0.04);
   expect(model.radiusPx / box.height, "big enough to read: a sixth of the height in radius").toBeGreaterThan(0.15);

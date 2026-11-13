@@ -192,6 +192,7 @@ export const MODEL_HANDOVER_PX = 10;
  * Pure, so a test can ask it at any height.
  *
  * @param distanceKm - The camera's distance from the satellite, in kilometres.
+ * @param lowest - The share at the lowest height, `ABOVE_MODEL_SHARE` by default (a page sets it with `ride-model-share`).
  * @returns The share, from 0 to 0.17.
  *
  * @example
@@ -201,9 +202,9 @@ export const MODEL_HANDOVER_PX = 10;
  * console.log(aboveModelShare(150), aboveModelShare(1000) < aboveModelShare(150), aboveModelShare(6000));
  * ```
  */
-export function aboveModelShare(distanceKm: number): number {
-  if (!(distanceKm > 0)) return ABOVE_MODEL_SHARE;
-  const base = ABOVE_MODEL_SHARE * Math.min(1, ABOVE_MODEL_KM / distanceKm);
+export function aboveModelShare(distanceKm: number, lowest: number = ABOVE_MODEL_SHARE): number {
+  if (!(distanceKm > 0)) return lowest;
+  const base = lowest * Math.min(1, ABOVE_MODEL_KM / distanceKm);
   const t = Math.min(1, Math.max(0, (distanceKm - MODEL_FADE_FROM_KM) / (MODEL_FADE_TO_KM - MODEL_FADE_FROM_KM)));
   return base * (1 - t * t * (3 - 2 * t));
 }

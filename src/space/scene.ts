@@ -38,9 +38,35 @@ const MAX_MARKED = 80;
 const RAD = Math.PI / 180;
 const FOV = 35;
 /** How big a satellite seen from outside by a ride from itself is drawn: its radius is this share of the height of the view (a model about a fifth of the height across; the satellite is a few metres, so this is not to scale). */
+/** A number easing from one value to another (the model's share, its seat, how much of it is there): `cur` is where it is. */
+export interface FrameEase {
+  cur: number;
+  from: number;
+  to: number;
+  start: number;
+}
+const newEase = (): FrameEase => ({ cur: Number.NaN, from: Number.NaN, to: Number.NaN, start: 0 });
+/** Moves an ease towards `to`: at once when it is new or `ms` is 0 (reduced motion), else over `ms` milliseconds with a smooth step. True while it is still on its way. */
+function stepEase(e: FrameEase, to: number, now: number, ms: number, fresh: boolean): boolean {
+  if (fresh || !Number.isFinite(e.cur)) {
+    e.cur = e.from = e.to = to;
+    return false;
+  }
+  if (to !== e.to) {
+    e.from = e.cur;
+    e.to = to;
+    e.start = now;
+  }
+  const k = ms > 0 ? Math.min(1, Math.max(0, (now - e.start) / ms)) : 1;
+  e.cur = e.from + (e.to - e.from) * k * k * (3 - 2 * k);
+  if (k >= 1) e.cur = to;
+  return k < 1;
+}
+/** The radius share and the seat the rides have when the page sets none: along the way it goes the model is large and low (0.22, 0.86), looking down it is small and in the middle. */
+const ALONG_SEAT = 0.86;
 const OUTSIDE_RADIUS_SHARE = 0.1;
 /** The share of the view's height an outside ride along (looking along the way it goes) draws the satellite's radius at: it sits at the bottom middle with part of it below the bottom edge, large enough to read and to be drawn sharp (MODULES-1303). */
-const OUTSIDE_ALONG_SHARE = 0.17;
+const OUTSIDE_ALONG_SHARE = 0.22;
 /** How much of the view's shorter side the Earth's disc fills at zoom 1 when the page does not say: 0.9, so the atmosphere's glow (8% beyond the disc) is inside the view and never cut. */
 export const DEFAULT_EARTH_SIZE = 0.9;
 
@@ -227,10 +253,15 @@ export interface SpaceModel {
   rideTurn: number;
   /** How far the riding camera is from the Earth's centre in Earth radii as of the last draw, or null when none rides: the range of tilt that does something follows it. */
   rideDistance: number | null;
+  /**
+   * The framing of the ridden satellite's model (MODULES-1316): the radius as a share of the picture's height and where its middle sits (a share of the height from the top) as the page set them (`null`: the ride's own), the eased values the last
+   * draw used, how long a change takes (0 for reduced motion), and the ground the picture spans below the satellite as of the last draw.
+   */
+  rideFrame: { share: number | null; seat: number | null; fresh: boolean; ms: number; moving: boolean; share_: FrameEase; seat_: FrameEase; weight_: FrameEase; groundKm: { across: number; tall: number } | null };
   /** The satellite at a point of the view (CSS pixels), within a radius, if a draw has been made and one is there. */
   pick: ((x: number, y: number, radius: number) => SatelliteRef | null) | null;
   /** The followed satellite's model, when there is one drawn: where its middle is on the screen (CSS pixels), as of the last draw. */
-  followModel: { x: number; y: number; shown: boolean; parts: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: Vec3; y: Vec3; z: Vec3 } } | null;
+  followModel: { x: number; y: number; shown: boolean; parts: number; share: number; seat: number; weight: number; radiusPx: number; box: { left: number; top: number; right: number; bottom: number }; axes: { x: Vec3; y: Vec3; z: Vec3 } } | null;
   /** The map tiles laid over the Earth while the scene is built: what they are doing, for a page or a test. */
   tiles: TileSet | null;
   /** Where a satellite of a shown group is on the screen as of the last draw (`placeSatellite`), or `null`. */
@@ -278,6 +309,7 @@ export const newSpaceModel = (): SpaceModel => ({
   pick: null,
   placeSatellite: null,
   followModel: null,
+  rideFrame: { share: null, seat: null, fresh: true, ms: 400, moving: false, share_: newEase(), seat_: newEase(), weight_: newEase(), groundKm: null },
   tiles: null,
   ratio: () => Math.min(globalThis.devicePixelRatio || 1, 2),
 });
@@ -879,13 +911,32 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               deps.onSatellitesError?.(error);
             }
           }
+          // the framing of the ridden satellite's model: its share of the picture, where its middle sits and how much of it there is (a switch to the view from inside fades it out over 0.4 s), each eased towards what the page set or the ride's own
+          let frameMoving = false;
+          const framing = ((): { share: number; seat: number; weight: number } | null => {
+            const riding = model.ride;
+            const f = model.rideFrame;
+            if (!riding || typeof riding.target === "string") {
+              f.fresh = true;
+              return null;
+            }
+            const along = riding.view === "from" && riding.look === "horizon";
+            const base = riding.view === "above" ? ABOVE_MODEL_SHARE : riding.view === "from" ? (along ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE) : MODEL_RADIUS_SHARE;
+            const now = performance.now();
+            if (stepEase(f.share_, f.share ?? base, now, f.ms, f.fresh)) frameMoving = true;
+            if (stepEase(f.seat_, f.seat ?? (along ? ALONG_SEAT : 0.5), now, f.ms, f.fresh)) frameMoving = true;
+            if (stepEase(f.weight_, riding.viewpoint === "outside" ? 1 : 0, now, f.ms, f.fresh)) frameMoving = true;
+            f.fresh = false;
+            return { share: f.share_.cur, seat: f.seat_.cur, weight: f.weight_.cur };
+          })();
+          model.rideFrame.moving = frameMoving;
           // the ridden satellite is drawn as its model while the model is big enough to read; its ring and name (the page's choice of it, or the marks) are left off exactly then, and come back when the model has shrunk to the size of a ring (MODULES-1303, 1306)
           {
             const riding = model.ride;
             let over: SatelliteRef | null = null;
-            if (riding && riding.viewpoint === "outside" && typeof riding.target !== "string") {
+            if (framing && riding && riding.viewpoint === "outside" && typeof riding.target !== "string") {
               const kmAbove = riding.distanceKm / Math.max(1e-9, model.view.zoom);
-              const would = riding.view === "above" ? (riding.modelSize === "fixed" ? ABOVE_MODEL_SHARE : aboveModelShare(kmAbove)) : riding.view === "from" ? (riding.look === "horizon" ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE) : MODEL_RADIUS_SHARE;
+              const would = (riding.view === "above" ? (riding.modelSize === "fixed" ? framing.share : aboveModelShare(kmAbove, framing.share)) : framing.share) * framing.weight;
               if (would * size.height >= MODEL_HANDOVER_PX) over = riding.target;
             }
             model.satellites.modelOver = over;
@@ -946,7 +997,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             // an outside ride: the same look, from a little way back along it, so the satellite is in the picture
             let outsideAway = Infinity;
             if (ridden && ride!.viewpoint === "outside") {
-              const out = outsidePose(pose, ride!.look);
+              const out = outsidePose(pose, ride!.look, framing ? (framing.seat - 0.5) / 0.5 : undefined);
               pose = out.pose;
               outsideAway = out.distance;
             }
@@ -1019,6 +1070,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           camera.fov = fovNow;
           camera.aspect = size.width / Math.max(1, size.height);
+          // the ground the picture spans straight below a ridden satellite, in kilometres: the height above the ground over the vertical field of view (flat-ground, to compare with a tile level's size)
+          if (framing) {
+            const heightKm = Math.max(0, (Math.hypot(camera.position.x, camera.position.y, camera.position.z) - 1) * 6371);
+            const tall = 2 * heightKm * Math.tan((fovNow / 2) * RAD);
+            model.rideFrame.groundKm = { across: tall * camera.aspect, tall };
+          } else model.rideFrame.groundKm = null;
           // the Earth's place in the view: the picture is moved, not the camera (a camera riding from a body, or above a satellite, keeps the middle)
           const centred = rideFrom !== null || (ride?.view === "above" && followed !== null);
           const shiftX = centred ? 0 : (model.earth.x - 0.5) * size.width;
@@ -1122,7 +1179,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const satellitePainter = deps.satellitePainter?.();
           // the satellite to draw: the one followed or seen from above, or (an outside ride from the satellite itself) the one ridden
           const candidate = followed ?? ridden;
-          const shownSat = followed ?? (ride?.viewpoint === "outside" ? ridden : null);
+          const shownSat = followed ?? (ride?.viewpoint === "outside" || (framing !== null && framing.weight > 0.001) ? ridden : null);
           const group = candidate ? model.satellites.groups.get(candidate.ref.group) : undefined;
           const set = candidate && group ? group.satellites.sets[candidate.ref.index] : undefined;
           const norad = set?.NORAD_CAT_ID;
@@ -1166,13 +1223,15 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           else if (!shownSat) modelSlot.axes = null;
           const axes = freshAxes ?? (shownSat ? modelSlot.axes : null);
           // a generic drawing is for an outside ride only; a page's model is drawn wherever the camera is not at the satellite
-          const drawn = shownSat !== null && (ride?.viewpoint === "outside" || (followed !== null && painted));
-          const aboveShare = followed && ride?.view === "above" && ride.modelSize !== "fixed" ? aboveModelShare(Math.hypot(shownSat!.place[0] - camera.position.x, shownSat!.place[1] - camera.position.y, shownSat!.place[2] - camera.position.z) * 6371) : 1;
+          const drawn = shownSat !== null && (ride?.viewpoint === "outside" || (framing !== null && framing.weight > 0.001) || (followed !== null && painted));
+          const aboveShare = followed && ride?.view === "above" && ride.modelSize !== "fixed" ? aboveModelShare(Math.hypot(shownSat!.place[0] - camera.position.x, shownSat!.place[1] - camera.position.y, shownSat!.place[2] - camera.position.z) * 6371, framing?.share) : 1;
           // from far above the satellite is a point: the model has shrunk to nothing and the ordinary mark is all there is
           if (modelSlot.drawing && shownSat && axes && drawn && aboveShare * size.height >= 0.5) {
             const object = modelSlot.drawing.object;
             const away = Math.hypot(shownSat.place[0] - camera.position.x, shownSat.place[1] - camera.position.y, shownSat.place[2] - camera.position.z);
-            const share = followed ? (ride?.view === "above" ? (ride.modelSize === "fixed" ? ABOVE_MODEL_SHARE : aboveModelShare(away * 6371)) : MODEL_RADIUS_SHARE) : ride?.look === "horizon" ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE;
+            const shape = framing?.share ?? MODEL_RADIUS_SHARE;
+            const weight = framing ? (followed !== null && ride?.viewpoint !== "outside" && framing.weight <= 0.001 ? 1 : framing.weight) : 1;
+            const share = (followed !== null && ride?.view === "above" && ride.modelSize !== "fixed" ? aboveModelShare(away * 6371, shape) : shape) * weight;
             object.matrix.set(...(modelMatrix(shownSat.place, axes, modelRadius(away, half, share, 1e-9)) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
             object.matrixWorldNeedsUpdate = true;
             object.visible = true;
@@ -1183,7 +1242,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             const sx = ((projected.x + 1) / 2) * size.width;
             const sy = ((1 - projected.y) / 2) * size.height;
             const radiusPx = size.height * share;
-            model.followModel = { x: sx, y: sy, shown: true, parts: modelSlot.parts, radiusPx, box: { left: sx - radiusPx, top: sy - radiusPx, right: sx + radiusPx, bottom: sy + radiusPx }, axes };
+            model.followModel = { x: sx, y: sy, shown: true, parts: modelSlot.parts, share, seat: sy / size.height, weight, radiusPx, box: { left: sx - radiusPx, top: sy - radiusPx, right: sx + radiusPx, bottom: sy + radiusPx }, axes };
           } else {
             if (modelSlot.drawing) modelSlot.drawing.object.visible = false;
             model.followModel = null;
@@ -1441,7 +1500,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           }
           routeLayer?.sync();
           if (model.rideLost) deps.onRideLost?.();
-          if (model.transition) deps.onMoving?.();
+          if (model.transition || frameMoving) deps.onMoving?.();
           return false;
         },
         resize(w, h) {
