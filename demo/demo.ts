@@ -19,6 +19,7 @@ import type { BodyPainter } from "../src/space/index.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../src/satellites/index.ts";
 import { fetchGroup, GROUP_STYLE, setsOfGroup, type GroupFile } from "./groups.ts";
 import { catalogueEntry, findInCatalogue, SATELLITE_GROUPS, type SatelliteGroupInfo } from "../src/satellites/catalogue.ts";
+import { SHORT_NAMES } from "../src/satellites/names.ts";
 import { nearest } from "../src/satellites/nearest.ts";
 import type { RideTarget } from "../src/space/element.ts";
 import { planetPainter } from "./planet-painter.ts";
@@ -480,19 +481,25 @@ if (flat && controls && stage) {
     if (!satSearch || !satResults) return;
     const text = satSearch.value;
     const wanted = squash(text);
+    // A kana or kanji query squashes to nothing. It still has to reach the catalogue, which matches those names as typed.
+    const query = text.trim();
     satResults.replaceChildren();
-    satResults.hidden = !wanted;
-    if (!wanted) return;
+    satResults.hidden = query.length === 0;
+    if (!query) return;
     const found = new Map<number, { name: string; group: string }>();
-    for (const set of made.get("yours")?.sets ?? []) if (found.size < 10 && (String(set.NORAD_CAT_ID) === wanted || squash(set.OBJECT_NAME).includes(wanted))) found.set(set.NORAD_CAT_ID, { name: set.OBJECT_NAME, group: "yours" });
-    for (const entry of findInCatalogue(text, 6)) if (!found.has(entry.noradId)) found.set(entry.noradId, { name: entry.name, group: entry.group });
-    try {
-      for (const [id, name, group] of (await loadIndex()).rows) {
-        if (found.size >= 10) break;
-        if (!found.has(id) && (String(id) === wanted || squash(name).includes(wanted))) found.set(id, { name, group });
+    if (wanted) {
+      for (const set of made.get("yours")?.sets ?? []) if (found.size < 10 && (String(set.NORAD_CAT_ID) === wanted || squash(set.OBJECT_NAME).includes(wanted))) found.set(set.NORAD_CAT_ID, { name: set.OBJECT_NAME, group: "yours" });
+    }
+    for (const entry of findInCatalogue(text, 6)) if (!found.has(entry.noradId)) found.set(entry.noradId, { name: SHORT_NAMES[entry.noradId]?.en ?? entry.name, group: entry.group });
+    if (wanted) {
+      try {
+        for (const [id, name, group] of (await loadIndex()).rows) {
+          if (found.size >= 10) break;
+          if (!found.has(id) && (String(id) === wanted || squash(name).includes(wanted))) found.set(id, { name, group });
+        }
+      } catch {
+        notice(say("satLoadFail"));
       }
-    } catch {
-      notice(say("satLoadFail"));
     }
     if (satSearch.value !== text) return;
     if (!found.size) {
