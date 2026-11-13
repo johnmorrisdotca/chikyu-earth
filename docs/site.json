@@ -74,6 +74,11 @@
       "en": "The Earth-orbit catalogue: orbit class, object kind, colours, fleets and the packed file format (no data)",
       "ja": "地球周回軌道のカタログ: 軌道の分類、物体の種類、色、衛星群、パック形式のファイル（データは含みません）",
       "platform": "node"
+    },
+    "./place": {
+      "en": "The place under a point: country, sea, continent and the nearest city",
+      "ja": "地点の場所: 国、海、大陸、最も近い都市",
+      "platform": "node"
     }
   }
 }
