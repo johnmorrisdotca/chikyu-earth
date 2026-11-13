@@ -13,6 +13,7 @@ interface Tiles {
   level: number | null;
   held: number;
   shown: number;
+  loading: number;
   requested: number;
 }
 const tiles = (page: Page): Promise<Tiles> => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { tiles: Tiles }).tiles);
