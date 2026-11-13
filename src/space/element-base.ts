@@ -40,7 +40,7 @@ import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
-import { applySatelliteFocus, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
+import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
@@ -1774,7 +1774,7 @@ export class ChikyuSpace extends HTMLElement {
 
   /** Is anything on show that moves faster than the Earth turns: a group of satellites, including above the interpolation limit where they are drawn as streaks? */
   #satellitesMoving(): boolean {
-    for (const group of this.#model.satellites.groups.values()) if (group.visible && group.satellites.count > 0) return true;
+    for (const [name, group] of this.#model.satellites.groups) if (satelliteEmphasis(name, group.visible, this.#model.satellites.focus).drawn && group.satellites.count > 0) return true;
     return false;
   }
 

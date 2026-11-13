@@ -13,7 +13,7 @@ import { cameraCentre, type CameraMode, createEarthItem, discRadius, lookAt, new
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { MAX_ORBIT_GROUP, type SatelliteStyle } from "../space/satellite-layer.ts";
-import { applySatelliteFocus, satelliteGroupRows, shellRadiusOf, zoomForOrthographicShell, type SatelliteOthers } from "../space/satellite-focus.ts";
+import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForOrthographicShell, type SatelliteOthers } from "../space/satellite-focus.ts";
 import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import type { Credit, DataSource } from "../data-door.ts";
@@ -1372,7 +1372,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
 
   /** Is anything on show that moves faster than the Earth turns: a group of satellites, including above the interpolation limit where they are drawn as streaks? */
   #satellitesMoving(): boolean {
-    for (const group of this.#model.satellites.groups.values()) if (group.visible && group.satellites.count > 0) return true;
+    for (const [name, group] of this.#model.satellites.groups) if (satelliteEmphasis(name, group.visible, this.#model.satellites.focus).drawn && group.satellites.count > 0) return true;
     return false;
   }
 
