@@ -7,6 +7,14 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.46.3: a satellite seen from above shrinks as the ride rises
+
+In a ride above a satellite (`view: "above"`) the model of the satellite was drawn at 17 per cent of the picture's height from any height, so from 6,000 km it was a block hundreds of kilometres across. It now keeps that size up to 150 km, shrinks as the camera rises and is gone by 2,000 km, where the ordinary mark (ring and name) takes over.
+
+- You want the old size at every height: set `ride-model-size="fixed"` on the element (property `rideModelSize`), or pass `{ modelSize: "fixed" }` to `ride`.
+- A painter's own model is told the smaller size through `update({ radiusPx })`; a model that picks its detail from `radiusPx` follows without a change.
+- The package's own drawings by kind are redrawn (framed panels, a bus with a radiator and camera, a dish, a cubesat kind for FLOCK, DOVE, LEMUR and similar names): nothing else changes.
+
 ## To 0.44: a ride shows the satellite
 
 A ride of a satellite (`ride(ref)`) now has the camera a little outside the satellite, behind and above it, with the satellite in the picture. It was at the satellite.

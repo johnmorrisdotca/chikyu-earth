@@ -13,7 +13,7 @@ import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
-import { faceOffset, outsidePose, ridePose, type RideFace, type RideLook, type RideViewpoint } from "./ride.ts";
+import { faceOffset, outsidePose, ridePose, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { genericSatellite, satelliteKind } from "./generic-satellite.ts";
 import { coverBody, covers } from "../sky/cover.ts";
 import type { SkyFrame } from "../sky/frame.ts";
@@ -21,7 +21,7 @@ import type { PlaceView } from "../markers/places.ts";
 import { beginPlaceSprites, createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import type { CountryFrame } from "../country-names/geometry.ts";
 import type { GeoPoint } from "../types.ts";
-import { aboveAxes, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
+import { ABOVE_MODEL_SHARE, aboveAxes, aboveModelShare, MODEL_HANDOVER_PX, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
 import { paintMinute } from "../paint/buffer.ts";
 import { createPaintTexture } from "../paint/texture.ts";
@@ -147,6 +147,8 @@ export interface RideState {
   distanceKm: number;
   /** `outside`: a ridden satellite is in the picture (the camera a little behind and above it in `from`, a drawing of it where the page has no model); `inside`: as a ride was before, the camera at the satellite and no drawing of it where the page has no model. */
   viewpoint: RideViewpoint;
+  /** How the model of a satellite seen from above is sized as the camera rises: `distance` shrinks it and hands over to the mark, `fixed` keeps one share of the picture. */
+  modelSize: RideModelSize;
 }
 
 /** The camera as the last draw left it, for the next one to start from when the ride changes. */
@@ -877,6 +879,17 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               deps.onSatellitesError?.(error);
             }
           }
+          // the ridden satellite is drawn as its model while the model is big enough to read; its ring and name (the page's choice of it, or the marks) are left off exactly then, and come back when the model has shrunk to the size of a ring (MODULES-1303, 1306)
+          {
+            const riding = model.ride;
+            let over: SatelliteRef | null = null;
+            if (riding && riding.viewpoint === "outside" && typeof riding.target !== "string") {
+              const kmAbove = riding.distanceKm / Math.max(1e-9, model.view.zoom);
+              const would = riding.view === "above" ? (riding.modelSize === "fixed" ? ABOVE_MODEL_SHARE : aboveModelShare(kmAbove)) : riding.view === "from" ? (riding.look === "horizon" ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE) : MODEL_RADIUS_SHARE;
+              if (would * size.height >= MODEL_HANDOVER_PX) over = riding.target;
+            }
+            model.satellites.modelOver = over;
+          }
           layer?.update(model.time, model.speed, model.drawn?.radiusPx ?? 0);
           model.pick = layer ? (x, y, radius) => layer!.pick(x, y, camera, size, radius) : null;
 
@@ -1154,10 +1167,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           const axes = freshAxes ?? (shownSat ? modelSlot.axes : null);
           // a generic drawing is for an outside ride only; a page's model is drawn wherever the camera is not at the satellite
           const drawn = shownSat !== null && (ride?.viewpoint === "outside" || (followed !== null && painted));
-          if (modelSlot.drawing && shownSat && axes && drawn) {
+          const aboveShare = followed && ride?.view === "above" && ride.modelSize !== "fixed" ? aboveModelShare(Math.hypot(shownSat!.place[0] - camera.position.x, shownSat!.place[1] - camera.position.y, shownSat!.place[2] - camera.position.z) * 6371) : 1;
+          // from far above the satellite is a point: the model has shrunk to nothing and the ordinary mark is all there is
+          if (modelSlot.drawing && shownSat && axes && drawn && aboveShare * size.height >= 0.5) {
             const object = modelSlot.drawing.object;
             const away = Math.hypot(shownSat.place[0] - camera.position.x, shownSat.place[1] - camera.position.y, shownSat.place[2] - camera.position.z);
-            const share = followed ? MODEL_RADIUS_SHARE : ride?.look === "horizon" ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE;
+            const share = followed ? (ride?.view === "above" ? (ride.modelSize === "fixed" ? ABOVE_MODEL_SHARE : aboveModelShare(away * 6371)) : MODEL_RADIUS_SHARE) : ride?.look === "horizon" ? OUTSIDE_ALONG_SHARE : OUTSIDE_RADIUS_SHARE;
             object.matrix.set(...(modelMatrix(shownSat.place, axes, modelRadius(away, half, share, 1e-9)) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
             object.matrixWorldNeedsUpdate = true;
             object.visible = true;

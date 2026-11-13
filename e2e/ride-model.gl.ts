@@ -58,7 +58,7 @@ async function open(page: Page, query = ""): Promise<void> {
 
 /** Ride the ISS as the page would: the options only, no gliding (the camera is at its place at once). */
 async function ride(page: Page, view: "from" | "above", look: "horizon" | "down", smooth = false): Promise<void> {
-  await page.locator(SPACE).evaluate((el, o) => (el as unknown as { ride(t: unknown, o: unknown): void }).ride({ group: "stations", index: o.index }, { view: o.view, look: o.look, smooth: o.smooth }), { index: issIndex, view, look, smooth });
+  await page.locator(SPACE).evaluate((el, o) => (el as unknown as { ride(t: unknown, o: unknown): void }).ride({ group: "stations", index: o.index }, { view: o.view, look: o.look, smooth: o.smooth, distanceKm: 150 }), { index: issIndex, view, look, smooth });
 }
 
 /** Give the held clock a time and wait for the draw that shows it: the draw count is read in the same turn as the time is given. */
