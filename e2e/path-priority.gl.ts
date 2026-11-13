@@ -52,12 +52,12 @@ async function open(page: Page): Promise<void> {
 }
 
 /** Do `act` in the page and wait for the draw it asks for: the draw count is read in the same turn as the change. */
-async function change(page: Page, act: (api: Api) => void): Promise<void> {
-  const before = await page.locator(SPACE).evaluate((el, source) => {
+async function change<A = null>(page: Page, act: (api: Api, arg: A) => void, arg: A = null as A): Promise<void> {
+  const before = await page.locator(SPACE).evaluate((el, [source, value]) => {
     const draws = (Reflect.get(el, "stats") as { draws: number }).draws;
-    (new Function(`return (${source})`)() as (api: unknown) => void)(el);
+    (new Function(`return (${source as string})`)() as (api: unknown, arg: unknown) => void)(el, value);
     return draws;
-  }, act.toString());
+  }, [act.toString(), arg] as const);
   await expect.poll(async () => (await statsOf(page)).draws, { timeout: 30_000, message: "a draw after the change" }).toBeGreaterThan(before);
   await untilStill(page);
 }
@@ -99,6 +99,24 @@ async function crowdedPoint(page: Page): Promise<{ x: number; y: number; id: num
   expect(found, "a point on the path with Starlink dots round it and no station's").not.toBeNull();
   return found!;
 }
+
+/**
+ * Stations whose dots stand alone: in the picture, with no other station's dot within 12 px (the recorded stations include modules of the ISS that lie on one another, and the nearest dot to a press on one of them is any of them).
+ * Found by looking over the picture, which is held.
+ */
+const loneStations = (page: Page): Promise<number[]> =>
+  inPage(
+    page,
+    (api, count: number) => {
+      const dots: { index: number; x: number; y: number }[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const at = api.placeSatellite({ group: "stations", index });
+        if (at?.visible) dots.push({ index, x: at.x, y: at.y });
+      }
+      return dots.filter((one) => dots.every((other) => other.index === one.index || Math.hypot(other.x - one.x, other.y - one.y) > 12)).map((one) => one.index);
+    },
+    20,
+  );
 
 const press = async (page: Page, x: number, y: number): Promise<void> => {
   const box = (await page.locator(SPACE).boundingBox())!;
@@ -159,8 +177,11 @@ test("at the Low level a crowd of dots hides a path under the default and does n
 test("under paths a listed satellite's own dot, and the chosen one's, still win; away from every path a dot is a dot", async ({ page }) => {
   await open(page);
   await page.locator(SPACE).evaluate((el) => el.setAttribute("path-priority", "paths"));
-  await change(page, (api) => api.setPaths([{ id: "stations:2", style: "favourite" }]));
-  const listed = await dotOf(page, "stations", 2);
+  const lone = await loneStations(page);
+  expect(lone.length, "stations stand alone in the picture").toBeGreaterThanOrEqual(3);
+  const [listedIndex, chosenIndex, otherIndex] = lone as [number, number, number];
+  await change(page, (api, index) => api.setPaths([{ id: `stations:${index}`, style: "favourite" }]), listedIndex);
+  const listed = await dotOf(page, "stations", listedIndex);
   expect(listed, "the listed station is in the picture").not.toBeNull();
   await clearLog(page);
   await press(page, listed!.x, listed!.y);
@@ -169,8 +190,8 @@ test("under paths a listed satellite's own dot, and the chosen one's, still win;
   await untilStill(page);
 
   // the chosen satellite: its own orbit is drawn through its dot, and the dot still wins
-  await change(page, (api) => api.selectSatellite({ group: "stations", index: 5 }));
-  const chosen = await dotOf(page, "stations", 5);
+  await change(page, (api, index) => api.selectSatellite({ group: "stations", index }), chosenIndex);
+  const chosen = await dotOf(page, "stations", chosenIndex);
   expect(chosen, "the chosen station is in the picture").not.toBeNull();
   await clearLog(page);
   await press(page, chosen!.x, chosen!.y);
@@ -183,10 +204,10 @@ test("under paths a listed satellite's own dot, and the chosen one's, still win;
     api.setPaths([]);
     api.selectSatellite(null);
   });
-  const lone = await dotOf(page, "stations", 7);
-  expect(lone).not.toBeNull();
+  const away = await dotOf(page, "stations", otherIndex);
+  expect(away).not.toBeNull();
   await clearLog(page);
-  await press(page, lone!.x, lone!.y);
+  await press(page, away!.x, away!.y);
   await expect.poll(async () => (await clicks(page)).length).toBe(1);
   expect(await clicks(page)).toEqual(["chikyu-satellite-click"]);
 });
