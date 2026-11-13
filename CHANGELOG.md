@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A here marker can name a town under 100,000** (MODULES-1212). After the capitals, the cities of a million and the cities of 100,000 have answered, `here-city` reads the smaller cities of the nearest city's country, and of one more country when that country also has a city of those three tiers within the limit. Each country is one file (`citiesOf`), loaded once. A nearer town within the limit wins. The optional peer is now kuni 1.8.0 or later, which is the first version with `citiesOf`. Nothing is loaded while `here-city` is off, and nothing is drawn again at rest.
+
 ## 0.42.0 - 2026-11-13
 
 - **The "you are here" marker can take the nearest city's name** (MODULES-1077). `here-city` on `<chikyu-space>` and `<chikyu-earth-realistic>` (off by default; the property `hereCity` is `false`, `true` or a number of kilometres) names each `kind: "here"` place with the nearest city within 100 km (`HERE_CITY_KM`; a number on the attribute is that limit, at most 20,000). The name follows the page's language. The cities are kuni's capitals, the other cities of a million and the others of 100,000, loaded only when this is on and a `here` place is set; a smaller town keeps the label the page gave. `places` itself is not changed. Nothing is drawn again at rest.
