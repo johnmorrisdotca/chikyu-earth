@@ -31,7 +31,8 @@ async function open(page: Page, look: (typeof LOOKS)[number], query = ""): Promi
   if (look === "ride" || look === "above") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
   if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
-  await page.waitForTimeout(look === "ride" || look === "above" ? 8000 : 800);
+  // 800 ms for the pictures to arrive, and the second in which a reader who asked for reduced motion has the draws they ask for gathered (MODULES-1195)
+  await page.waitForTimeout(look === "ride" || look === "above" ? 8000 : 800 + 1000);
 }
 
 /**
