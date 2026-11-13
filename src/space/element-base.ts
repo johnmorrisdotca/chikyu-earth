@@ -1481,6 +1481,8 @@ export class ChikyuSpace extends HTMLElement {
     if (answer.group === null) this.#restoreFocusView();
     else if (options.frame !== false) this.#frameSatelliteShell(answer.group);
     if (answer.changed) this.dispatchEvent(new CustomEvent("chikyu-satellite-focus", { detail: { group: answer.group, count: answer.count }, bubbles: true, composed: true }));
+    // which groups are drawn decides how often time is drawn, so the next step is worked out again, as for `showSatellites`
+    this.#schedule();
     this.#gate?.request();
     return { ok: true, group: answer.group, count: answer.count };
   }
