@@ -39,7 +39,7 @@ import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
-import { MAX_ORBIT_GROUP, type SatelliteStyle } from "./satellite-layer.ts";
+import { MAX_ORBIT_GROUP, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
@@ -1510,10 +1510,9 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
-   * Where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm }` in CSS pixels from the view's top left, `visible` meaning it is inside the box and not behind the Earth. `null` when its group is not set or not shown, it cannot be
-   * placed (its elements are too old), or it is behind the camera. It is the picture's own camera maths and its own test for the Earth in the way, so a page that draws its own rings need not repeat either.
+   * Where a satellite is on the screen as of the last draw: `{ x, y, visible, heightKm, edge, behind }` in CSS pixels from the view's top left. `visible` means it is inside the box, in front of the camera and not behind the Earth. `edge` is `top`, `right`, `bottom` or `left` when the place lies beyond that edge, and `null` when it is inside the box. `behind` is true when it is behind the camera (the picture would mirror it, so `edge` is read from the camera's own axes). `x` and `y` may lie outside the box. `null` when its group is not set or not shown, or it cannot be placed (its elements are too old). It is the picture's own camera maths and its own test for the Earth in the way, so a page that draws its own rings, or a mark on the edge, need not repeat either.
    */
-  placeSatellite(ref: SatelliteRef): { x: number; y: number; visible: boolean; heightKm: number } | null {
+  placeSatellite(ref: SatelliteRef): SatelliteScreen | null {
     return this.#model.placeSatellite?.(ref) ?? null;
   }
 

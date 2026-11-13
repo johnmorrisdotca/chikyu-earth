@@ -132,8 +132,44 @@ export function pinPlan(count: number, next: number, elapsedMs: number): { runs:
   return { runs, next: (first + slice) % count };
 }
 
+/** An edge of the picture a satellite lies beyond. `null` when its place is inside the box. */
+export type ScreenEdge = "top" | "right" | "bottom" | "left";
+
 /**
- * Where a satellite is on the screen now: in CSS pixels in the view's box, whether it can be seen (inside the box and not behind the Earth) and how high it is.
+ * Which edge of a box a point lies beyond. A corner goes to the edge it passes by more. Inside the box, `null`.
+ *
+ * @param x - CSS pixels from the left.
+ * @param y - CSS pixels from the top.
+ * @param width - The box width.
+ * @param height - The box height.
+ * @returns The edge, or `null` when the point is inside.
+ */
+export function screenEdge(x: number, y: number, width: number, height: number): ScreenEdge | null {
+  const left = Math.max(0, -x);
+  const right = Math.max(0, x - width);
+  const top = Math.max(0, -y);
+  const bottom = Math.max(0, y - height);
+  const dx = Math.max(left, right);
+  const dy = Math.max(top, bottom);
+  if (dx === 0 && dy === 0) return null;
+  if (dx >= dy) return left > 0 ? "left" : "right";
+  return top > 0 ? "top" : "bottom";
+}
+
+/**
+ * Which edge a point lies beyond, from the camera's own axes: `x` to the right, `y` up. Used when the point is behind the camera, whose picture would otherwise mirror it.
+ *
+ * @param x - To the camera's right.
+ * @param y - Up, in the camera's axes.
+ * @returns The edge.
+ */
+export function edgeBeyondCamera(x: number, y: number): ScreenEdge {
+  if (Math.abs(x) >= Math.abs(y)) return x < 0 ? "left" : "right";
+  return y >= 0 ? "top" : "bottom";
+}
+
+/**
+ * Where a satellite is on the screen now: in CSS pixels from the view's top left (which may lie outside the box), whether it can be seen, which edge it lies beyond, whether it is behind the camera, and how high it is.
  *
  * @example
  * ```ts
@@ -146,14 +182,18 @@ export function pinPlan(count: number, next: number, elapsedMs: number): { runs:
 export interface SatelliteScreen {
   x: number;
   y: number;
-  /** Inside the box and in front of the Earth (not hidden by it). */
+  /** Inside the box, in front of the camera and not hidden by the Earth. */
   visible: boolean;
   /** Height above the mean Earth radius, in kilometres, at the moment drawn. */
   heightKm: number;
+  /** The edge the satellite lies beyond, or `null` when its place is inside the box. Behind the camera, the edge is the way it lies in the camera's own axes, not the mirrored picture. */
+  edge: ScreenEdge | null;
+  /** The satellite is behind the camera. The picture would put it on the opposite side, so `edge` is taken from the camera's own axes. */
+  behind: boolean;
 }
 
 export interface SatelliteLayer {
-  /** Where one satellite of a shown group is on the screen as of the last update, or `null` when its group is not shown, it is not placed (its elements are too old) or it is behind the camera. */
+  /** Where one satellite of a shown group is on the screen as of the last update, or `null` when its group is not shown or it is not placed (its elements are too old). A satellite outside the picture or behind the camera is still returned, with `visible` false. */
   placeOf(ref: SatelliteRef, camera: THREE.Camera, size: { width: number; height: number }): SatelliteScreen | null;
   /** Place every shown group for `model.time` and the chosen satellite exactly. `earthPx` is the Earth's radius on the screen, so a dot grows as the view zooms in. */
   update(time: number, speed: number, earthPx?: number): void;
@@ -476,30 +516,44 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       const i = ref.index * 3;
       world.set(p[i]!, p[i + 1]!, p[i + 2]!).applyMatrix4(scene.matrixWorld);
       const heightKm = (Math.hypot(p[i]!, p[i + 1]!, p[i + 2]!) - 1) * 6371;
-      projected.copy(world).project(camera);
-      if (projected.z > 1 || projected.z < -1) return null;
-      const x = ((projected.x + 1) / 2) * size.width;
-      const y = ((1 - projected.y) / 2) * size.height;
+      // the camera looks down its own -z, so a point in front has a negative z. A point behind would be mirrored by the picture, so its edge is read from these axes.
+      view.copy(world).applyMatrix4(camera.matrixWorldInverse);
       const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
-      const c = camera.position;
-      let hidden: boolean;
-      if (ortho) {
-        const centreDepth = view.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z;
-        view.copy(world).applyMatrix4(camera.matrixWorldInverse);
-        hidden = view.z < centreDepth && view.x * view.x + view.y * view.y < 0.996;
-      } else {
-        // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
-        const px = world.x - c.x;
-        const py = world.y - c.y;
-        const pz = world.z - c.z;
-        const len2 = px * px + py * py + pz * pz;
-        const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
-        const nx = c.x + px * t;
-        const ny = c.y + py * t;
-        const nz = c.z + pz * t;
-        hidden = nx * nx + ny * ny + nz * nz < 0.998;
+      const behind = !ortho && view.z > 0;
+      projected.copy(world).project(camera);
+      let x = Number.isFinite(projected.x) ? ((projected.x + 1) / 2) * size.width : size.width / 2;
+      let y = Number.isFinite(projected.y) ? ((1 - projected.y) / 2) * size.height : size.height / 2;
+      const edge = behind ? edgeBeyondCamera(view.x, view.y) : screenEdge(x, y, size.width, size.height);
+      if (behind) {
+        if (edge === "left") x = -1;
+        else if (edge === "right") x = size.width + 1;
+        else if (edge === "top") y = -1;
+        else y = size.height + 1;
       }
-      return { x, y, visible: !hidden && x >= 0 && x <= size.width && y >= 0 && y <= size.height, heightKm };
+      const c = camera.position;
+      let hidden = false;
+      if (!behind) {
+        if (ortho) {
+          const right = view.x;
+          const up = view.y;
+          const depth = view.z;
+          const centreDepth = world.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z;
+          hidden = depth < centreDepth && right * right + up * up < 0.996;
+          world.set(p[i]!, p[i + 1]!, p[i + 2]!).applyMatrix4(scene.matrixWorld);
+        } else {
+          // behind the Earth: the line from the camera to the satellite passes through the unit sphere before it gets there
+          const px = world.x - c.x;
+          const py = world.y - c.y;
+          const pz = world.z - c.z;
+          const len2 = px * px + py * py + pz * pz;
+          const t = Math.max(0, Math.min(1, -(c.x * px + c.y * py + c.z * pz) / len2));
+          const nx = c.x + px * t;
+          const ny = c.y + py * t;
+          const nz = c.z + pz * t;
+          hidden = nx * nx + ny * ny + nz * nz < 0.998;
+        }
+      }
+      return { x, y, visible: !behind && !hidden && edge === null, heightKm, edge, behind };
     },
 
     place(camera, size) {
