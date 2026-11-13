@@ -47,7 +47,7 @@ import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./
 import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
 import { claimPress } from "../sky/claim.ts";
-import { bindPaths, emptyPathStats, pointerOf, type PathControls, type PathStats } from "./path-controls.ts";
+import { bindPaths, emptyPathStats, pointerOf, readPathPriority, type PathControls, type PathStats } from "./path-controls.ts";
 import { styleTable, type PathHit, type PathRequest, type PathStyle } from "./paths.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "./satellite-hover.ts";
 import { clampFollow, retargetFollow } from "./follow.ts";
@@ -297,7 +297,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "selected-path", "path-hit", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "selected-path", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -2185,6 +2185,18 @@ export class ChikyuSpace extends HTMLElement {
     else this.removeAttribute("path-hit");
   }
   /**
+   * Which is heard first where a satellite's dot and a path lie under the pointer (the attribute `path-priority`): `dots`, the default, or `paths`. With `dots` a press or a hover is the dot's, and a path is heard only where no dot is within 12 px: at the Low level, with thousands of dots crowding a line, a path can go unheard.
+   * With `paths` a path of the page's (`setPaths`, or the chosen satellite's own orbit) is heard before a dot, **except** a dot of a satellite that is itself one of the paths' satellites or the chosen or ridden one: that satellite's own dot still wins, and a press on it is `chikyu-satellite-click`.
+   * Either way one press has one meaning, in this order. `dots`: any dot, then a path, then the sky. `paths`: a listed or chosen satellite's dot, then a path, then any other dot, then the sky. Anything but `paths` reads as `dots`.
+   */
+  get pathPriority(): "dots" | "paths" {
+    return readPathPriority(this.getAttribute("path-priority"));
+  }
+  set pathPriority(value: "dots" | "paths") {
+    if (value === "paths") this.setAttribute("path-priority", "paths");
+    else this.removeAttribute("path-priority");
+  }
+  /**
    * The path under a point of the element, from the last draw: its id as given, the satellite (`ref`, the same shape as in `chikyu-satellite-click`), the name of its look, the nearest point on it and the distance to it, or `null`.
    *
    * @param x - CSS pixels from the element's left.
@@ -2574,14 +2586,15 @@ export class ChikyuSpace extends HTMLElement {
     const rect = this.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+    // one press, one meaning: the paths decide first, since which of a dot and a path wins depends on `path-priority` (a dot wins in the default, and the paths say so by answering no)
+    if (this.#pathControls?.press(x, y, pointerOf(event))) {
+      claimPress(event);
+      return;
+    }
     const satellite = this.#model.pick?.(x, y, 12);
     if (satellite) {
       claimPress(event);
       this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite), ...this.#estimateOf(satellite) }, bubbles: true, composed: true }));
-      return;
-    }
-    if (this.#pathControls?.press(x, y, pointerOf(event))) {
-      claimPress(event);
       return;
     }
     if (!this.#places) return;
