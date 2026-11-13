@@ -60,7 +60,7 @@ text read on 2026-11-02, so check them if you need the exact wording for print.
 
 The bathymetry-free Blue Marble maps (base map, and base map with topography, on the same Blue Marble page) fall under the same NASA terms; the tiles use the one with bathymetry, as `day-*.webp` does. The clouds are not tiled: NASA's sharper cloud files (Visible Earth 57747, once at eoimages.gsfc.nasa.gov) are no longer served, and the Blue Marble 2002 page (https://science.nasa.gov/earth/earth-observatory/the-blue-marble-true-color-global-imagery-at-1km-resolution/) offers only the 2048 picture already in `clouds-2048.webp`.
 
-The 500 m maps could fill one more level (65536 across for the day map); the pyramid stops at level 5 (day) and level 4 (night) for now. Where the pyramid is hosted: GitHub Pages of this public repository, which costs nothing (docs/guides/earth-tiles.md). It adds 3,412 files and 35.4 MB to the site (852 files and 10.3 MB before the 500 m levels). The source files are downloaded by the build (688 MB, once, kept by CI's cache) and are not part of the site.
+The 500 m maps could fill one more level (65536 across for the day map); the pyramid stops at level 5 (day) and level 4 (night) for now. Where the pyramid is hosted: GitHub Pages of this public repository, which costs nothing (docs/guides/earth-tiles.md). It adds 3,412 files and 35.4 MB to the site (852 files and 10.3 MB before the 500 m levels; the levels above day 4 and night 3 go out only when the repository variable EARTH_TILES_ALL is yes, see docs/guides/earth-tiles.md). The source files are downloaded by the build (688 MB, once, kept by CI's cache) and are not part of the site.
 
 ## The Moon's picture
 

@@ -39,6 +39,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # The Earth tiles above day 4 and night 3 are published only when the repository variable EARTH_TILES_ALL is yes (scripts/site.ts, docs/guides/earth-tiles.md).
+    env:
+      EARTH_TILES_ALL: ${{ vars.EARTH_TILES_ALL }}
     timeout-minutes: 60
     environment:
       name: github-pages
