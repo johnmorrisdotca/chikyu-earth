@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Reduced motion gathers the pictures that arrive** (MODULES-1195). Since bodies are made only when big enough (MODULES-1192), a body that came into view made its pictures arrive one by one, each asking for a draw: a reader who asked for reduced motion got about 8 draws in half a second, and 1.75 draws a second riding the ISS at 60x against the one step a second the clock makes. The Earth's maps, its finer tiles and a body's pictures now ask for one draw between them in each second, and none when a draw (the clock's step) was made in that second; without reduced motion a picture is drawn as soon as it arrives, as before. `e2e/ride.gl.ts` measures from the start of the ride again (the three seconds `dbae5d8` let pass first are gone): 1.25 draws a second, where the code of 0.42.0 reads 1.75.
+- **The realistic Earth's first draw is waited for, not 5 s** (MODULES-1194). `e2e/air-visible.gl.ts` gave the first draw 5 s and timed out on a loaded Mac; it now waits on the element's own draw counter, within the test's own time. Held back by 8 s in the page, the old wait fails at 5 s and the new one passes. A test change only; the package is unchanged.
 
 ## 0.42.0 - 2026-11-12
 

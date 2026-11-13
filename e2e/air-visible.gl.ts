@@ -15,7 +15,8 @@ async function open(page: Page, element: string, query: string, fullScreen = fal
   await page.goto(`/chikyu-earth/${address}time=${NOV2}&speed=0&camera=sun&center=0,0&${query}`);
   await page.locator(`${element}[data-state=live]`).waitFor({ timeout: 60_000 });
   await page.addStyleTag({ content: `${element}{background:${BACKGROUND}}` });
-  if (element === EARTH) await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(0);
+  // wait on the first draw itself (the element's own counter), however long a loaded machine takes to make it: the test's own time is the limit, not a fixed 5 s (MODULES-1194)
+  if (element === EARTH) await page.waitForFunction((tag) => (Reflect.get(document.querySelector(tag)!, "stats") as { draws: number }).draws > 0, EARTH, { timeout: 0 });
   await settle(page, 1500);
 }
 
