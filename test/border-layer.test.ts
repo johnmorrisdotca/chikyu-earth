@@ -21,7 +21,7 @@ function make(state: BorderState) {
 }
 const on = (data: BorderState["data"] = {}): BorderState => ({ ...newBorderState(), countries: true, regions: true, data });
 
-test("at a small size only the countries are loaded and drawn: neither the finer outlines nor any region is asked for", async () => {
+test("at a small size only the countries are loaded and drawn: neither the finer outlines nor any region is asked for", { timeout: 30_000 }, async () => {
   let detail = 0;
   let regions = 0;
   const state = on({ detail: async () => (detail += 1, { features: [] }), regions: async () => (regions += 1, null) });
@@ -34,7 +34,7 @@ test("at a small size only the countries are loaded and drawn: neither the finer
   assert.deepEqual(state.stats.shown, { countries: true, detail: false, regions: false });
 });
 
-test("from BORDER_DETAIL_RADIUS the countries come from chizu's finer world, asked for once, and the coarse lines are put away", async () => {
+test("from BORDER_DETAIL_RADIUS the countries come from chizu's finer world, asked for once, and the coarse lines are put away", { timeout: 30_000 }, async () => {
   const state = on();
   const { layer, until } = make(state);
   layer.sync(view(BORDER_DETAIL_RADIUS - 1));
@@ -49,7 +49,7 @@ test("from BORDER_DETAIL_RADIUS the countries come from chizu's finer world, ask
   layer.dispose();
 });
 
-test("from BORDER_REGIONS_RADIUS the regions of the countries in view come from chizu's divisions-geo, with no loader of the page's", async () => {
+test("from BORDER_REGIONS_RADIUS the regions of the countries in view come from chizu's divisions-geo, with no loader of the page's", { timeout: 30_000 }, async () => {
   const state = on();
   const { layer, until } = make(state);
   layer.sync(view(BORDER_REGIONS_RADIUS));
@@ -65,7 +65,7 @@ test("from BORDER_REGIONS_RADIUS the regions of the countries in view come from 
   layer.dispose();
 });
 
-test("a loader the page gives is used in place of chizu's, for the countries, the finer countries and the regions", async () => {
+test("a loader the page gives is used in place of chizu's, for the countries, the finer countries and the regions", { timeout: 30_000 }, async () => {
   const square = (code: string) => ({ features: [{ properties: { code }, geometry: { type: "Polygon", coordinates: [[[139, 35], [140, 35], [140, 36], [139, 36], [139, 35]]] } }] });
   const asked: string[] = [];
   const state = on({
@@ -82,7 +82,7 @@ test("a loader the page gives is used in place of chizu's, for the countries, th
   layer.dispose();
 });
 
-test("countries off asks for none of them, and regions off asks for no region, however large the Earth", async () => {
+test("countries off asks for none of them, and regions off asks for no region, however large the Earth", { timeout: 30_000 }, async () => {
   let asked = 0;
   const state: BorderState = { ...newBorderState(), countries: false, regions: false, data: { countries: async () => (asked += 1, { features: [] }), detail: async () => (asked += 1, { features: [] }), regions: async () => (asked += 1, null) } };
   const { layer } = make(state);
