@@ -32,14 +32,31 @@ async function open(page: Page, query = "", groups = "stations"): Promise<void> 
 }
 
 /** A group of this many satellites made from the real Starlink ones, spread round their orbits (test only), shown under the name "many". */
-const addMany = (page: Page, count = 6000): Promise<void> =>
+/** Adds the group and says how many draws the view had when it did, read in the same turn as the change. */
+const addMany = (page: Page, count = 6000): Promise<number> =>
   page.evaluate((n) => {
     const tools = Reflect.get(window, "chikyuSatellites") as { createSatellites(sets: unknown[], options?: unknown): unknown; groups: Map<string, { sets: Record<string, number | string>[] }> };
     const base = tools.groups.get("starlink")!.sets;
     const sets = Array.from({ length: n }, (_, i) => ({ ...base[i % base.length]!, NORAD_CAT_ID: 100_000 + i, MEAN_ANOMALY: ((base[i % base.length]!["MEAN_ANOMALY"] as number) + i * 0.37) % 360, RA_OF_ASC_NODE: ((base[i % base.length]!["RA_OF_ASC_NODE"] as number) + i * 0.11) % 360 }));
     const el = document.querySelector("chikyu-space") as unknown as { setSatellites(name: string, group: unknown, style?: unknown): void };
+    const draws = (Reflect.get(el, "stats") as { draws: number }).draws;
     el.setSatellites("many", tools.createSatellites(sets), { size: 2, color: "#7fd4ff" });
+    return draws;
   }, count);
+
+/** Takes groups away and says how many draws the view had when it did, read in the same turn as the change. */
+const removeGroups = (page: Page, ...names: string[]): Promise<number> =>
+  page.locator(SPACE).evaluate((el, groups) => {
+    const draws = (Reflect.get(el, "stats") as { draws: number }).draws;
+    for (const group of groups) (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites(group, null);
+    return draws;
+  }, names);
+
+/** The buffers of a group are made and freed by the draw that follows the change, not by the call: wait for that draw (`before` is the count of draws read with the change), then for the view to be still. */
+async function drawnSince(page: Page, before: number): Promise<void> {
+  await expect.poll(async () => (await statsOf(page)).draws, { timeout: 30_000, message: "a draw after the change" }).toBeGreaterThan(before);
+  await untilArrived(page);
+}
 
 const setSpeed = async (page: Page, speed: number): Promise<void> => {
   await page.locator(SPACE).evaluate((el, value) => Reflect.set(el, "speed", value), speed);
@@ -434,15 +451,12 @@ test("taking a group away frees its buffers, and a lost context is recovered wit
   page.on("pageerror", (e) => errors.push(e.message));
   await open(page, "", "stations,starlink");
   const base = alive(await counts(page), "Buffer");
-  await addMany(page, 3000);
-  await settle(page, 800);
+  await drawnSince(page, await addMany(page, 3000));
   expect(alive(await counts(page), "Buffer")).toBeGreaterThan(base);
-  await page.locator(SPACE).evaluate((el) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites("many", null));
-  await settle(page, 800);
+  await drawnSince(page, await removeGroups(page, "many"));
   expect(alive(await counts(page), "Buffer"), "the group's buffer is freed").toBe(base);
   const programs = alive(await counts(page), "Program");
-  for (const name of ["starlink", "stations"]) await page.locator(SPACE).evaluate((el, group) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites(group, null), name);
-  await settle(page, 800);
+  await drawnSince(page, await removeGroups(page, "starlink", "stations"));
   expect(alive(await counts(page), "Buffer"), "and all the others").toBeLessThan(base);
   expect(alive(await counts(page), "Program")).toBeLessThanOrEqual(programs);
 
