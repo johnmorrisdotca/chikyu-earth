@@ -214,7 +214,7 @@ test.describe("moving", () => {
 
   test("switching bodies glides, in about a second and a bit, and ends at rest", async ({ page }) => {
     // The glide is a function of the page's clock and ends on the first frame drawn after it, so the test owns the clock: how long a busy machine takes to draw a frame cannot change what is measured.
-    await page.clock.install();
+    await ownClock(page);
     await open(page);
     await freezeClock(page);
     const glideFor = (ms: number): Promise<void> => page.clock.runFor(ms);
@@ -234,11 +234,11 @@ test.describe("moving", () => {
     expect((await statsOf(page)).ride.gliding, "still gliding after a second").toBe(true);
     await glideFor(900);
     expect((await statsOf(page)).ride.gliding, "ended by 1.9 s").toBe(false);
-    await page.clock.resume();
-    await settle(page, 600);
     expect(Math.hypot(...(await statsOf(page)).camera.position)).toBeCloseTo(10, 0);
-    // the pictures the ISS's view needed are let go four seconds after it (the texture tiers' own rule): those frames are not the ride's
-    await settle(page, 6000);
+    // the pictures the ISS's view needed are let go four seconds after it (the texture tiers' own rule): those frames are not the ride's. The four seconds are the page's time, run through by the test and not waited
+    // for, and `untilStill` waits for what is not the clock's (the pictures arriving, the last frame queued).
+    await passTime(page, 6000);
+    await untilStill(page);
     const rest = await measure(page, 2500);
     expect(rest.glDraws, "rests after the glide").toBe(0);
   });
