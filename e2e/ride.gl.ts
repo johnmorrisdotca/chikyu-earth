@@ -272,11 +272,11 @@ test("a satellite whose elements are too old for the date cannot be ridden: the 
   expect(Math.hypot(...(await statsOf(page)).camera.position)).toBeGreaterThan(2.5);
 });
 
-test("riding, stopping and riding again frees what it took, and a lost context comes back with the ride", async ({ page }) => {
+test("riding, stopping and riding again frees what it took", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   // The test's own clock: the glide of each switch and the four seconds after which a picture is let go are the page's time, run through at once (this test once spent 45 of its 60 seconds waiting for them), and
-  // `untilStill` waits for what is not the clock's: the pictures arriving, and the last frame queued.
+  // `untilStill` waits for what is not the clock's: the pictures arriving, and the last frame queued. The test is three rounds of six switches and takes about half of its 60 seconds on its own, so the lost context (below) is a test of its own.
   await ownClock(page);
   await open(page);
   // a first round of every way to ride makes what is made once (the first time a planet is in the picture its sphere is put on the GPU); the second must give back what it took
@@ -294,6 +294,16 @@ test("riding, stopping and riding again frees what it took, and a lost context c
   await ride();
   await ride();
   expect(await held(), "no more buffers, textures and vertex arrays after two more rounds of six switches").toBeLessThanOrEqual(riding);
+  expect(errors).toEqual([]);
+});
+
+test("a lost context comes back with the ride", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await ownClock(page);
+  await open(page);
+  await rideButton(page, "ISS").click();
+  await glided(page);
   await passTime(page, 4500);
   await untilStill(page);
   const before = (await statsOf(page)).draws;
