@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A press on a place tells the page** (MODULES-1082). `chikyu-place-click` is sent on `<chikyu-space>` and `<chikyu-earth-realistic>` for a press or a tap that is not a drag, on a place drawn as a marker of its own, in any look: `detail: { place, group, x, y, pointer }` (`place` a copy of the place as the page gave it, `group` `false` and reserved for a later press on a group ring, `x` and `y` CSS pixels in the element, `pointer` `mouse`, `touch` or `pen`; the type is `PlaceClickDetail` in `/markers`). The reach is 14 CSS pixels from the ring and the stick for a mouse or a pen and 22 for a touch. A place the Earth hides, one gathered into a group and one past the first `PLACE_MARKS` in sight are not pressed, and the package's own names (cities, countries, seas, bodies, stars) are not places. One press, one meaning: a satellite's dot, then a path, then a place, then the bodies, then the sky, so a press on a place does not also send `chikyu-body-click` for the Earth under it. No keyboard route yet. Guide: places, and its Japanese twin; `examples/place-click`.
+
 ## 0.51.0 - 2026-11-13
 
 - **The ridden satellite's own orbit grows out of the camera** (MODULES-1340). In Ride along the orbit ahead, seen edge-on, was a hard bright stroke. Its opacity now rises from nothing at the camera to the path's whole look about 300 km along it (`RIDE_PATH_FADE_KM`, a smooth rise worked out in the ribbon shader from each point's distance to the camera: no extra draw, nothing drawn at rest, and every other path unchanged). The ribbon now reaches the camera for it instead of stopping 64 km short.

@@ -18,6 +18,26 @@ import { project, type Pose } from "./project.ts";
 export type PlaceKind = "here" | "favourite";
 
 /**
+ * What `chikyu-place-click` carries: a press or a tap, that was not a drag, on a place drawn as a marker of its own. `place` is a copy of the place as the page gave it, `x` and `y` are CSS pixels in the element and
+ * `pointer` is `mouse`, `touch` or `pen`. `group` is `false` and is reserved: a later version may send the same event for a press on a group ring, with `group: true` and the members, and nothing is sent for a group now.
+ *
+ * @example
+ * ```ts
+ * import type { PlaceClickDetail } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const label = (detail: PlaceClickDetail): string => `${detail.place.label ?? detail.place.id} (${detail.pointer})`;
+ * console.log(label({ place: { id: "tokyo", lon: 139.69, lat: 35.69 }, group: false, x: 210, y: 210, pointer: "mouse" }));
+ * ```
+ */
+export interface PlaceClickDetail {
+  place: Place;
+  group: boolean;
+  x: number;
+  y: number;
+  pointer: "mouse" | "touch" | "pen";
+}
+
+/**
  * One place for the `places` attribute or property of `<chikyu-space>` and `<chikyu-earth-realistic>`. The package keeps none and stores none: the page hands them over.
  *
  * @example

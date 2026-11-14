@@ -29,6 +29,48 @@ description: "読む人の今いる場所と、いくつでもお気に入りの
 - **止まっているときは何もしない。** 場所の配置は、絵を描くとき (カメラが動いた、時計が進んだ、設定が変わった) だけ計算します。輪が広がる動きは CSS のアニメーションなので、絵を描き直すことはありません。要素が見えないあいだは止まり、動きを減らす設定の人には出ません。
 - **最大 5,000 か所。** それより長い配列は `MAX_PLACES` までに切ります。経度が -180 から 180 の外、または緯度が -90 から 90 の外にある場所は出しません。
 
+## 場所を押す
+
+場所の目印を押す (タップする) と、ページに知らせます。ページは、その場所のカードを開いたり、読む人をそこへ連れて行ったりできます。要素は `chikyu-place-click` を送ります (`<chikyu-space>` と `<chikyu-earth-realistic>` の両方、バブリングします)。`detail` は `{ place, group, x, y, pointer }` です。
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A press on a place</title>
+  </head>
+  <body>
+    <chikyu-space center="139.69,35.69" time="2026-11-02T12:00Z" speed="0" texture-base="/textures/" style="width: 420px"></chikyu-space>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
+```
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import type { PlaceClickDetail } from "@johnmorrisdotca/chikyu-earth/markers";
+
+const space = document.querySelector("chikyu-space")!;
+space.places = [
+  { id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo" },
+  { id: "me", lon: -79.4, lat: 43.7, label: "You are here", kind: "here" },
+];
+// A press or a tap on a place's marker says which place (not a drag, and not a place hidden by the Earth or gathered into a group).
+space.addEventListener("chikyu-place-click", (event) => {
+  const { place, pointer } = (event as CustomEvent<PlaceClickDetail>).detail;
+  console.log(`${place.label ?? place.id} pressed with a ${pointer}`);
+});
+```
+
+- **detail の中身。** `place` は、ページが渡した場所のコピーです (`id`、`lon`、`lat`、`label`、`kind`、`color`)。`group` は `false` です (予約です。のちの版で、グループの輪を押したときにも同じイベントを `group: true` と中身の場所つきで送るかもしれません。いまはグループでは何も送りません)。`x` と `y` は要素の中の CSS ピクセルです。`pointer` は `mouse`、`touch`、`pen` で、`chikyu-path-click` と同じです。型は `PlaceClickDetail` で、`@johnmorrisdotca/chikyu-earth/markers` から取れます。
+- **送るとき。** ドラッグでない押しやタップのとき (6ピクセル以上動く押しは視点を回しているので何も送りません)。自分の目印として描かれた場所に対して、見た目 (`beam`、`pin`、`ring`) を問わず、根元の輪の上か棒の上を、マウスやペンなら 14 CSS ピクセル以内、タッチなら 22 以内で押したときです。いちばん近い場所が選ばれます。
+- **送らないとき。** 地球に隠れた場所、絵の外の場所、数と一緒に 1 つの輪にまとめられた場所、見えている場所のうち最初の `PLACE_MARKS` を過ぎた場所 (地面の輪で、自分の目印はありません) は押せません。グループがほどけるまで拡大するか、`place-groups="off"` にすれば押せます。
+- **場所ではないもの。** パッケージ自身の名前は場所ではなく、何も送りません。地面の都市名、国名、海の名前、天体の名前、星と星座の名前です。`here-city` が `here` の場所につける名前はその場所の名前なので、これまでどおり場所として押せます。
+- **1回の押しは1つの意味。** 順番は、衛星の点、経路 (この2つのどちらかは、これまでどおり `path-priority` が決めます)、場所、天体 (地球)、空です。場所を押したら場所だけのもので、その下の地球は押されず、`chikyu-body-click` も出ません。場所の上にある点や経路は、点や経路のものです。場所のそばを押せば、これまでどおり地球の押しです。
+- **キーボード** では、まだ場所に届きません。目印はボタンではないので、場所の一覧があるページは、場所ごとに自分のボタンを用意してください。
+
 ## たくさんの場所
 
 ページは何千か所でも渡せて、それでも重くなりません。
@@ -74,7 +116,7 @@ document.querySelector("#here").addEventListener("click", () => {
 
 - **ボタンを押したときにたずねる。** `getCurrentPosition` は読む人のクリックから呼びます。こうすると、ブラウザーの確認は本人が求めたあとに出ます。消す方法も用意してください (`space.places = []`)。
 - **まるめる。** `nearby(point, km)` は、場所を約 `km` キロメートルのます目 (初期値は 10) に合わせます。目印が通りの名前までわかる位置に出ることはありません。描く前や残す前にまるめてください。
-- **端末の中だけに置く。** 要素は何も保存せず、どこにも送りません。本人が共有を選ばないかぎり、現在地をページのアドレスに入れたり、サーバーに送ったりしないでください。デモは開いているページの中だけで使い、ページを閉じると消えます。
+- **端末の中だけに置く。** 要素は何も保存せず、現在地をどこにも送りません (出すイベントは、ページ自身へ向けた `chikyu-place-click` だけです)。本人が共有を選ばないかぎり、現在地をページのアドレスに入れたり、サーバーに送ったりしないでください。デモは開いているページの中だけで使い、ページを閉じると消えます。
 
 ## いちばん近い都市の名前
 

@@ -860,7 +860,7 @@ export class ChikyuSpace extends HTMLElement {
    * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind, color }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
    * (the default: quieter), and `color` an optional CSS colour of its own. The first `PLACE_MARKS` in sight (`here` first, then in the order given) stand up out of the ground with their names; every other place
    * is a ring on the ground, all of them one draw call, and places that crowd are gathered into one ring with their count. They turn with the Earth, are hidden on its far side, are dimmer on its night side
-   * and keep their size in pixels at any zoom. Names never overlap one another or the bodies' names; one with no room is left out. The element stores nothing and sends nothing: the page hands the places
+   * and keep their size in pixels at any zoom. Names never overlap one another or the bodies' names; one with no room is left out. The element stores nothing and sends only `chikyu-place-click`, for a press or a tap on a place's marker (`detail: { place, group: false, x, y, pointer }`, see `PlaceClickDetail`; a place the Earth hides, one gathered into a group or one past the first `PLACE_MARKS` is not pressed, and the package's own names are not places): the page hands the places
    * over and keeps them where it likes. Setting the property writes the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight
    * and for a reader who asked for less motion.
    */
@@ -2598,6 +2598,13 @@ export class ChikyuSpace extends HTMLElement {
     if (satellite) {
       claimPress(event);
       this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite), ...this.#estimateOf(satellite) }, bubbles: true, composed: true }));
+      return;
+    }
+    // a place of the page's, under the bodies (the Earth) it stands on and over nothing a dot or a path has taken: one press, one meaning, so the Earth is not also pressed
+    const place = this.#placeLayer?.pick(x, y, pointerOf(event));
+    if (place) {
+      claimPress(event);
+      this.dispatchEvent(new CustomEvent("chikyu-place-click", { detail: { place: { ...place }, group: false, x, y, pointer: pointerOf(event) }, bubbles: true, composed: true }));
       return;
     }
     if (!this.#places) return;

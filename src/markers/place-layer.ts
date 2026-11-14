@@ -68,6 +68,9 @@ const SATELLITE_RING = 8;
  * ```
  */
 export const PLACE_MARKS = 32;
+/** How far, in CSS pixels, a press may be from a place marker (its ring and its stick) and still be on it: a mouse or a pen, and a touch. */
+export const PLACE_REACH = 14;
+export const PLACE_TOUCH_REACH = 22;
 /**
  * The most rings the layer draws itself, as small circles in the page, when the picture cannot draw them (the three.js parts handed over lack `Points`). Places in sight beyond it are counted in `stats.omitted`, not dropped quietly.
  *
@@ -124,6 +127,11 @@ export interface PlaceLayer {
   /** Dim a name the Earth hides, and leave its ring off. On by default. Off leaves that name out. */
   dimOccluded: boolean;
   readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
+  /**
+   * The place a press at a point of the picture is on, from the last `frame`: one that is drawn as a marker of its own (not one the Earth hides, one gathered into a group, or one past the marker cap), by its ring at the
+   * foot and its stick up to the head, within 14 CSS pixels for a mouse or a pen and 22 for a touch. The nearest, or `null`. The place is the one the page gave.
+   */
+  pick(x: number, y: number, pointer?: "mouse" | "touch" | "pen"): Place | null;
   /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
   readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
   dispose(): void;
@@ -165,6 +173,8 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   // the ring sizes written last, so a frame that changes none does not copy the buffer
   let shapeHeld = new Float32Array(0);
   let boxes: { left: number; top: number; width: number; height: number }[] = [];
+  // the markers of the last frame, where a press can find them
+  let hits: { place: Place; x: number; y: number; tipX: number; tipY: number; ring: number }[] = [];
   const rings: HTMLElement[] = [];
   const measures: HTMLElement[] = [];
   // the groups of the places for the cell they were made with, and the rings' data the picture reads
@@ -353,6 +363,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   watcher?.observe(box);
 
   const clear = (): void => {
+    hits = [];
     hideFrom(marks.map((m) => m.root), 0);
     hideFrom(names, 0);
     hideFrom(rings, 0);
@@ -445,6 +456,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       measureAll(own);
       const layout = layoutPlaces(own, view, look, { size: (place) => size(place), taken, sun });
       // favourites first, so a `here` marker is drawn over them
+      hits = layout.shapes.filter((shape) => shape.opacity > 0).map((shape) => ({ place: own[shape.index]!, x: shape.x, y: shape.y, tipX: shape.tipX, tipY: shape.tipY, ring: shape.ring }));
       const order = [...layout.shapes].sort((a, b) => (own[a.index]!.kind === "here" ? 1 : 0) - (own[b.index]!.kind === "here" ? 1 : 0));
       for (const [i, shape] of order.entries()) {
         const place = own[shape.index]!;
@@ -600,6 +612,24 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     stats,
     get boxes() {
       return boxes;
+    },
+    pick(x, y, pointer = "mouse") {
+      const reach = pointer === "touch" ? PLACE_TOUCH_REACH : PLACE_REACH;
+      let best: Place | null = null;
+      let bestDistance = Infinity;
+      for (const hit of hits) {
+        // the distance to the stick, from the foot to the head (a ring is a stick of no length)
+        const dx = hit.tipX - hit.x;
+        const dy = hit.tipY - hit.y;
+        const len2 = dx * dx + dy * dy;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - hit.x) * dx + (y - hit.y) * dy) / len2)) : 0;
+        const distance = Math.hypot(x - (hit.x + dx * t), y - (hit.y + dy * t));
+        if (distance <= Math.max(reach, hit.ring) && distance < bestDistance) {
+          best = hit.place;
+          bestDistance = distance;
+        }
+      }
+      return best;
     },
     dispose() {
       watcher?.disconnect();

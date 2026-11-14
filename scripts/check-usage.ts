@@ -390,6 +390,29 @@ await step("paths", async () => {
   });
 });
 
+await step("place-click", async () => {
+  // A press on a place, built by Vite from the package as npm packs it: the page hears chikyu-place-click with the place and the pointer.
+  const out = join(usage, "out", "place-click");
+  await viteBuild({ root: examples("place-click"), logLevel: "warn", build: { outDir: out, emptyOutDir: true }, base: "./", configFile: false });
+  await opened(browser, async (page) => {
+    await serve(page, "https://app.test", out);
+    await page.route("https://app.test/textures/**", (route) => {
+      const file = join(installed, "dist", "textures", new URL(route.request().url()).pathname.slice("/textures/".length));
+      return existsSync(file) ? route.fulfill({ body: readFileSync(file), contentType: "image/webp" }) : route.fulfill({ status: 404, body: "" });
+    });
+    await page.goto("https://app.test/");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => document.querySelector("chikyu-space")!.shadowRoot!.querySelectorAll(".pl-mark:not([hidden])").length > 0, undefined, { timeout: 20_000 });
+    const foot = await page.evaluate(() => {
+      const box = document.querySelector("chikyu-space")!.shadowRoot!.querySelector<HTMLElement>(".pl-mark:not([hidden])")!.getBoundingClientRect();
+      return { x: box.left, y: box.top };
+    });
+    const heard = page.waitForEvent("console", { predicate: (message) => message.text() === "Tokyo pressed with a mouse", timeout: 10_000 });
+    await page.mouse.click(foot.x, foot.y);
+    await heard;
+  });
+});
+
 await step("estimate", async () => {
   // A satellite far from its elements, as an estimate, built by Vite from the package as npm packs it: it must be placed, and said to be an estimate.
   const out = join(usage, "out", "estimate");
@@ -551,6 +574,8 @@ const FILES: Record<string, string[]> = {
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "paths/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "paths/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
+  "place-click/index.html": ["docs/guides/places.md", "docs/guides/ja/places.md"],
+  "place-click/main.ts": ["docs/guides/places.md", "docs/guides/ja/places.md"],
   "estimate/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "estimate/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "ride/index.html": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],

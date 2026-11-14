@@ -29,6 +29,48 @@ description: "Mark the reader's own place and any number of favourite places on 
 - **Nothing at rest.** The places are laid out when the picture is drawn (the camera moved, the clock stepped, a setting changed) and not otherwise. The pulse is a CSS animation: it never draws the picture again, it stops while the element is out of sight, and a reader who asked for less motion gets none.
 - **At most 5,000.** A longer list is cut to `MAX_PLACES`. A place with a longitude outside -180 to 180 or a latitude outside -90 to 90 is left out.
 
+## A press on a place
+
+A press or a tap on a place's marker tells the page, so it can open the place's card or take the reader there. The element sends `chikyu-place-click` (on `<chikyu-space>` and `<chikyu-earth-realistic>`; it bubbles) with `detail: { place, group, x, y, pointer }`:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A press on a place</title>
+  </head>
+  <body>
+    <chikyu-space center="139.69,35.69" time="2026-11-02T12:00Z" speed="0" texture-base="/textures/" style="width: 420px"></chikyu-space>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
+```
+
+```ts no-run
+import "@johnmorrisdotca/chikyu-earth/space/element";
+import type { PlaceClickDetail } from "@johnmorrisdotca/chikyu-earth/markers";
+
+const space = document.querySelector("chikyu-space")!;
+space.places = [
+  { id: "tokyo", lon: 139.69, lat: 35.69, label: "Tokyo" },
+  { id: "me", lon: -79.4, lat: 43.7, label: "You are here", kind: "here" },
+];
+// A press or a tap on a place's marker says which place (not a drag, and not a place hidden by the Earth or gathered into a group).
+space.addEventListener("chikyu-place-click", (event) => {
+  const { place, pointer } = (event as CustomEvent<PlaceClickDetail>).detail;
+  console.log(`${place.label ?? place.id} pressed with a ${pointer}`);
+});
+```
+
+- **The detail.** `place` is a copy of the place as the page gave it (`id`, `lon`, `lat`, `label`, `kind`, `color`); `group` is `false` (it is reserved: a later version may send the same event for a press on a group ring, with `group: true` and the members, and nothing is sent for a group now); `x` and `y` are CSS pixels in the element; `pointer` is `mouse`, `touch` or `pen`, as in `chikyu-path-click`. `PlaceClickDetail` is the type, from `@johnmorrisdotca/chikyu-earth/markers`.
+- **When it is sent.** For a press or a tap that is not a drag (a press that moves 6 pixels or more is turning the view and sends nothing), on a place drawn as a marker of its own, in any look (`beam`, `pin` or `ring`): on the ring at its foot or on its stick, within 14 CSS pixels for a mouse or a pen and 22 for a touch. The nearest place is the one.
+- **When it is not.** A place the Earth hides, one outside the picture, one gathered into a group ring with its count, and one past the first `PLACE_MARKS` in sight (a ring on the ground, not a marker of its own) are not pressed. Zoom in until a group comes apart, or set `place-groups="off"`, and its places are.
+- **What is not a place.** The package's own names are not places and send nothing: the cities', countries' and seas' names on the ground, the bodies' labels, the stars' and the constellations' names. The name `here-city` gives a `here` place is that place's name, so the place is pressed as before.
+- **One press, one meaning.** In this order: a satellite's dot, a path (`path-priority` decides between those two as before), a place, then the bodies (the Earth), then the sky. A press on a place is the place's alone: the Earth under it is not also pressed, so there is no `chikyu-body-click` for it. A dot or a path over a place is the dot's or the path's. A press beside a place is the Earth's as before.
+- **A keyboard** reaches no place yet: the markers are not buttons, so a page with a list of its places gives each a button of its own.
+
 ## Many places
 
 A page can hand over thousands of places, and they stay cheap:
@@ -74,7 +116,7 @@ document.querySelector("#here").addEventListener("click", () => {
 
 - **Ask on a press.** Call `getCurrentPosition` from the reader's own click, so the browser's question comes after they asked for it. Offer a way to take it away again (`space.places = []`).
 - **Round it.** `nearby(point, km)` puts a place on a grid about `km` kilometres across (10 by default), so the marker never shows a street. Round before you draw it or keep it.
-- **Keep it on the device.** The element stores nothing and sends nothing. Do not put the reader's place in the page's address or send it to a server unless they choose to share it. The demo keeps it only in the open page: it is gone when the page is closed.
+- **Keep it on the device.** The element stores nothing and sends the reader's place nowhere (its only event is `chikyu-place-click`, to your own page). Do not put the reader's place in the page's address or send it to a server unless they choose to share it. The demo keeps it only in the open page: it is gone when the page is closed.
 
 ## The nearest city's name
 
