@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.51.1 - 2026-11-13
+
+Tests only: the package is unchanged by this release.
+
+- **The ride spec's lost-context test no longer runs out of time** (MODULES-1191). "A lost context comes back with the ride" was the tail of a test of three rounds of six ride switches that takes half of its 60 seconds on its own; it is now a test of its own (about 10 seconds) and the leak test keeps its rounds.
+- **The glide test ends on the page's clock** (MODULES-1062). "Switching bodies glides" waited real seconds for the clock to carry the glide and the let-go of the pictures; it owns the clock and runs the page's time through, as the other ride tests do.
+- **freezeClock's widening is held by a test** (MODULES-1064). When a loaded machine has run the page's clock past the 3 second margin, `freezeClock` reads the time again and asks with 4 and then 16 times the margin; a test with a fake page now holds that, and that any other answer is given back at once.
+- **The satellites buffer test reads the buffers after the draw** (MODULES-1065, 1086). "Taking a group away frees its buffers" counted the GL buffers after a fixed 800 ms; it now reads the draw count in the same turn as the change, waits for the draw that follows and for the view to be still, and then counts.
+- **The glide into the above view is counted on the page** (MODULES-1190). `ride-above.gl.ts` counts each glide at every animation frame (an earlier fix, e545a3d); checked again with 5 repeats under CPU throttle 4 and with the glide taken out of the product, which fails it.
+
 ## 0.51.0 - 2026-11-13
 
 - **The ridden satellite's own orbit grows out of the camera** (MODULES-1340). In Ride along the orbit ahead, seen edge-on, was a hard bright stroke. Its opacity now rises from nothing at the camera to the path's whole look about 300 km along it (`RIDE_PATH_FADE_KM`, a smooth rise worked out in the ribbon shader from each point's distance to the camera: no extra draw, nothing drawn at rest, and every other path unchanged). The ribbon now reaches the camera for it instead of stopping 64 km short.
