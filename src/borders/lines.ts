@@ -65,6 +65,19 @@ export interface BorderSets {
 export const BORDER_REGIONS_RADIUS = 900;
 
 /**
+ * The Earth's radius on the screen, in CSS pixels, from which the countries' borders are drawn from the finer outlines (chizu's 1:50m `world-geo-detail`, instead of the 1:110m `world-geo`): about 10 km to a pixel,
+ * where the coarse lines, which can lie several kilometres off, begin to show it. The finer outlines are loaded the first time the Earth is this large and the countries are on, never before.
+ *
+ * @example
+ * ```ts
+ * import { BORDER_DETAIL_RADIUS } from "@johnmorrisdotca/chikyu-earth/realistic";
+ *
+ * console.log(BORDER_DETAIL_RADIUS);
+ * ```
+ */
+export const BORDER_DETAIL_RADIUS = 600;
+
+/**
  * The attributes the borders read: `borders`.
  *
  * @example

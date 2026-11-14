@@ -166,7 +166,7 @@ export const readTime = (value: string | null): number | "now" => {
  * is sent when the strongest active shower changes, with `detail: { shower, zhr }` (`shower` is `null` when none is active).
  * `meteors-strength` (0 to 1, the property `meteorsStrength`; 1 when the page says nothing) makes them subtler: fewer streaks and fainter ones, none at 0, and nothing that is real changes.
  *
- * `borders` draws the borders on the land as thin lines that turn with the Earth: `countries` (chizu's, at any size), `regions` (provinces, states and the like, from the page's `borderData.regions`,
+ * `borders` draws the borders on the land as thin lines that turn with the Earth: `countries` (chizu's, at any size, from its finer outlines once the Earth is large), `regions` (provinces, states and the like, chizu's by default or the page's `borderData.regions`,
  * once the Earth is large enough to tell them apart), or both with a bare attribute. The shapes are loaded only when a set is switched on; `chikyu-borders-unavailable` is sent when they cannot be.
  *
  * `grid` draws the meridians and parallels on the Earth (every 30 degrees while it is small on the screen, every 15 once it is large), with the equator, the tropics, the polar circles and the prime
@@ -910,7 +910,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
-   * Where the borders' shapes come from (see `BorderData`): `countries` in place of chizu's `world-geo`, and `regions`, a country's regions by its code, which draws the regions; without it none are drawn.
+   * Where the borders' shapes come from (see `BorderData`): `countries` in place of chizu's `world-geo`, `detail` in place of its finer `world-geo-detail`, and `regions`, a country's regions by its code, in place of chizu's `divisions-geo`.
    * Set it before `borders` is switched on: shapes already loaded are kept.
    */
   get borderData(): BorderData {

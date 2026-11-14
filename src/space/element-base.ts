@@ -265,7 +265,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * (`speed` set to 0): a page writes the date into its date box from it. It is not sent for a `time` the page sets itself. `chikyu-time` is the older event of every step the clock takes (up to thirty a second):
  * it is kept for pages that use it, but a page that shows the date wants `chikyu-timechange`.
  *
- * `borders` draws the borders on the Earth's land as thin lines that turn with it, as on `<chikyu-earth-realistic>`: `countries`, `regions` (from the page's `borderData.regions`, once the Earth is
+ * `borders` draws the borders on the Earth's land as thin lines that turn with it, as on `<chikyu-earth-realistic>`: `countries`, `regions` (chizu's by default or the page's `borderData.regions`, once the Earth is
  * large enough), or both with a bare attribute; `chikyu-borders-unavailable` is sent when the shapes cannot be loaded.
  *
  * `beam` draws a beam of light from the chosen satellite (the one marked, or the one ridden) down to the ground below it: a soft cone ending in a lit footprint, the circle from which the satellite is above
@@ -1251,7 +1251,7 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
-   * Where the borders' shapes come from (see `BorderData`): `countries` in place of chizu's `world-geo`, and `regions`, a country's regions by its code, which draws the regions; without it none are drawn.
+   * Where the borders' shapes come from (see `BorderData`): `countries` in place of chizu's `world-geo`, `detail` in place of its finer `world-geo-detail`, and `regions`, a country's regions by its code, in place of chizu's `divisions-geo`.
    * Set it before `borders` is switched on: shapes already loaded are kept.
    */
   get borderData(): BorderData {
