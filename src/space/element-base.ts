@@ -51,7 +51,7 @@ import { bindPaths, emptyPathStats, pointerOf, readPathPriority, type PathContro
 import { styleTable, type PathHit, type PathRequest, type PathStyle } from "./paths.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "./satellite-hover.ts";
 import { clampFollow, retargetFollow } from "./follow.ts";
-import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
+import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
@@ -172,6 +172,8 @@ export interface RideOptions {
   viewpoint?: RideViewpoint;
   /** `distance` (the default, or the element's `ride-model-size`) lets the model of a satellite seen from above shrink as the camera rises and hand over to the ordinary mark, ring and name, between 1,000 and 2,000 km; `fixed` keeps one share of the picture at every height. */
   modelSize?: RideModelSize;
+  /** What a drag does in an outside ride from the satellite (`view: "from"`): `head` (the default, or the element's `ride-drag`) turns the view where the camera is, like turning your head, so the camera keeps its place behind and above the satellite and the scene turns round it; `orbit` takes the camera round the satellite as it looks about, so the satellite stays in the same place in the picture and is seen from every side, as a ride did up to 0.51. */
+  drag?: RideDrag;
   distanceKm?: number;
   smooth?: boolean;
 }
@@ -197,6 +199,8 @@ export interface Riding {
   viewpoint: RideViewpoint;
   /** `distance` or `fixed` (see `RideOptions`). */
   modelSize: RideModelSize;
+  /** `head` or `orbit` (see `RideOptions`). */
+  drag: RideDrag;
 }
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
@@ -297,7 +301,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "hover-path", "names-on-hover", "selected-path", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -592,6 +596,7 @@ export class ChikyuSpace extends HTMLElement {
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === "ride-viewpoint") this.#applyViewpoint();
     else if (name === "ride-model-size") this.#applyModelSize();
+    else if (name === "ride-drag") this.#applyDrag();
     else if (name === "ride-model-share" || name === "ride-model-seat") this.#applyFrame();
     else if (name === "ride-zoom") this.#applyRideZoom();
     else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
@@ -1598,7 +1603,7 @@ export class ChikyuSpace extends HTMLElement {
       // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
       const faceable = !(view === "follow" && typeof target === "string");
       const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize };
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize, drag: options.drag === "head" || options.drag === "orbit" ? options.drag : this.rideDrag };
       if (face) {
         model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
         model.rideTurn = 0;
@@ -1753,6 +1758,44 @@ export class ChikyuSpace extends HTMLElement {
   }
   set rideModelSize(value: RideModelSize) {
     this.setAttribute("ride-model-size", value === "fixed" ? "fixed" : "distance");
+  }
+
+  /**
+   * What a drag does in an outside ride from the satellite: `head` (the default; the attribute `ride-drag`) turns the view where the camera is, like turning your head, so the camera keeps its place behind and above the satellite and the scene turns round it (look away and the satellite
+   * leaves the picture); `orbit` takes the camera round the satellite as it looks about, as a ride did up to 0.51: the satellite stays where it is in the picture and is seen from every side. It makes no difference inside the satellite, above it or behind it, or riding a body.
+   * It is the default for the next `ride` and, set while riding, moves the camera in one eased glide (a jump for a reader who asked for reduced motion), keeping the ride and the clock. See `RideOptions.drag`.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideDrag = "orbit";
+   * console.log(space.rideDrag);
+   * ```
+   */
+  get rideDrag(): RideDrag {
+    return this.getAttribute("ride-drag") === "orbit" ? "orbit" : "head";
+  }
+  set rideDrag(value: RideDrag) {
+    this.setAttribute("ride-drag", value === "orbit" ? "orbit" : "head");
+  }
+
+  #applyDrag(): void {
+    const model = this.#model;
+    const ride = model.ride;
+    const next = this.rideDrag;
+    if (!ride || ride.drag === next) return;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const pose = model.pose;
+    model.ride = { ...ride, drag: next };
+    // only an outside ride from the satellite looks different: the others have nothing to glide
+    const moves = ride.view === "from" && ride.viewpoint === "outside" && typeof ride.target !== "string";
+    model.transition = moves && !reduced && pose.valid ? { start: performance.now(), duration: 1200, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
   }
 
   #applyModelSize(): void {

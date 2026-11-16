@@ -13,7 +13,7 @@ import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
-import { faceOffset, outsidePose, ridePose, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
+import { faceOffset, outsidePose, ridePose, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { stripLights, type ModelSun } from "./model-lights.ts";
 import { newLightFade, stepLightFade, type LightFade } from "../realistic/light-fade.ts";
 import { prefersLessMotion } from "../meteors/note.ts";
@@ -181,6 +181,8 @@ export interface RideState {
   viewpoint: RideViewpoint;
   /** How the model of a satellite seen from above is sized as the camera rises: `distance` shrinks it and hands over to the mark, `fixed` keeps one share of the picture. */
   modelSize: RideModelSize;
+  /** What a drag does in an outside ride from the satellite: `head` turns the view where the camera is, `orbit` takes the camera round the satellite. */
+  drag: RideDrag;
 }
 
 /** The camera as the last draw left it, for the next one to start from when the ride changes. */
@@ -1032,7 +1034,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             // an outside ride: the same look, from a little way back along it, so the satellite is in the picture
             let outsideAway = Infinity;
             if (ridden && ride!.viewpoint === "outside") {
-              const out = outsidePose(pose, ride!.look, framing ? (framing.seat - 0.5) / 0.5 : undefined);
+              // a drag turns the view where the camera is (`head`: the camera's place is the one it has with no drag), or takes the camera round the satellite (`orbit`)
+              const rest = ride!.drag === "orbit" ? undefined : ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: 0, tilt: 0, zoom: model.view.zoom, turn: 0, ...(ride!.face ? { face: ride!.face } : {}) });
+              const out = outsidePose(pose, ride!.look, framing ? (framing.seat - 0.5) / 0.5 : undefined, rest);
               pose = out.pose;
               outsideAway = out.distance;
             }

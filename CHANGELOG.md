@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A drag in a ride turns the view from where the vehicle is, not the vehicle round the camera** (MODULES-1374). In a ride of a satellite with the `outside` viewpoint (the default), dragging looked about but took the camera round the satellite as it looked, so the satellite was seen from every side and the whole vehicle seemed to be moved. A drag now turns the view where the camera is, like turning your head, in both looks (`horizon`, Ride along, and `down`, Ride above): the camera keeps its place 25 km behind and above the satellite and the scene turns round it; the satellite is at its share and seat of the picture while you do not drag and leaves it as you look away. **A change of behaviour**: `ride-drag="orbit"` (property `rideDrag`, option `drag` of `ride`, field `drag` of `Riding`) brings the old look-around back; the default is `head`. `outsidePose` takes an optional `rest` (the pose with no drag) and keeps the camera where that puts it; without it, it works as before. Inside the satellite, the `follow` and `above` views and riding a body are unchanged. Tests: unit tests of the pose maths (the camera does not move under any drag in `head`, the satellite holds its place in `orbit`, the pace of the ground), and `e2e/ride-outside.gl.ts` for both looks and both modes. English and Japanese guides and the upgrading page.
+
 ## 0.51.1 - 2026-11-13
 
 Tests only: the package is unchanged by this release.

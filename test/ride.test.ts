@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { faceOffset, ridePose, RIDE_FACES, RIDE_FOV, type RideFace, type RideInput } from "../src/space/ride.ts";
+import { faceOffset, outsidePose, ridePose, RIDE_FACES, RIDE_FOV, type RideFace, type RideInput, type RideLook, type RidePose } from "../src/space/ride.ts";
 import { aboveAxes } from "../src/space/satellite-model.ts";
 
 const dot = (a: number[], b: number[]): number => a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
@@ -229,4 +229,88 @@ test("above a satellite, down looks straight down and the other facings look alo
     const got = face === "down" || face === "up" ? forward : level(forward, radial);
     assert.ok(angle(got, want[face]) <= 1, `${face} is ${angle(got, want[face]).toFixed(2)} degrees off`);
   }
+});
+
+// A drag in an outside ride (MODULES-1374). The camera of an outside ride is 25 km back from the satellite. `orbit` took it round the satellite as it looked about (the satellite stayed in one place in the picture, and was seen from every side);
+// `head` keeps the camera where it is behind and above the satellite and turns the view there, like turning your head.
+const PIXELS = 720;
+const sat: [number, number, number] = [1.066, 0, 0];
+const way: [number, number, number] = [0, 0.1, -7.66];
+const pose0 = (look: RideLook, yaw: number, tilt: number, zoom = 1, face?: RideFace): RidePose => ridePose({ position: sat, velocity: way, look, yaw, tilt, zoom, ...(face ? { face } : {}) });
+/** The picture the camera at `pose` makes, `PIXELS` high: where the satellite is in it, in pixels from the picture's middle (right, down), or `null` behind the camera. */
+function screenOf(pose: RidePose): { x: number; y: number } | null {
+  const to = [sat[0] - pose.position[0], sat[1] - pose.position[1], sat[2] - pose.position[2]];
+  const right = [pose.forward[1] * pose.up[2] - pose.forward[2] * pose.up[1], pose.forward[2] * pose.up[0] - pose.forward[0] * pose.up[2], pose.forward[0] * pose.up[1] - pose.forward[1] * pose.up[0]];
+  const depth = dot(to, pose.forward);
+  if (depth <= 0) return null;
+  const focal = PIXELS / 2 / Math.tan((pose.fov / 2) * (Math.PI / 180));
+  return { x: (dot(to, right) / depth) * focal, y: (-dot(to, pose.up) / depth) * focal };
+}
+const looks: RideLook[] = ["horizon", "down"];
+const drags: [number, number][] = [[0, 0], [30, 0], [-90, 10], [180, 0], [0, 25], [0, -40], [120, -30]];
+
+test("orbit, as before: the satellite stays at one place in the picture however far the drag turns", () => {
+  for (const look of looks) {
+    const rest = screenOf(outsidePose(pose0(look, 0, 0), look).pose)!;
+    for (const [yaw, tilt] of drags) {
+      const here = screenOf(outsidePose(pose0(look, yaw, tilt), look).pose);
+      assert.ok(here, `${look} ${yaw},${tilt}: the satellite is in front of the camera`);
+      assert.ok(Math.hypot(here.x - rest.x, here.y - rest.y) < 0.01, `${look} ${yaw},${tilt}: ${here.x},${here.y} against ${rest.x},${rest.y}`);
+    }
+  }
+});
+
+test("head: the camera keeps its place whatever the drag, and with no drag it is the picture of orbit", () => {
+  for (const look of looks) {
+    const rest = pose0(look, 0, 0);
+    const kept = outsidePose(rest, look, undefined, rest).pose;
+    const orbit = outsidePose(rest, look).pose;
+    for (let i = 0; i < 3; i += 1) assert.ok(Math.abs(kept.position[i]! - orbit.position[i]!) < 1e-12, `${look}: at rest the two are the same camera`);
+    const at = screenOf(kept)!;
+    for (const [yaw, tilt] of drags) {
+      const turned = pose0(look, yaw, tilt);
+      const head = outsidePose(turned, look, undefined, rest);
+      for (let i = 0; i < 3; i += 1) assert.ok(Math.abs(head.pose.position[i]! - kept.position[i]!) < 1e-12, `${look} ${yaw},${tilt}: the camera has not moved`);
+      assert.deepEqual(head.pose.forward, turned.forward, "it looks where the drag says");
+      assert.deepEqual(head.pose.up, turned.up, "with the pose's own up");
+      assert.ok(Math.abs(head.distance * 6371 - 25) < 1e-6, "still 25 km from the satellite");
+    }
+    // the satellite is where it was framed with no drag
+    assert.ok(Math.abs(at.x) < 0.01, `${look}: in the middle sideways`);
+    if (look === "down") assert.ok(Math.abs(at.y) < 0.01, "straight below the camera, at the middle of the picture");
+    else assert.ok(at.y > PIXELS * 0.3 && at.y < PIXELS / 2, `behind and above it, the satellite low in the picture: ${at.y}px below the middle of ${PIXELS}`);
+  }
+});
+
+test("head: a small drag moves the satellite in the picture with the ground, a turn of the head, and not by the camera going round it", () => {
+  const focal = PIXELS / 2 / Math.tan((RIDE_FOV / 2) * (Math.PI / 180));
+  for (const look of looks) {
+    const rest = pose0(look, 0, 0);
+    const at = screenOf(outsidePose(rest, look).pose)!;
+    // 5 degrees of the controls' yaw is a turn of 2.5 degrees at the natural zoom (a pixel and a half for each pixel of the drag, over the field of view)
+    const turned = pose0(look, 5, 0);
+    const head = screenOf(outsidePose(turned, look, undefined, rest).pose)!;
+    const orbit = screenOf(outsidePose(turned, look).pose)!;
+    assert.ok(Math.abs(orbit.x - at.x) < 0.01, "orbit holds it");
+    const shift = Math.abs(head.x - at.x);
+    const turn = focal * Math.tan(2.5 * (Math.PI / 180));
+    // straight below the camera it moves as the ground does; low in the picture, where the turn is about the vertical, a little less
+    if (look === "down") assert.ok(Math.abs(shift - turn) < 1, `${look}: the satellite moved ${shift.toFixed(1)}px, the ground ${turn.toFixed(1)}px`);
+    else assert.ok(shift > turn * 0.4 && shift <= turn + 1, `${look}: the satellite moved ${shift.toFixed(1)}px, the ground ${turn.toFixed(1)}px`);
+  }
+});
+
+test("head follows the facing and the zoom: the camera is put by the facing with no drag, and at any zoom", () => {
+  for (const face of RIDE_FACES) {
+    for (const zoom of [1, 4]) {
+      const rest = pose0("horizon", 0, 0, zoom, face);
+      const turned = pose0("horizon", 70, 8, zoom, face);
+      const head = outsidePose(turned, "horizon", undefined, rest).pose;
+      const orbit = outsidePose(rest, "horizon").pose;
+      for (let i = 0; i < 3; i += 1) assert.ok(Math.abs(head.position[i]! - orbit.position[i]!) < 1e-12, `${face} at ${zoom}x`);
+    }
+  }
+  const wide = screenOf(outsidePose(pose0("horizon", 0, 0, 1), "horizon", undefined, pose0("horizon", 0, 0, 1)).pose)!;
+  const close = screenOf(outsidePose(pose0("horizon", 0, 0, 5), "horizon", undefined, pose0("horizon", 0, 0, 5)).pose)!;
+  assert.ok(Math.abs(wide.y - close.y) < 0.01, "the zoom does not move the satellite at rest");
 });

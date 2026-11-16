@@ -128,6 +128,62 @@ test("switching keeps the ride and the clock, and the camera moves between the t
   await expect.poll(async () => { const w = await where(page); return w.away > 20 && w.s.followModel?.shown === true; }, { timeout: 20_000, message: "outside again, with the model" }).toBe(true);
 });
 
+/** The yaw the controls hold, so that a turn is made a step at a time as a drag makes it (the controls keep their yaw within -180 to 180, so no step is more than 150). */
+let held = 0;
+/** The controls' yaw and tilt set the way a drag sets them, then wait for the view to settle. */
+async function turnTo(page: Page, yaw: number, tilt: number): Promise<void> {
+  const steps = Math.max(1, Math.ceil(Math.abs(yaw - held) / 150));
+  for (let i = 1; i <= steps; i += 1) {
+    const next = held + ((yaw - held) * i) / steps;
+    const wrapped = ((((next + 180) % 360) + 360) % 360) - 180;
+    await page.locator("kazoku-view-controls").evaluate((el, v) => {
+      const controls = el as unknown as { state: { zoom: number }; controller: { set(view: unknown, final: boolean, why: string): void } };
+      controls.controller.set({ yaw: v.wrapped, tilt: v.tilt, zoom: controls.state.zoom }, true, "test");
+    }, { wrapped, tilt });
+  }
+  held = yaw;
+  await untilStill(page);
+}
+
+for (const look of ["horizon", "down"] as const) {
+  test(`${look}: a drag turns the view from where the vehicle is (head, the default): the camera keeps its place and the model leaves the middle as the scene turns`, async ({ page }) => {
+    held = 0;
+    await open(page, null, look);
+    const rest = await where(page);
+    expect(await page.locator(SPACE).evaluate((el) => Reflect.get(el, "rideDrag"))).toBe("head");
+    for (const [yaw, tilt] of [[40, 0], [-90, 5], [170, 0], [0, 20]] as const) {
+      await turnTo(page, yaw, tilt);
+      const turned = await where(page);
+      // the camera is where it was, behind and above the satellite, to a few metres; only where it looks has changed
+      expect(Math.hypot(...[0, 1, 2].map((i) => (turned.s.camera.position[i]! - rest.s.camera.position[i]!) * 6371)), `${yaw},${tilt}: kilometres the camera moved`).toBeLessThan(0.05);
+      expect(Math.abs(turned.away - rest.away), "still 25 km off").toBeLessThan(0.05);
+    }
+    // looked away, the model is out of the middle of the picture, not turned about it
+    await turnTo(page, 90, 0);
+    const away = await where(page);
+    expect(away.s.followModel === null || Math.hypot(away.shareX! - rest.shareX!, away.shareY! - rest.shareY!) > 0.2, "the satellite is not where it was framed").toBe(true);
+    await turnTo(page, 0, 0);
+    const back = await where(page);
+    expect(Math.abs(back.shareX! - rest.shareX!), "back where it was framed, sideways").toBeLessThan(0.01);
+    expect(Math.abs(back.shareY! - rest.shareY!), "and down").toBeLessThan(0.01);
+  });
+
+  test(`${look}: orbit, as before: the model stays at its place in the picture and the camera goes round the satellite`, async ({ page }) => {
+    held = 0;
+    await open(page, null, look);
+    await page.locator(SPACE).evaluate((el) => Reflect.set(el, "rideDrag", "orbit"));
+    await untilStill(page);
+    const rest = await where(page);
+    expect(await page.locator(SPACE).evaluate((el) => (Reflect.get(el, "riding") as { drag: string }).drag)).toBe("orbit");
+    await turnTo(page, 120, 0);
+    const turned = await where(page);
+    expect(Math.abs(turned.away - rest.away), "still 25 km off").toBeLessThan(0.05);
+    expect(Math.hypot(...[0, 1, 2].map((i) => (turned.s.camera.position[i]! - rest.s.camera.position[i]!) * 6371)), "kilometres the camera went round").toBeGreaterThan(10);
+    expect(Math.abs(turned.shareX! - rest.shareX!), "the model, sideways").toBeLessThan(0.01);
+    expect(Math.abs(turned.shareY! - rest.shareY!), "and down").toBeLessThan(0.01);
+  });
+}
+
 test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
 

@@ -220,6 +220,20 @@ const unit = (a: Vec3): Vec3 => {
 export type RideViewpoint = "outside" | "inside";
 
 /**
+ * What a drag does in an outside ride: `head` (the default) turns the view where the camera is, like turning your head, so the camera keeps its place behind and above the satellite and the scene turns round it (look away and the satellite
+ * leaves the picture, as anything behind your shoulder does); `orbit` is what a ride did up to 0.51: the camera goes round the satellite as it looks about, so the satellite stays in the same place in the picture but is seen from every side.
+ *
+ * @example
+ * ```ts
+ * import type { RideDrag } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const drags: RideDrag[] = ["head", "orbit"];
+ * console.log(drags.join(" or "));
+ * ```
+ */
+export type RideDrag = "head" | "orbit";
+
+/**
  * How big the model of the ridden satellite is drawn as the camera rises above it in a ride above: `distance` (the default) lets it shrink as one over the height and hand over to the ordinary mark between 1,000 and 2,000 km, `fixed` keeps the same share of the picture at every height, as 0.46.1 did.
  *
  * @example
@@ -249,11 +263,14 @@ const OUTSIDE_LOW = 0.8;
 
 /**
  * The camera of an outside ride: the pose `ridePose` works out for a camera at the satellite, moved to `OUTSIDE_KM` back along its own line of sight so the satellite is in front of it. Looking along the way it goes (`look: "horizon"`) the satellite sits a little below the middle of the picture, so the camera is behind and above it; looking
- * down (`look: "down"`) it is at the middle, with the camera straight above it. Where the satellite sits in the picture does not change with the zoom. Which way the camera looks and which way is up are the pose's own, so the look-around is the same as from the satellite itself; the camera goes round the satellite as it looks about. Pure. Never nearer the ground than half the satellite's height.
+ * down (`look: "down"`) it is at the middle, with the camera straight above it. Where the satellite sits in the picture does not change with the zoom. Which way the camera looks and which way is up are the pose's own. With no `rest`, the camera goes round the satellite as it looks about (`orbit`):
+ * the satellite stays where it is in the picture and is seen from every side. With `rest`, the pose the same ride has with no drag, the camera is put where that pose puts it and only turns where it is, so a drag looks about from there like a turn of the head (`head`): the satellite is at its place in the picture
+ * at rest and leaves it as the view turns away. Pure. Never nearer the ground than half the satellite's height.
  *
  * @param pose - The pose from `ridePose` for the camera at the satellite.
  * @param look - The look the pose was made with.
  * @param low - How far below the middle of the picture the satellite is, as a share of half its height (0 the middle, 1 the bottom edge); by default 0.8 looking along and 0 looking down.
+ * @param rest - The pose from `ridePose` for the same camera with no drag (yaw, tilt and turn of 0): where the camera is kept. Leave it out for the camera to go round the satellite as it looks about.
  * @returns The pose moved back from the satellite, with how far the camera is from it in Earth radii and how many degrees below the middle of the picture the satellite is.
  *
  * @example
@@ -262,16 +279,19 @@ const OUTSIDE_LOW = 0.8;
  *
  * const at = ridePose({ position: [1.066, 0, 0], velocity: [0, 0, -7.66], look: "horizon", yaw: 0, tilt: 0, zoom: 1 });
  * const out = outsidePose(at, "horizon");
- * console.log(out.distance.toFixed(4), out.below.toFixed(1), out.pose.position.map((n) => n.toFixed(4)).join(","));
+ * const turned = ridePose({ position: [1.066, 0, 0], velocity: [0, 0, -7.66], look: "horizon", yaw: 90, tilt: 0, zoom: 1 });
+ * const head = outsidePose(turned, "horizon", undefined, at);
+ * console.log(out.distance.toFixed(4), out.below.toFixed(1), out.pose.position.map((n) => n.toFixed(4)).join(","), head.pose.position.map((n) => n.toFixed(4)).join(","));
  * ```
  */
-export function outsidePose(pose: RidePose, look: RideLook, low?: number): { pose: RidePose; distance: number; below: number } {
+export function outsidePose(pose: RidePose, look: RideLook, low?: number, rest?: RidePose): { pose: RidePose; distance: number; below: number } {
+  const base = rest ?? pose;
   const height = Math.max(0, norm(pose.position) - 1);
   const distance = Math.max(1e-5, Math.min(OUTSIDE_KM / 6371, height * 0.5));
   const lowNow = low ?? (look === "horizon" ? OUTSIDE_LOW : 0);
-  const below = Math.atan(Math.max(0, lowNow) * Math.tan((pose.fov / 2) * RAD));
-  // the satellite is along the line of sight turned `below` down (towards the bottom of the picture): the camera is back along that line
-  const line = add(scale(pose.forward, Math.cos(below)), scale(pose.up, -Math.sin(below)));
+  const below = Math.atan(Math.max(0, lowNow) * Math.tan((base.fov / 2) * RAD));
+  // the satellite is along the line of sight turned `below` down (towards the bottom of the picture): the camera is back along that line. The line is the pose's own, so the camera goes round the satellite as it looks about, or the line of the pose with no drag (`rest`), so the camera keeps its place and only turns
+  const line = add(scale(base.forward, Math.cos(below)), scale(base.up, -Math.sin(below)));
   return { pose: { ...pose, position: add(pose.position, scale(line, -distance)) }, distance, below: below / RAD };
 }
 

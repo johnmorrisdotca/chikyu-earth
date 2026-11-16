@@ -7,6 +7,14 @@ description: "What changed between versions and what to do about it. The package
 
 The package is at 0.x, so a minor version (0.5 to 0.6) may change behaviour. Each release's notes are in the [changelog](../../CHANGELOG.md); this page lists what needs your action.
 
+## To 0.52: a drag in a ride turns the view where the camera is
+
+In a ride of a satellite with the `outside` viewpoint (the default), a drag used to take the camera round the satellite as it looked about, so the satellite stayed in one place in the picture but was seen from every side, and it felt as if the vehicle itself was being moved. A drag now turns the view from where the camera is, like turning your head: the camera keeps its place 25 km behind and above the satellite (straight above it with `look: "down"`), and the scene turns round it. The satellite is where it was framed (`ride-model-share`, `ride-model-seat`) while you do not drag, and leaves the picture as you look away.
+
+- You want the old look-around, the camera going round the satellite: set `ride-drag="orbit"` on the element (property `rideDrag`), or pass `{ drag: "orbit" }` to `ride`.
+- You ride from `viewpoint: "inside"`, use `view: "follow"` or `"above"`, or ride a body: nothing changes there.
+- You call `outsidePose` yourself: it works as before. Give it the pose with no drag as a fourth argument (`rest`) to keep the camera where that puts it. `Riding` has a new field, `drag`.
+
 ## To 0.51: the ridden orbit grows out of the camera
 
 - In a ride, the ridden satellite's path is faint at the camera and full by 300 km, and the group's own orbit line for that satellite (and for objects on the same orbit) is no longer drawn while it is ridden. A page that drew over that line, or counted on it, sets `selected-path` and `setPathStyles({ selected: ... })` instead. Nothing else changes.
