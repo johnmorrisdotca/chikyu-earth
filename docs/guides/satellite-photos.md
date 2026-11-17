@@ -58,7 +58,7 @@ document.body.append(image);
 
 ## The credit
 
-`photoCredit("en")` is the short line to show beside a picture: it names NASA as the source and says it is not an endorsement. `photoCredit("en", true)` is the acknowledgement sentence NASA asks every client of GIBS to show, word for word; the Japanese version of it is this package's translation, because NASA publishes none. Show one of them wherever a picture is shown. NASA's imagery is not subject to copyright in the United States; the terms and the day they were read are in `NOTICE.md`.
+`photoCredit("en")` is the short line to show beside a picture: it names NASA as the source and says it is not an endorsement. `photoCredit("en", true)` is the acknowledgement sentence NASA asks every client of GIBS to show, word for word; the Japanese version of it is this package's translation, because NASA publishes none. Show one of them wherever a picture is shown. NASA says its imagery is generally not subject to copyright in the United States; the terms and the day they were read are in `NOTICE.md`.
 
 ## In the demo
 

@@ -386,5 +386,5 @@ export function photoFallbacks(options: PhotoOptions, days: number = PHOTO_FALLB
  */
 export function photoCredit(lang: "en" | "ja", full = false): string {
   if (full) return GIBS_CREDIT[lang];
-  return lang === "ja" ? "画像：NASA GIBS／Worldview（NASA、衛星画像）。NASAが推奨するものではありません。" : "Imagery: NASA GIBS / Worldview (NASA). Not endorsed by NASA.";
+  return lang === "ja" ? "画像：NASA GIBS／Worldview（NASA）。NASAが承認したものではありません。" : "Imagery: NASA GIBS / Worldview (NASA). Not endorsed by NASA.";
 }
