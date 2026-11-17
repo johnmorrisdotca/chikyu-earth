@@ -113,3 +113,17 @@ chikyu-passes { --chikyu-picture: 270px; }
 .passes-picks .fam-row, .passes-choices .fam-row { max-width: 100%; min-width: 0; }
 .passes-picks .fam-seg { max-width: 100%; border-radius: 22px; }
 .passes-picks .fam-seg button { white-space: normal; }
+
+/* the flat map page */
+.flat { display: grid; gap: 10px; padding: 8px 0 16px; }
+.flat-picks { display: grid; gap: 10px; }
+.flat-picks .fam-row { flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.flat-picks .fam-seg { flex-wrap: wrap; }
+.flat-picks .fam-seg button, .flat-picks .fam-button, .flat-picks .fam-field { min-height: 48px; min-width: 48px; font-family: inherit; }
+.flat-picks .field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
+.flat-picks input[type="datetime-local"] { border-radius: 999px; padding: 0 14px; }
+chikyu-flat { display: flex; width: 100%; --chikyu-flat-sea: #0b1830; }
+.flat-facts { overflow-x: auto; }
+.flat-table { border-collapse: collapse; font-size: .9rem; width: 100%; font-variant-numeric: tabular-nums; }
+.flat-table th, .flat-table td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.flat-call pre { overflow-x: auto; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; }

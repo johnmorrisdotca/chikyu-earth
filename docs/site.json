@@ -65,6 +65,16 @@
       "ja": "<chikyu-passes> 要素",
       "platform": "browser"
     },
+    "./flat": {
+      "en": "The flat map's pure parts: the facts and orbital planes of a group of satellites, the map's geometry, colours and words",
+      "ja": "平面地図の計算部分: 衛星グループの情報と軌道面、地図の座標計算、色、表示用の文言",
+      "platform": "node"
+    },
+    "./flat/define": {
+      "en": "The <chikyu-flat> element: satellites on a flat map of the world",
+      "ja": "<chikyu-flat> 要素: 世界の平面地図の上の衛星",
+      "platform": "browser"
+    },
     "./sheets": {
       "en": "Printable sheets: the globe and a world map to colour, my country, day and night, the seasons",
       "ja": "印刷できるシート: 色をぬる地球と世界地図、わたしの国、昼と夜、季節",

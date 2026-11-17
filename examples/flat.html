@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GPS satellites on a flat map</title>
+  </head>
+  <body>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@johnmorrisdotca/chikyu-earth/flat/define/+esm"></script>
+    <!-- Your page chooses where the orbit data come from (its own file, or a source whose terms it has read); this address is an example. -->
+    <chikyu-flat group="gps" colour-by="plane" center="0" home-lon="139.69" home-lat="35.69" elements-src="https://example.org/gps.json"></chikyu-flat>
+  </body>
+</html>

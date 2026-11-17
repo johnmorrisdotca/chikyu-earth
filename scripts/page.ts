@@ -54,6 +54,17 @@ export function renderPasses(): string {
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 
+/** The page for the flat map of the satellites, made like the demo's, with the family's blocks and its own script. */
+export function renderFlat(): string {
+  const html = readFileSync(new URL("../demo/flat.html", import.meta.url), "utf8");
+  return html
+    .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.fl_title, description: WORDS.en.fl_description }))
+    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
+    .replace("<!--family:footer-->", footer())
+    .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
+}
+
 /** demo/passes-embed.html, the frame for the passes: plain, no family blocks. */
 export function renderPassesEmbed(): string {
   return readFileSync(new URL("../demo/passes-embed.html", import.meta.url), "utf8");

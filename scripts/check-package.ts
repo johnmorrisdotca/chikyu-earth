@@ -1,7 +1,7 @@
 // Check the built package the way a consumer would: the entry files are there, and importing the built index draws a globe.
 import { existsSync, readdirSync, statSync } from "node:fs";
 
-for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/space/no-cultures.js", "dist/space/no-cultures.d.ts", "dist/realistic/no-cultures.js", "dist/realistic/no-cultures.d.ts", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js", "dist/catalogue/index.js", "dist/catalogue/index.d.ts"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/meteors/index.js", "dist/meteors/index.d.ts", "dist/door/index.js", "dist/door/index.d.ts", "dist/element.js", "dist/countries.js", "dist/realistic/index.js", "dist/realistic/element.js", "dist/realistic/element.d.ts", "dist/markers/index.js", "dist/markers/layer.js", "dist/space/index.js", "dist/space/element.js", "dist/space/no-cultures.js", "dist/space/no-cultures.d.ts", "dist/realistic/no-cultures.js", "dist/realistic/no-cultures.d.ts", "dist/satellites/index.js", "dist/passes/index.js", "dist/passes/element.js", "dist/catalogue/index.js", "dist/catalogue/index.d.ts", "dist/flat/index.js", "dist/flat/index.d.ts", "dist/flat/define.js", "dist/flat/define.d.ts"]) {
   if (!existsSync(new URL(`../${file}`, import.meta.url))) throw new Error(`missing ${file}`);
 }
 
@@ -79,6 +79,13 @@ const catalogue = await import(new URL("../dist/catalogue/index.js", import.meta
 const packedBack = await catalogue.unpackAny(await catalogue.gzipBytes(catalogue.packCatalogue([{ set: { ...iss, NORAD_CAT_ID: 123456 }, kind: "DEB" }])));
 if (catalogue.classOfElements(15.49, 0.0007) !== "leo" || catalogue.classOfElements(1.0027, 0.0002) !== "geo" || catalogue.readKind("ROCKET BODY") !== "RB" || packedBack.norad[0] !== 123456 || catalogue.fleetOf("STARLINK-1007", "PAY") !== "starlink" || catalogue.MAX_PACKED !== 200_000) throw new Error("the catalogue is off");
 console.log("catalogue ok");
+
+// the flat map's pure parts import with no browser and no dependency: the facts and planes of a group, and the map's geometry
+const flat = await import(new URL("../dist/flat/index.js", import.meta.url).href);
+const node = (RA_OF_ASC_NODE: number) => ({ MEAN_MOTION: 2.00563, ECCENTRICITY: 0.0102, INCLINATION: 55.1, RA_OF_ASC_NODE });
+const flatFacts = flat.groupFacts([node(10), node(12), node(130), node(133), node(250), node(252)]);
+if (flatFacts.planeCount !== 3 || flatFacts.planes[0].id !== "A" || Math.abs(flatFacts.meanAltitudeKm - 20_200) > 300 || flat.wrapLongitude(190) !== -170 || Math.abs(flat.projectFlat({ width: 720, height: 360, centerLon: 155, centerLat: 0, zoom: 1 }, -170, 0).x - 430) > 1e-9) throw new Error("the flat map's pure parts are off");
+console.log("flat ok");
 
 // the package's own types never import an optional peer a page may not have: following the imports of every entry's .d.ts, none reaches hoshi-stars (the star names' look is `SkyLabelStyle`, written out here)
 {

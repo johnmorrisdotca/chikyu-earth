@@ -807,3 +807,133 @@ test("satellites far from their elements as an estimate: nothing drawn at rest w
   await untilStill(page);
   expect(gpuObjects(await readCounts(page)), "switching it over and over leaves no trail of objects").toBeLessThanOrEqual(cold + 0);
 });
+
+// The flat map (<chikyu-flat>, MODULES-1391): a canvas, no GL. The same rules: at rest nothing is drawn and no frame is asked for, a running clock draws a frame at a time at the pace it needs, out of sight and in a hidden tab it
+// draws nothing, and the canvases stay inside 6 million pixels and 4096 a side. The Starlink file is the recorded one (11,156 satellites), so the "crowd" is the whole of Starlink and the other groups.
+test.describe("the flat map", () => {
+  type FlatEl = HTMLElement & { stats: { draws: number; averageDrawMs: number; lastDrawMs: number; running: boolean; fast: boolean; dots: number; canvases: { width: number; height: number }[] }; speed: number; paused: boolean; time: number };
+  const ALL = "gps,galileo,glonass,beidou,iridium,oneweb,stations,earth-observation,weather,starlink";
+  const stat = (page: Page) => page.locator("chikyu-flat").evaluate((el) => (el as FlatEl).stats);
+  const counts = (page: Page) => page.evaluate(() => ({ raf: JSON.parse(JSON.stringify(Reflect.get(window, "__kazokuCount"))) as { rafRequests: number; rafCallbacks: number }, draws: (document.querySelector("chikyu-flat") as FlatEl).stats.draws }));
+  async function openFlat(page: Page, held = true): Promise<void> {
+    await page.addInitScript(COUNT_SCRIPT);
+    await page.goto("/chikyu-earth/flat.html?by=group");
+    await page.locator("body[data-ready=true]").waitFor({ timeout: 30_000 });
+    // the recorded Starlink file holds about 2,000 satellites: the group is made 5 times as big (each copy a few degrees turned and numbered apart), the size of all of Starlink
+    await page.evaluate(async () => {
+      const el = document.querySelector("chikyu-flat") as HTMLElement & { setGroup(id: string, sets: Record<string, number>[]): void };
+      const file = (await (await fetch("elements/starlink.json")).json()) as { fields: string[]; rows: (string | number)[][] };
+      const sets: Record<string, number>[] = [];
+      for (let k = 0; k < 5; k += 1) {
+        for (const row of file.rows) {
+          const one = Object.fromEntries(file.fields.map((field, i) => [field, row[i]])) as Record<string, number>;
+          one["NORAD_CAT_ID"] = one["NORAD_CAT_ID"]! + k * 1_000_000;
+          one["RA_OF_ASC_NODE"] = (one["RA_OF_ASC_NODE"]! + k * 7) % 360;
+          sets.push(one);
+        }
+      }
+      el.setGroup("starlink", sets);
+    });
+    await page.locator("chikyu-flat").evaluate((el, [all, hold]) => {
+      el.setAttribute("group", all as string);
+      el.setAttribute("time", "2026-11-04T00:00Z");
+      el.setAttribute("speed", hold ? "0" : "1");
+      el.scrollIntoView({ block: "start" });
+    }, [ALL, held] as const);
+    await expect.poll(async () => (await stat(page)).dots, { timeout: 20_000 }).toBeGreaterThan(9000);
+    await page.waitForTimeout(1200);
+  }
+  const between = async (page: Page, ms: number) => {
+    const start = await counts(page);
+    await page.waitForTimeout(ms);
+    const stop = await counts(page);
+    return { frames: stop.draws - start.draws, requests: stop.raf.rafRequests - start.raf.rafRequests, callbacks: stop.raf.rafCallbacks - start.raf.rafCallbacks, outstanding: stop.raf.rafRequests - stop.raf.rafCallbacks };
+  };
+
+  test("at rest nothing is drawn, no frame is asked for and no timer runs", async ({ page }) => {
+    await openFlat(page);
+    const rest = await between(page, 3000);
+    expect(rest.frames).toBe(0);
+    expect(rest.requests).toBeLessThanOrEqual(2);
+    expect((await stat(page)).running).toBe(false);
+  });
+
+  test.describe("the clock running", () => {
+    test.use({ reducedMotion: "no-preference" });
+
+    test("real time draws slowly, 600 times real time draws a frame at a time, Starlink and all, and Pause leaves nothing drawn", async ({ page }) => {
+      await openFlat(page, false);
+      const live = await between(page, 4000);
+      expect(live.frames, "frames in 4 s at real time: the dots move a fraction of a pixel a second").toBeLessThanOrEqual(8);
+      await page.locator("chikyu-flat").evaluate((el) => ((el as FlatEl).speed = 600));
+      await page.waitForTimeout(1000);
+      const fast = await between(page, 3000);
+      const stats = await stat(page);
+      console.log("FLAT 600x", JSON.stringify(fast), JSON.stringify({ dots: stats.dots, averageDrawMs: stats.averageDrawMs, lastDrawMs: stats.lastDrawMs, fast: stats.fast }));
+      expect(stats.fast).toBe(true);
+      expect(stats.dots).toBeGreaterThan(9000);
+      expect(fast.frames, "frames in 3 s").toBeGreaterThan(15);
+      expect(fast.frames, "a frame for each frame of the page at most").toBeLessThanOrEqual(fast.callbacks + 3);
+      expect(fast.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(fast.callbacks + 3);
+      expect(fast.outstanding, "one request waiting at a time").toBeLessThanOrEqual(3);
+      await page.locator("chikyu-flat").evaluate((el) => ((el as FlatEl).paused = true));
+      await page.waitForTimeout(500);
+      const held = await between(page, 2500);
+      expect(held.frames).toBe(0);
+      expect(held.requests).toBeLessThanOrEqual(2);
+    });
+
+    test("out of sight, and in a hidden tab, it draws nothing and asks for nothing", async ({ page }) => {
+      await openFlat(page, false);
+      await page.locator("chikyu-flat").evaluate((el) => ((el as FlatEl).speed = 600));
+      await page.waitForTimeout(800);
+      await page.evaluate(() => {
+        const spacer = document.createElement("div");
+        spacer.style.height = "6000px";
+        document.body.prepend(spacer);
+        window.scrollTo(0, 0);
+      });
+      await expect.poll(async () => page.locator("chikyu-flat").evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(1000);
+      await page.locator("chikyu-flat").evaluate(
+        (el) =>
+          new Promise<void>((done) => {
+            const watch = new IntersectionObserver((entries) => {
+              if (!entries[entries.length - 1]!.isIntersecting) {
+                watch.disconnect();
+                done();
+              }
+            });
+            watch.observe(el);
+          }),
+      );
+      await page.waitForTimeout(800);
+      const away = await between(page, 2500);
+      expect(away.frames, "no draws out of sight").toBe(0);
+      expect((await stat(page)).running).toBe(false);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+        Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await page.waitForTimeout(800);
+      const hiddenTab = await between(page, 2500);
+      expect(hiddenTab.frames, "no draws in a hidden tab").toBe(0);
+      expect(hiddenTab.requests).toBeLessThanOrEqual(2);
+    });
+  });
+
+  test("on a 5K screen at a pixel ratio of 2 its canvases stay inside 6 million pixels and 4096 a side", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 2560, height: 1440 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await openFlat(page);
+    await page.locator("chikyu-flat").evaluate((el) => {
+      el.style.cssText += ";width:2560px;max-width:none;height:1400px";
+    });
+    await page.waitForTimeout(1500);
+    const size = await stat(page);
+    expect(size.canvases.length).toBe(2);
+    for (const canvas of size.canvases) expect(withinPixelBudget({ pixels: canvas.width * canvas.height, side: Math.max(canvas.width, canvas.height), count: 1 })).toBe(true);
+    await context.close();
+  });
+});

@@ -75,6 +75,8 @@
     "./src/element.ts",
     "./dist/passes/element.js",
     "./src/passes/element.ts",
+    "./dist/flat/define.js",
+    "./src/flat/define.ts",
     "./dist/realistic/element.js",
     "./src/realistic/element.ts",
     "./dist/realistic/element-base.js",
@@ -163,6 +165,16 @@
       "types": "./dist/passes/index.d.ts",
       "import": "./dist/passes/index.js",
       "default": "./dist/passes/index.js"
+    },
+    "./flat": {
+      "types": "./dist/flat/index.d.ts",
+      "import": "./dist/flat/index.js",
+      "default": "./dist/flat/index.js"
+    },
+    "./flat/define": {
+      "types": "./dist/flat/define.d.ts",
+      "import": "./dist/flat/define.js",
+      "default": "./dist/flat/define.js"
     },
     "./sheets": {
       "types": "./dist/sheets/index.d.ts",

@@ -554,6 +554,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../meteors` | The year's meteor showers, and when and where their meteors fall. No DOM, no dependency. |
 | `.../door` | The data door: sources of your own maps and orbit data with their licence and credit, `creditLine`, the package's own sources. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
+| `.../flat`, `.../flat/define` | The facts and orbital planes of a group of satellites (no dependency), and `<chikyu-flat>`, satellites on a flat world map; `satellite.js` for the element. |
 | `.../catalogue` | The Earth-orbit catalogue's pure parts: the class of an orbit from its elements, the kind of an object, colours, legend, fleets, and the packed file of up to 200,000 objects. No data, no DOM, no dependency. |
 
 ## Guides
@@ -572,6 +573,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
 | [Full screen, the camera in the stars and every satellite](docs/guides/full-screen-and-camera.md) | `immersive`, `camera="space"`, the Earth's look, and every satellite group on the realistic Earth |
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
+| [Satellites on a flat map](docs/guides/flat-map.md) | `<chikyu-flat>`: groups, orbital planes, footprints, the ground track, the clock; the facts of a group |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |

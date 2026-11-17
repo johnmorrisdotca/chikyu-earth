@@ -205,6 +205,11 @@ await step("node-passes", () => {
   if (!/^ISS \(ZARYA\): highest \d+ degrees in the [NESW]+, (visible|daylight|shadow|faint)$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-flat", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "flat.mjs")], { cwd: usage, encoding: "utf8" }).trim();
+  if (out !== "6 satellites, 20189 km up, 55 degrees, 3 planes (A:2 B:2 C:2)") throw new Error(`unexpected output: ${out}`);
+});
+
 await step("node-missions", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "missions.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (!/^135 flights; STS-1 Columbia, 2 crew: \d+ km up over -?\d+ degrees$/.test(out)) throw new Error(`unexpected output: ${out}`);
@@ -286,6 +291,26 @@ await step("cdn-passes", async () => {
     await page.waitForFunction(() => (document.querySelector("chikyu-passes")?.shadowRoot?.querySelectorAll(".row").length ?? 0) > 0, undefined, { timeout: 20_000 });
     const dome = await page.locator("chikyu-passes").evaluate((el) => el.shadowRoot?.querySelector(".dome svg")?.getAttribute("aria-label") ?? "");
     if (!/ISS|crosses the sky/.test(dome)) throw new Error(`no sky dome: ${dome}`);
+  });
+});
+
+await step("cdn-flat", async () => {
+  // The one script tag and the one element: with the orbit data it is given, the element draws the GPS satellites as dots on the map, coloured by plane, with a marker at the reader's place.
+  const file = JSON.parse(readFileSync(at("demo", "elements", "gps.json"), "utf8")) as { fields: string[]; rows: unknown[][] };
+  const sets = file.rows.map((row) => Object.fromEntries(file.fields.map((field, i) => [field, row[i]])));
+  await opened(browser, async (page) => {
+    await page.clock.setFixedTime(new Date("2026-11-04T00:00:00Z"));
+    await page.route("https://cdn.jsdelivr.net/**", async (route) => {
+      const { pathname } = new URL(route.request().url());
+      if (pathname !== "/npm/@johnmorrisdotca/chikyu-earth/flat/define/+esm") return route.fulfill({ status: 404, body: "" });
+      return route.fulfill({ body: await bundleOf(modules("flat/define.js")), contentType: "text/javascript" });
+    });
+    await page.route("https://example.org/gps.json", (route) => route.fulfill({ body: JSON.stringify(sets), contentType: "application/json", headers: { "access-control-allow-origin": "*" } }));
+    await page.route("https://page.test/**", (route) => route.fulfill({ body: pageOf(join(examples(""), "flat.html")), contentType: "text/html" }));
+    await page.goto("https://page.test/");
+    await page.waitForFunction(() => ((document.querySelector("chikyu-flat") as unknown as { stats: { dots: number } } | null)?.stats.dots ?? 0) > 20, undefined, { timeout: 20_000 });
+    const planes = await page.locator("chikyu-flat").evaluate((el) => (Reflect.get(el, "planes") as unknown[]).length);
+    if (planes !== 6) throw new Error(`the GPS satellites came out in ${planes} planes, not 6`);
   });
 });
 
@@ -450,7 +475,7 @@ await step("together", async () => {
 await step("earth-only", async () => {
   // Every entry point of chikyu-earth bundles with wakusei-planets missing: nothing in the package imports it.
   const refuse = { name: "no-wakusei", setup: (build: import("esbuild").PluginBuild) => build.onResolve({ filter: /wakusei-planets/ }, (args) => ({ errors: [{ text: `${args.importer} imports ${args.path}` }] })) };
-  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "passes/index.js", "passes/element.js", "space/element.js", "catalogue/index.js"]) {
+  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "passes/index.js", "passes/element.js", "flat/index.js", "flat/define.js", "space/element.js", "catalogue/index.js"]) {
     await esbuild({ entryPoints: [modules(entry)], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [refuse], external: ["three", "astronomy-engine", "satellite.js", "@johnmorrisdotca/kazoku-ui", "@johnmorrisdotca/kazoku-ui/*", "three/*"] });
   }
 });
@@ -546,6 +571,8 @@ const FILES: Record<string, string[]> = {
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/passes.mjs": ["docs/guides/passes.md", "docs/guides/ja/passes.md"],
   "passes.html": ["docs/guides/passes.md", "docs/guides/ja/passes.md"],
+  "node/flat.mjs": ["docs/guides/flat-map.md", "docs/guides/ja/flat-map.md"],
+  "flat.html": ["docs/guides/flat-map.md", "docs/guides/ja/flat-map.md"],
   "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],
   "node/sheets.mjs": ["docs/guides/printable-sheets.md", "docs/guides/ja/printable-sheets.md"],
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
