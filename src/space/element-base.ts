@@ -44,6 +44,8 @@ import { readMeteorStrength } from "../meteors/strength.ts";
 import { METEOR_NOTE_STYLE, prefersLessMotion, setMeteorNote } from "../meteors/note.ts";
 import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
+import type { SatelliteHistory } from "../satellites/history.ts";
+import { trailOrbits } from "./trail.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
@@ -188,6 +190,28 @@ export interface RideOptions {
 }
 
 /**
+ * What `observe` can be told: how many orbits of trail, its colour, and the ride's own distance and smoothness.
+ *
+ * @example
+ * ```ts no-run
+ * import type { ObserveOptions } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const options: ObserveOptions = { orbits: 5, colour: "#ffd479", distanceKm: 2000 };
+ * console.log(options.orbits);
+ * ```
+ */
+export interface ObserveOptions {
+  /** How many orbits of the satellite's path before the moment shown are drawn as its trail: 0.25 to 20, 3 when left out. */
+  orbits?: number;
+  /** Any CSS colour for the trail (a light blue when left out). */
+  colour?: string;
+  /** How far back the camera keeps from the satellite, kilometres (3000 when left out, as a followed satellite). */
+  distanceKm?: number;
+  /** Glide to the view (true when left out); false, or a reader who asked for reduced motion, jumps. */
+  smooth?: boolean;
+}
+
+/**
  * What the camera is riding along with now: the body or satellite, how (`from`, `follow` or `above`), where it looks, the facing it looks round from (`null` when none was chosen), and the distance kept for a satellite.
  *
  * @example
@@ -218,7 +242,7 @@ export interface Riding {
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
 
-type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; orbitLines: number; estimated: number };
+type SatelliteStats = { groups: number; placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; epochMs: number; propagations: number; lastBatchMs: number; maxBatchMs: number; updateMs: number; maxUpdateMs: number; averageUpdateMs: number; updates: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; orbitLines: number; estimated: number; trailPoints: number; trailBuilds: number };
 
 /** A `light` attribute: `lit` or `boost`, else the true sun. */
 const readLight = (value: string | null): LightMode => (value === "lit" || value === "boost" ? value : "sun");
@@ -387,6 +411,8 @@ export class ChikyuSpace extends HTMLElement {
   /** The ease of `follow` from one share to the next, if one is running. */
   #followTimer: ReturnType<typeof setTimeout> | undefined;
   #focusBeforeRide: BodyName = "Earth";
+  #histories = new Map<number, SatelliteHistory>();
+  #observed = false;
   /** The yaw, tilt and zoom from before a satellite group was framed, put back when the focus is cleared. */
   #focusView: { yaw: number; tilt: number; zoom: number } | null = null;
   #lostTold = false;
@@ -2190,6 +2216,84 @@ export class ChikyuSpace extends HTMLElement {
     this.#gate?.request();
   }
 
+  /**
+   * Give a satellite its history: a series of element sets, with its launch and decay dates, made by `createSatelliteHistory` (from `@johnmorrisdotca/chikyu-earth/satellites`, which needs satellite.js; this element does not import it).
+   * The satellite is set as the group `history:<id>` (one satellite, index 0) and is placed at any moment from the set nearest that moment: not drawn before its launch or after it has come down, shaded after its newest set
+   * (a prediction, with its uncertainty stated by `history.describe(ms)`). `null` takes it away. The page brings the sets: nothing is fetched.
+   *
+   * @param id - The NORAD catalogue number.
+   * @param history - What `createSatelliteHistory(sets, options)` returned, or `null` to remove it.
+   * @returns `{ group, index }` of the satellite, for `ride`, `observe` and `selectSatellite`, or `null` when removed or the history has no usable set.
+   */
+  setSatelliteHistory(id: number, history: SatelliteHistory | null): SatelliteRef | null {
+    const name = `history:${id}`;
+    if (history === null || history.sets.length === 0) {
+      this.#histories.delete(id);
+      this.setSatellites(name, null);
+      return null;
+    }
+    this.#histories.set(id, history);
+    this.setSatellites(name, history.group, { orbits: false });
+    return { group: name, index: 0 };
+  }
+
+  /** The history given to `setSatelliteHistory` for a satellite, or `undefined`: its `describe(ms)` says whether it is launched, tracked, predicted or down, and when. */
+  satelliteHistory(id: number): SatelliteHistory | undefined {
+    return this.#histories.get(id);
+  }
+
+  /**
+   * The Observe view: the camera outside a satellite (the follow view, 3000 km back by default) with the Earth turning and sliding beneath, and the satellite's trail over its last `orbits` orbits drawn behind it as one line.
+   * The trail is the satellite's own path before the moment shown, placed by the same SGP4 (from the set nearest each moment, for a satellite with a history), so it runs back at any clock speed and is shorter where the satellite
+   * was not yet launched. It is drawn only while the view is on, rebuilt only when the clock moves, and never at rest or out of sight. `null` stops, and so does any other `ride`.
+   *
+   * @param target - `{ group, index }`, or a NORAD number: first the history set with `setSatelliteHistory`, else the first group that has it.
+   * @param options - `orbits`, `colour`, `distanceKm`, `smooth`.
+   * @returns False when the satellite is not set (nothing changes).
+   */
+  observe(target: SatelliteRef | number | null, options: ObserveOptions = {}): boolean {
+    const state = this.#model.satellites;
+    if (target === null) {
+      state.trail.ref = null;
+      state.trail.version += 1;
+      if (this.observing) this.ride(null);
+      this.#observed = false;
+      // the trail comes off at the next draw
+      this.#schedule();
+      this.#gate?.request();
+      return true;
+    }
+    let ref: SatelliteRef | null = null;
+    if (typeof target === "number") {
+      if (this.#histories.has(target)) ref = { group: `history:${target}`, index: 0 };
+      else {
+        for (const [group, entry] of state.groups) {
+          const index = entry.satellites.sets.findIndex((set) => set.NORAD_CAT_ID === target);
+          if (index >= 0) {
+            ref = { group, index };
+            break;
+          }
+        }
+      }
+    } else if (state.groups.get(target.group)) ref = { group: target.group, index: target.index };
+    if (!ref) return false;
+    state.trail.ref = ref;
+    state.trail.orbits = trailOrbits(options.orbits);
+    if (typeof options.colour === "string" && options.colour !== "") state.trail.colour = options.colour;
+    state.trail.version += 1;
+    this.#observed = true;
+    this.ride(ref, { view: "follow", distanceKm: options.distanceKm ?? 3000, ...(options.smooth === undefined ? {} : { smooth: options.smooth }) });
+    return true;
+  }
+
+  /** What `observe` is showing now (`{ ref, orbits }`), or null. */
+  get observing(): { ref: SatelliteRef; orbits: number } | null {
+    const t = this.#model.satellites.trail;
+    const riding = this.riding;
+    const on = t.ref !== null && this.#observed && riding !== null && typeof riding.target === "object" && riding.target.group === t.ref.group && riding.target.index === t.ref.index;
+    return on && t.ref ? { ref: { ...t.ref }, orbits: t.orbits } : null;
+  }
+
   /** Show or hide a group without losing it. */
   showSatellites(group: string, on: boolean): void {
     const found = this.#model.satellites.groups.get(group);
@@ -2701,7 +2805,7 @@ export class ChikyuSpace extends HTMLElement {
     }
     let epochMs = 0;
     for (const group of this.#model.satellites.groups.values()) epochMs = Math.max(epochMs, group.satellites.newestEpochMs);
-    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, selectedRing: drawn.selectedRing, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity, orbitLines: drawn.orbitLines, estimated: drawn.estimated };
+    return { groups: this.#model.satellites.groups.size, placed: drawn.placed, segments: drawn.segments, tooFast: drawn.tooFast, dotScale: drawn.dotScale, longestStreakPx: drawn.longestStreakPx, streakCapPx: drawn.streakCapPx, weight: drawn.weight, fade: drawn.fade, earthPx: drawn.earthPx, epochMs, propagations, lastBatchMs, maxBatchMs, updateMs: drawn.updateMs, maxUpdateMs: drawn.maxUpdateMs, averageUpdateMs: drawn.updates ? drawn.totalMs / drawn.updates : 0, updates: drawn.updates, selectedRing: drawn.selectedRing, hoverPath: drawn.hoverPath, hoverOpacity: drawn.hoverOpacity, selectedOpacity: drawn.selectedOpacity, orbitLines: drawn.orbitLines, estimated: drawn.estimated, trailPoints: drawn.trailPoints, trailBuilds: drawn.trailBuilds };
   }
 
   // --- the game clock ----------------------------------------------------------------------------------------------------------------------------

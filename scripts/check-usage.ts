@@ -211,6 +211,14 @@ await step("node-passes", () => {
   if (!/^ISS \(ZARYA\): highest \d+ degrees in the [NESW]+, (visible|daylight|shadow|faint)$/.test(out)) throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-history", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "history.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  const want = [/^1998-01-01: before-launch$/, /^2026-11-05: tracked, within \d+ km$/, /^2026-11-20: predicted, within \d+ km$/, /^2031-06-01: decayed$/, /^2026-11-02 \d+ km, 2026-11-09 \d+ km$/];
+  want.forEach((pattern, at) => {
+    if (!pattern.test(out[at] ?? "")) throw new Error(`line ${at + 1} is not what the guide says: ${out[at]}`);
+  });
+});
+
 await step("node-flat", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "flat.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (out !== "6 satellites, 20189 km up, 55 degrees, 3 planes (A:2 B:2 C:2)") throw new Error(`unexpected output: ${out}`);
@@ -467,6 +475,25 @@ await step("ride", async () => {
   });
 });
 
+await step("history", async () => {
+  // A satellite's history and the Observe view, built by Vite from the package as npm packs it: the satellite must be placed from its set, and a trail of 3 orbits built behind it.
+  const out = join(usage, "out", "history");
+  await viteBuild({ root: examples("history"), logLevel: "warn", build: { outDir: out, emptyOutDir: true }, base: "./", configFile: false });
+  await opened(browser, async (page) => {
+    await serve(page, "https://app.test", out);
+    await page.route("https://app.test/textures/**", (route) => {
+      const file = join(installed, "dist", "textures", new URL(route.request().url()).pathname.slice("/textures/".length));
+      return existsSync(file) ? route.fulfill({ body: readFileSync(file), contentType: "image/webp" }) : route.fulfill({ status: 404, body: "" });
+    });
+    await page.goto("https://app.test/");
+    await page.locator("chikyu-space[data-state=live]").waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => {
+      const stats = Reflect.get(document.querySelector("chikyu-space")!, "stats") as { satellites: { placed: number; estimated: number; trailPoints: number } };
+      return stats.satellites.placed === 1 && stats.satellites.estimated === 1 && stats.satellites.trailPoints >= 3 * 96;
+    }, undefined, { timeout: 20_000 });
+  });
+});
+
 await step("together", async () => {
   // chikyu-earth and wakusei-planets on one page, built by Vite from the package as npm packs it: the Earth's line look must be chikyu-earth's globe with the countries, and Mars must stay wakusei-planets' own line drawing.
   // wakusei-planets sits beside chikyu-earth in node_modules as npm would put it (a copy, not pnpm's link into its store), because it loads chikyu-earth's element by name.
@@ -583,6 +610,9 @@ const FILES: Record<string, string[]> = {
   "satellites/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/passes.mjs": ["docs/guides/passes.md", "docs/guides/ja/passes.md"],
   "passes.html": ["docs/guides/passes.md", "docs/guides/ja/passes.md"],
+  "node/history.mjs": ["docs/guides/satellite-history.md", "docs/guides/ja/satellite-history.md"],
+  "history/index.html": ["docs/guides/satellite-history.md", "docs/guides/ja/satellite-history.md"],
+  "history/main.ts": ["docs/guides/satellite-history.md", "docs/guides/ja/satellite-history.md"],
   "node/flat.mjs": ["docs/guides/flat-map.md", "docs/guides/ja/flat-map.md"],
   "flat.html": ["docs/guides/flat-map.md", "docs/guides/ja/flat-map.md"],
   "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],

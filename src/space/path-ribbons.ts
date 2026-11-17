@@ -116,6 +116,8 @@ export interface RibbonPath {
   dark?: Uint8Array;
   /** Any CSS colour: what the flagged segments are drawn in. Needed with `dark`. */
   darkInk?: string;
+  /** An open line, not a loop: the last segment (from the last point back to the first) is not drawn. A line of more than {@link PATH_POINTS} points is laid in several slots that share their end points. */
+  open?: boolean;
 }
 
 export interface PathRibbons {
@@ -174,13 +176,13 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
     set(paths) {
       count = Math.min(PATH_SLOTS, paths.length);
       for (let p = 0; p < count; p += 1) {
-        const { positions, style, fade = 0, dark, darkInk } = paths[p]!;
+        const { positions, style, fade = 0, dark, darkInk, open = false } = paths[p]!;
         colour.set(style.color);
         if (dark && darkInk) shade.set(darkInk);
         // the arc length at each point, in Earth radii, for the dashes
         let along = 0;
         for (let i = 0; i < PATH_POINTS; i += 1) {
-          const j = (i + 1) % PATH_POINTS;
+          const j = open && i === PATH_POINTS - 1 ? i : (i + 1) % PATH_POINTS;
           const ax = positions[i * 3]!;
           const ay = positions[i * 3 + 1]!;
           const az = positions[i * 3 + 2]!;

@@ -8,7 +8,8 @@ import { satelliteEmphasis, type SatelliteFocus } from "./satellite-focus.ts";
 import { BUILT_IN_PATH_STYLES, capPaths, nearestLoop, resolvePathId, styleOf, styleTable, type PathHit, type PathInfo, type PathRequest, type PathStyle } from "./paths.ts";
 import { shadowFlags, sunDirectionScene } from "../flat/track-state.ts";
 import { TRACK_SHADOW, TRACK_SUNLIT } from "../flat/colours.ts";
-import { createPathRibbons, RIDE_PATH_FADE_KM, type RibbonPath } from "./path-ribbons.ts";
+import { createPathRibbons, PATH_POINTS, RIDE_PATH_FADE_KM, type PathRibbons, type RibbonPath } from "./path-ribbons.ts";
+import { createTrailBuilder, TRAIL_MAX_POINTS, TRAIL_SLOTS } from "./trail.ts";
 
 type Three = ThreeParts;
 
@@ -56,9 +57,11 @@ export interface SatelliteState {
    * 0 draws the whole stretch one frame spans, however long that is.
    */
   streakMax: number;
+  /** The Observe view's trail (`observe`): the satellite it follows, how many orbits it reaches back, its colour, and a number that goes up when the page changes any of them. `ref` null: no trail, and nothing made for one. */
+  trail: { ref: SatelliteRef | null; orbits: number; colour: string; version: number };
   /** Set at each draw by the view: the satellite a ride shows as its model while the model is big enough to read. Its ring (the chosen marker) and name are left off while this is so; its orbit line stays. Clears with the ride, or when the model has handed over to the mark. */
   modelOver: SatelliteRef | null;
-  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; orbitLines: number; pathsDrawn: number; pathDraws: number; estimated: number };
+  drawn: { placed: number; segments: number; tooFast: boolean; dotScale: number; longestStreakPx: number; streakCapPx: number; weight: number; fade: number; earthPx: number; updateMs: number; maxUpdateMs: number; updates: number; totalMs: number; selectedRing: boolean; hoverPath: boolean; hoverOpacity: number; selectedOpacity: number; orbitLines: number; pathsDrawn: number; pathDraws: number; estimated: number; trailPoints: number; trailBuilds: number };
 }
 
 /**
@@ -119,7 +122,7 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, light: { on: true, sun: TRACK_SUNLIT, shadow: TRACK_SHADOW }, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, orbitLines: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, light: { on: true, sun: TRACK_SUNLIT, shadow: TRACK_SHADOW }, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, trail: { ref: null, orbits: 3, colour: "#8fe3ff", version: 0 }, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, orbitLines: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0, trailPoints: 0, trailBuilds: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -403,6 +406,66 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   let hoverKey = "";
   // The page's paths and the chosen satellite's own orbit: one mesh, one draw call, buffers made once (see path-ribbons.ts).
   const ribbons = createPathRibbons(three, scene);
+  // The Observe view's trail: its own ribbon mesh (one draw call), made the first time a trail is asked for and never otherwise; its buffers are made once.
+  let trailRibbons: PathRibbons | null = null;
+  const trailBuilder = createTrailBuilder();
+  const trailPoints = new Float32Array(TRAIL_MAX_POINTS * 3);
+  const trailChunks = Array.from({ length: TRAIL_SLOTS }, () => new Float32Array(PATH_POINTS * 3));
+  const trailPaths: RibbonPath[] = [];
+  const trailStyle: PathStyle = { color: "#8fe3ff", width: 2.5, opacity: 0.95, dash: null };
+  let trailAt = Number.NaN;
+  let trailKey = "";
+  const updateTrail = (time: number, size: { width: number; height: number } | undefined, radius: number): void => {
+    // the trail is on while its satellite is the one ridden: any other ride, or none, takes it away
+    const wanted = state.trail.ref;
+    const want = wanted !== null && state.ridden !== null && state.ridden.group === wanted.group && state.ridden.index === wanted.index ? wanted : null;
+    if (want === null) {
+      if (trailRibbons && trailRibbons.count > 0) {
+        trailRibbons.set([]);
+        state.drawn.trailPoints = 0;
+      }
+      trailKey = "";
+      return;
+    }
+    const set = find(want);
+    const info = set?.sets[want.index];
+    if (!set || !info) return;
+    trailRibbons ??= createPathRibbons(three, scene);
+    if (size) trailRibbons.frame(size.width, size.height, radius);
+    const key = `${refKey(want)}|${state.trail.orbits}|${state.trail.colour}|${state.trail.version}`;
+    if (key === trailKey && time === trailAt) return;
+    if (key !== trailKey) {
+      trailBuilder.reset();
+      trailStyle.color = state.trail.colour;
+    }
+    trailKey = key;
+    trailAt = time;
+    const periodMs = (1440 / (info.MEAN_MOTION || 15)) * 60_000;
+    const n = trailBuilder.build((ms, out) => set.exact(want.index, ms, out), periodMs, state.trail.orbits, time, trailPoints);
+    state.drawn.trailBuilds += 1;
+    state.drawn.trailPoints = n;
+    if (n < 2) {
+      trailRibbons.set([]);
+      return;
+    }
+    // the points are laid in ribbon slots of 120, each sharing its end point with the next, the last padded with its own end point (a segment of no length)
+    const chunks = Math.ceil((n - 1) / (PATH_POINTS - 1));
+    trailPaths.length = chunks;
+    for (let c = 0; c < chunks; c += 1) {
+      const buffer = trailChunks[c]!;
+      const from = c * (PATH_POINTS - 1);
+      for (let i = 0; i < PATH_POINTS; i += 1) {
+        const p = Math.min(n - 1, from + i) * 3;
+        buffer[i * 3] = trailPoints[p]!;
+        buffer[i * 3 + 1] = trailPoints[p + 1]!;
+        buffer[i * 3 + 2] = trailPoints[p + 2]!;
+      }
+      const path = trailPaths[c];
+      if (path) path.positions = buffer;
+      else trailPaths[c] = { positions: buffer, style: trailStyle, open: true };
+    }
+    trailRibbons.set(trailPaths);
+  };
   interface PathSlot {
     key: string;
     info: PathInfo;
@@ -774,6 +837,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       for (const entry of drawn.values()) for (const line of entry.lines) if (line.loop.visible) lines += 1;
       state.drawn.orbitLines = lines;
       if (size) ribbons.frame(size.width, size.height, radius);
+      updateTrail(time, size, radius);
       const chosen = state.selected;
       const chosenGroup = chosen ? state.groups.get(chosen.group) : undefined;
       const chosenDrawn = chosen !== null && chosenGroup !== undefined && satelliteEmphasis(chosen.group, chosenGroup.visible, state.focus).drawn;
@@ -961,6 +1025,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       drawn.clear();
       scene.remove(selectedPoints, hoverLoop);
       ribbons.dispose();
+      trailRibbons?.dispose();
       selectedGeometry.dispose();
       selectedMaterial.dispose();
       hoverLine.geometry.dispose();
