@@ -162,6 +162,12 @@ await step("node-place", () => {
   if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
 });
 
+await step("node-photos", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "photos.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
+  const want = ["VIIRS_NOAA20_CorrectedReflectance_TrueColor 2026-11-10", "2 283+229", "2026-11-10 2026-11-09 2026-11-08", "Imagery: NASA GIBS / Worldview (NASA). Not endorsed by NASA."];
+  if (out.join("|") !== want.join("|")) throw new Error(`unexpected output: ${out.join("|")}`);
+});
+
 await step("node-catalogue-rows", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "catalogue-rows.mjs")], { cwd: usage, encoding: "utf8" }).trim().split("\n");
   const want = ["Hubble / ハッブル (HST)", "HST", "14"];
@@ -567,6 +573,7 @@ const FILES: Record<string, string[]> = {
   "node/satellites.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/catalogue-rows.mjs": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "node/place.mjs": ["docs/guides/place-of.md", "docs/guides/ja/place-of.md"],
+  "node/photos.mjs": ["docs/guides/satellite-photos.md", "docs/guides/ja/satellite-photos.md"],
   "node/meteors.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/meteor-strength.mjs": ["docs/guides/meteors.md", "docs/guides/ja/meteors.md"],
   "node/body-label.mjs": ["docs/guides/body-label.md", "docs/guides/ja/body-label.md"],
