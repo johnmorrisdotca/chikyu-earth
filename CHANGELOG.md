@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.60.0 - 2026-11-17
 
 - **`classOfElements` and `orbitClass` follow the Space Program X site's orbit levels** (MODULES-1403; breaking for code that reads the class names). The class is now decided by the rule the site's `levelOf` uses, so a page that shows both says one thing: low is a highest point under 2,000 km; geostationary is both points within 2,500 km (was 1,500) of 35,786 km; the outer edge of low orbit (`outer`, new) is a lowest point of 2,000 km or more and a highest under 8,000 km; medium is the rest of those to 32,000 km (was 34,286); `far` is every orbit left. There is no rule on the eccentricity any more (`heo` is gone: an oval low orbit is low, and the stretched ones that swing far out are `far`), and `other` is gone (`far` takes what was left). `OrbitClass` is `"leo" | "outer" | "meo" | "geo" | "far"`, `ORBIT_CLASSES`, `CLASS_LABELS` (English and Japanese, the site's words) and `CLASS_COLOURS` follow, and `CLASS_LIMITS` is `{ leoApogeeKm, outerApogeeKm, meoApogeeKm, geoBandKm }`. Heights stay above the mean Earth radius (6,371 km), 7 km under the site's equatorial radius, so a set within 7 km of a limit can differ. On the site's own 16,903 element sets 53 had a different class under the old rule. The satellites' class colours on the Earth follow.
 

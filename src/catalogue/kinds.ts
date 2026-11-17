@@ -103,7 +103,7 @@ export const CLASS_LABELS: Readonly<Record<OrbitClass, { en: string; ja: string;
   outer: { en: "Low orbit, outer edge", ja: "低軌道の外縁", rule: "lowest point 2,000 km or more, highest point under 8,000 km" },
   meo: { en: "Medium orbit", ja: "中軌道", rule: "lowest point 2,000 km or more, highest point 8,000 km or more and under 32,000 km" },
   geo: { en: "Geostationary", ja: "静止軌道", rule: "35,786 km, both points within 2,500 km" },
-  far: { en: "Far orbits", ja: "遠方の長楕円軌道", rule: "every orbit the others leave: stretched ones that swing far out, and any above the belt" },
+  far: { en: "Far orbits", ja: "遠方の軌道", rule: "every orbit the others leave: stretched ones that swing far out, and any above the belt" },
 };
 
 /**
