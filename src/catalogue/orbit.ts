@@ -5,7 +5,7 @@ const MU = 398_600.4418;
 const EARTH_RADIUS_KM = 6371;
 
 /**
- * The height of the geostationary orbit above the equator, in kilometres: the radius of a circular orbit that goes round once a sidereal day (42,164 km) less the equatorial radius (6,378 km). The heights in this module are above the mean Earth radius of 6,371 km, which differs by 7 km, well inside the 1,500 km band.
+ * The height of the geostationary orbit above the equator, in kilometres: the radius of a circular orbit that goes round once a sidereal day (42,164 km) less the equatorial radius (6,378 km). The heights in this module are above the mean Earth radius of 6,371 km, which differs by 7 km, well inside the 2,500 km band.
  *
  * @example
  * ```ts
@@ -62,19 +62,19 @@ export function orbitShape(meanMotion: number, eccentricity: number): OrbitShape
 }
 
 /**
- * The numbers behind the classes: the highest point a low orbit may have (2,000 km), the eccentricity from which an orbit is highly elliptical (0.25), and how far from 35,786 km the lowest and highest points of a geostationary orbit may be (1,500 km).
+ * The numbers behind the classes, the same ones the Space Program X site puts its orbit levels at: the highest point a low orbit may have (2,000 km), the highest point of the outer edge of low orbit (8,000 km, where the medium orbits' lowest are 2,000 km or more), the highest point a medium orbit may have (32,000 km, the navigation satellites are about 20,000), and how far from 35,786 km the lowest and highest points of a geostationary orbit may be (2,500 km).
  *
  * @example
  * ```ts
  * import { CLASS_LIMITS } from "@johnmorrisdotca/chikyu-earth/catalogue";
  *
- * console.log(CLASS_LIMITS.leoApogeeKm, CLASS_LIMITS.heoEccentricity, CLASS_LIMITS.geoBandKm);
+ * console.log(CLASS_LIMITS.leoApogeeKm, CLASS_LIMITS.outerApogeeKm, CLASS_LIMITS.meoApogeeKm, CLASS_LIMITS.geoBandKm);
  * ```
  */
-export const CLASS_LIMITS = { leoApogeeKm: 2_000, heoEccentricity: 0.25, geoBandKm: 1_500 } as const;
+export const CLASS_LIMITS = { leoApogeeKm: 2_000, outerApogeeKm: 8_000, meoApogeeKm: 32_000, geoBandKm: 2_500 } as const;
 
 /**
- * The class an orbit falls in. `heo` when the eccentricity is 0.25 or more; otherwise `leo` when the highest point is under 2,000 km, `geo` when both points are within 1,500 km of 35,786 km, `meo` when the lowest point is 2,000 km or more and the highest is under that band, and `other` for what is left (above the geostationary belt, or between the classes).
+ * The class an orbit falls in, by the rule the Space Program X site's orbit levels use (there is no rule on the eccentricity). `leo` when the highest point is under 2,000 km; `geo` when both points are within 2,500 km of 35,786 km; `outer` when the lowest point is 2,000 km or more and the highest is under 8,000 km (the outer edge of low orbit); `meo` when the lowest point is 2,000 km or more and the highest is under 32,000 km; `far` for every orbit those leave: the stretched ones that swing far out, and any above the belt.
  *
  * @param shape - The orbit's shape, from `orbitShape`.
  * @returns The class.
@@ -84,17 +84,14 @@ export const CLASS_LIMITS = { leoApogeeKm: 2_000, heoEccentricity: 0.25, geoBand
  * import { orbitClass, orbitShape } from "@johnmorrisdotca/chikyu-earth/catalogue";
  *
  * const of = (n: number, e: number): string => orbitClass(orbitShape(n, e)!);
- * console.log(of(15.49, 0.0007), of(2.0056, 0.0001), of(1.0027, 0.0002), of(2.0, 0.72), of(0.9, 0.001));
+ * console.log(of(15.49, 0.0007), of(5.0, 0.001), of(2.0056, 0.0001), of(1.0027, 0.0002), of(2.0, 0.72));
  * ```
  */
 export function orbitClass(shape: OrbitShape): OrbitClass {
-  if (shape.eccentricity >= CLASS_LIMITS.heoEccentricity) return "heo";
   if (shape.apogeeKm < CLASS_LIMITS.leoApogeeKm) return "leo";
-  const low = GEO_ALTITUDE_KM - CLASS_LIMITS.geoBandKm;
-  const high = GEO_ALTITUDE_KM + CLASS_LIMITS.geoBandKm;
-  if (shape.perigeeKm >= low && shape.apogeeKm <= high) return "geo";
-  if (shape.perigeeKm >= CLASS_LIMITS.leoApogeeKm && shape.apogeeKm < low) return "meo";
-  return "other";
+  if (Math.abs(shape.perigeeKm - GEO_ALTITUDE_KM) < CLASS_LIMITS.geoBandKm && Math.abs(shape.apogeeKm - GEO_ALTITUDE_KM) < CLASS_LIMITS.geoBandKm) return "geo";
+  if (shape.perigeeKm >= CLASS_LIMITS.leoApogeeKm && shape.apogeeKm < CLASS_LIMITS.meoApogeeKm) return shape.apogeeKm < CLASS_LIMITS.outerApogeeKm ? "outer" : "meo";
+  return "far";
 }
 
 /**

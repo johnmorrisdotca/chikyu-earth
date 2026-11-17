@@ -20,21 +20,24 @@ test("the shape of an orbit comes from the mean motion and eccentricity alone, a
   for (const bad of [[0, 0], [-1, 0], [15, 1], [15, -0.1], [Number.NaN, 0], [Infinity, 0]] as const) assert.equal(orbitShape(bad[0], bad[1]), null);
 });
 
-test("the class thresholds: low under 2,000 km, geostationary within 1,500 km of 35,786, highly elliptical from 0.25, medium between", () => {
-  assert.deepEqual(CLASS_LIMITS, { leoApogeeKm: 2_000, heoEccentricity: 0.25, geoBandKm: 1_500 });
+test("the class thresholds are the site's orbit levels: low under 2,000 km, outer to 8,000, medium to 32,000, geostationary within 2,500 km of 35,786, far for the rest, and no rule on eccentricity", () => {
+  assert.deepEqual(CLASS_LIMITS, { leoApogeeKm: 2_000, outerApogeeKm: 8_000, meoApogeeKm: 32_000, geoBandKm: 2_500 });
+  assert.deepEqual([...ORBIT_CLASSES], ["leo", "outer", "meo", "geo", "far"]);
   assert.equal(orbitClass(shape(400, 420)), "leo");
   assert.equal(orbitClass(shape(500, 1_999.9)), "leo");
-  assert.equal(orbitClass(shape(500, 2_000)), "other", "a lowest point under 2,000 km and a highest of 2,000 is not low and not medium");
-  assert.equal(orbitClass(shape(2_000, 3_000)), "meo");
-  assert.equal(orbitClass(shape(19_000, 34_285)), "meo");
-  assert.equal(orbitClass(shape(19_000, 34_286)), "other");
-  assert.equal(orbitClass(shape(34_286, 37_286)), "geo");
-  assert.equal(orbitClass(shape(34_285, 37_286)), "other");
-  assert.equal(orbitClass(shape(34_286, 37_287)), "other");
-  assert.equal(orbitClass(shape(38_000, 39_000)), "other", "above the geostationary belt");
-  assert.equal(orbitClass({ ...shape(500, 600), eccentricity: 0.25 }), "heo");
-  assert.equal(orbitClass({ ...shape(500, 600), eccentricity: 0.2499 }), "leo");
-  assert.equal(orbitClass(shape(600, 39_000)), "heo", "a transfer orbit swings far out");
+  assert.equal(orbitClass(shape(500, 2_000)), "far", "a lowest point under 2,000 km and a highest of 2,000 is not low and not medium: it swings out");
+  assert.equal(orbitClass(shape(2_000, 3_000)), "outer");
+  assert.equal(orbitClass(shape(2_000, 7_999)), "outer");
+  assert.equal(orbitClass(shape(2_000, 8_000)), "meo");
+  assert.equal(orbitClass(shape(19_000, 31_999)), "meo");
+  assert.equal(orbitClass(shape(19_000, 32_000)), "far");
+  assert.equal(orbitClass(shape(33_287, 38_285)), "geo");
+  assert.equal(orbitClass(shape(33_286, 37_286)), "far", "a lowest point 2,500 km below the ring is not in the belt");
+  assert.equal(orbitClass(shape(34_000, 38_286)), "far", "nor a highest point 2,500 km above it");
+  assert.equal(orbitClass(shape(38_000, 39_000)), "far", "above the geostationary belt");
+  assert.equal(orbitClass({ ...shape(500, 600), eccentricity: 0.25 }), "leo", "the eccentricity says nothing: a low orbit is low");
+  assert.equal(orbitClass({ ...shape(2_000, 20_000), eccentricity: 0.6 }), "meo");
+  assert.equal(orbitClass(shape(600, 39_000)), "far", "a transfer orbit swings far out");
 });
 
 test("classes of the sample's objects, from their elements alone", () => {
@@ -44,7 +47,7 @@ test("classes of the sample's objects, from their elements alone", () => {
   assert.equal(classes[20580], "leo");
   assert.equal(classes[26407], "meo");
   assert.equal(classes[900001], "geo");
-  assert.equal(classes[1000002], "heo");
+  assert.equal(classes[1000002], "far");
   assert.equal(classes[345678], "leo");
   assert.equal(classOfElements(0, 0), null);
 });

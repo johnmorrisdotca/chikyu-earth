@@ -172,7 +172,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     if (epoch > newestEpochMs) newestEpochMs = epoch;
     rate[i] = (set.MEAN_MOTION * 2 * Math.PI) / DAY_MS;
     if (set.ECCENTRICITY >= ECCENTRIC_FROM) eccentric.push(i);
-    const kind = classOfElements(set.MEAN_MOTION, set.ECCENTRICITY) ?? "other";
+    const kind = classOfElements(set.MEAN_MOTION, set.ECCENTRICITY) ?? "far";
     const hex = Number.parseInt(CLASS_COLOURS[kind].slice(1), 16);
     classColour[i * 3] = ((hex >> 16) & 255) / 255;
     classColour[i * 3 + 1] = ((hex >> 8) & 255) / 255;

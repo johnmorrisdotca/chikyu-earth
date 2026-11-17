@@ -74,7 +74,7 @@ export const KIND_LABELS: Readonly<Record<ObjectKind, { en: string; ja: string }
  * console.log(value);
  * ```
  */
-export type OrbitClass = "leo" | "meo" | "geo" | "heo" | "other";
+export type OrbitClass = "leo" | "outer" | "meo" | "geo" | "far";
 
 /**
  * The five classes, in the order a legend lists them.
@@ -86,7 +86,7 @@ export type OrbitClass = "leo" | "meo" | "geo" | "heo" | "other";
  * console.log(ORBIT_CLASSES.join(" "));
  * ```
  */
-export const ORBIT_CLASSES: readonly OrbitClass[] = ["leo", "meo", "geo", "heo", "other"];
+export const ORBIT_CLASSES: readonly OrbitClass[] = ["leo", "outer", "meo", "geo", "far"];
 
 /**
  * The words for each class, in English and Japanese, with the rule that makes it (heights above the mean Earth radius).
@@ -100,14 +100,14 @@ export const ORBIT_CLASSES: readonly OrbitClass[] = ["leo", "meo", "geo", "heo",
  */
 export const CLASS_LABELS: Readonly<Record<OrbitClass, { en: string; ja: string; rule: string }>> = {
   leo: { en: "Low orbit", ja: "低軌道", rule: "highest point under 2,000 km" },
-  meo: { en: "Medium orbit", ja: "中軌道", rule: "lowest point 2,000 km or more, highest point under 34,286 km" },
-  geo: { en: "Geostationary", ja: "静止軌道", rule: "35,786 km, within 1,500 km, nearly circular" },
-  heo: { en: "Highly elliptical", ja: "高楕円軌道", rule: "eccentricity 0.25 or more" },
-  other: { en: "Other", ja: "その他", rule: "none of the above (above the geostationary belt, or between the classes)" },
+  outer: { en: "Low orbit, outer edge", ja: "低軌道の外縁", rule: "lowest point 2,000 km or more, highest point under 8,000 km" },
+  meo: { en: "Medium orbit", ja: "中軌道", rule: "lowest point 2,000 km or more, highest point 8,000 km or more and under 32,000 km" },
+  geo: { en: "Geostationary", ja: "静止軌道", rule: "35,786 km, both points within 2,500 km" },
+  far: { en: "Far orbits", ja: "遠方の長楕円軌道", rule: "every orbit the others leave: stretched ones that swing far out, and any above the belt" },
 };
 
 /**
- * The colour of each class on a dark background: green, yellow, red, violet and grey.
+ * The colour of each class on a dark background: green, blue, yellow, red and violet.
  *
  * @example
  * ```ts
@@ -116,7 +116,7 @@ export const CLASS_LABELS: Readonly<Record<OrbitClass, { en: string; ja: string;
  * console.log(CLASS_COLOURS.geo);
  * ```
  */
-export const CLASS_COLOURS: Readonly<Record<OrbitClass, string>> = { leo: "#5dd6a2", meo: "#ffd166", geo: "#ef476f", heo: "#b388eb", other: "#9aa5b1" };
+export const CLASS_COLOURS: Readonly<Record<OrbitClass, string>> = { leo: "#5dd6a2", outer: "#4cc9f0", meo: "#ffd166", geo: "#ef476f", far: "#b388eb" };
 
 /**
  * The colour of each kind on a dark background: cyan payloads, orange rocket bodies, grey debris and pale unknowns.

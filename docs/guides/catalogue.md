@@ -28,12 +28,12 @@ const file = await unpackAny(await gzipBytes(packCatalogue(records, { group: "ex
 console.log(file.count, file.norad[1], file.recordAt(1).owner, legend("kind", "en").map((line) => line.label).join(", "));
 ```
 
-- **The class of an orbit** comes from two numbers every element set has, its mean motion and its eccentricity: `classOfElements(meanMotion, eccentricity)`, or `orbitShape` then `orbitClass` when you want the heights too. The thresholds are ours, and `CLASS_LIMITS` and `CLASS_LABELS` state them. Heights are above the mean Earth radius of 6,371 km.
-  - **Highly elliptical** (`heo`): an eccentricity of 0.25 or more, whatever the heights.
+- **The class of an orbit** comes from two numbers every element set has, its mean motion and its eccentricity: `classOfElements(meanMotion, eccentricity)`, or `orbitShape` then `orbitClass` when you want the heights too. The thresholds are the ones the Space Program X site puts its orbit levels at, and `CLASS_LIMITS` and `CLASS_LABELS` state them. There is no rule on the eccentricity: a low orbit is low however oval it is. Heights are above the mean Earth radius of 6,371 km.
   - **Low** (`leo`): the highest point is under 2,000 km.
-  - **Geostationary** (`geo`): both the lowest and the highest point are within 1,500 km of 35,786 km.
-  - **Medium** (`meo`): the lowest point is 2,000 km or more and the highest is under 34,286 km, which takes in the navigation satellites.
-  - **Other**: what is left, above the geostationary belt or between the classes.
+  - **Low orbit, outer edge** (`outer`): the lowest point is 2,000 km or more and the highest is under 8,000 km.
+  - **Medium** (`meo`): the lowest point is 2,000 km or more and the highest is 8,000 km or more and under 32,000 km, which takes in the navigation satellites.
+  - **Geostationary** (`geo`): both the lowest and the highest point are within 2,500 km of 35,786 km.
+  - **Far orbits** (`far`): every orbit those leave, the stretched ones that swing far out and any beyond the geostationary belt (35,786 km, within 2,500 km).
 - **The kind of an object**, from the catalogue's own object type: `readKind` takes Space-Track's `PAYLOAD`, `ROCKET BODY`, `DEBRIS` and `TBA`, or the short codes `PAY`, `R/B`, `DEB` and `UNK`. Anything else is unknown.
 - **A colour and a legend** for each class and kind, in English or Japanese: `legend("class", lang)` and `legend("kind", lang)` give the labels and colours in the order a legend lists them, and `CLASS_COLOURS` and `KIND_COLOURS` are the colours themselves, chosen for a dark background.
 - **Fleets**: `FLEETS` lists Starlink, OneWeb, GPS, Galileo, GLONASS, BeiDou, Iridium and the space stations by the pattern their names follow. `fleetOf(name, kind)` says which one an object belongs to (only payloads belong to a fleet) and `countFleets` counts them, which is the "N of M" a filter shows. A satellite whose name does not say its fleet is not matched.

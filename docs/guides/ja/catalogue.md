@@ -28,12 +28,12 @@ const file = await unpackAny(await gzipBytes(packCatalogue(records, { group: "ex
 console.log(file.count, file.norad[1], file.recordAt(1).owner, legend("kind", "en").map((line) => line.label).join(", "));
 ```
 
-- **軌道の分類**は、どの要素にもある2つの数、平均運動と離心率から決まります。`classOfElements(meanMotion, eccentricity)` を使います。高さも知りたいときは `orbitShape` から `orbitClass` へ進みます。しきい値はこのパッケージが決めたもので、`CLASS_LIMITS` と `CLASS_LABELS` に書いてあります。高さは、平均半径 6,371 km の地球の表面からの高さです。
-  - **高楕円軌道**（`heo`）: 離心率が 0.25 以上。高さは問いません。
+- **軌道の分類**は、どの要素にもある2つの数、平均運動と離心率から決まります。`classOfElements(meanMotion, eccentricity)` を使います。高さも知りたいときは `orbitShape` から `orbitClass` へ進みます。しきい値は、Space Program X のサイトが軌道を「レベル」に分けるときの値と同じです。`CLASS_LIMITS` と `CLASS_LABELS` に書いてあります。離心率そのものに基準はありません。軌道がどれだけ細長くても、最も高い点が 2,000 km 未満なら低軌道です。高さは、平均半径 6,371 km の地球の表面からの高さです。
   - **低軌道**（`leo`）: 最も高い点が 2,000 km 未満。
-  - **静止軌道**（`geo`）: 最も低い点も最も高い点も、高度 35,786 km ±1,500 km の範囲内。
-  - **中軌道**（`meo`）: 最も低い点が 2,000 km 以上で、最も高い点が 34,286 km 未満。測位衛星がここに入ります。
-  - **その他**（`other`）: 上のどれにも当てはまらないもの。静止軌道のさらに外側や、分類のあいだにあるものです。
+  - **低軌道の外縁**（`outer`）: 最も低い点が 2,000 km 以上で、最も高い点が 8,000 km 未満。
+  - **中軌道**（`meo`）: 最も低い点が 2,000 km 以上で、最も高い点が 8,000 km 以上 32,000 km 未満。測位衛星がここに入ります。
+  - **静止軌道**（`geo`）: 最も低い点も最も高い点も、高度 35,786 km ±2,500 km の範囲内。
+  - **遠方の長楕円軌道**（`far`）: 上のどれにも当てはまらないもの。遠くまで大きく振れる細長い軌道や、静止軌道の範囲（高度 35,786 km ±2,500 km）より外側の軌道です。
 - **物体の種類**は、カタログの物体種別から決めます。`readKind` は Space-Track の `PAYLOAD`、`ROCKET BODY`、`DEBRIS`、`TBA`、または短い記号 `PAY`、`R/B`、`DEB`、`UNK` を読みます。それ以外は種類不明です。
 - **色と凡例**は、軌道の分類ごと、種類ごとにあります。`legend("class", lang)` と `legend("kind", lang)` が、凡例に並べる順にラベルと色を返します。言語は `en` か `ja` です。`CLASS_COLOURS` と `KIND_COLOURS` は暗い背景向けに選んだ色そのものです。
 - **衛星群**: `FLEETS` は、Starlink、OneWeb、GPS、Galileo、GLONASS、BeiDou、Iridium、宇宙ステーションを、名前のパターンで見分けます。`fleetOf(name, kind)` はその物体がどの群に属するかを返します（群に入るのは人工衛星だけです）。`countFleets` は群ごとの数を数えます。フィルターに表示される「N / M」は、この数です。名前から群がわからない衛星は、どの群にも入りません。
