@@ -8,6 +8,7 @@ const BLACK = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAADElEQVR4nGNgGB4AA
 const THROTTLE = Number(process.env["PHOTOS_THROTTLE"] ?? 0);
 const flat = (page: Page) => page.locator("chikyu-flat");
 type Flat = HTMLElement & { placeOf(id: number): { x: number; y: number } | null; selected: number | null };
+type Stats = { stats: { draws: number; dots: number } };
 
 /** Answer every request to NASA's service: the first `black` of them with a black picture, then green ones. Returns the days asked for, in order. */
 async function fakeNasa(page: Page, black: number): Promise<string[]> {
@@ -27,13 +28,16 @@ async function open(page: Page): Promise<void> {
   if (THROTTLE > 1 && page.context().browser()?.browserType().name() === "chromium") await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   await page.goto("/chikyu-earth/flat.html");
   await page.locator("body[data-ready=true]").waitFor({ timeout: 30_000 });
-  await flat(page).evaluate((el, at) => {
+  const before = await flat(page).evaluate((el, at) => {
     el.setAttribute("speed", "0");
     el.setAttribute("time", at);
+    return (el as unknown as Stats).stats.draws;
   }, AT);
   await page.locator(".flat-photo").scrollIntoViewIfNeeded();
   await flat(page).evaluate((el) => el.scrollIntoView({ block: "start" }));
-  await expect.poll(() => flat(page).evaluate((el) => (el as unknown as { stats: { dots: number } }).stats.dots)).toBeGreaterThan(20);
+  // on a phone the map is below the first screen and draws the held moment only once in sight: wait for that draw, as the dots of the draw before it are where the satellites are now, not at AT
+  await expect.poll(() => flat(page).evaluate((el) => (el as unknown as Stats).stats.draws)).toBeGreaterThan(before);
+  await expect.poll(() => flat(page).evaluate((el) => (el as unknown as Stats).stats.dots)).toBeGreaterThan(20);
 }
 
 /** Tap the GPS satellite nearest the middle of the map. */

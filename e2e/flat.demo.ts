@@ -22,12 +22,15 @@ const read = <T>(page: Page, fn: (el: Flat) => T): Promise<T> => flat(page).eval
 async function open(page: Page, query = ""): Promise<void> {
   await page.goto(`/chikyu-earth/flat.html${query}`);
   await page.locator("body[data-ready=true]").waitFor({ timeout: 30_000 });
-  await flat(page).evaluate((el, at) => {
+  const before = await flat(page).evaluate((el, at) => {
     el.setAttribute("speed", "0");
     el.setAttribute("time", at);
+    return (el as Flat).stats.draws;
   }, AT);
   // on a phone the map is below the page's first screen, and an element out of sight draws nothing
   await flat(page).evaluate((el) => el.scrollIntoView({ block: "start" }));
+  // so the held moment is drawn only once the map is in sight: wait for that draw, as the dots of the draw before it are where the satellites are now, not at AT
+  await expect.poll(() => read(page, (el) => el.stats.draws)).toBeGreaterThan(before);
   await expect.poll(() => read(page, (el) => el.stats.dots)).toBeGreaterThan(20);
 }
 
