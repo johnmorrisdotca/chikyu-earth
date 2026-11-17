@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.55.0 - 2026-11-17
+
 - **Real satellite pictures of the ground under a point: `@johnmorrisdotca/chikyu-earth/photos`** (MODULES-1368). Pure functions that make the address of a NASA GIBS (Worldview) true-colour snapshot of a box around a point, so a page can show the ground under a satellite or a ride. The reader's browser fetches the picture from NASA (no key, no account, no server cache); about 250 m a pixel, clouds left in.
   - **Functions.** `photoUrl({ lat, lon, sizeKm, date, widthPx })` (a WMS GetMap request, EPSG:4326, JPEG; a box over the date line or a pole is moved inside the world), `photoPieces` (the exact box as one request, or two across the date line), `photoBox`, `photoLayer`, `photoFallbacks` (the days to try, newest first, when a day's picture is black) and `photoCredit(lang, full?)` (the short credit line, English and Japanese, or NASA's own acknowledgement sentence). The layer is NOAA-20 VIIRS from 2018-01-05, then Suomi NPP VIIRS (2015-11-24 to 2026-11-02, when it ends) and MODIS Terra (from 2000-02-24); before that there is no picture.
   - **Demo.** The flat map page has "The ground under it": choose a satellite, pick 100, 300 or 1,000 km, press the button, and the picture of the place under it appears with the credit line. English and Japanese.
