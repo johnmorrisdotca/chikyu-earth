@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.58.0 - 2026-11-17
 
 - **A fast clock's streaks turn about the plane of the moment shown** (MODULES-1476). Above 60 times real time `arc()` turned each pinned place about a normal worked out once from the element set's own `RA_OF_ASC_NODE` and `INCLINATION`, so days from the elements (a low orbit's plane turns about 5 degrees a day) the dot left its orbit between two pins: 600 s after its pin the ISS's place was 3,049 km from `exact()`'s at 20 days from its elements and 5,970 km at 400. The axis is now the pinned place crossed with SGP4's velocity there, worked out once for each pin and not in `arc()`, with no allocation in the frame: the same ISS is 13.6 km off at 20 days and 5.4 km at 400 (what is left is the mean motion standing in for the true rate along the orbit). At the page's own pin rate (about once a second) the worst place of the recorded stations is 0.4 km off. Tests: `arc` within 1 km of `exact` at the pin rate and within 20 km 600 s after a pin, 20 and 400 days from the elements, and no SGP4 call or heap growth in a frame between pins. No change to the API.
 - **A satellite's history, and the Observe view** (MODULES-1118). Data only: the page brings the element sets, chikyu fetches nothing.
