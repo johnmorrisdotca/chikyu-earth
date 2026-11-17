@@ -282,6 +282,61 @@ test("a capped streak ends at the satellite and points back along its motion, fo
   }
 });
 
+/**
+ * The most `arc` may stray from `exact`, in kilometres, for the page's own pin rate (every satellite is pinned again about once a second, `PIN_PERIOD_MS`): measured after the fix at 0.4 km worst over the stations, 20 and 400 days from their elements; 1 km states it with a margin of 2.5.
+ * Before the fix the turn's axis was the elements' own plane and this was 342 km a minute after the pin (20 days).
+ */
+const ARC_MAX_ERROR_KM = 1;
+/** The same, for the ISS a long 600 s after its pin (the case in MODULES-1476): measured 13.6 km at 20 days and 5.4 km at 400 after the fix (3,049 km and 5,970 km before); 20 km states it. The rest is the mean motion standing in for the true rate along the orbit, not the axis. */
+const ARC_MAX_ERROR_LONG_KM = 20;
+
+test("arc stays within a stated distance of exact between pins, 20 and 400 days from the elements (the turn's axis comes from the pinned place and its velocity, not from the elements' own plane)", () => {
+  const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
+  const epoch = Date.parse(`${base.EPOCH}Z`);
+  const km = 6371;
+  const gap = (positions: Float32Array, i: number, one: Float64Array): number => Math.hypot(positions[i * 3]! - one[0]!, positions[i * 3 + 1]! - one[1]!, positions[i * 3 + 2]! - one[2]!) * km;
+  for (const days of [20, 400]) {
+    const group = createSatellites(stations, { estimateFar: true });
+    const t = epoch + days * 86_400_000;
+    const positions = new Float32Array(group.count * 3);
+    const segments = new Float32Array(group.count * 6);
+    const one = new Float64Array(6);
+    const iss = group.sets.findIndex((set) => set.NORAD_CAT_ID === 25544);
+    group.pin(t);
+    let checked = 0;
+    for (const after of [0, PIN_PERIOD_MS]) {
+      group.arc(t + after, 120_000, positions, segments);
+      for (let i = 0; i < group.count; i += 1) {
+        if (group.sets[i]!.ECCENTRICITY >= ECCENTRIC_FROM || !group.visible(i) || !group.exact(i, t + after, one)) continue;
+        const error = gap(positions, i, one);
+        assert.ok(error <= ARC_MAX_ERROR_KM, `${group.sets[i]!.OBJECT_NAME}, ${days} days from its elements, ${after / 1000} s after its pin: ${error.toFixed(2)} km from SGP4 (limit ${ARC_MAX_ERROR_KM} km)`);
+        checked += 1;
+      }
+    }
+    assert.ok(checked >= 2 * 10, `${days} days: ${checked} places checked`);
+    group.arc(t + 600_000, 120_000, positions, segments);
+    assert.ok(group.exact(iss, t + 600_000, one));
+    const long = gap(positions, iss, one);
+    assert.ok(long <= ARC_MAX_ERROR_LONG_KM, `the ISS, ${days} days from its elements, 600 s after its pin: ${long.toFixed(1)} km from SGP4 (limit ${ARC_MAX_ERROR_LONG_KM} km)`);
+  }
+});
+
+test("arc works out the orbit's axis once for each pin, not for each call: no SGP4 call and no allocation in a frame", () => {
+  const group = createSatellites(stations);
+  const t = ISS_EPOCH + 3_600_000;
+  const positions = new Float32Array(group.count * 3);
+  const segments = new Float32Array(group.count * 6);
+  group.pin(t);
+  group.arc(t, 120_000, positions, segments);
+  const eccentric = group.sets.filter((set) => set.ECCENTRICITY >= ECCENTRIC_FROM).length;
+  const before = group.propagations;
+  for (let frame = 1; frame <= 50; frame += 1) group.arc(t + frame * 16, 120_000, positions, segments);
+  assert.equal(group.propagations - before, 50 * eccentric * 2, "a frame between pins calls SGP4 only for the eccentric orbits");
+  const heap = process.memoryUsage().heapUsed;
+  for (let frame = 0; frame < 20_000; frame += 1) group.arc(t + frame * 16, 120_000, positions, segments);
+  assert.ok(process.memoryUsage().heapUsed - heap < 8_000_000, "20,000 frames grow the heap by less than 8 MB (no per-call allocation)");
+});
+
 test("a highly eccentric orbit is capped too, by the speed SGP4 gives it, whether it is fast at its low point or slow at its high one", () => {
   const base = stations.find((set) => set.NORAD_CAT_ID === 25544)!;
   const molniya = { ...base, NORAD_CAT_ID: 9, OBJECT_NAME: "MOLNIYA", MEAN_MOTION: 2.00614, ECCENTRICITY: 0.74, INCLINATION: 63.4, ARG_OF_PERICENTER: 270, MEAN_ANOMALY: 0, BSTAR: 0, MEAN_MOTION_DOT: 0 };
