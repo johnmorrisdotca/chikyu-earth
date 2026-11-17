@@ -589,6 +589,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Printable sheets](docs/guides/printable-sheets.md) | The globe, a world map, my country, day and night and the seasons to print and colour |
 | [Why two packages](docs/guides/two-packages.md) | This package and wakusei-planets: which to install, alone and together |
 | [How it stays light](docs/guides/how-it-works.md) | The budget |
+| [How accurate it is](docs/guides/accuracy.md) | The Sun's overhead point, the day and night line and SGP4, each measured against a published reference, with its source and limit |
 | [Architecture](docs/guides/architecture.md) | How the layers fit |
 | [Troubleshooting](docs/guides/troubleshooting.md) | Something does not appear |
 | [Upgrading](docs/guides/upgrading.md) | What to act on between versions |
