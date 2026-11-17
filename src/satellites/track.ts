@@ -1,6 +1,6 @@
 // SGP4 for a group of satellites, kept cheap: the whole group is run at two moments a step apart and every position in between is an interpolation, so the cost is one batch a step
 // (about once a second), never one a frame. satellite.js (MIT) does the SGP4 itself; this file never touches the screen and imports on a server.
-import { json2satrec, sgp4 } from "satellite.js";
+import { constants, json2satrec, sgp4 } from "satellite.js";
 import { CLASS_COLOURS } from "../catalogue/kinds.ts";
 import { classOfElements } from "../catalogue/orbit.ts";
 import { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS } from "./limits.ts";
@@ -37,12 +37,17 @@ export interface SatellitesOptions {
   /**
    * Keep placing a satellite beyond `maxAgeDays` from its element set, as an estimate (off by default): the same elements carried forward or back by the same SGP4 code, where the satellite would be had its orbit not changed.
    * Never before its launch date or after its decay date when the elements carry them (`LAUNCH_DATE`, `DECAY_DATE`; else the launch year in `OBJECT_ID` marks the earliest), and a satellite that SGP4 cannot carry that far, or brings down below about 120 km, is left out.
+   *
+   * `true` carries the elements on with their air drag left in, so with nobody to boost it a low satellite sinks in the model and is left out some months or years on. `"steady"` switches the drag off beyond `maxAgeDays`: the satellite keeps the height and
+   * shape its orbit had on that day, for as long as the clock runs, while the orbit's plane and low point go on turning as the Earth's flattening turns them. It is the satellite's usual orbit, not a prediction. Up to `maxAgeDays` the two are the same, and the place does not jump where one hands over to the other.
    */
-  estimateFar?: boolean;
+  estimateFar?: boolean | "steady";
 }
 
 type Rec = ReturnType<typeof json2satrec>;
-type Sample = { position: { x: number; y: number; z: number } | false; velocity: { x: number; y: number; z: number } | false } | null;
+type Sample = { position: { x: number; y: number; z: number } | false; velocity: { x: number; y: number; z: number } | false; meanElements: { em: number; im: number; Om: number; om: number; mm: number; nm: number } } | null;
+/** A satellite's orbit with the drag off, for `estimateFar: "steady"`: the record, the moment it starts from, and how far its first place is from the place the elements give at that moment (kilometres, TEME). */
+type Steady = { rec: Rec; startMs: number; dx: number; dy: number; dz: number };
 
 /** A date from the catalogue (`2026-11-02`, or with a time), in milliseconds, or NaN. A bare date is taken as the start of that day UTC. */
 const dateOf = (text: string | undefined): number => {
@@ -54,6 +59,33 @@ const dateOf = (text: string | undefined): number => {
 };
 /** The height, in kilometres above the mean Earth radius, below which a satellite carried far from its elements is taken to have come down: SGP4 has nothing true to say there, and it is never drawn inside the Earth. */
 const LOWEST_ESTIMATE_KM = 120;
+/** How long after the hand-over to a steady orbit what is left of the gap between the two records is faded out, so the place never jumps. The gap is nothing for a low orbit and a few kilometres for a high one that carries a drag term. */
+const STEADY_FADE_MS = DAY_MS;
+/**
+ * How far the mean motion SGP4 has reached at the hand-over may be from the elements' own, as a ratio either way, for a steady orbit to be made from it. Thirty days of real drag or of an engine raising an orbit change it by a few hundredths;
+ * a large drag term run that long can run away to an orbit many times higher, which is the arithmetic and not the satellite, and is never held.
+ */
+const STEADY_MOST_CHANGE = 1.25;
+const DEGREES = 180 / Math.PI;
+const wholeTurn = (radians: number): number => (((radians * DEGREES) % 360) + 360) % 360;
+
+/**
+ * The mean motion an element set must state (Kozai's, radians a minute) for SGP4 to start from the mean motion `nm` (Brouwer's, which is what SGP4 itself works in and gives back).
+ * SGP4 turns the first into the second when it starts; this is that step run backwards, and it settles in a few rounds because the difference is about a thousandth.
+ */
+const statedMeanMotion = (nm: number, eccentricity: number, inclination: number): number => {
+  const flat = 1 - eccentricity * eccentricity;
+  const cos = Math.cos(inclination);
+  const d1 = (0.75 * constants.j2 * (3 * cos * cos - 1)) / (Math.sqrt(flat) * flat);
+  let stated = nm;
+  for (let round = 0; round < 6; round += 1) {
+    const ak = Math.pow(constants.xke / stated, 2 / 3);
+    const del = d1 / (ak * ak);
+    const adel = ak * (1 - del * del - del * (1 / 3 + (134 * del * del) / 81));
+    stated = nm * (1 + d1 / (adel * adel));
+  }
+  return stated;
+};
 
 const epochOf = (text: string): number => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`);
 
@@ -172,7 +204,8 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   let propagations = 0;
   let placed = 0;
   const timing = { lastBatchMs: 0, maxBatchMs: 0 };
-  let estimate = options.estimateFar === true;
+  let steady = options.estimateFar === "steady";
+  let estimate = steady || options.estimateFar === true;
   let estimatedCount = 0;
   /** Whether a satellite is placed at a moment: within `maxAgeDays` of its elements, or, when far moments are estimated, inside the time it was in orbit. */
   const usableAt = (i: number, ms: number): boolean => {
@@ -182,6 +215,61 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const isFar = (i: number, ms: number): boolean => estimate && Math.abs(ms - epochs[i]!) > maxAgeMs;
   /** A carried-far position that is down in the air or inside the Earth is no estimate (Earth radii). */
   const tooLow = (x: number, y: number, z: number): boolean => Math.hypot(x, y, z) < 1 + LOWEST_ESTIMATE_KM / EARTH_RADIUS_KM;
+  // each satellite's steady orbit after and before its elements, made the first time it is asked for (null: it cannot be made)
+  const steadyAfter: (Steady | null | undefined)[] = [];
+  const steadyBefore: (Steady | null | undefined)[] = [];
+  /**
+   * The orbit satellite `i` keeps beyond `maxAgeDays` with the drag off. It starts at that day from the mean elements SGP4 itself has reached there, so the two records give the same place at the hand-over
+   * (far under a millimetre for a low orbit; a high orbit starts its Sun and Moon terms again, which leaves a few kilometres, faded out over `STEADY_FADE_MS`).
+   * Elements with no drag term are already steady and are used as they are. Null when the elements cannot be carried to that day, or have run away by then (`STEADY_MOST_CHANGE`).
+   */
+  const makeSteady = (i: number, after: boolean): Steady | null => {
+    const rec = recs[i]!;
+    const epoch = epochs[i]!;
+    if (rec.bstar === 0) return { rec, startMs: epoch, dx: 0, dy: 0, dz: 0 };
+    const startMs = Math.round(epoch + (after ? maxAgeMs : -maxAgeMs));
+    const last = sgp4(rec, (startMs - epoch) / 60_000) as Sample;
+    if (!last || !last.position || !Number.isFinite(last.position.x)) return null;
+    const mean = last.meanElements;
+    const change = mean.nm / rec.no;
+    if (!(change <= STEADY_MOST_CHANGE && change >= 1 / STEADY_MOST_CHANGE)) return null;
+    try {
+      const held = json2satrec({
+        ...usable[i]!,
+        EPOCH: new Date(startMs).toISOString(),
+        MEAN_MOTION: statedMeanMotion(mean.nm, mean.em, mean.im) * constants.xpdotp,
+        ECCENTRICITY: mean.em,
+        INCLINATION: mean.im * DEGREES,
+        RA_OF_ASC_NODE: wholeTurn(mean.Om),
+        ARG_OF_PERICENTER: wholeTurn(mean.om),
+        MEAN_ANOMALY: wholeTurn(mean.mm),
+        BSTAR: 0,
+        MEAN_MOTION_DOT: 0,
+        MEAN_MOTION_DDOT: 0,
+      } as never);
+      const first = sgp4(held, 0) as Sample;
+      if (!first || !first.position || held.error !== 0 || !Number.isFinite(first.position.x)) return null;
+      return { rec: held, startMs, dx: last.position.x - first.position.x, dy: last.position.y - first.position.y, dz: last.position.z - first.position.z };
+    } catch {
+      return null;
+    }
+  };
+  /** SGP4 for satellite `i` at one moment: from its elements, or, beyond `maxAgeDays` with `estimateFar: "steady"`, from its steady orbit. Null, or no position, when it cannot be placed. */
+  const carried = (i: number, ms: number): Sample => {
+    const away = ms - epochs[i]!;
+    if (!steady || Math.abs(away) <= maxAgeMs) return sgp4(recs[i]!, away / 60_000) as Sample;
+    const made = away > 0 ? steadyAfter : steadyBefore;
+    const held = made[i] === undefined ? (made[i] = makeSteady(i, away > 0)) : made[i]!;
+    if (held === null) return null;
+    const result = sgp4(held.rec, (ms - held.startMs) / 60_000) as Sample;
+    const fade = 1 - Math.abs(ms - held.startMs) / STEADY_FADE_MS;
+    if (fade > 0 && result && result.position) {
+      result.position.x += held.dx * fade;
+      result.position.y += held.dy * fade;
+      result.position.z += held.dz * fade;
+    }
+    return result;
+  };
   const pinned = new Float32Array(n * 3);
   const pinOk = new Uint8Array(n);
   // when each satellite was last pinned (NaN: never), so a group can be pinned a slice at a time and `arc` turns each from its own pin
@@ -208,13 +296,12 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     for (let i = from; i < to; i += 1) {
       // an eccentric orbit is placed by SGP4 at every frame by `arc` and never read from a pin
       if (skipEccentric && isEccentric[i] === 1) continue;
-      const epoch = epochs[i]!;
       if (!usableAt(i, ms)) {
         ok[i] = 0;
         continue;
       }
       propagations += 1;
-      const result = sgp4(recs[i]!, (ms - epoch) / 60_000) as Sample;
+      const result = carried(i, ms);
       const p = result && result.position;
       if (!p || !Number.isFinite(p.x) || (isFar(i, ms) && tooLow(p.x / EARTH_RADIUS_KM, p.y / EARTH_RADIUS_KM, p.z / EARTH_RADIUS_KM))) {
         ok[i] = 0;
@@ -230,10 +317,9 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   };
 
   const exactAt = (index: number, ms: number, out: Float64Array): boolean => {
-    const epoch = epochs[index];
-    if (epoch === undefined || !usableAt(index, ms)) return false;
+    if (epochs[index] === undefined || !usableAt(index, ms)) return false;
     propagations += 1;
-    const result = sgp4(recs[index]!, (ms - epoch) / 60_000) as Sample;
+    const result = carried(index, ms);
     if (!result || !result.position || !result.velocity || !Number.isFinite(result.position.x)) return false;
     if (isFar(index, ms) && tooLow(result.position.x / EARTH_RADIUS_KM, result.position.y / EARTH_RADIUS_KM, result.position.z / EARTH_RADIUS_KM)) return false;
     out[0] = result.position.x / EARTH_RADIUS_KM;
@@ -268,11 +354,12 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       return fastest;
     },
     get estimateFar() {
-      return estimate;
+      return steady ? "steady" : estimate;
     },
     set estimateFar(value) {
-      if (value === estimate) return;
-      estimate = value;
+      if (value === (steady ? "steady" : estimate)) return;
+      steady = value === "steady";
+      estimate = steady || value === true;
       // what was placed was placed under the other rule: place everything again, and draw each satellite's look again
       ready = false;
       pinnedCount = 0;

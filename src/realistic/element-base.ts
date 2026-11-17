@@ -1525,6 +1525,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
    * Keep placing satellites that are far from their element sets, as an estimate (the attribute `estimate-far`, off unless set; `estimate-far="off"` is off). A satellite is left out when the moment shown is more than `maxAgeDays` (30) from its elements; on, it is carried forward or back by the same SGP4 code
    * instead, and drawn lighter than a dimmed one. **An estimate is where the satellite would be if its orbit had not changed since the elements were taken.** It is worst for low orbits (drag changes them within days, and a manoeuvre moves the satellite along its path, so after weeks the estimate can be far along the orbit from the truth, and a satellite that has re-entered is not there at all) and for a long time away; a high orbit changes slowly and is close for months. Never before a satellite's launch or after its decay when its elements carry `LAUNCH_DATE` and `DECAY_DATE` (else the year of its `OBJECT_ID` is the earliest);
    * one SGP4 cannot carry that far, or brings down below about 120 km, is left out and is not counted as placed. Each estimated satellite is `estimated: true`, with `estimatedDays`, in `placeSatellite`, `satelliteInfo`, `chikyu-satellite-visibility` and `chikyu-satellite-click`, and `stats.satellites.estimated` counts them.
+   * **`estimate-far="steady"`** (the property set to `"steady"`) switches the air drag off beyond `maxAgeDays`, so a satellite keeps its usual orbit for as long as the clock runs instead of sinking in the model and being left out; the place does not jump where the drag is switched off.
    * It applies to every group, those the page made with `createSatellites(sets, { estimateFar: true })` too.
    *
    * @example
@@ -1538,11 +1539,14 @@ export class ChikyuEarthRealistic extends HTMLElement {
    * console.log(typeof farFromToday);
    * ```
    */
-  get estimateFar(): boolean {
-    return this.hasAttribute("estimate-far") && this.getAttribute("estimate-far") !== "off";
+  get estimateFar(): boolean | "steady" {
+    const value = this.getAttribute("estimate-far");
+    if (value === null || value === "off") return false;
+    return value.trim().toLowerCase() === "steady" ? "steady" : true;
   }
-  set estimateFar(value: boolean) {
-    if (value) this.setAttribute("estimate-far", "");
+  set estimateFar(value: boolean | "steady") {
+    if (value === "steady") this.setAttribute("estimate-far", "steady");
+    else if (value) this.setAttribute("estimate-far", "");
     else this.removeAttribute("estimate-far");
   }
   /** What an event says of a satellite's place: whether it is an estimate, and how far the moment shown is from its elements' own, in days. */
