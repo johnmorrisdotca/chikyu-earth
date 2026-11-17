@@ -1,5 +1,5 @@
 // Satellites far from today, as an estimate (MODULES-1296): off by default, so a satellite more than 30 days from its elements is left out; with `estimate-far` it is placed by the same orbit code, drawn lighter, and said to be an estimate
-// (with how far from its elements the moment is) in `stats`, `placeSatellite`, `chikyu-satellite-click` and `chikyu-satellite-visibility`. The clock is the test's own: `speed=0` at a moment 36 days after the recorded elements, the
+// (with how far from its elements the moment is) in `stats`, `placeSatellite`, `chikyu-satellite-click` and `chikyu-satellite-visibility`. With `estimate-far="steady"` (MODULES-1366) it keeps its usual orbit, the drag off, and does not sink out of the picture. The clock is the test's own: `speed=0` at a moment 36 days after the recorded elements, the
 // view's controls paused. With ESTIMATE_THROTTLE set the browser's CPU is slowed by that factor, for the repeats under load.
 import { expect, test, type Page } from "@playwright/test";
 import { COUNT_SCRIPT, untilStill } from "./gl.ts";
@@ -12,6 +12,8 @@ const SPACE = "chikyu-space";
 /** The recorded stations' elements are of 2 November 2026: this is 36 days after, past the 30-day limit. */
 const FAR = "2026-12-08T12:00Z";
 const NEAR = "2026-11-22T12:00Z";
+/** Five years after the recorded elements: with their drag left in, some of the stations have sunk out of the picture by then. */
+const YEARS_ON = "2031-11-02T12:00Z";
 const THROTTLE = Number(process.env.ESTIMATE_THROTTLE ?? 0);
 
 interface Stats {
@@ -81,6 +83,21 @@ test("36 days from the elements: left out as ever, and placed as an estimate wit
   const gone = await change(page, (el) => el.removeAttribute("estimate-far"));
   expect(gone.satellites.placed, "off again, left out again").toBe(0);
   expect(gone.satellites.estimated).toBe(0);
+});
+
+test("5 years from the elements: estimate-far=\"steady\" keeps the stations that estimate-far alone has let sink, each still an estimate, and going back lets them go again", async ({ page }) => {
+  await open(page, YEARS_ON);
+  const plain = await change(page, (el) => el.setAttribute("estimate-far", ""));
+  expect(await page.locator(SPACE).evaluate((el) => (el as unknown as { estimateFar: boolean | "steady" }).estimateFar)).toBe(true);
+
+  const steady = await change(page, (el) => el.setAttribute("estimate-far", "steady"));
+  expect(steady.satellites.placed, "on its usual orbit every station is still there").toBeGreaterThan(plain.satellites.placed);
+  expect(steady.satellites.estimated, "and every one is an estimate").toBe(steady.satellites.placed);
+  expect(await page.locator(SPACE).evaluate((el) => (el as unknown as { estimateFar: boolean | "steady" }).estimateFar)).toBe("steady");
+
+  const back = await change(page, (el) => ((el as unknown as { estimateFar: boolean | "steady" }).estimateFar = true));
+  expect(back.satellites.placed, "with the drag left in again, the same stations as before").toBe(plain.satellites.placed);
+  expect(await page.locator(SPACE).getAttribute("estimate-far")).toBe("");
 });
 
 test("20 days from the elements is no estimate with the option on", async ({ page }) => {

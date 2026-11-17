@@ -147,6 +147,7 @@ const sameRef = (a: Ref | null, b: Ref | null): boolean => a === b || (a !== nul
 
 const escape = (text: string): string => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const flag = (value: string | null): boolean => value !== null && !/^(off|false|no|0)$/i.test(value.trim());
+const estimateFarOf = (value: string | null): boolean | "steady" => (value !== null && value.trim().toLowerCase() === "steady" ? "steady" : flag(value));
 const finite = (value: string | null, fallback: number): number => (value === null || value.trim() === "" || !Number.isFinite(Number(value)) ? fallback : Number(value));
 const readTime = (value: string | null): number | "now" => {
   if (value === null || value.trim() === "" || value.trim().toLowerCase() === "now") return "now";
@@ -200,7 +201,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
  * The page gives it orbital elements: `setGroup(id, sets)` for each group (the ids of `SATELLITE_GROUPS` are known by name and colour), or the `elements` property for one, or `elements-src` (an address, read once, through `fetchElements`' rules). The package fetches nothing of its own.
  * Attributes: `center` (the longitude in the middle, degrees; 0, Greenwich, by default; the map wraps round the date line), `home-lon` and `home-lat` (the reader's place: a marker, and the "My place" button, which appear only when given; the element never asks the browser for a place),
  * `group` (which groups to show: `all`, one id, or several with commas), `off` (groups that are loaded but start off when `group` names none, such as `starlink`: the filter chip turns one on), `colour-by` (`group`, or `plane` to colour by orbital plane), `plane` (a plane letter: show that plane only), `footprint` and `track` (draw the coverage circle and the ground track, which is amber in sunlight and blue in the Earth's shadow, a cylinder, with a key: `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow` change the colours; the footprint is of the chosen satellite, or of every one shown when there are 80 or fewer),
- * `paused` (hold the clock and keep the speed; nothing is drawn while it is held), `trails` (`off` for no streaks at a fast clock), `footprint-elevation` (degrees above the horizon the circle is drawn for; 25 like the 3D beam), `selected` (a NORAD number: the chosen satellite), `time` (`now` or an ISO date; live when absent), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `estimate-far`, `shade` (`off` for no night),
+ * `paused` (hold the clock and keep the speed; nothing is drawn while it is held), `trails` (`off` for no streaks at a fast clock), `footprint-elevation` (degrees above the horizon the circle is drawn for; 25 like the 3D beam), `selected` (a NORAD number: the chosen satellite), `time` (`now` or an ISO date; live when absent), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `estimate-far` (`steady` keeps each satellite's usual orbit beyond 30 days from its elements), `shade` (`off` for no night),
  * `dot-size` (pixels), `controls` (`none`, or any of `centre zoom footprint track chips`: the built-in buttons and filter chips shown; all by default) and `lang` (`en` or `ja`; the page's language by default).
  *
  * Events: `chikyu-flat-pick` (a satellite under the pointer, tapped, or reached by the keyboard: a `FlatPick`; `detail.id` is null when a tap lands on nothing and clears the choice), `chikyu-flat-filter` (a chip changed which groups or plane are shown: `{ groups, plane }`),
@@ -300,7 +301,7 @@ export class ChikyuFlat extends HTMLElement {
     }
     if (sets !== null) {
       const sats = createSatellites(sets);
-      sats.estimateFar = flag(this.getAttribute("estimate-far"));
+      sats.estimateFar = estimateFarOf(this.getAttribute("estimate-far"));
       const known = SATELLITE_GROUPS.find((one) => one.id === id);
       const n = sats.count;
       const clusters = clusterPlanes(sats.sets);
@@ -564,7 +565,7 @@ export class ChikyuFlat extends HTMLElement {
     } else if (name === "paused") {
       if (flag(value) !== this.#paused) this.paused = flag(value);
     } else if (name === "time" || name === "speed") this.#readClock();
-    else if (name === "estimate-far") for (const g of this.#groups.values()) g.sats.estimateFar = flag(value);
+    else if (name === "estimate-far") for (const g of this.#groups.values()) g.sats.estimateFar = estimateFarOf(value);
     else if (name === "elements-src") this.#load();
     else if (name === "shade" || name === "dot-size") this.#mapKey = "";
   }

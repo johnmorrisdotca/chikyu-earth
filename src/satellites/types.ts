@@ -84,7 +84,7 @@ export interface SatelliteInfo {
   epochMs: number;
   /** Days between the elements' moment and the moment asked about (negative before it). */
   ageDays: number;
-  /** The moment asked about is beyond `maxAgeDays` from the elements, so the place is an estimate (`estimateFar`): where it would be had its orbit not changed. */
+  /** The moment asked about is beyond `maxAgeDays` from the elements, so the place is an estimate (`estimateFar`): where it would be had its orbit not changed, or, with `estimateFar: "steady"`, on the orbit it had at `maxAgeDays` with the air drag off. */
   estimated: boolean;
   /** How far the moment asked about is from the elements' own, in days, whichever way (0 or more): for a card that says "estimated, 36 days from its last tracking". */
   estimatedDays: number;
@@ -179,8 +179,11 @@ export interface Satellites {
    * the places already held, so it costs nothing at a frame; the view uses it to draw a frame whenever the quickest dot has moved half a pixel. Multiply by the Earth's radius on the screen for pixels.
    */
   readonly fastest: number;
-  /** Place satellites beyond `maxAgeDays` from their elements as an estimate (`estimateFar`, off by default). Setting it places everything again at the next draw. */
-  estimateFar: boolean;
+  /**
+   * Place satellites beyond `maxAgeDays` from their elements as an estimate (`estimateFar`, off by default): `true` with the elements' air drag left in, so a low satellite sinks and is left out in time, `"steady"` with the drag off beyond `maxAgeDays`, so it keeps its usual orbit.
+   * Setting it places everything again at the next draw.
+   */
+  estimateFar: boolean | "steady";
   /** How many satellites the last `at` or `arc` placed as an estimate. */
   readonly estimatedCount: number;
   /** True if satellite `index` was placed by the last `at` or `arc` as an estimate: its moment is beyond `maxAgeDays` from its elements. */
