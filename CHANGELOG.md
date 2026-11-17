@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Finer tiles: a daily layer's end is respected, and another layer stands in** (MODULES-1446). Suomi NPP VIIRS stops at 2026-11-02 in NASA's capabilities, but any later day was still asked of it, so its finer tiles for those days did not come. A layer that has ended is now asked for no day after its last. When the layer asked for has no picture for a day, the first of NOAA-20 VIIRS, NOAA-21 VIIRS, Suomi NPP VIIRS, MODIS Terra and MODIS Aqua that has it is read instead, and a day still to come shows the newest day there is. The credit line says when the picture is not the one asked for ("Shown: NOAA-20 VIIRS, 2026-11-10 (Suomi NPP VIIRS has no picture for that day)."). The days of every daily layer are one table, read on 2026-11-17 (`GIBS_DAYS_READ`), which `/photos` uses too; how to refresh it is beside it in `src/door/gibs.ts`. `gibsTiles` takes `now` (the present moment, `Date.now` when left out). Unit tests of each case from the table (no request to NASA), and a browser test that a past-end day of Suomi NPP draws NOAA-20's ground, not black.
+
 ## 0.55.0 - 2026-11-17
 
 - **Real satellite pictures of the ground under a point: `@johnmorrisdotca/chikyu-earth/photos`** (MODULES-1368). Pure functions that make the address of a NASA GIBS (Worldview) true-colour snapshot of a box around a point, so a page can show the ground under a satellite or a ride. The reader's browser fetches the picture from NASA (no key, no account, no server cache); about 250 m a pixel, clouds left in.

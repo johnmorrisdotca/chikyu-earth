@@ -6,6 +6,7 @@ import { GIBS_CREDIT, gibsGrid, gibsTiles, gridKey, gridKeys, gridPastExtent, gr
 import { createFinerHolder } from "../src/door/gibs.ts";
 import { GIBS_SLOW_MS } from "../src/door/gibs.ts";
 import { GIBS_DEFAULT_LAYER, GIBS_LAYERS, GIBS_NAMES, NODATA_BELOW, NODATA_FULL, GIBS_LOOKBACK_DAYS, forgetGibsDays, gibsCandidates, gibsDay, gibsHasDay } from "../src/door/gibs.ts";
+import { GIBS_DAILY_ORDER, GIBS_DAYS_READ, gibsNewest, gibsPick, gibsPickCandidates } from "../src/door/gibs.ts";
 import { createTileSet, type TileSources } from "../src/realistic/tile-set.ts";
 import type { ThreeParts } from "../src/realistic/textures.ts";
 import type { TileCamera } from "../src/realistic/tiles.ts";
@@ -64,7 +65,8 @@ test("a point's tile is stable at every level, and the antimeridian and the pole
 test("a day outside the layer's range names no tile, and a tile that fails or is blank is not a picture", async () => {
   const vii = GIBS_LAYERS["VIIRS_SNPP_CorrectedReflectance_TrueColor"]!;
   assert.equal(gibsDay(vii, "previous-day", Date.UTC(2026, 5, 21, 12)), "2026-06-20");
-  assert.equal(gibsDay(vii, "previous-day", Date.UTC(2026, 10, 13, 12)), "2026-11-12", "a day after the last listed one may have imagery: the list is of 2026-11-13 and the layer goes on");
+  assert.equal(gibsDay(vii, "previous-day", Date.UTC(2026, 10, 13, 12)), undefined, "Suomi NPP has ended: a day after its last listed one (2026-11-02) is not its own");
+  assert.equal(gibsDay(GIBS_LAYERS["MODIS_Terra_CorrectedReflectance_TrueColor"]!, "previous-day", Date.UTC(2026, 10, 20, 12)), "2026-11-19", "a layer still running goes on after the day the list was read");
   assert.equal(gibsDay(vii, "2022-08-01", Date.UTC(2026, 5, 21)), undefined, "a day in a gap the list shows");
   assert.equal(gibsDay(vii, "2015-11-23", Date.UTC(2026, 5, 21)), undefined, "a day before the first");
   assert.equal(gibsDay(vii, "2001-01-01", Date.UTC(2026, 5, 21)), undefined);
@@ -370,4 +372,103 @@ test("a tile is given two seconds, or the time the page says, before it is left"
   attrs["tiles-finer-timeout"] = "9000";
   assert.notEqual(hold.source(read, false), first, "a new timeout makes a new source");
   assert.equal(GIBS_SLOW_MS, 2000);
+});
+
+const SNPP = GIBS_LAYERS["VIIRS_SNPP_CorrectedReflectance_TrueColor"]!;
+const NOAA20 = GIBS_LAYERS["VIIRS_NOAA20_CorrectedReflectance_TrueColor"]!;
+const NOAA21 = GIBS_LAYERS["VIIRS_NOAA21_CorrectedReflectance_TrueColor"]!;
+const TERRA = GIBS_LAYERS["MODIS_Terra_CorrectedReflectance_TrueColor"]!;
+/** The present day in these tests: the day the table was read. */
+const TODAY = "2026-11-17";
+
+test("one table: every daily layer's days are in order and apart, on the 250 m matrix, read on 2026-11-17, and only Suomi NPP has ended", () => {
+  assert.equal(GIBS_DAYS_READ, "2026-11-17");
+  assert.deepEqual(GIBS_DAILY_ORDER.map((id) => id.split("_")[1]), ["NOAA20", "NOAA21", "SNPP", "Terra", "Aqua"]);
+  for (const id of GIBS_DAILY_ORDER) {
+    const layer = GIBS_LAYERS[id]!;
+    assert.equal(layer.id, id);
+    assert.equal(layer.matrix, "250m", `${id}: a stand-in must be on the same grid`);
+    assert.ok(layer.ranges.length > 0 && layer.name, id);
+    layer.ranges.forEach((range, index) => {
+      assert.ok(range.start <= range.end, `${id} ${range.start}`);
+      if (index > 0) assert.ok(range.start > layer.ranges[index - 1]!.end, `${id}: ${range.start} after the range before it`);
+    });
+  }
+  assert.deepEqual(GIBS_DAILY_ORDER.filter((id) => GIBS_LAYERS[id]!.ended), ["VIIRS_SNPP_CorrectedReflectance_TrueColor"]);
+  assert.equal(SNPP.ranges[SNPP.ranges.length - 1]!.end, "2026-11-02");
+});
+
+test("a day inside a layer is read from that layer", () => {
+  assert.deepEqual(gibsPick(TERRA, "2026-06-20", TODAY), { layer: TERRA, day: "2026-06-20", wanted: "2026-06-20", why: "asked" });
+  assert.equal(gibsPick(SNPP, "2026-10-01", TODAY)?.layer, SNPP);
+  assert.equal(gibsPick(SNPP, "2026-11-02", TODAY)?.layer, SNPP, "its last day");
+  assert.equal(gibsHasDay(NOAA20, "2026-11-17", TODAY), true, "a running layer goes on past its last listed day, to the present day");
+  assert.equal(gibsHasDay(NOAA20, "2026-11-18", TODAY), false, "but no layer has a day still to come");
+});
+
+test("a day past Suomi NPP's end is read from NOAA-20, and so is a day in one of its gaps", () => {
+  assert.equal(gibsHasDay(SNPP, "2026-11-03"), false, "an ended layer has no day after its last");
+  const pick = gibsPick(SNPP, "2026-11-10", TODAY)!;
+  assert.equal(pick.layer, NOAA20);
+  assert.equal(pick.day, "2026-11-10", "the same day, from another satellite");
+  assert.equal(pick.why, "layer");
+  assert.equal(gibsPick(SNPP, "2026-04-29", TODAY)?.layer, NOAA20, "a gap of Suomi NPP's list");
+  assert.equal(gibsPick(TERRA, "2022-10-15", TODAY)?.layer, NOAA20, "a gap of MODIS Terra's list");
+});
+
+test("a day past every layer is the newest day there is, and says so", () => {
+  const pick = gibsPick(SNPP, "2026-12-25", TODAY)!;
+  assert.deepEqual([pick.layer, pick.day, pick.wanted, pick.why], [NOAA20, "2026-11-16", "2026-12-25", "newest"]);
+  assert.deepEqual(gibsNewest(TODAY), { layer: NOAA20, day: "2026-11-16" }, "the day before the present day, the first layer of the order that has it");
+  const terra = gibsPick(TERRA, "2026-12-25", TODAY)!;
+  assert.deepEqual([terra.layer, terra.day, terra.why], [TERRA, "2026-11-16", "newest"], "the layer asked for when it has that day too");
+  const tries = gibsPickCandidates(SNPP, "2027-01-10", TODAY);
+  assert.deepEqual(tries.slice(0, 2).map((one) => `${one.layer.name} ${one.day} ${one.why}`), ["NOAA-20 VIIRS 2026-11-16 newest", "NOAA-20 VIIRS 2026-11-15 newest"], "the default rule looks back from the newest day");
+  assert.equal(tries.length, GIBS_LOOKBACK_DAYS);
+});
+
+test("a day before a layer started is read from one that had started, and before every layer nothing is asked", () => {
+  assert.equal(gibsHasDay(NOAA21, "2023-02-09", TODAY), false);
+  const pick = gibsPick(NOAA21, "2022-06-01", TODAY)!;
+  assert.deepEqual([pick.layer, pick.why], [NOAA20, "layer"]);
+  assert.equal(gibsPick(NOAA20, "2016-06-01", TODAY)?.layer, SNPP, "before NOAA-20, Suomi NPP");
+  assert.equal(gibsPick(NOAA20, "2010-06-01", TODAY)?.layer, TERRA, "before VIIRS, MODIS Terra");
+  assert.equal(gibsPick(TERRA, "1999-12-31", TODAY), undefined, "before 2000-02-24 no layer has a picture");
+  assert.deepEqual(gibsPickCandidates(TERRA, "2000-02-25", TODAY).map((one) => one.day), ["2000-02-25", "2000-02-24"]);
+});
+
+test("the tiles of a past-end day are NOAA-20's, and the credit line says which picture is shown", async () => {
+  forgetGibsDays();
+  const urls: string[] = [];
+  const source = gibsTiles({
+    time: () => new Date("2026-11-13T12:00:00Z"),
+    now: () => Date.UTC(2026, 10, 17, 12),
+    layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
+    date: "2026-11-10",
+    fetch: (url) => (urls.push(url), Promise.resolve(new Response(new Uint8Array([1]), { status: 200 }))),
+    decode: () => Promise.resolve({ width: 512, height: 512, close() {} }),
+  });
+  assert.doesNotMatch(source.info.credit.en, /Shown:/, "nothing to say before a tile is named");
+  const keys = source.need(place, 50000);
+  assert.ok(keys.length > 0 && keys.every((key) => key.startsWith("2026-11-10/")));
+  await source.load(keys[0]!, new AbortController().signal);
+  assert.match(urls[0]!, /\/VIIRS_NOAA20_CorrectedReflectance_TrueColor\/default\/2026-11-10\/250m\//);
+  assert.match(source.info.credit.en, /Shown: NOAA-20 VIIRS, 2026-11-10 \(Suomi NPP VIIRS has no picture for that day\)\.$/);
+  assert.match(source.info.credit.ja, /表示中：NOAA-20 VIIRS、2026-11-10/);
+  assert.equal(source.info, source.info, "the same credit while the picture is the same");
+  const later = gibsTiles({ time: () => new Date("2027-01-10T12:00:00Z"), now: () => Date.UTC(2026, 10, 17, 12), layer: "today", date: "shown", fetch: () => Promise.reject(new Error("no request expected")) });
+  assert.ok(later.need(place, 50000).every((key) => key.startsWith("2026-11-16/")), "a day still to come: the newest day there is");
+  assert.match(later.info.credit.en, /Shown: MODIS Terra, 2026-11-16, the newest day with a picture \(there is none yet for 2027-01-10\)\.$/);
+});
+
+test("the default rule on Suomi NPP after its end asks NOAA-20 for the day before, one tile", async () => {
+  forgetGibsDays();
+  const { source, urls, changed } = answering("2026-11-13", () => true, { layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor", now: () => Date.UTC(2026, 10, 17, 12) });
+  assert.deepEqual(source.need(place, 50000), []);
+  await settleAll();
+  assert.equal(urls.length, 1);
+  assert.match(urls[0]!, /\/VIIRS_NOAA20_CorrectedReflectance_TrueColor\/default\/2026-11-12\//);
+  assert.equal(changed(), 1);
+  assert.ok(source.need(place, 50000).every((key) => key.startsWith("2026-11-12/")));
+  assert.match(source.info.credit.en, /Shown: NOAA-20 VIIRS, 2026-11-12/);
 });

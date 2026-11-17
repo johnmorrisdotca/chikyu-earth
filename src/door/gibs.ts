@@ -57,17 +57,33 @@ const INFO: SourceInfo = {
   retrieved: GIBS_READ,
 };
 
-/** A day the layer has imagery, inclusive, as the capabilities document listed it on 2026-11-13. Dates sort as text. */
+/**
+ * The day the daily layers' days in `GIBS_LAYERS` were read, from the capabilities documents (the tiles' WMTS and the snapshots' WMS list the same days).
+ *
+ * To refresh the table: fetch `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/1.0.0/WMTSCapabilities.xml`, and for each daily layer copy the `<Value>` ranges of its `Time` dimension
+ * (`start/end/P1D`) into `ranges`, oldest first. Mark a layer `ended` when its last day stays behind the others' (the satellite has stopped, or its processing has), and take the mark off if it starts again. Then change this date.
+ */
+export const GIBS_DAYS_READ = "2026-11-17";
+
+/** A day the layer has imagery, inclusive, as the capabilities document listed it on `GIBS_DAYS_READ`. Dates sort as text. */
 interface DayRange {
   start: string;
   end: string;
 }
 
+/** One layer of NASA's service, as the package uses it. */
 interface GibsLayer {
   id: string;
   matrix: "31.25m" | "250m" | "500m";
-  /** Empty for a picture that has no day (the shaded relief, and the annual Landsat mosaics, which have `years`). */
+  /** The days it has, oldest first. Empty for a picture that has no day (the shaded relief, and the annual Landsat mosaics, which have `years`). */
   ranges: readonly DayRange[];
+  /**
+   * True when the layer has stopped: no day after its last listed one is asked for. A layer still running is taken to go on to the present day after its last listed one, because the list is of the day it was read and
+   * the satellite goes on sending.
+   */
+  ended?: boolean;
+  /** The satellite and instrument, for the credit line when this layer stands in for another (see `gibsPick`). */
+  name?: string;
   /** True when the picture is one day of the satellite and clouds are left in. */
   clouds: boolean;
   /** For a layer with one picture a year: the years' times, as the service names them (`yyyy-mm-dd`), oldest first. The newest is the one used unless a page names another of them. */
@@ -82,9 +98,19 @@ interface GibsLayer {
   credit?: { en: string; ja: string };
 }
 
+/** A daily true-colour layer on the 250 m matrix, with the clouds left in. */
+const daily = (id: string, name: string, ranges: readonly (readonly [string, string])[], ended = false): GibsLayer => ({
+  id,
+  name,
+  matrix: "250m",
+  clouds: true,
+  ranges: ranges.map(([start, end]) => ({ start, end })),
+  ...(ended ? { ended: true } : {}),
+});
+
 /**
- * The layers a page may ask for. The ranges are the days the capabilities document listed on 2026-11-13; a day outside them is not requested.
- * The two daily layers are true colour with the clouds left in. The shaded relief is the same kind of picture as the package's own level 5, and is only a stand-in.
+ * The layers a page may ask for, and the one table of the days each daily layer has (read on `GIBS_DAYS_READ`; how to refresh it is there). A day outside a layer's days is not requested from it.
+ * The daily layers are true colour with the clouds left in. Suomi NPP VIIRS has ended: its last day is 2026-11-02, and a later day is a black picture. The shaded relief is the same kind of picture as the package's own level 5, and is only a stand-in.
  */
 export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
   Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual: {
@@ -103,39 +129,65 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
       ja: "Landsat画像：NASAのGlobal Web-Enabled Landsat Data（GWELD）の年間30 mモザイク。NASAのLP DAACが配布しています。",
     },
   },
-  VIIRS_SNPP_CorrectedReflectance_TrueColor: {
-    id: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
-    matrix: "250m",
-    clouds: true,
-    ranges: [
-      { start: "2015-11-24", end: "2022-07-27" },
-      { start: "2022-08-10", end: "2024-05-31" },
-      { start: "2024-06-04", end: "2024-07-11" },
-      { start: "2024-07-16", end: "2024-07-24" },
-      { start: "2024-07-29", end: "2024-11-03" },
-      { start: "2024-11-06", end: "2026-04-28" },
-      { start: "2026-04-30", end: "2026-07-10" },
-      { start: "2026-07-16", end: "2026-11-02" },
+  VIIRS_NOAA20_CorrectedReflectance_TrueColor: daily("VIIRS_NOAA20_CorrectedReflectance_TrueColor", "NOAA-20 VIIRS", [
+    ["2018-01-05", "2018-02-21"],
+    ["2018-02-24", "2018-03-12"],
+    ["2018-03-14", "2019-12-31"],
+    ["2020-01-02", "2022-01-12"],
+    ["2022-01-14", "2026-11-16"],
+  ]),
+  VIIRS_NOAA21_CorrectedReflectance_TrueColor: daily("VIIRS_NOAA21_CorrectedReflectance_TrueColor", "NOAA-21 VIIRS", [
+    ["2023-02-10", "2023-02-23"],
+    ["2023-02-25", "2023-03-09"],
+    ["2023-03-11", "2024-02-26"],
+    ["2024-02-29", "2026-11-16"],
+  ]),
+  VIIRS_SNPP_CorrectedReflectance_TrueColor: daily(
+    "VIIRS_SNPP_CorrectedReflectance_TrueColor",
+    "Suomi NPP VIIRS",
+    [
+      ["2015-11-24", "2022-07-27"],
+      ["2022-08-10", "2024-05-31"],
+      ["2024-06-04", "2024-07-11"],
+      ["2024-07-16", "2024-07-24"],
+      ["2024-07-29", "2024-11-03"],
+      ["2024-11-06", "2026-04-28"],
+      ["2026-04-30", "2026-07-10"],
+      ["2026-07-16", "2026-11-02"],
     ],
-  },
-  MODIS_Terra_CorrectedReflectance_TrueColor: {
-    id: "MODIS_Terra_CorrectedReflectance_TrueColor",
-    matrix: "250m",
-    clouds: true,
-    ranges: [
-      { start: "2000-02-24", end: "2000-04-25" },
-      { start: "2000-04-28", end: "2000-08-06" },
-      { start: "2000-08-18", end: "2001-06-15" },
-      { start: "2001-07-03", end: "2002-03-19" },
-      { start: "2002-03-28", end: "2003-12-16" },
-      { start: "2003-12-24", end: "2008-12-20" },
-      { start: "2008-12-23", end: "2016-02-18" },
-      { start: "2016-02-27", end: "2022-10-10" },
-      { start: "2022-10-23", end: "2026-11-13" },
-    ],
-  },
+    true,
+  ),
+  MODIS_Terra_CorrectedReflectance_TrueColor: daily("MODIS_Terra_CorrectedReflectance_TrueColor", "MODIS Terra", [
+    ["2000-02-24", "2000-04-25"],
+    ["2000-04-28", "2000-08-06"],
+    ["2000-08-18", "2001-06-15"],
+    ["2001-07-03", "2002-03-19"],
+    ["2002-03-28", "2003-12-16"],
+    ["2003-12-24", "2008-12-20"],
+    ["2008-12-23", "2016-02-18"],
+    ["2016-02-27", "2022-10-10"],
+    ["2022-10-23", "2026-11-17"],
+  ]),
+  MODIS_Aqua_CorrectedReflectance_TrueColor: daily("MODIS_Aqua_CorrectedReflectance_TrueColor", "MODIS Aqua", [
+    ["2002-07-03", "2002-07-30"],
+    ["2002-08-07", "2002-09-12"],
+    ["2002-09-14", "2022-03-31"],
+    ["2022-04-17", "2026-11-16"],
+  ]),
   BlueMarble_ShadedRelief_Bathymetry: { id: "BlueMarble_ShadedRelief_Bathymetry", matrix: "500m", clouds: false, ranges: [] },
 };
+
+/**
+ * The daily true-colour layers in the order one stands in for another: when the layer a page asked for has no picture for a day (it has ended, it had not started, or the day is in a gap of its list), the first of these that has the day is used.
+ * NOAA-20 VIIRS, NOAA-21 VIIRS, Suomi NPP VIIRS (VIIRS is finer and newer than MODIS), then MODIS Terra and MODIS Aqua.
+ */
+export const GIBS_DAILY_ORDER: readonly string[] = [
+  "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+  "VIIRS_NOAA21_CorrectedReflectance_TrueColor",
+  "VIIRS_SNPP_CorrectedReflectance_TrueColor",
+  "MODIS_Terra_CorrectedReflectance_TrueColor",
+  "MODIS_Aqua_CorrectedReflectance_TrueColor",
+];
 
 /**
  * The layer a page gets without naming one: the Landsat annual true-colour mosaic (30 m, no cloud, land only; the year 2000, the newest it has). The daily layers are a named choice: `today` for MODIS Terra.
@@ -209,15 +261,81 @@ export function previousUtcDay(ms: number): string {
 }
 
 /**
- * Whether the layer may have imagery for a day: inside one of the ranges listed on 2026-11-13, or after the last of them (a daily layer goes on growing, and the list does not). A day before the layer's first day, or in a gap the list shows, has none, and is not asked for.
+ * Whether the layer may have imagery for a day: inside one of its listed ranges, or, for a layer still running (not `ended`), after the last of them and no later than `today` (the list is of the day it was read, and the layer goes on growing).
+ * A day before the layer's first day, in a gap the list shows, after the last day of a layer that has ended, or after `today`, has none, and is not asked for.
+ *
+ * @param today - The present UTC day, `yyyy-mm-dd`. Left out, a running layer has every day after its last listed one.
  */
-export function gibsHasDay(layer: GibsLayer, day: string): boolean {
+export function gibsHasDay(layer: GibsLayer, day: string, today?: string): boolean {
   if (layer.ranges.length === 0) return true;
   const first = layer.ranges[0]!;
   const last = layer.ranges[layer.ranges.length - 1]!;
   if (day < first.start) return false;
-  if (day > last.end) return true;
+  if (day > last.end) return !layer.ended && (today === undefined || day <= today);
   return layer.ranges.some((range) => day >= range.start && day <= range.end);
+}
+
+/** The day before `day`. */
+const dayBefore = (day: string): string => previousUtcDay(Date.parse(`${day}T12:00:00Z`));
+
+/** Why `gibsPick` chose what it did: the layer asked for has the day, another layer stands in for it, or no layer has the day and the newest day there is is shown instead. */
+type GibsPickWhy = "asked" | "layer" | "newest";
+
+/** The layer and the day the tiles are read from, for a layer asked for and a day wanted. */
+interface GibsPick {
+  layer: GibsLayer;
+  day: string;
+  /** The day that was wanted. */
+  wanted: string;
+  why: GibsPickWhy;
+}
+
+const isDaily = (layer: GibsLayer): boolean => GIBS_DAILY_ORDER.includes(layer.id);
+
+/** The newest day each daily layer surely has by `today`: the day before it for a layer still running (that day's passes are in), the last listed one for a layer that has ended. The newest of them, from the first layer in `GIBS_DAILY_ORDER` that has it. */
+export function gibsNewest(today: string): { layer: GibsLayer; day: string } | undefined {
+  let best: { layer: GibsLayer; day: string } | undefined;
+  const yesterday = dayBefore(today);
+  for (const id of GIBS_DAILY_ORDER) {
+    const layer = GIBS_LAYERS[id]!;
+    const day = layer.ended ? layer.ranges[layer.ranges.length - 1]!.end : yesterday;
+    if (!gibsHasDay(layer, day, today)) continue;
+    if (best === undefined || day > best.day) best = { layer, day };
+  }
+  return best;
+}
+
+/**
+ * The layer and day to read for a day wanted. The layer asked for when it has the day. Else, for a daily true-colour layer, the first of `GIBS_DAILY_ORDER` that has it (Suomi NPP has ended on 2026-11-02, so a later day is NOAA-20's).
+ * Else, when the day is after the newest day any of them has (a day still to come), that newest day, from the layer asked for if it has it. A day no layer has that is not after all of them (before 2000-02-24, when MODIS Terra began) gives `undefined`: nothing is requested.
+ *
+ * @param today - The present UTC day, `yyyy-mm-dd`: no layer has a day after it.
+ */
+export function gibsPick(asked: GibsLayer, day: string, today: string): GibsPick | undefined {
+  if (gibsHasDay(asked, day, today)) return { layer: asked, day, wanted: day, why: "asked" };
+  if (!isDaily(asked)) return undefined;
+  for (const id of GIBS_DAILY_ORDER) {
+    const other = GIBS_LAYERS[id]!;
+    if (other !== asked && gibsHasDay(other, day, today)) return { layer: other, day, wanted: day, why: "layer" };
+  }
+  const newest = gibsNewest(today);
+  if (!newest || day <= newest.day) return undefined;
+  // the layer asked for, when it has that newest day too
+  return { layer: gibsHasDay(asked, newest.day, today) ? asked : newest.layer, day: newest.day, wanted: day, why: "newest" };
+}
+
+/** The days the default rule tries, newest first, each with the layer it is read from: from `start` (or, when `start` is after every layer, from the newest day there is), back, `GIBS_LOOKBACK_DAYS` days, skipping a day no layer has. */
+export function gibsPickCandidates(asked: GibsLayer, start: string, today: string): GibsPick[] {
+  const first = gibsPick(asked, start, today);
+  const from = first?.why === "newest" ? first.day : start;
+  const found: GibsPick[] = [];
+  let day = from;
+  for (let count = 0; count < GIBS_LOOKBACK_DAYS; count += 1) {
+    const pick = gibsPick(asked, day, today);
+    if (pick && pick.why !== "newest") found.push(first?.why === "newest" ? { ...pick, wanted: start, why: "newest" } : pick);
+    day = dayBefore(day);
+  }
+  return found;
 }
 
 /** The day a fixed rule names (`previous-day`, `shown`, or one `yyyy-mm-dd`), or `undefined` for `latest`, which has to be looked for. */
@@ -240,9 +358,6 @@ export function gibsDay(layer: GibsLayer, rule: string, ms: number): string | un
   return gibsHasDay(layer, named) ? named : undefined;
 }
 
-/** The day before `day`. */
-const dayBefore = (day: string): string => previousUtcDay(Date.parse(`${day}T12:00:00Z`));
-
 /** The days the default rule looks at, newest first: from `start`, back, skipping days the layer is known to lack, until the layer's first day or `GIBS_LOOKBACK_DAYS` days have been counted. */
 export function gibsCandidates(layer: GibsLayer, start: string): string[] {
   const found: string[] = [];
@@ -255,8 +370,8 @@ export function gibsCandidates(layer: GibsLayer, start: string): string[] {
   return found;
 }
 
-/** The days the default rule has settled, by layer and starting day: a day with imagery, or `null` for none. Kept for the session, so a view that moves asks nothing again. */
-const settled = new Map<string, string | null>();
+/** The days the default rule has settled, by layer and starting day: the day with imagery and the layer it is read from, or `null` for none. Kept for the session, so a view that moves asks nothing again. */
+const settled = new Map<string, GibsPick | null>();
 const probing = new Set<string>();
 
 /** Forget what the default rule has settled (for a page that wants to look again, and for the tests). */
@@ -289,6 +404,8 @@ export interface GibsTilesOptions extends EarthTilesOptions {
   changed?: () => void;
   /** How many milliseconds a tile is given to arrive (`GIBS_SLOW_MS`, 2000, when left out). A page on a slow link can give it longer. */
   slowMs?: number;
+  /** The present moment, which no layer has a picture after (`Date.now` when left out; not the moment on show, which may be one still to come). */
+  now?: () => number;
 }
 
 /**
@@ -315,6 +432,17 @@ async function pictureIsBlank(image: BitmapLike): Promise<boolean> {
   }
 }
 
+/** The sentence the credit line adds when the picture is not the one asked for: another layer stands in for a day, or the newest day there is stands in for one still to come. */
+function pickNote(asked: GibsLayer, pick: GibsPick): { en: string; ja: string } | undefined {
+  const name = pick.layer.name ?? pick.layer.id;
+  if (pick.why === "layer") {
+    const was = asked.name ?? asked.id;
+    return { en: `Shown: ${name}, ${pick.day} (${was} has no picture for that day).`, ja: `表示中：${name}、${pick.day}（${was}にはこの日の画像がありません）。` };
+  }
+  if (pick.why === "newest") return { en: `Shown: ${name}, ${pick.day}, the newest day with a picture (there is none yet for ${pick.wanted}).`, ja: `表示中：${name}、${pick.day}。画像のある最新の日です（${pick.wanted}の画像はまだありません）。` };
+  return undefined;
+}
+
 /**
  * A map source that reads NASA's imagery service directly. It declares its own grid (512 pixel tiles, the Geographic matrix, which is not the package's pyramid). `need` names no tile for a day outside the layer's range.
  * `load` gives a tile two seconds, and treats a 404 or an all-black tile as no imagery. The clouds are not taken out of the daily layers.
@@ -338,6 +466,11 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
   const rule = options.date ?? "latest";
   const get = options.fetch ?? ((url: string, init?: RequestInit) => globalThis.fetch(url, init));
   const decode = options.decode ?? ((blob: Blob): Promise<BitmapLike> => createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" }));
+  const today = (): string => utcDay(options.now ? options.now() : Date.now());
+  /** The layer a key's day is read from: the one asked for, or the daily layer that stands in for it on that day (`gibsPick`). */
+  const layerOf = (day: string): GibsLayer => (known && isDaily(layer) ? (gibsPick(layer, day, today())?.layer ?? layer) : layer);
+  /** The pick the tiles in view were last named from, for the credit line. */
+  let shown: GibsPick | undefined;
   /** One tile of one day, as `load` reads it: nothing for a 404, a blank picture, a slow answer or a failure. */
   const fetchTile = async (key: string, signal: AbortSignal): Promise<ImageTile> => {
     const parts = tileKeyParts(key);
@@ -345,7 +478,8 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
     const level = parts ? grid.levels.find((one) => one.level === parts.level) : undefined;
     if (!parts || !day || !level) throw new RangeError(`"${key}" is not the key of a tile`);
     if (!gridOnEarth(level, parts.col, parts.row, grid.extent)) throw new RangeError(`"${key}" is off the Earth`);
-    const url = `${TILE_URL}/${layer.id}/default/${day}/${layer.matrix}/${parts.level}/${parts.row}/${parts.col}.jpg`;
+    const from = layerOf(day);
+    const url = `${TILE_URL}/${from.id}/default/${day}/${from.matrix}/${parts.level}/${parts.row}/${parts.col}.jpg`;
     const timer = AbortSignal.timeout(options.slowMs && options.slowMs > 0 ? options.slowMs : GIBS_SLOW_MS);
     let response: Response;
     try {
@@ -365,14 +499,14 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
   const lookFor = (settledKey: string, start: string, place: EarthMapPlace, detail: number): void => {
     probing.add(settledKey);
     void (async () => {
-      let found: string | null = null;
-      for (const day of gibsCandidates(layer, start)) {
-        const keys = gridKeys(grid, place, detail, `${day}/`);
+      let found: GibsPick | null = null;
+      for (const pick of gibsPickCandidates(layer, start, today())) {
+        const keys = gridKeys(grid, place, detail, `${pick.day}/`);
         if (keys.length === 0) break;
         try {
           const tile = await fetchTile(keys[0]!, new AbortController().signal);
           tile.image.close?.();
-          found = day;
+          found = pick;
           break;
         } catch {
           // no picture for this day here: the day before
@@ -384,29 +518,47 @@ export function gibsTiles(options: GibsTilesOptions): EarthMapSource {
     })();
   };
   // an unknown layer has no published range, so no day is inside it and nothing is requested
-  const dayOf = (place: EarthMapPlace, detail: number): string | undefined => {
+  const pickOf = (place: EarthMapPlace, detail: number): GibsPick | undefined => {
     if (!known) return undefined;
     const ms = options.time().getTime();
-    if (layer.years || fixedDay(rule, ms) !== undefined || layer.ranges.length === 0) return gibsDay(layer, rule, ms);
+    if (layer.years || layer.ranges.length === 0) {
+      const day = gibsDay(layer, rule, ms);
+      return day === undefined ? undefined : { layer, day, wanted: day, why: "asked" };
+    }
+    const fixed = fixedDay(rule, ms);
+    const now = today();
+    if (fixed !== undefined) return gibsPick(layer, fixed, now);
     const start = previousUtcDay(ms);
-    const settledKey = `${layer.id}|${start}`;
+    const settledKey = `${layer.id}|${start}|${now}`;
     if (settled.has(settledKey)) return settled.get(settledKey) ?? undefined;
     if (!probing.has(settledKey)) lookFor(settledKey, start, place, detail);
     return undefined;
   };
+  const baseInfo: SourceInfo = layer.credit ? { ...INFO, credit: { en: `${GIBS_CREDIT.en} ${layer.credit.en}`, ja: `${GIBS_CREDIT.ja}${layer.credit.ja}` } } : INFO;
+  let noted: { key: string; info: SourceInfo } = { key: "", info: baseInfo };
+  /** The credit, with a sentence when another layer or the newest day stands in for the one asked for; the same object while that does not change. */
+  const infoNow = (): SourceInfo => {
+    const note = shown ? pickNote(layer, shown) : undefined;
+    const key = note ? note.en : "";
+    if (key !== noted.key) noted = { key, info: note ? { ...baseInfo, credit: { en: `${baseInfo.credit.en} ${note.en}`, ja: `${baseInfo.credit.ja}${note.ja}` } } : baseInfo };
+    return noted.info;
+  };
   const source: EarthMapSource = {
     kind: "tiles",
     layer: "day",
-    info: layer.credit ? { ...INFO, credit: { en: `${GIBS_CREDIT.en} ${layer.credit.en}`, ja: `${GIBS_CREDIT.ja}${layer.credit.ja}` } } : INFO,
+    get info() {
+      return infoNow();
+    },
     holes: true,
     // the loader draws the tile with these on the graphics card: clear where it is dark, and each colour multiplied (nothing is done to the pixels on the processor)
     look: { clear: layer.clear ?? [NODATA_BELOW, NODATA_FULL], ...(layer.gain ? { gain: layer.gain } : {}) },
     grid,
     need(place, detail) {
       if (gridLevelFor(grid, detail, 0) === undefined) return [];
-      const day = dayOf(place, detail);
-      if (day === undefined) return [];
-      return gridKeys(grid, place, detail, `${day}/`);
+      const pick = pickOf(place, detail);
+      shown = pick;
+      if (pick === undefined) return [];
+      return gridKeys(grid, place, detail, `${pick.day}/`);
     },
     levels() {
       return { tileSize: grid.tileSize, levels: grid.levels.map((level) => ({ level: level.level, width: level.width })) };

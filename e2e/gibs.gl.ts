@@ -113,6 +113,36 @@ test("closer than the package's own tiles, the page asks the imagery service and
   expect((await statsOf(page)).draws, "at rest, no further draw").toBe(draws);
 });
 
+test("a day after Suomi NPP's end is drawn from NOAA-20, real ground and not black, and the credit line says so", async ({ page }) => {
+  // the service answers a day a layer does not have with a black picture: here Suomi NPP's tiles are black and NOAA-20's are magenta
+  const urls: string[] = [];
+  const black = png(BLACK);
+  const ground = png(MAGENTA);
+  await page.route("https://gibs.earthdata.nasa.gov/**", async (route) => {
+    const url = route.request().url();
+    urls.push(url);
+    return route.fulfill({ status: 200, contentType: "image/png", body: url.includes("/VIIRS_SNPP_") ? black : ground, headers: { "access-control-allow-origin": "*" } });
+  });
+  await routeTiles(page);
+  await openEarth(page, `time=${NOON}&center=0,23`);
+  await page.locator(EARTH).evaluate((el) => {
+    el.setAttribute("tiles-finer", "gibs");
+    el.setAttribute("tiles-finer-timeout", "30000");
+    el.setAttribute("tiles-finer-layer", "VIIRS_SNPP_CorrectedReflectance_TrueColor");
+    el.setAttribute("tiles-finer-date", "2026-11-10");
+  });
+  await expect.poll(async () => (await statsOf(page)).tiles.ready).toBe(true);
+  await setView(page, await zoomFor(page, 8000));
+  await expect.poll(async () => urls.length, { timeout: 30_000 }).toBeGreaterThan(0);
+  await untilStill(page);
+  expect(urls.every((url) => url.startsWith("https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/2026-11-10/250m/")), "no tile is asked of Suomi NPP after its last day").toBe(true);
+  const pixel = await pixelAt(page, page.locator(EARTH), 0.5, 0.5);
+  expect(pixel[0]! > 180 && pixel[2]! > 180 && pixel[1]! < 140, `NOAA-20's tile is on the screen, not black: ${pixel}`).toBe(true);
+  const credit = page.locator(EARTH).locator("#finer-credit");
+  await expect(credit).toBeVisible();
+  await expect(credit).toContainText("Shown: NOAA-20 VIIRS, 2026-11-10 (Suomi NPP VIIRS has no picture for that day).");
+});
+
 test("a missing tile and a slow tile leave the coarser picture and are not asked for again", async ({ page }) => {
   const gibs = await routeGibs(page, "missing");
   await routeTiles(page);
