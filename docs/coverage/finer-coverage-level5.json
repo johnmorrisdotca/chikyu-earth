@@ -1,0 +1,252 @@
+{
+ "read": "2026-11-17",
+ "layer": "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual",
+ "year": "2000-12-01",
+ "level": 5,
+ "cell": 0.5,
+ "sample": "all",
+ "landShare": {
+  "covered": 0.8958,
+  "thin": 0.0085,
+  "none": 0.0957
+ },
+ "pureBlackShareOfLand": 0.0955,
+ "byLatitudeBand": {
+  "80": {
+   "covered": 0.682,
+   "thin": 0.087,
+   "none": 0.23
+  },
+  "70": {
+   "covered": 0.972,
+   "thin": 0.014,
+   "none": 0.014
+  },
+  "60": {
+   "covered": 0.989,
+   "thin": 0.01,
+   "none": 0.001
+  },
+  "50": {
+   "covered": 0.99,
+   "thin": 0.01,
+   "none": 0.0
+  },
+  "40": {
+   "covered": 0.981,
+   "thin": 0.016,
+   "none": 0.003
+  },
+  "30": {
+   "covered": 0.996,
+   "thin": 0.004,
+   "none": 0.0
+  },
+  "20": {
+   "covered": 0.997,
+   "thin": 0.003,
+   "none": 0.0
+  },
+  "10": {
+   "covered": 0.992,
+   "thin": 0.008,
+   "none": 0.0
+  },
+  "0": {
+   "covered": 0.991,
+   "thin": 0.008,
+   "none": 0.001
+  },
+  "-10": {
+   "covered": 0.983,
+   "thin": 0.017,
+   "none": 0.0
+  },
+  "-20": {
+   "covered": 0.992,
+   "thin": 0.008,
+   "none": 0.0
+  },
+  "-30": {
+   "covered": 0.995,
+   "thin": 0.005,
+   "none": 0.0
+  },
+  "-40": {
+   "covered": 0.988,
+   "thin": 0.012,
+   "none": 0.0
+  },
+  "-50": {
+   "covered": 0.959,
+   "thin": 0.041,
+   "none": 0.0
+  },
+  "-60": {
+   "covered": 0.974,
+   "thin": 0.026,
+   "none": 0.0
+  },
+  "-70": {
+   "covered": 0.0,
+   "thin": 0.0,
+   "none": 1.0
+  },
+  "-80": {
+   "covered": 0.0,
+   "thin": 0.0,
+   "none": 1.0
+  },
+  "-90": {
+   "covered": 0.0,
+   "thin": 0.0,
+   "none": 1.0
+  }
+ },
+ "largestNone": [
+  {
+   "cells": 26693,
+   "areaKm2": 13916776,
+   "latMax": -64.5,
+   "latMin": -90.0,
+   "lonMin": -180.0,
+   "lonMax": 180.0,
+   "centre": [
+    -80.25,
+    14.94
+   ]
+  },
+  {
+   "cells": 84,
+   "areaKm2": 33431,
+   "latMax": 83.5,
+   "latMin": 82.0,
+   "lonMin": -45.5,
+   "lonMax": -26.5,
+   "centre": [
+    82.62,
+    -35.17
+   ]
+  },
+  {
+   "cells": 71,
+   "areaKm2": 28616,
+   "latMax": 83.5,
+   "latMin": 82.0,
+   "lonMin": -82.0,
+   "lonMax": -62.5,
+   "centre": [
+    82.52,
+    -73.41
+   ]
+  },
+  {
+   "cells": 30,
+   "areaKm2": 18739,
+   "latMax": 80.0,
+   "latMin": 76.5,
+   "lonMin": 15.0,
+   "lonMax": 19.5,
+   "centre": [
+    78.37,
+    17.08
+   ]
+  },
+  {
+   "cells": 7,
+   "areaKm2": 14561,
+   "latMax": 48.5,
+   "latMin": 47.0,
+   "lonMin": -89.5,
+   "lonMax": -87.5,
+   "centre": [
+    47.82,
+    -88.46
+   ]
+  },
+  {
+   "cells": 5,
+   "areaKm2": 11114,
+   "latMax": 45.0,
+   "latMin": 43.5,
+   "lonMin": -87.5,
+   "lonMax": -86.5,
+   "centre": [
+    44.15,
+    -86.95
+   ]
+  },
+  {
+   "cells": 7,
+   "areaKm2": 10573,
+   "latMax": 61.5,
+   "latMin": 60.0,
+   "lonMin": 30.5,
+   "lonMax": 32.5,
+   "centre": [
+    60.82,
+    31.32
+   ]
+  },
+  {
+   "cells": 2,
+   "areaKm2": 6195,
+   "latMax": 1.5,
+   "latMin": 1.0,
+   "lonMin": -49.5,
+   "lonMax": -48.5,
+   "centre": [
+    1.25,
+    -49.0
+   ]
+  },
+  {
+   "cells": 10,
+   "areaKm2": 5885,
+   "latMax": 79.5,
+   "latMin": 78.5,
+   "lonMin": 12.0,
+   "lonMax": 15.0,
+   "centre": [
+    79.05,
+    13.5
+   ]
+  },
+  {
+   "cells": 8,
+   "areaKm2": 5126,
+   "latMax": 79.0,
+   "latMin": 77.5,
+   "lonMin": 21.0,
+   "lonMax": 23.5,
+   "centre": [
+    78.06,
+    22.12
+   ]
+  },
+  {
+   "cells": 9,
+   "areaKm2": 4961,
+   "latMax": 80.0,
+   "latMin": 79.5,
+   "lonMin": 21.5,
+   "lonMax": 26.0,
+   "centre": [
+    79.75,
+    23.75
+   ]
+  },
+  {
+   "cells": 5,
+   "areaKm2": 4619,
+   "latMax": 73.5,
+   "latMin": 72.0,
+   "lonMin": 175.0,
+   "lonMax": 176.0,
+   "centre": [
+    72.65,
+    175.45
+   ]
+  }
+ ]
+}

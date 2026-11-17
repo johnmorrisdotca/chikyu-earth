@@ -19,6 +19,8 @@ jobs:
       - run: python3 -m venv .cache/venv && .cache/venv/bin/pip install pillow
       - name: The Earth tile script on a tiny made-up map (counts, sizes, seams, the antimeridian)
         run: .cache/venv/bin/python -I scripts/make-earth-tiles.py selftest
+      - name: The finer-ground coverage script on a tiny made-up map (the package's reading of a pixel, the words, the summary)
+        run: .cache/venv/bin/python -I scripts/finer-coverage.py selftest
       - run: pnpm check
   package:
     runs-on: ${{ matrix.os }}
