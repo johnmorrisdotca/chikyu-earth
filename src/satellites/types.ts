@@ -174,6 +174,11 @@ export interface Satellites {
   visible(index: number): boolean;
   /** How many of them the last `at` or `arc` placed. */
   readonly placed: number;
+  /**
+   * How fast the quickest satellite goes, in Earth radii for each second of the clock's time, between the two moments SGP4 was last run at for `at` (0 before the first `at`). It is worked out once for each pair of moments from
+   * the places already held, so it costs nothing at a frame; the view uses it to draw a frame whenever the quickest dot has moved half a pixel. Multiply by the Earth's radius on the screen for pixels.
+   */
+  readonly fastest: number;
   /** Place satellites beyond `maxAgeDays` from their elements as an estimate (`estimateFar`, off by default). Setting it places everything again at the next draw. */
   estimateFar: boolean;
   /** How many satellites the last `at` or `arc` placed as an estimate. */

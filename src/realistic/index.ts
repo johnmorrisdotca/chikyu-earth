@@ -3,6 +3,7 @@
 export { greenwichSidereal, subsolarPoint, unitVector, julianDay } from "./sun.ts";
 export { chooseTier, textureBytes, textureCap, MAX_TEXTURE, TIERS, TEXELS_PER_RADIUS_PIXEL, type Layer } from "./tiers.ts";
 export { createGate, frameCap, type Gate } from "./gate.ts";
+export { framesPerSecond, readSmoothFps, smoothCap, waitFor, watchLowBattery } from "./pace.ts";
 export { lookAt, discRadius, ATMOSPHERE_OUTER, cameraCentre, type CameraMode, type LightMode } from "./earth.ts";
 export type { ThreeParts } from "./earth.ts";
 export { TEXEL_SLACK, coveringTile, gridTilesInView, parseManifest, pointOnEarth, tileColumns, tileLevel, tileRect, tileRows, tilesInView, type TileCamera, type TileId, type TileLayer, type TilePerspective, type VisibleTile } from "./tiles.ts";

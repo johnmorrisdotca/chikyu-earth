@@ -171,6 +171,61 @@ test("at real time a group on show draws once a second and runs SGP4 once a seco
   expect(m.propagations).toBeLessThanOrEqual(2252 * 1.6);
 });
 
+// MODULES-1448: real time is drawn each time the quickest thing has moved half a pixel, 1 to 15 a second. What that costs on a phone: 16,000 satellites, the CPU slowed to a quarter, a phone's screen.
+test.describe("on a phone with the CPU slowed to a quarter", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: "no-preference" });
+
+  /** The JavaScript a frame took over a stretch, from the page's own running totals (the average it reports is for the whole life of the page), with the frames a second and SGP4 calls a second of the stretch. */
+  async function cost(page: Page, ms: number) {
+    const before = (await statsOf(page)).satellites;
+    const run = await measure(page, ms);
+    const after = run.stats.satellites;
+    const frames = after.updates - before.updates;
+    return { run, frames: run.frames, perFrameMs: frames > 0 ? (after.averageUpdateMs * after.updates - before.averageUpdateMs * before.updates) / frames : 0, maxUpdateMs: after.maxUpdateMs, propagations: run.propagations, maxBatchMs: run.maxBatchMs };
+  }
+  const fmt = (c: Awaited<ReturnType<typeof cost>>): string => `${c.frames.toFixed(2)} frames a second, ${c.perFrameMs.toFixed(2)} ms of JavaScript a frame (the longest ${c.maxUpdateMs.toFixed(1)}), ${c.propagations.toFixed(0)} SGP4 calls a second, the longest batch ${c.maxBatchMs.toFixed(1)} ms`;
+  const paceOf = (page: Page) => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { pace: { pixelsPerSecond: number; perSecond: number; cap: number } }).pace);
+  /** Real time, from the page's own controls held so that what is counted is the clock's. */
+  async function goRealTime(page: Page, query: string): Promise<void> {
+    await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await open(page, query, "stations,starlink");
+    await addMany(page, 16_000);
+    await expect.poll(async () => (await statsOf(page)).satellites.groups, { timeout: 60_000 }).toBe(3);
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await setSpeed(page, 1);
+    await settle(page, 3000);
+  }
+
+  test("16,000 satellites at real time, whole Earth and zoomed in: near once a second, within the cap, and what a frame costs", async ({ page }) => {
+    test.setTimeout(180_000);
+    await goRealTime(page, "&earth-size=0.9");
+    const whole = await cost(page, 8000);
+    const wholePace = await paceOf(page);
+    await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, f: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: 2.5, panX: 0, panY: 0 }, true));
+    await settle(page, 3000);
+    const near = await cost(page, 8000);
+    console.log(`16,000 + 2,252 satellites at real time on a phone, CPU 4x slower: whole Earth ${fmt(whole)} ${JSON.stringify(wholePace)}; zoomed in ${fmt(near)} ${JSON.stringify(await paceOf(page))}`);
+    expect(whole.frames, "whole Earth").toBeLessThanOrEqual(2.4);
+    expect(whole.frames, "whole Earth").toBeGreaterThanOrEqual(0.7);
+    expect(near.frames, "zoomed in").toBeLessThanOrEqual(15 + 1);
+    expect(near.frames, "zoomed in").toBeGreaterThanOrEqual(0.7);
+    expect(whole.perFrameMs, "JavaScript a frame").toBeLessThan(1000 / 15);
+    // SGP4 about once a second for each satellite, whatever the frame rate
+    expect(whole.propagations, "SGP4 calls a second").toBeLessThanOrEqual((16_000 + 2252) * 1.6);
+  });
+
+  test("16,000 satellites at real time riding the ISS: frames rise towards the cap and the JavaScript of a frame fits it", async ({ page }) => {
+    test.setTimeout(180_000);
+    await goRealTime(page, "&earth-size=0.9&ride=iss");
+    const riding = await cost(page, 8000);
+    console.log(`16,000 + 2,252 satellites at real time riding the ISS on a phone, CPU 4x slower: ${fmt(riding)} ${JSON.stringify(await paceOf(page))}`);
+    expect(riding.frames, "riding").toBeGreaterThan(2);
+    expect(riding.frames, "riding").toBeLessThanOrEqual(15 + 1);
+    expect(riding.perFrameMs, "JavaScript a frame").toBeLessThan(1000 / 15);
+    expect(riding.propagations, "SGP4 calls a second").toBeLessThanOrEqual((16_000 + 2252) * 1.6);
+  });
+});
+
 test.describe("moving", () => {
   test.use({ reducedMotion: "no-preference" });
   test("6,000 satellites at 60 times real time: at most 30 frames a second, one SGP4 batch a second, one extra draw call", async ({ page }) => {

@@ -495,6 +495,83 @@ test.describe("the space view's clock", () => {
   });
 });
 
+test.describe("the space view's clock at real time draws when the quickest thing has moved half a pixel (MODULES-1448)", () => {
+  type Pace = { pixelsPerSecond: number; perSecond: number; cap: number; waitMs: number };
+  const SPACE = "chikyu-space";
+  const paceOf = (page: Page) => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { pace: Pace }).pace);
+  /** Real time from here on, at this zoom, with the pictures arrived and the first steps of the new clock let pass. */
+  async function realTime(page: Page, look: (typeof LOOKS)[number], zoom: number | null): Promise<void> {
+    await open(page, look);
+    // the demo's own controls turn the view by themselves once the clock runs: held, so what is counted is the clock's
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await page.locator(SPACE).evaluate((el, z) => {
+      const space = el as unknown as { speed: number; setView(v: unknown, final: boolean): void };
+      if (z !== null) space.setView({ yaw: 0, tilt: 0, zoom: z, panX: 0, panY: 0 }, true);
+      space.speed = 1;
+    }, zoom);
+    await page.waitForTimeout(2500);
+  }
+  /** Frames drawn a second over a stretch, and the pace the page worked out at its end. */
+  async function rate(page: Page, look: (typeof LOOKS)[number], ms = 6000): Promise<{ perSecond: number; pace: Pace }> {
+    const run = await bounded(page, ms, look);
+    return { perSecond: run.frames / (ms / 1000), pace: await paceOf(page) };
+  }
+
+  test.describe("with the clock free to move", () => {
+    test.use({ reducedMotion: "no-preference" });
+
+    test("the whole Earth with satellites stays near one to two frames a second", async ({ page }) => {
+      await realTime(page, "satellites", 1);
+      const whole = await rate(page, "satellites");
+      console.log(`REAL TIME whole Earth, 2,252 satellites: ${whole.perSecond.toFixed(2)} frames a second, ${JSON.stringify(whole.pace)}`);
+      expect(whole.perSecond, "frames a second").toBeGreaterThanOrEqual(0.7);
+      expect(whole.perSecond, "frames a second").toBeLessThanOrEqual(2.4);
+      expect(whole.pace.cap).toBe(15);
+    });
+
+    test("zoomed in on the satellites, it rises above the whole Earth's, and never past the cap", async ({ page }) => {
+      await realTime(page, "satellites", 1);
+      const whole = await rate(page, "satellites", 4000);
+      await page.locator(SPACE).evaluate((el) => (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: 2.5, panX: 0, panY: 0 }, true));
+      await page.waitForTimeout(2500);
+      const near = await rate(page, "satellites");
+      console.log(`REAL TIME zoomed in, 2,252 satellites: ${near.perSecond.toFixed(2)} frames a second against ${whole.perSecond.toFixed(2)} whole, ${JSON.stringify(near.pace)}`);
+      expect(near.pace.pixelsPerSecond, "the quickest dot moves further on a larger Earth").toBeGreaterThan(whole.pace.pixelsPerSecond * 1.5);
+      expect(near.perSecond, "frames a second").toBeGreaterThan(whole.perSecond * 1.2);
+      expect(near.perSecond, "frames a second").toBeLessThanOrEqual(15 + 1);
+    });
+
+    test("riding the ISS it rises towards the cap, and `smooth-fps` moves the cap", async ({ page }) => {
+      await realTime(page, "ride", null);
+      const riding = await rate(page, "ride");
+      console.log(`REAL TIME riding the ISS: ${riding.perSecond.toFixed(2)} frames a second, ${JSON.stringify(riding.pace)}`);
+      expect(riding.pace.pixelsPerSecond, "the ground goes by under the camera").toBeGreaterThan(2);
+      expect(riding.perSecond, "frames a second").toBeGreaterThan(3);
+      expect(riding.perSecond, "frames a second").toBeLessThanOrEqual(15 + 1);
+      await page.locator(SPACE).evaluate((el) => el.setAttribute("smooth-fps", "4"));
+      await page.waitForTimeout(1500);
+      const capped = await rate(page, "ride", 5000);
+      console.log(`REAL TIME riding the ISS with smooth-fps 4: ${capped.perSecond.toFixed(2)} frames a second, ${JSON.stringify(capped.pace)}`);
+      expect(capped.pace.cap).toBe(4);
+      expect(capped.perSecond, "frames a second").toBeLessThanOrEqual(4.6);
+    });
+  });
+
+  test.describe("for a reader who asked for reduced motion", () => {
+    test.use({ reducedMotion: "reduce" });
+
+    for (const [name, look, zoom] of [["zoomed in on the satellites", "satellites", 2.5], ["riding the ISS", "ride", null]] as const) {
+      test(`${name} it stays at one a second`, async ({ page }) => {
+        await realTime(page, look, zoom);
+        const still = await rate(page, look);
+        console.log(`REAL TIME reduced motion, ${name}: ${still.perSecond.toFixed(2)} frames a second, ${JSON.stringify(still.pace)}`);
+        expect(still.perSecond, "frames a second").toBeGreaterThanOrEqual(0.6);
+        expect(still.perSecond, "frames a second").toBeLessThanOrEqual(1.6);
+      });
+    }
+  });
+});
+
 test.describe("the realistic Earth's clock", () => {
   test.use({ reducedMotion: "no-preference" });
 

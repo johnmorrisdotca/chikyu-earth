@@ -165,6 +165,10 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   let bMs = 0;
   let ready = false;
   let stepMs = MIN_STEP_MS;
+  // the quickest satellite between the two samples now held, in Earth radii for each second of game time, worked out once for each pair (see `at`) and not at every frame
+  let fastest = 0;
+  let fastestAt = Number.NaN;
+  let fastestTo = Number.NaN;
   let propagations = 0;
   let placed = 0;
   const timing = { lastBatchMs: 0, maxBatchMs: 0 };
@@ -259,6 +263,9 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     classColour,
     get placed() {
       return placed;
+    },
+    get fastest() {
+      return fastest;
     },
     get estimateFar() {
       return estimate;
@@ -398,6 +405,22 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
           sample(b, okB, bMs);
           ready = true;
         }
+      }
+      // how far the quickest one went between the two samples: once for each pair of samples (about once a second), never at a frame, so it costs one pass over the group a second
+      if (fastestAt !== aMs || fastestTo !== bMs) {
+        fastestAt = aMs;
+        fastestTo = bMs;
+        let most = 0;
+        for (let i = 0; i < n; i += 1) {
+          if (okA[i] !== 1 || okB[i] !== 1) continue;
+          const k = i * 3;
+          const dx = b[k]! - a[k]!;
+          const dy = b[k + 1]! - a[k + 1]!;
+          const dz = b[k + 2]! - a[k + 2]!;
+          const squared = dx * dx + dy * dy + dz * dz;
+          if (squared > most) most = squared;
+        }
+        fastest = Math.sqrt(most) / ((bMs - aMs) / 1000);
       }
       const t = (ms - aMs) / (bMs - aMs);
       let count = 0;
