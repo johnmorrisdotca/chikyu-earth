@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.59.0 - 2026-11-18
 
 - **A survey of where the finer ground has a picture, and the guide corrected** (MODULES-1367). `scripts/finer-coverage.py` (`pnpm coverage`) reads the Landsat layer's tiles at a grid of places and writes the maps and tables in `docs/coverage/` (level 5 and level 11). On 2026-11-17 the finer picture covered 89 per cent of the land, and every band of latitude from 60 degrees south to 80 degrees north at 96 per cent or more; what is missing is all of Antarctica, part of the land north of 80 degrees and the water of large lakes. The earth-tiles guide, in English and Japanese, says that instead of "the far north". `pnpm test:tiles` runs the script's selftest on a tiny made-up map (it needs Pillow: `python3 -m venv .cache/venv && .cache/venv/bin/pip install pillow`), and CI runs it too.
 - **The Landsat scene edge west of Tokyo is named in the guide** (MODULES-1314). With `tiles-finer="gibs"` the 2000 mosaic shows a straight edge about 40 km west of Tokyo (tile level 9, row 96, column 568) where two Landsat scenes meet. It is in NASA's picture. No general fix was found (the tiles do not say where a scene ends, and a colour gain scales both sides alike), so the guide, in English and Japanese, now names it and says to pick another year (`tiles-finer-date`) or layer (`tiles-finer-layer`). No code changes.
