@@ -1,6 +1,6 @@
 // Real satellite pictures of the ground under a point: the address of a NASA GIBS (Worldview) snapshot of a box around it, the days to try when a day is missing, and the credit NASA asks for.
 // Pure: nothing here fetches. The reader's browser asks NASA for the picture (no key, and the service answers any page). A page that never imports this does not pay for it.
-import { GIBS_CREDIT, previousUtcDay, utcDay } from "../door/gibs.ts";
+import { GIBS_CREDIT, GIBS_LAYERS, gibsHasDay, previousUtcDay, utcDay } from "../door/gibs.ts";
 
 /** The WMS address of NASA's imagery, in the plain latitude and longitude (EPSG:4326) grid. */
 const WMS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi";
@@ -68,45 +68,11 @@ export const PHOTO_MAX_PX = 2048;
  */
 export const PHOTO_FALLBACK_DAYS = 3;
 
-/** A day range of a layer, inclusive, `yyyy-mm-dd` (dates sort as text). */
-type Days = readonly [start: string, end: string];
-
-interface PhotoLayer {
-  id: string;
-  /** The days NASA lists, read from the WMS capabilities document on 2026-11-17. */
-  days: readonly Days[];
-  /** True while the satellite is still sending: a day after the last listed one is asked for. False for a layer that has ended (Suomi NPP's last day is 2026-11-02, and a later day is a black picture). */
-  running: boolean;
-}
-
 /**
  * The daily true-colour layers, best first, about 250 m a pixel with the clouds left in: NOAA-20 VIIRS (from 2018-01-05), Suomi NPP VIIRS (2015-11-24 to 2026-11-02, then it ends) and MODIS Terra (from 2000-02-24).
- * The first with a day is used, so a day one of them skipped is taken from the next. Read from NASA's capabilities document on 2026-11-17.
+ * The first with a day is used, so a day one of them skipped is taken from the next. Their days are the one table in `door/gibs.ts` (`GIBS_LAYERS`, read on `GIBS_DAYS_READ`), which the finer map tiles use too.
  */
-const LAYERS: readonly PhotoLayer[] = [
-  {
-    id: "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
-    running: true,
-    days: [["2018-01-05", "2018-02-21"], ["2018-02-24", "2018-03-12"], ["2018-03-14", "2019-12-31"], ["2020-01-02", "2022-01-12"], ["2022-01-14", "2026-11-16"]],
-  },
-  {
-    id: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
-    running: false,
-    days: [["2015-11-24", "2022-07-27"], ["2022-08-10", "2024-05-31"], ["2024-06-04", "2024-07-11"], ["2024-07-16", "2024-07-24"], ["2024-07-29", "2024-11-03"], ["2024-11-06", "2026-04-28"], ["2026-04-30", "2026-07-10"], ["2026-07-16", "2026-11-02"]],
-  },
-  {
-    id: "MODIS_Terra_CorrectedReflectance_TrueColor",
-    running: true,
-    days: [["2000-02-24", "2000-04-25"], ["2000-04-28", "2000-08-06"], ["2000-08-18", "2001-06-15"], ["2001-07-03", "2002-03-19"], ["2002-03-28", "2003-12-16"], ["2003-12-24", "2008-12-20"], ["2008-12-23", "2016-02-18"], ["2016-02-27", "2022-10-10"], ["2022-10-23", "2026-11-17"]],
-  },
-];
-
-/** Whether the layer lists the day, or is still running and the day is after its last. */
-const hasDay = (layer: PhotoLayer, day: string): boolean => {
-  const last = layer.days[layer.days.length - 1]![1];
-  if (day > last) return layer.running;
-  return layer.days.some(([start, end]) => day >= start && day <= end);
-};
+const LAYERS = ["VIIRS_NOAA20_CorrectedReflectance_TrueColor", "VIIRS_SNPP_CorrectedReflectance_TrueColor", "MODIS_Terra_CorrectedReflectance_TrueColor"].map((id) => GIBS_LAYERS[id]!);
 
 /**
  * What to ask for: a point, the side of the box in kilometres, and the day.
@@ -263,7 +229,7 @@ export function photoBox(options: PhotoOptions): PhotoBox {
  * ```
  */
 export function photoLayer(day: string): string | null {
-  return LAYERS.find((layer) => hasDay(layer, day))?.id ?? null;
+  return LAYERS.find((layer) => gibsHasDay(layer, day))?.id ?? null;
 }
 
 function requestFor(layer: string, west: number, south: number, east: number, north: number, widthPx: number, heightPx: number, day: string): string {
