@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The Landsat scene edge west of Tokyo is named in the guide** (MODULES-1314). With `tiles-finer="gibs"` the 2000 mosaic shows a straight edge about 40 km west of Tokyo (tile level 9, row 96, column 568) where two Landsat scenes meet. It is in NASA's picture. No general fix was found (the tiles do not say where a scene ends, and a colour gain scales both sides alike), so the guide, in English and Japanese, now names it and says to pick another year (`tiles-finer-date`) or layer (`tiles-finer-layer`). No code changes.
+
 ## 0.58.0 - 2026-11-17
 
 - **A fast clock's streaks turn about the plane of the moment shown** (MODULES-1476). Above 60 times real time `arc()` turned each pinned place about a normal worked out once from the element set's own `RA_OF_ASC_NODE` and `INCLINATION`, so days from the elements (a low orbit's plane turns about 5 degrees a day) the dot left its orbit between two pins: 600 s after its pin the ISS's place was 3,049 km from `exact()`'s at 20 days from its elements and 5,970 km at 400. The axis is now the pinned place crossed with SGP4's velocity there, worked out once for each pin and not in `arc()`, with no allocation in the frame: the same ISS is 13.6 km off at 20 days and 5.4 km at 400 (what is left is the mean motion standing in for the true rate along the orbit). At the page's own pin rate (about once a second) the worst place of the recorded stations is 0.4 km off. Tests: `arc` within 1 km of `exact` at the pin rate and within 20 km 600 s after a pin, 20 and 400 days from the elements, and no SGP4 call or heap growth in a frame between pins. No change to the API.
