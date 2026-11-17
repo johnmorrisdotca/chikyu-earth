@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.53.0 - 2026-11-16
+
 - **`<chikyu-flat>`: satellites on a flat map of the world** (MODULES-1391). A new entry `@johnmorrisdotca/chikyu-earth/flat/define` registers the element, and `@johnmorrisdotca/chikyu-earth/flat` holds its pure parts (they import on a server, with no dependency, not even satellite.js).
   - **Map.** Plate carree on two canvases (map and dots), with the country outlines, a graticule and the night side from the real Sun. `center` is the longitude in the middle (0, Greenwich, by default), wraps cleanly at the date line, and the built-in **Greenwich** and **My place** buttons switch; My place and a marker at the place appear only when the page gives `home-lon` and `home-lat` (the element never asks for a location). A box taller than 2 to 1 (a phone) is filled; touch pan, two-finger pinch zoom, + and - buttons and keys, Control or Command and the wheel zoom.
   - **Satellites.** `setGroup(id, sets, style?)` for each group, `elements` for one, or `elements-src`; the `group` attribute names the groups shown and `off` those that start off (Starlink). Colour by group, or `colour-by="plane"` by orbital plane. Filter chips (groups, or planes) are built in and are the legend; `controls="none"` leaves the page to drive `group` and `plane`. `planes`, `facts(id)`, `groups`, `visibleGroups`, `selected`, `placeOf`. Optional `footprint` (the coverage circle) and `track` (the ground track of the chosen satellite, which follows the clock). Events `chikyu-flat-pick`, `chikyu-flat-filter`, `chikyu-flat-planes`, `chikyu-flat-view` and `chikyu-timechange`. Keyboard: arrow keys move from dot to dot, Enter chooses, Escape clears; hover and tap pick.
