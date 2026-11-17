@@ -6,6 +6,8 @@ import type { SatelliteRef, Satellites } from "../satellites/types.ts";
 import type { ThreeParts } from "../realistic/textures.ts";
 import { satelliteEmphasis, type SatelliteFocus } from "./satellite-focus.ts";
 import { BUILT_IN_PATH_STYLES, capPaths, nearestLoop, resolvePathId, styleOf, styleTable, type PathHit, type PathInfo, type PathRequest, type PathStyle } from "./paths.ts";
+import { shadowFlags, sunDirectionScene } from "../flat/track-state.ts";
+import { TRACK_SHADOW, TRACK_SUNLIT } from "../flat/colours.ts";
 import { createPathRibbons, RIDE_PATH_FADE_KM, type RibbonPath } from "./path-ribbons.ts";
 
 type Three = ThreeParts;
@@ -46,7 +48,7 @@ export interface SatelliteState {
    * The extra paths a page asked for (`setPaths`), the look table (`setPathStyles`: the page's entries over the built-in ones), whether the chosen satellite's own orbit is drawn (`selected-path`), and a number that goes up at each change so the layer
    * rewrites its buffers only when something changed. `info` is what the last draw resolved and kept: the paths drawn, in order; `dropped` how many the cap left out and `unresolved` how many matched no satellite.
    */
-  paths: { requests: PathRequest[]; overrides: Record<string, Partial<PathStyle> | null>; selectedOn: boolean; version: number; info: PathInfo[]; dropped: number; unresolved: number };
+  paths: { requests: PathRequest[]; overrides: Record<string, Partial<PathStyle> | null>; selectedOn: boolean; light: { on: boolean; sun: string; shadow: string }; version: number; info: PathInfo[]; dropped: number; unresolved: number };
   /** Set at each draw by the view: the satellite a ride is on, whose own orbit is drawn in the `selected` look while `selected-path` is on. `null` when none rides a satellite. */
   ridden: SatelliteRef | null;
   /**
@@ -117,7 +119,7 @@ export function longestStreak(segments: Float32Array, count: number, earthPx: nu
   return longest * earthPx;
 }
 
-export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, orbitLines: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0 } });
+export const newSatelliteState = (): SatelliteState => ({ groups: new Map(), selected: null, marked: new Set(), pinned: [], orbitTint: false, focus: null, modelOver: null, hover: { ref: null, fade: 0, enabled: true, color: "#ffffff", opacity: HOVER_PATH_OPACITY }, paths: { requests: [], overrides: {}, selectedOn: true, light: { on: true, sun: TRACK_SUNLIT, shadow: TRACK_SHADOW }, version: 0, info: [], dropped: 0, unresolved: 0 }, ridden: null, streakMax: DEFAULT_STREAK_MAX, drawn: { placed: 0, segments: 0, tooFast: false, dotScale: 1, longestStreakPx: 0, streakCapPx: 0, weight: 1, fade: 1, earthPx: 0, updateMs: 0, maxUpdateMs: 0, updates: 0, totalMs: 0, selectedRing: false, hoverPath: false, hoverOpacity: 0, selectedOpacity: 0, orbitLines: 0, pathsDrawn: 0, pathDraws: 0, estimated: 0 } });
 
 /** The most orbits a group may draw all at once, one line each. */
 export const MAX_ORBIT_GROUP = 40;
@@ -412,6 +414,9 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
     seen: Uint8Array;
     at: number;
     wall: number;
+    /** Which points of the orbit are in the Earth's shadow, for the moment `at` (the chosen satellite's own orbit only, while `path-light` is on), and the signature it was worked out for. */
+    dark: Uint8Array;
+    darkFor: string;
     /** The orbit could not be placed (its elements are too old): nothing to draw. */
     empty: boolean;
   }
@@ -563,7 +568,8 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         wanted.push({ id: norad ?? refKey(ref), ref, name: "selected", style: table["selected"]!, fade: riding ? RIDE_PATH_FADE_KM / EARTH_KM : 0 });
       }
     }
-    const signature = wanted.map((w) => `${refKey(w.ref)}|${w.name}|${w.style.color}|${w.style.width}|${w.style.opacity}|${w.style.dash ? w.style.dash.join(",") : "-"}|${w.fade}`).join(";");
+    const light = pathState.light;
+    const signature = `${light.on ? `${light.sun}|${light.shadow}` : "-"};` + wanted.map((w) => `${refKey(w.ref)}|${w.name}|${w.style.color}|${w.style.width}|${w.style.opacity}|${w.style.dash ? w.style.dash.join(",") : "-"}|${w.fade}`).join(";");
     let dirty = signature !== slotsSignature;
     const old = new Map(slots.map((slot) => [slot.key, slot]));
     let empty = 0;
@@ -573,7 +579,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       let slot = old.get(key);
       const set = find(w.ref)!;
       if (!slot) {
-        slot = { key, info: { id: w.id, ref: w.ref, style: w.name }, style: w.style, fade: w.fade, positions: new Float32Array(ORBIT_POINTS * 3), screen: new Float32Array(ORBIT_POINTS * 2), seen: new Uint8Array(ORBIT_POINTS), at: Number.NaN, wall: 0, empty: false };
+        slot = { key, info: { id: w.id, ref: w.ref, style: w.name }, style: w.style, fade: w.fade, positions: new Float32Array(ORBIT_POINTS * 3), screen: new Float32Array(ORBIT_POINTS * 2), seen: new Uint8Array(ORBIT_POINTS), at: Number.NaN, wall: 0, dark: new Uint8Array(ORBIT_POINTS), darkFor: "", empty: false };
         dirty = true;
       }
       old.delete(key);
@@ -587,13 +593,21 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         slot.empty = slot.positions.every((v) => v === 0);
         dirty = true;
       }
+      // the chosen satellite's own orbit, coloured by where the Earth's shadow lies on it (the Sun is fixed over the one revolution it is)
+      const shaded = light.on && w.name === "selected" && !slot.empty;
+      const darkFor = shaded ? `${slot.at}|${light.sun}|${light.shadow}` : "";
+      if (darkFor !== slot.darkFor) {
+        slot.darkFor = darkFor;
+        if (shaded) shadowFlags(slot.positions, ORBIT_POINTS, sunDirectionScene(slot.at), slot.dark);
+        dirty = true;
+      }
       if (slot.empty) empty += 1;
       next.push(slot);
     }
     slots = next;
     if (dirty) {
       slotsSignature = signature;
-      ribbons.set(slots.filter((slot) => !slot.empty).map((slot): RibbonPath => ({ positions: slot.positions, style: slot.style, fade: slot.fade })));
+      ribbons.set(slots.filter((slot) => !slot.empty).map((slot): RibbonPath => ({ positions: slot.positions, style: slot.darkFor ? { ...slot.style, color: light.sun } : slot.style, fade: slot.fade, ...(slot.darkFor ? { dark: slot.dark, darkInk: light.shadow } : {}) })));
     }
     const own = wanted.filter((w) => w.name === "selected" && pathState.selectedOn);
     pathState.info = slots.filter((slot) => !slot.empty).map((slot) => ({ ...slot.info }));

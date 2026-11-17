@@ -584,16 +584,22 @@ if (flat && controls && stage) {
   let rideKey = address.get("ride");
   let rideView: "from" | "follow" | "above" = address.get("rview") === "follow" ? "follow" : address.get("rview") === "above" ? "above" : "from";
   let rideLook: "down" | "horizon" = address.get("rlook") === "horizon" ? "horizon" : "down";
+  let rideUp: "travel" | "north" = address.get("rup") === "north" ? "north" : "travel";
   const FACES = ["ahead", "behind", "left", "right", "down", "up"] as const;
   let rideFace: (typeof FACES)[number] | null = FACES.includes(address.get("face") as (typeof FACES)[number]) ? (address.get("face") as (typeof FACES)[number]) : null;
   const rideButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride]")];
   const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-view]")];
   const lookButtonsRide = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-look]")];
   const faceButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-face]")];
+  const upButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-ride-up]")];
   const markRide = (): void => {
     for (const b of rideButtons) b.classList.toggle("on", b.dataset["ride"] === (rideKey?.startsWith("group:") ? "group" : (rideKey ?? "none")));
     for (const b of viewButtons) b.classList.toggle("on", b.dataset["rideView"] === rideView);
     for (const b of lookButtonsRide) b.classList.toggle("on", b.dataset["rideLook"] === rideLook);
+    for (const b of upButtons) {
+      b.classList.toggle("on", b.dataset["rideUp"] === rideUp);
+      b.setAttribute("aria-pressed", String(b.dataset["rideUp"] === rideUp));
+    }
     const facing = space?.facing ?? null;
     for (const b of faceButtons) {
       const on = b.dataset["rideFace"] === facing;
@@ -627,7 +633,7 @@ if (flat && controls && stage) {
     markRide();
     speakRide();
     rideFace = null;
-    for (const key of ["ride", "rview", "rlook", "face"]) address.set(key, null);
+    for (const key of ["ride", "rview", "rlook", "rup", "face"]) address.set(key, null);
   }
   async function startRide(key: string, keepTurn = false): Promise<void> {
     if (!space) return;
@@ -674,13 +680,14 @@ if (flat && controls && stage) {
       space.selectSatellite(null);
       if (satInfo) satInfo.hidden = true;
     } else if (typeof target !== "string") showSatellite(null);
-    space.ride(target, { view: rideView, look: rideLook, ...(rideFace ? { face: rideFace } : {}) });
+    space.ride(target, { view: rideView, look: rideLook, up: rideUp, ...(rideFace ? { face: rideFace } : {}) });
     setRideZoom(keepTurn);
     speakRide();
     markRide();
     address.set("ride", key);
     address.set("rview", rideView === "from" ? null : rideView);
     address.set("rlook", rideLook === "horizon" ? "horizon" : null);
+    address.set("rup", rideUp === "north" ? "north" : null);
     address.set("face", rideFace);
   }
   // riding along is for watching it go by: a ride starts the clock (Play), and the date box moves with it
@@ -702,6 +709,15 @@ if (flat && controls && stage) {
       rideLook = button.dataset["rideLook"] === "horizon" ? "horizon" : "down";
       if (rideKey) void startRide(rideKey);
       else markRide();
+    });
+  }
+  // which way is up changes the picture of a ride in place: the element turns it in a glide (a jump for a reader who asked for less motion), and the ride and the clock go on
+  for (const button of upButtons) {
+    button.addEventListener("click", () => {
+      rideUp = button.dataset["rideUp"] === "north" ? "north" : "travel";
+      space?.setAttribute("ride-up", rideUp);
+      address.set("rup", rideUp === "north" ? "north" : null);
+      markRide();
     });
   }
   for (const button of faceButtons) {

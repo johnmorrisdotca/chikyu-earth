@@ -112,6 +112,10 @@ export interface RibbonPath {
   style: PathStyle;
   /** Earth radii from the camera over which the path fades in (nothing at the camera, all of its opacity at this distance); 0 or missing draws it at its look everywhere. */
   fade?: number;
+  /** One flag a point ({@link PATH_POINTS}): 1 where the segment that starts at the point is drawn in `darkInk` instead of the look's colour (the part of an orbit in the Earth's shadow). */
+  dark?: Uint8Array;
+  /** Any CSS colour: what the flagged segments are drawn in. Needed with `dark`. */
+  darkInk?: string;
 }
 
 export interface PathRibbons {
@@ -163,14 +167,16 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
   mesh.visible = false;
   scene.add(mesh);
   const colour = new three.Color();
+  const shade = new three.Color();
   let count = 0;
 
   return {
     set(paths) {
       count = Math.min(PATH_SLOTS, paths.length);
       for (let p = 0; p < count; p += 1) {
-        const { positions, style, fade = 0 } = paths[p]!;
+        const { positions, style, fade = 0, dark, darkInk } = paths[p]!;
         colour.set(style.color);
+        if (dark && darkInk) shade.set(darkInk);
         // the arc length at each point, in Earth radii, for the dashes
         let along = 0;
         for (let i = 0; i < PATH_POINTS; i += 1) {
@@ -183,6 +189,7 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
           const bz = positions[j * 3 + 2]!;
           const length = Math.hypot(bx - ax, by - ay, bz - az);
           const q = p * PATH_POINTS + i;
+          const ink0 = dark && darkInk && dark[i] === 1 ? shade : colour;
           for (let k = 0; k < 4; k += 1) {
             const v = q * 4 + k;
             position[v * 3] = ax;
@@ -191,9 +198,9 @@ export function createPathRibbons(three: Three, scene: THREE.Object3D): PathRibb
             other[v * 3] = bx;
             other[v * 3 + 1] = by;
             other[v * 3 + 2] = bz;
-            ink[v * 4] = colour.r;
-            ink[v * 4 + 1] = colour.g;
-            ink[v * 4 + 2] = colour.b;
+            ink[v * 4] = ink0.r;
+            ink[v * 4 + 1] = ink0.g;
+            ink[v * 4 + 2] = ink0.b;
             ink[v * 4 + 3] = style.opacity;
             look[v * 4] = style.width;
             look[v * 4 + 1] = style.dash ? style.dash[0] : 0;

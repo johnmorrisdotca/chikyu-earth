@@ -73,7 +73,7 @@ The map is plate carree (longitude and latitude to equal widths) with the countr
 | `colour-by` | `group` (the default) or `plane`. By plane, each plane of a group has its own colour (twelve, in order). |
 | `plane` | A plane letter (`A`): show only that plane of the one group on show. |
 | `footprint` | Draw the coverage circle of the chosen satellite, or of every one shown when there are 80 or fewer. `footprint-elevation` is the lowest angle above the horizon the circle is drawn for (25, as the 3D beam). |
-| `track` | Draw the ground track of the chosen satellite: one orbit, dashed behind it and solid ahead. It follows the clock. |
+| `track` | Draw the ground track of the chosen satellite: one orbit, dashed behind it and solid ahead, **amber where the satellite is in sunlight and blue where it is in the Earth's shadow**, with a key. It follows the clock. |
 | `selected` | The NORAD number of the chosen satellite. |
 | `shade` | `off` for no night side. |
 | `dot-size` | The dot's width in pixels. |
@@ -95,11 +95,15 @@ While time runs the map draws a frame whenever a satellite would move half a pix
 
 ### Choosing a satellite
 
-A pointer going over a dot, a tap or click on it, or the keyboard sends `chikyu-flat-pick` with `{ id, index, group, name, plane, altitudeKm, via }`; `via` is `hover`, `tap` or `key`, and a tap on nothing sends `id: null` and clears the choice. The canvas takes keyboard focus: the arrow keys move from one dot to the next, from the left of the map to the right, Page Up and Page Down jump ten, Enter chooses, Escape clears. The name of the dot is read out in a live region and written beside it. `pick(id)` chooses one from code, without the event. `placeOf(id)` says where a satellite is on the screen.
+A pointer going over a dot, a tap or click on it, or the keyboard sends `chikyu-flat-pick` with `{ id, index, group, name, plane, altitudeKm, sunlit, bearingDeg, ascending, via }`; `via` is `hover`, `tap` or `key`, and a tap on nothing sends `id: null` and clears the choice. The canvas takes keyboard focus: the arrow keys move from one dot to the next, from the left of the map to the right, Page Up and Page Down jump ten, Enter chooses, Escape clears. The name of the dot is read out in a live region and written beside it. `pick(id)` chooses one from code, without the event. `placeOf(id)` says where a satellite is on the screen. `stateOf(id)` and `selectedState` say where it is over the ground, which way it goes and whether the Sun lights it: `{ lat, lon, heightKm, bearingDeg, ascending, sunlit }`, placed exactly by SGP4 for the moment shown; it is what the pick carries.
+
+### Sunlit and in the shadow
+
+The ground track is drawn in two colours: **amber where the satellite is in sunlight, blue where it is in the Earth's shadow**, over a dark edge so it reads on a dark sea and a light one. The part behind the satellite is dashed and the part ahead solid, as before, and a key under the map names the two colours while the track is on. Amber and blue differ in lightness as well as in hue, so a reader who cannot tell red from green can read them. The shadow is the Earth's cylinder of shadow, not the cone (see [Riding along](ride-along.md) for what that means and how it is tested): a satellite is lit or it is not, with no penumbra. A page that wants other colours sets `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `groundTrack(set, from, to)` of `/passes` gives every point of a track a `sunlit` too, for a page that draws its own.
 
 ### Style
 
-The sea, land, outline and night colours are the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line` and `--chikyu-flat-night`. `--chikyu-flat-aspect` (2 / 1) and `--chikyu-flat-aspect-narrow` (4 / 3, under 600 px wide) set the shape of the map, and `--chikyu-flat-radius` its corners. Give the element a height and the map fills it.
+The sea, land, outline and night colours are the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line` and `--chikyu-flat-night`; the track's two colours are `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `--chikyu-flat-aspect` (2 / 1) and `--chikyu-flat-aspect-narrow` (4 / 3, under 600 px wide) set the shape of the map, and `--chikyu-flat-radius` its corners. Give the element a height and the map fills it.
 
 ## Cost
 

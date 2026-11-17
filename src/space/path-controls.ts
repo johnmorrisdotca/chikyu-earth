@@ -1,11 +1,12 @@
 // What the two satellite elements share for the page's paths: the list and the look table, the attributes `selected-path` and `path-hit`, the test of which path a pointer is on, and the events `chikyu-path-hover` and `chikyu-path-click`.
 // One press means one thing, in this order: a satellite's dot, then a path, then the sky. The element asks {@link PathControls.press} after the dot and before anything else, and what it answers `true` to is not given to the sky.
+import { TRACK_SHADOW, TRACK_SUNLIT } from "../flat/colours.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import type { SatelliteState } from "./satellite-layer.ts";
 import { capPaths, hitRadius, MAX_PATHS, readPathHit, styleTable, type PathHit, type PathRequest, type PathStyle } from "./paths.ts";
 
 /** The attributes the paths add to an element. */
-export const PATH_ATTRIBUTES = ["selected-path", "path-hit", "path-priority"] as const;
+export const PATH_ATTRIBUTES = ["selected-path", "path-light", "path-hit", "path-priority"] as const;
 
 /** Which comes first under a pointer: a satellite's `dots` (the default), or `paths` (a path of the page's, unless the dot is of a satellite whose path is listed or that is chosen). Anything else is `dots`. */
 export type PathPriority = "dots" | "paths";
@@ -146,8 +147,16 @@ export function bindPaths(host: PathHost): PathControls {
     },
     sync() {
       const on = element.getAttribute("selected-path") !== "off";
-      if (on === state.paths.selectedOn) return;
+      // the chosen orbit in sunlight and in the Earth's shadow: `path-light="off"` keeps it one colour; the colours are the page's `--chikyu-path-sun` and `--chikyu-path-shadow`
+      const lightOn = !/^(off|false|no|0)$/i.test((element.getAttribute("path-light") ?? "").trim());
+      const style = getComputedStyle(element);
+      const sun = style.getPropertyValue("--chikyu-path-sun").trim() || TRACK_SUNLIT;
+      const shadow = style.getPropertyValue("--chikyu-path-shadow").trim() || TRACK_SHADOW;
+      const light = state.paths.light;
+      const lightChanged = lightOn !== light.on || sun !== light.sun || shadow !== light.shadow;
+      if (on === state.paths.selectedOn && !lightChanged) return;
       state.paths.selectedOn = on;
+      state.paths.light = { on: lightOn, sun, shadow };
       state.paths.version += 1;
       host.request();
     },

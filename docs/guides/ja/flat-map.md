@@ -73,7 +73,7 @@ flat.addEventListener("chikyu-flat-pick", (event) => console.log(event.detail.na
 | `colour-by` | `group` (初期値) または `plane`。`plane` ではグループの軌道面ごとに色が変わります (12色を順に使います)。 |
 | `plane` | 軌道面の文字 (`A`)。表示中の1つのグループのその軌道面だけを表示します。 |
 | `footprint` | 選んだ衛星の可視範囲 (カバーする円) を描きます。表示中の衛星が80機以下なら、そのすべてを描きます。`footprint-elevation` は円を求める最低仰角で、初期値は25度 (3D のビームと同じ) です。 |
-| `track` | 選んだ衛星の地上軌跡を描きます。1周分で、後ろは破線、前は実線です。時計に合わせて動きます。 |
+| `track` | 選んだ衛星の地上軌跡を描きます。1周分で、後ろは破線、前は実線で、**衛星に日が当たっているところは琥珀色、地球の影に入っているところは青**で描き、色の凡例が付きます。時計に合わせて動きます。 |
 | `selected` | 選んだ衛星の NORAD 番号。 |
 | `shade` | `off` で夜の側を描きません。 |
 | `dot-size` | 点の幅 (ピクセル)。 |
@@ -95,11 +95,15 @@ flat.addEventListener("chikyu-flat-pick", (event) => console.log(event.detail.na
 
 ### 衛星を選ぶ
 
-ポインターが点の上を通る、点をタップまたはクリックする、キーボードで選ぶと、`chikyu-flat-pick` が `{ id, index, group, name, plane, altitudeKm, via }` つきで送られます。`via` は `hover`、`tap`、`key` のどれかで、何もない所をタップすると `id: null` が送られ、選択が解除されます。キャンバスはキーボードフォーカスを受け取ります。矢印キーで地図の左から右の順に次の点へ移り、Page Up と Page Down で10個ずつ飛び、Enter で選び、Escape で解除します。点の名前は読み上げ領域に出力し、点のそばにも表示します。`pick(id)` はコードから、イベントを送らずに選びます。`placeOf(id)` は衛星の画面上の位置を返します。
+ポインターが点の上を通る、点をタップまたはクリックする、キーボードで選ぶと、`chikyu-flat-pick` が `{ id, index, group, name, plane, altitudeKm, sunlit, bearingDeg, ascending, via }` つきで送られます。`via` は `hover`、`tap`、`key` のどれかで、何もない所をタップすると `id: null` が送られ、選択が解除されます。キャンバスはキーボードフォーカスを受け取ります。矢印キーで地図の左から右の順に次の点へ移り、Page Up と Page Down で10個ずつ飛び、Enter で選び、Escape で解除します。点の名前は読み上げ領域に出力し、点のそばにも表示します。`pick(id)` はコードから、イベントを送らずに選びます。`placeOf(id)` は衛星の画面上の位置を返します。`stateOf(id)` と `selectedState` は、衛星が地上のどこにいて、どちらへ進み、太陽が当たっているかを `{ lat, lon, heightKm, bearingDeg, ascending, sunlit }` で返します。表示している時刻について SGP4 で正確に求めた値で、選択イベントで送られる値と同じです。
+
+### 日なたと影
+
+地上軌跡は2色で描かれます。**衛星に日が当たっているところは琥珀色、地球の影に入っているところは青**です。暗い縁取りの上に重ねるので、暗い海でも明るい海でも読めます。衛星の後ろの部分は破線、前の部分は実線のままで、軌跡を描いている間は、2色の凡例が地図の下に出ます。琥珀色と青は色相だけでなく明るさも違うので、赤と緑の区別がつきにくい人にも読めます。影は、円錐ではなく、地球の円柱形の影です (意味と試験の方法は[人工衛星や惑星といっしょに動く](ride-along.md)を参照)。衛星は日なたか影かのどちらかで、半影はありません。ほかの色にしたいページは、`--chikyu-flat-track-sun` と `--chikyu-flat-track-shadow` を設定します。`/passes` の `groundTrack(set, from, to)` も、軌跡の各点に `sunlit` を付けて返すので、自分で軌跡を描くページにも使えます。
 
 ### 見た目
 
-海、陸、輪郭、夜の色は、カスタムプロパティ `--chikyu-flat-sea`、`--chikyu-flat-land`、`--chikyu-flat-line`、`--chikyu-flat-night` で決めます。`--chikyu-flat-aspect` (2 / 1) と `--chikyu-flat-aspect-narrow` (幅 600 px 未満では 4 / 3) で地図の形、`--chikyu-flat-radius` で角の丸みを決めます。要素に高さを与えると、地図はそれいっぱいに広がります。
+海、陸、輪郭、夜の色は、カスタムプロパティ `--chikyu-flat-sea`、`--chikyu-flat-land`、`--chikyu-flat-line`、`--chikyu-flat-night` で決めます。軌跡の2色は `--chikyu-flat-track-sun` と `--chikyu-flat-track-shadow` です。`--chikyu-flat-aspect` (2 / 1) と `--chikyu-flat-aspect-narrow` (幅 600 px 未満では 4 / 3) で地図の形、`--chikyu-flat-radius` で角の丸みを決めます。要素に高さを与えると、地図はそれいっぱいに広がります。
 
 ## 処理の負荷
 

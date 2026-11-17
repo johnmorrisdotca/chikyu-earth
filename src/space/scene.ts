@@ -25,6 +25,8 @@ import type { PlaceView } from "../markers/places.ts";
 import { beginPlaceSprites, createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import type { CountryFrame } from "../country-names/geometry.ts";
 import type { GeoPoint } from "../types.ts";
+import { localNorth, northUpYaw, screenAngle, type RideUp } from "./north-up.ts";
+import { trackStateOfScene, type GroundTrackState } from "../flat/track-state.ts";
 import { ABOVE_MODEL_SHARE, aboveAxes, aboveModelShare, MODEL_HANDOVER_PX, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 import type { PathHit } from "./paths.ts";
 import { createSatelliteLayer, newSatelliteState, type SatelliteLayer, type SatelliteScreen, type SatelliteState } from "./satellite-layer.ts";
@@ -183,6 +185,26 @@ export interface RideState {
   modelSize: RideModelSize;
   /** What a drag does in an outside ride from the satellite: `head` turns the view where the camera is, `orbit` takes the camera round the satellite. */
   drag: RideDrag;
+  /** Which way is up in the view above a satellite: the way it is going (`travel`), or north. */
+  up: RideUp;
+}
+
+/**
+ * Where the ridden satellite is over the ground and how it is going, and where north is in the picture, as of the last draw.
+ *
+ * @example
+ * ```ts
+ * import type { RideTrack } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * const say = (track: RideTrack): string => `heading ${track.bearingDeg.toFixed(0)} degrees, north ${track.northDeg === null ? "out of sight" : `${track.northDeg.toFixed(0)} degrees round`}`;
+ * console.log(typeof say);
+ * ```
+ */
+export interface RideTrack extends GroundTrackState {
+  /** Where north points in the picture, degrees clockwise from its top (0 north at the top, 90 to the right), or `null` when it points along the line of sight. */
+  northDeg: number | null;
+  /** The way the satellite goes over the ground in the picture, degrees clockwise from its top: the picture's north angle plus the bearing; or `null` with north. */
+  travelDeg: number | null;
 }
 
 /** The camera as the last draw left it, for the next one to start from when the ride changes. */
@@ -265,6 +287,8 @@ export interface SpaceModel {
   rideMotion: number;
   /** The heading of a riding camera in degrees, added up change by change from the controls' wrapped yaw (`rideTurnDegrees`): a drag the whole way round is a turn the whole way round, and a change of zoom swings nothing. */
   rideTurn: number;
+  /** The ridden satellite's ground state and where north is in the picture, as of the last draw, or `null` when no satellite is ridden or followed. */
+  rideTrack: RideTrack | null;
   /** How far the riding camera is from the Earth's centre in Earth radii as of the last draw, or null when none rides: the range of tilt that does something follows it. */
   rideDistance: number | null;
   /**
@@ -317,6 +341,7 @@ export const newSpaceModel = (): SpaceModel => ({
   pose: { p: [0, 0, 0], q: [0, 0, 0, 1], fov: FOV, valid: false },
   rideMotion: 0,
   rideTurn: 0,
+  rideTrack: null,
   rideDistance: null,
   satellites: newSatelliteState(),
   meteors: newMeteorState(),
@@ -1073,7 +1098,9 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               // A facing puts the camera ahead, behind, left, right, down or up; a drag turns and tips from there.
               distance = Math.max(1e-4, ride.distanceKm / 6371 / Math.max(1e-9, model.view.zoom));
               const base = ride.face ? faceOffset(ride.face) : { yaw: 0, tilt: 0 };
-              const up = aboveAxes(followed.place, followed.velocity, base.yaw + model.view.yaw * RAD, base.tilt + Math.max(-80, Math.min(80, model.view.tilt)) * RAD);
+              // north up (the view above a satellite only): the picture is turned so north is at the top, less near a pole; a drag turns it from there
+              const north = ride.view === "above" && ride.up === "north" ? northUpYaw(followed.place, followed.velocity) : null;
+              const up = aboveAxes(followed.place, followed.velocity, base.yaw + (north ? north.yaw * north.weight : 0) + model.view.yaw * RAD, base.tilt + Math.max(-80, Math.min(80, model.view.tilt)) * RAD);
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + up.offset[0] * distance, target.y + up.offset[1] * distance, target.z + up.offset[2] * distance);
               camera.up.set(up.up[0], up.up[1], up.up[2]);
@@ -1124,6 +1151,16 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           else if (camera.view) camera.clearViewOffset();
           camera.updateProjectionMatrix();
           camera.updateMatrixWorld();
+          // the ridden satellite's heading and where north is in the picture, worked out with the draw that is being made, never on a timer
+          {
+            const sat = followed ?? ridden;
+            if (sat && ride) {
+              const state = trackStateOfScene(sat.place, sat.velocity, model.time);
+              const north = localNorth(sat.place);
+              const northDeg = north ? screenAngle([camera.quaternion.x, camera.quaternion.y, camera.quaternion.z, camera.quaternion.w], north) : null;
+              model.rideTrack = { ...state, northDeg, travelDeg: northDeg === null ? null : (northDeg + state.bearingDeg) % 360 };
+            } else model.rideTrack = null;
+          }
           // always lit: the light comes from the camera's side of the Earth (the Sun, Moon and planets stay where they are)
           if (model.light === "lit") sunEarth.value.set(camera.position.x, camera.position.y, camera.position.z).normalize();
           const pose = model.pose;

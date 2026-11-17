@@ -51,9 +51,11 @@ import { bindPaths, emptyPathStats, pointerOf, readPathPriority, type PathContro
 import { styleTable, type PathHit, type PathRequest, type PathStyle } from "./paths.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "./satellite-hover.ts";
 import { clampFollow, retargetFollow } from "./follow.ts";
+import { COMPASS_HTML, COMPASS_STYLE, createCompass, readCompass, type Compass } from "./compass.ts";
+import type { RideUp } from "./north-up.ts";
 import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
-import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type SatellitePainter, type SpaceModel } from "./scene.ts";
+import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type RideTrack, type SatellitePainter, type SpaceModel } from "./scene.ts";
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
 
 export { BODY_NAMES, type BodyName, type CameraMode, type RideTarget };
@@ -174,6 +176,8 @@ export interface RideOptions {
   modelSize?: RideModelSize;
   /** What a drag does in an outside ride from the satellite (`view: "from"`): `head` (the default, or the element's `ride-drag`) turns the view where the camera is, like turning your head, so the camera keeps its place behind and above the satellite and the scene turns round it; `orbit` takes the camera round the satellite as it looks about, so the satellite stays in the same place in the picture and is seen from every side, as a ride did up to 0.51. */
   drag?: RideDrag;
+  /** Which way is up in the view above a satellite (`view: "above"`): `travel` (the default, or the element's `ride-up`) puts the way the satellite is going at the top of the picture, `north` puts north there, so the satellite is seen to go the way it really goes over the ground. Within 3 degrees of a pole it is `travel` (mixed in smoothly out to 6). A drag turns the picture from there. */
+  up?: RideUp;
   distanceKm?: number;
   smooth?: boolean;
 }
@@ -201,6 +205,8 @@ export interface Riding {
   modelSize: RideModelSize;
   /** `head` or `orbit` (see `RideOptions`). */
   drag: RideDrag;
+  /** `travel` or `north` (see `RideOptions`). */
+  up: RideUp;
 }
 
 const FACE_KEYS: Record<string, RideFace> = { w: "ahead", s: "behind", a: "left", d: "right", r: "up", f: "down" };
@@ -255,7 +261,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${SEA_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${SEA_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}${COMPASS_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -301,7 +307,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -333,6 +339,10 @@ export class ChikyuSpace extends HTMLElement {
   /** The ringed satellites of the last draw (`labelSatellites`), laid out with the places. */
   #marks: SatelliteMark[] = [];
   #airNote: HTMLElement | undefined;
+  /** The compass on a ride's picture. */
+  #compass: Compass | undefined;
+  /** The heading last told to the page (`chikyu-ride-track`): whole degrees, ascending and sunlit, so a heading that has not changed is not told again. */
+  #toldTrack = "";
   #bodiesNote: HTMLElement | undefined;
   #gate: Gate | undefined;
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
@@ -399,8 +409,9 @@ export class ChikyuSpace extends HTMLElement {
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth, the Moon, the Sun and the planets in their places for the date shown");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="bodies-note" hidden></p><p id="finer-credit" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div>${COMPASS_HTML}<div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="bodies-note" hidden></p><p id="finer-credit" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
+    this.#compass = createCompass(root);
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#note = root.getElementById("meteor-note")!;
@@ -597,6 +608,8 @@ export class ChikyuSpace extends HTMLElement {
     if (name === "ride-viewpoint") this.#applyViewpoint();
     else if (name === "ride-model-size") this.#applyModelSize();
     else if (name === "ride-drag") this.#applyDrag();
+    else if (name === "ride-up") this.#applyUp();
+    else if (name === "compass") this.#showCompass();
     else if (name === "ride-model-share" || name === "ride-model-seat") this.#applyFrame();
     else if (name === "ride-zoom") this.#applyRideZoom();
     else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
@@ -672,7 +685,7 @@ export class ChikyuSpace extends HTMLElement {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.request();
     } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
-    else if (name === "selected-path") this.#pathControls?.sync();
+    else if (name === "selected-path" || name === "path-light") this.#pathControls?.sync();
     else if (name === "estimate-far") this.#applyEstimate();
     else if (name === "path-hit") {
       /* read at each press and move */
@@ -1027,6 +1040,7 @@ export class ChikyuSpace extends HTMLElement {
   #nameFrame(frame: CountryFrame | null): void {
     this.#lastNameFrame = frame;
     this.#tellModel();
+    this.#showCompass();
     this.#relayNames(true, false);
   }
 
@@ -1603,7 +1617,7 @@ export class ChikyuSpace extends HTMLElement {
       // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
       const faceable = !(view === "follow" && typeof target === "string");
       const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize, drag: options.drag === "head" || options.drag === "orbit" ? options.drag : this.rideDrag };
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize, drag: options.drag === "head" || options.drag === "orbit" ? options.drag : this.rideDrag, up: options.up === "north" || options.up === "travel" ? options.up : this.rideUp };
       if (face) {
         model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
         model.rideTurn = 0;
@@ -1796,6 +1810,72 @@ export class ChikyuSpace extends HTMLElement {
     this.#schedule();
     this.#gate?.request();
     this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+  }
+
+  /**
+   * Which way is up in the picture of a ride above a satellite (the attribute `ride-up`): `travel` (the default) keeps the way the satellite is going at the top, so the picture turns as the heading does; `north` keeps north at the top, so the satellite is seen to go south-east, or whichever way
+   * it really goes over the ground. Within 3 degrees of a pole north-up gives way to travel-up (mixed in smoothly out to 6 degrees), because there north's direction swings round faster than a picture can follow. A drag turns the picture from the up it has, so with `north` a drag turns it away from north, and the compass shows where north has gone.
+   * It is the default for the next `ride` and, set while riding, turns the picture to the new up in one eased glide (a jump for a reader who asked for reduced motion), keeping the ride and the clock. The other views (`from`, `follow`) keep the way it is going at the top. See `RideOptions.up`.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideUp = "north";
+   * console.log(space.rideUp);
+   * ```
+   */
+  get rideUp(): RideUp {
+    return this.getAttribute("ride-up") === "north" ? "north" : "travel";
+  }
+  set rideUp(value: RideUp) {
+    this.setAttribute("ride-up", value === "north" ? "north" : "travel");
+  }
+
+  #applyUp(): void {
+    const model = this.#model;
+    const ride = model.ride;
+    const next = this.rideUp;
+    if (!ride || ride.up === next) return;
+    const reduced = prefersLessMotion();
+    const pose = model.pose;
+    model.ride = { ...ride, up: next };
+    // only the view above a satellite looks different
+    const moves = ride.view === "above" && typeof ride.target !== "string";
+    model.transition = moves && !reduced && pose.valid ? { start: performance.now(), duration: 800, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
+  }
+
+  /**
+   * Where the ridden satellite is over the ground and how it is going, as of the last draw: `lat`, `lon`, `heightKm`, `bearingDeg` (the way its ground track runs, degrees clockwise from north, with the Earth's turn taken out), `ascending` (going north), `sunlit` (the Sun lights it; the Earth's shadow is a cylinder),
+   * and where north is in the picture: `northDeg` (degrees clockwise from the top; 0 means north is at the top) and `travelDeg` (the way it goes, in the picture). `null` when no satellite is ridden or followed. A page that prints "heading SE 128°" reads `bearingDeg` and needs no maths of its own;
+   * `chikyu-ride-track` is sent with the same object when the whole degree of the heading, `ascending` or `sunlit` changes, never on a timer. It is worked out by the draws the picture makes, so it is as new as the last draw.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * console.log(space.rideTrack);
+   * ```
+   */
+  get rideTrack(): RideTrack | null {
+    return this.#model.rideTrack ? { ...this.#model.rideTrack } : null;
+  }
+
+  /** Shows the compass for the last draw (the language, the mode of the attribute `compass`), and tells the page when the heading changed by a whole degree, or the satellite went into or out of the Earth's shadow. Called with the draw. */
+  #showCompass(): void {
+    const track = this.#model.rideTrack;
+    const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+    this.#compass?.update(track, lang, readCompass(this.getAttribute("compass")));
+    const key = track ? `${Math.round(track.bearingDeg) % 360}|${track.ascending}|${track.sunlit}` : "";
+    if (key === this.#toldTrack) return;
+    this.#toldTrack = key;
+    if (track) this.dispatchEvent(new CustomEvent("chikyu-ride-track", { detail: { ...track } }));
   }
 
   #applyModelSize(): void {
@@ -2217,6 +2297,17 @@ export class ChikyuSpace extends HTMLElement {
     else this.setAttribute("selected-path", "off");
   }
   /**
+   * Colour the chosen satellite's own orbit by the light on it (the attribute `path-light`; on unless `off`): amber where the satellite is in sunlight and blue where it is in the Earth's shadow (a cylinder of the Earth's radius along the line from the Sun; `--chikyu-path-sun` and `--chikyu-path-shadow` change the two colours, read when the attribute, `selected-path` or the element changes). The width, opacity and dash are still those of the `selected` look.
+   * Off, the whole orbit is the `selected` look's one colour, as the orbit always was. The page's other paths (`setPaths`) are not coloured by light. The light is worked out for the moment the orbit was last laid out (it is again every half hour of the clock), and the Sun is taken as fixed over the one revolution the path is.
+   */
+  get pathLight(): boolean {
+    return !/^(off|false|no|0)$/i.test((this.getAttribute("path-light") ?? "").trim());
+  }
+  set pathLight(value: boolean) {
+    if (value) this.removeAttribute("path-light");
+    else this.setAttribute("path-light", "off");
+  }
+  /**
    * How near, in CSS pixels, the pointer has to be to a path for the pick and hover events to report it (the attribute `path-hit`; 8 when left out, 0 to 40; `0` or `off` turns the test off). A touch is given twice that, and at least 16.
    * The test covers the page's paths and the chosen satellite's own orbit, not the part of an orbit the Earth hides, and a satellite's dot under the pointer comes first. In a ride from a satellite the test is off unless the attribute is set.
    */
@@ -2428,7 +2519,7 @@ export class ChikyuSpace extends HTMLElement {
     lightFade: { mix: number; fading: boolean };
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
     paths: PathStats;
-    ride: { riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null; groundKm: { across: number; tall: number } | null };
+    ride: { track: RideTrack | null; compass: { northDeg: number; travelDeg: number | null; text: string } | null; riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null; groundKm: { across: number; tall: number } | null };
     /** The camera as the last draw left it: its place in Earth radii from the Earth's centre, the way it is turned (a unit quaternion, x y z w) and its field of view in degrees. */
     camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
     /** What the body painter has made at the last draw: the Sun and planets with a drawing, the moons shown round a planet that is near and the moons held (shown, or gone from the view for less than four seconds), whether the Moon is the painter's (`moon`), and the bodies with finer map tiles on them (`tiles`). `mapped` is how many drawings are the painter's, with its pictures: a body out of the view, or too small to show its map, is a plain sphere and the painter is not asked for it. `pending` is how many pictures asked of the painter have not yet arrived, and one more while a gathered draw (reduced motion) waits for its second: while it is above 0 a draw is still to come that nothing but the view itself asked for. */
@@ -2479,7 +2570,7 @@ export class ChikyuSpace extends HTMLElement {
       satellites: this.#satelliteStats(),
       lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
-      ride: { riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null || this.#model.rideFrame.moving, facing: this.facing, groundKm: this.#model.rideFrame.groundKm },
+      ride: { track: this.#model.rideTrack ? { ...this.#model.rideTrack } : null, compass: this.#compass?.shown ? { ...this.#compass.shown } : null, riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null || this.#model.rideFrame.moving, facing: this.facing, groundKm: this.#model.rideFrame.groundKm },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
       bodies: { look: this.#model.bodies || painter?.looks?.[0] || "plain", painted: this.#model.painted.bodies, moons: this.#model.painted.moons, held: this.#model.painted.held, moon: this.#model.painted.moon, tiles: this.#model.painted.tiles, mapped: this.#model.painted.mapped, pending: this.#model.painted.pending },
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },

@@ -49,6 +49,11 @@ export const FLAT_WORDS: Readonly<Record<FlatLang, Readonly<Record<string, strin
     nothing: "No satellite to show.",
     help: "Arrow keys move from one satellite to the next, Enter chooses it, plus and minus zoom.",
     shown: "{count} satellites shown",
+    trackSunlit: "In sunlight",
+    trackShadow: "In the Earth's shadow",
+    trackKey: "Ground track colours",
+    sunlitNow: ", in sunlight",
+    shadowNow: ", in the Earth's shadow",
   },
   ja: {
     map: "世界の平面地図の上の衛星",
@@ -76,6 +81,11 @@ export const FLAT_WORDS: Readonly<Record<FlatLang, Readonly<Record<string, strin
     nothing: "表示する衛星がありません。",
     help: "矢印キーで次の衛星へ移り、Enter キーで選びます。プラスとマイナスで拡大・縮小します。",
     shown: "{count} 機を表示中",
+    trackSunlit: "日なた",
+    trackShadow: "地球の影の中",
+    trackKey: "地上軌跡の色",
+    sunlitNow: "、日なた",
+    shadowNow: "、地球の影の中",
   },
 };
 

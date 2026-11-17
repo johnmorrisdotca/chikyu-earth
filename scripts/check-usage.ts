@@ -224,6 +224,11 @@ await step("node-ride", () => {
   if (out !== "The horizon is 70 degrees from straight down; the camera looks -0.53, 0.00, -0.85.") throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-track-state", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "track-state.mjs")], { cwd: usage, encoding: "utf8" }).trim();
+  if (!/^Heading (N|NE|E|SE|S|SW|W|NW) \d+ degrees, going (north|south), (in sunlight|in the Earth's shadow)\.$/.test(out)) throw new Error(`unexpected output: ${out}`);
+});
+
 await step("typescript", () => {
   writeFileSync(join(examples("typescript"), "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "esnext", moduleResolution: "bundler", strict: true, noEmit: true, lib: ["es2023", "dom", "dom.iterable"], types: [], skipLibCheck: true }, include: ["index.ts"] }));
   sh(process.execPath, [require.resolve("typescript/bin/tsc"), "-p", join(examples("typescript"), "tsconfig.json")], usage);
@@ -576,6 +581,7 @@ const FILES: Record<string, string[]> = {
   "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],
   "node/sheets.mjs": ["docs/guides/printable-sheets.md", "docs/guides/ja/printable-sheets.md"],
   "node/ride.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
+  "node/track-state.mjs": ["docs/guides/ride-along.md", "docs/guides/ja/ride-along.md"],
   "paths/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "paths/main.ts": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],
   "estimate/index.html": ["docs/guides/satellites.md", "docs/guides/ja/satellites.md"],

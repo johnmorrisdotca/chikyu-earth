@@ -19,8 +19,9 @@ test.describe.configure({ mode: "serial" });
 
 const NOON = "2026-06-21T12:00Z";
 // "satellites" is the space view with the stations and 2,000 Starlink satellites on show, "ride" the same with the camera on the ISS, "above" with the camera over the ISS looking down (both with the satellite's beam on, with 19 spot cells: it is part of the draw that moves the satellite, so it must add no frame, no draw at rest and no object that stays).
-const LOOKS = ["realistic", "space", "satellites", "ride", "above"] as const;
-const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", satellites: "chikyu-space", ride: "chikyu-space", above: "chikyu-space" } as const;
+// "north" is the same above the ISS with north at the top of the picture (`ride-up="north"`) and the compass on it: a compass that turns with the picture is part of the frame that turns it, so it adds no frame and nothing at rest (MODULES-1437).
+const LOOKS = ["realistic", "space", "satellites", "ride", "above", "north"] as const;
+const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", satellites: "chikyu-space", ride: "chikyu-space", above: "chikyu-space", north: "chikyu-space" } as const;
 
 /**
  * `size` is how the ridden model is sized as the ride rises (`ride-model-size`): the demo's "above" look rides at its default 3,000 km, where the model of the default `distance` size has handed over to the ordinary mark and is not drawn, so the looks that
@@ -28,17 +29,17 @@ const ELEMENT = { realistic: "chikyu-earth-realistic", space: "chikyu-space", sa
  */
 async function open(page: Page, look: (typeof LOOKS)[number], query = "", size: "fixed" | "distance" = "fixed"): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
-  const space = look === "space" || look === "satellites" || look === "ride" || look === "above";
-  const withSatellites = look === "satellites" || look === "ride" || look === "above";
-  await page.goto(`/chikyu-earth/?look=${space ? "space" : look}&time=${withSatellites ? "2026-11-02T18:00Z" : NOON}&center=10,20${space ? "&speed=0" : ""}${look === "satellites" ? "&sats=stations,starlink" : ""}${look === "ride" ? "&ride=iss&beam=on&beam-cells=19" : look === "above" ? "&ride=iss&rview=above&beam=on&beam-cells=19" : ""}${query}`);
+  const space = look === "space" || look === "satellites" || look === "ride" || look === "above" || look === "north";
+  const withSatellites = look === "satellites" || look === "ride" || look === "above" || look === "north";
+  await page.goto(`/chikyu-earth/?look=${space ? "space" : look}&time=${withSatellites ? "2026-11-02T18:00Z" : NOON}&center=10,20${space ? "&speed=0" : ""}${look === "satellites" ? "&sats=stations,starlink" : ""}${look === "ride" ? "&ride=iss&beam=on&beam-cells=19" : look === "above" ? "&ride=iss&rview=above&beam=on&beam-cells=19" : look === "north" ? "&ride=iss&rview=above&rup=north&beam=on&beam-cells=19" : ""}${query}`);
   await page.locator(`${ELEMENT[look]}[data-state=live]`).waitFor({ timeout: 60_000 });
   // riding at the ISS needs the Earth's largest pictures: let them arrive, and the ones that are let go be let go, before anything is asked of the page
-  if (look === "ride" || look === "above") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
-  if (look === "above" && size === "fixed") await page.locator("chikyu-space").evaluate((el) => el.setAttribute("ride-model-size", "fixed"));
+  if (look === "ride" || look === "above" || look === "north") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
+  if ((look === "above" || look === "north") && size === "fixed") await page.locator("chikyu-space").evaluate((el) => el.setAttribute("ride-model-size", "fixed"));
   if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
   // 800 ms for the pictures to arrive, and the second in which a reader who asked for reduced motion has the draws they ask for gathered (MODULES-1195)
-  await page.waitForTimeout(look === "ride" || look === "above" ? 8000 : 800 + 1000);
+  await page.waitForTimeout(look === "ride" || look === "above" || look === "north" ? 8000 : 800 + 1000);
 }
 
 /**
@@ -132,8 +133,8 @@ for (const look of LOOKS) {
         expect(turning.callbacks).toBeGreaterThan(5);
         expect(turning.frames, "frames drawn").toBeLessThanOrEqual(turning.callbacks + 3);
         // above the ISS, and riding it (outside by default), the demo's stand-in model is drawn beside the scene (a draw call for each mesh it is made of, as the scene says), and nothing else is allowed more
-        const parts = look === "above" || look === "ride" ? await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: { parts: number } | null }).followModel?.parts ?? 0) : 0;
-        if (look === "above" || look === "ride") expect(parts, "the model is drawn").toBeGreaterThan(0);
+        const parts = look === "above" || look === "north" || look === "ride" ? await page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { followModel: { parts: number } | null }).followModel?.parts ?? 0) : 0;
+        if (look === "above" || look === "north" || look === "ride") expect(parts, "the model is drawn").toBeGreaterThan(0);
         console.log("TURNING", JSON.stringify(turning), parts);
         expect(turning.draws, "GL draw calls for each frame drawn").toBeLessThanOrEqual(Math.max(1, turning.frames) * (40 + parts));
         expect(turning.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(turning.callbacks + 3);

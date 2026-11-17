@@ -13,9 +13,10 @@ import { MAX_SATELLITE_SPEED } from "../satellites/limits.ts";
 import { fetchElements } from "../satellites/source.ts";
 import { createSatellites } from "../satellites/track.ts";
 import type { ElementSet, Satellites } from "../satellites/types.ts";
-import { GROUP_COLOURS, PLANE_COLOURS, SPARE_COLOUR } from "./colours.ts";
+import { GROUP_COLOURS, PLANE_COLOURS, SPARE_COLOUR, TRACK_SHADOW, TRACK_SUNLIT } from "./colours.ts";
 import { clusterPlanes, groupFacts, type GroupFacts, type Plane, type PlaneClusters } from "./facts.ts";
 import { FLATTENED, MAX_ZOOM, clampView, pixelsPerDegree, projectFlat, wrapLongitude, zoomAbout, type FlatView } from "./geometry.ts";
+import { trackStateOfScene, type GroundTrackState } from "./track-state.ts";
 import { say, type FlatLang } from "./words.ts";
 
 const RAD = Math.PI / 180;
@@ -51,6 +52,12 @@ export interface FlatPick {
   /** The letter of its orbital plane (`A`), or null when it is in none. */
   plane: string | null;
   altitudeKm: number;
+  /** True when the Sun lights it, false when it is in the Earth's shadow (the cylindrical model of `inEarthShadow`), at the moment shown. Null when it cannot be placed exactly then. */
+  sunlit: boolean | null;
+  /** The way its ground track runs, degrees clockwise from north (0 to 360), at the moment shown; null when it cannot be placed exactly. */
+  bearingDeg: number | null;
+  /** True going north, false going south; null when it cannot be placed exactly. */
+  ascending: boolean | null;
   /** What chose it: a pointer going over it (`hover`), a tap or click (`tap`), or the keyboard (`key`). */
   via: "hover" | "tap" | "key";
 }
@@ -110,6 +117,28 @@ interface Group {
   clusters: PlaneClusters;
   facts: GroupFacts;
 }
+/** A stretch of the ground track in one light: the points, and whether the Sun lights the satellite along it. */
+interface TrackRun {
+  sunlit: boolean;
+  points: [number, number][];
+}
+
+/** Cut a ground track into stretches of sunlight and shadow. Each stretch ends on the first point of the next, so the line has no gap where the light changes. */
+const trackRuns = (points: readonly { lon: number; lat: number; sunlit: boolean }[]): TrackRun[] => {
+  const runs: TrackRun[] = [];
+  let run: TrackRun | null = null;
+  for (const p of points) {
+    if (!run || run.sunlit !== p.sunlit) {
+      const next: TrackRun = { sunlit: p.sunlit, points: [] };
+      if (run && run.points.length > 0) next.points.push(run.points[run.points.length - 1]!);
+      runs.push(next);
+      run = next;
+    }
+    run.points.push([p.lon, p.lat]);
+  }
+  return runs;
+};
+
 interface Ref {
   g: Group;
   i: number;
@@ -156,6 +185,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ring.hov{width:14px;height:14px;margin:-7px 0 0 -7px;border-width:1px}
 .ring[hidden],.tip[hidden]{display:none}
 .tip{position:absolute;left:0;top:0;pointer-events:none;background:rgba(8,14,28,.94);color:#fff;padding:4px 8px;border-radius:6px;font-size:.85em;line-height:1.3;white-space:nowrap;border:1px solid rgba(255,255,255,.3)}
+.key{position:absolute;left:8px;bottom:8px;display:flex;flex-wrap:wrap;gap:4px 12px;margin:0;padding:3px 8px;border-radius:6px;background:rgba(8,14,28,.82);color:#fff;font-size:.8em;line-height:1.3;pointer-events:none;max-width:calc(100% - 16px)}
+.key[hidden]{display:none}
+.key span{display:inline-flex;align-items:center;gap:6px}
+.key i{display:inline-block;width:18px;height:0;border-top:3px solid var(--k,#fff);border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
 .msg{position:absolute;inset:0;display:grid;place-items:center;margin:0;padding:12px;text-align:center;color:#cfe0f5;pointer-events:none}
 .msg:empty{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -166,7 +199,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
  *
  * The page gives it orbital elements: `setGroup(id, sets)` for each group (the ids of `SATELLITE_GROUPS` are known by name and colour), or the `elements` property for one, or `elements-src` (an address, read once, through `fetchElements`' rules). The package fetches nothing of its own.
  * Attributes: `center` (the longitude in the middle, degrees; 0, Greenwich, by default; the map wraps round the date line), `home-lon` and `home-lat` (the reader's place: a marker, and the "My place" button, which appear only when given; the element never asks the browser for a place),
- * `group` (which groups to show: `all`, one id, or several with commas), `off` (groups that are loaded but start off when `group` names none, such as `starlink`: the filter chip turns one on), `colour-by` (`group`, or `plane` to colour by orbital plane), `plane` (a plane letter: show that plane only), `footprint` and `track` (draw the coverage circle and the ground track; the footprint is of the chosen satellite, or of every one shown when there are 80 or fewer),
+ * `group` (which groups to show: `all`, one id, or several with commas), `off` (groups that are loaded but start off when `group` names none, such as `starlink`: the filter chip turns one on), `colour-by` (`group`, or `plane` to colour by orbital plane), `plane` (a plane letter: show that plane only), `footprint` and `track` (draw the coverage circle and the ground track, which is amber in sunlight and blue in the Earth's shadow, a cylinder, with a key: `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow` change the colours; the footprint is of the chosen satellite, or of every one shown when there are 80 or fewer),
  * `paused` (hold the clock and keep the speed; nothing is drawn while it is held), `trails` (`off` for no streaks at a fast clock), `footprint-elevation` (degrees above the horizon the circle is drawn for; 25 like the 3D beam), `selected` (a NORAD number: the chosen satellite), `time` (`now` or an ISO date; live when absent), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `estimate-far`, `shade` (`off` for no night),
  * `dot-size` (pixels), `controls` (`none`, or any of `centre zoom footprint track chips`: the built-in buttons and filter chips shown; all by default) and `lang` (`en` or `ja`; the page's language by default).
  *
@@ -227,7 +260,8 @@ export class ChikyuFlat extends HTMLElement {
   #announced = -Infinity;
   #mapKey = "";
   #trackKey = "";
-  #trackLines: { past: [number, number][]; future: [number, number][] } | null = null;
+  #trackLines: { past: TrackRun[]; future: TrackRun[] } | null = null;
+  #key: HTMLElement | undefined;
   #stage: HTMLElement | undefined;
   #bar: HTMLElement | undefined;
   #mapCanvas: HTMLCanvasElement | undefined;
@@ -945,7 +979,10 @@ export class ChikyuFlat extends HTMLElement {
     const wantFootprint = this.#footprint;
     const wantTrack = this.#track;
     const chosen = this.#selected && this.#selected.g.on[this.#selected.i] === 1 ? this.#selected : null;
-    if (!wantFootprint && !(wantTrack && chosen)) return;
+    if (!wantFootprint && !(wantTrack && chosen)) {
+      this.#showKey(false);
+      return;
+    }
     const path = geoPath(this.#projection(), ctx);
     if (wantFootprint) {
       const elevation = finite(this.getAttribute("footprint-elevation"), BEAM_ELEVATION);
@@ -970,23 +1007,61 @@ export class ChikyuFlat extends HTMLElement {
     if (wantTrack && chosen) {
       const lines = this.#trackOf(chosen, ms);
       if (lines) {
-        ctx.lineWidth = 1.6;
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        path({ type: "LineString", coordinates: lines.past });
-        ctx.stroke();
+        const colours = this.#trackColours();
+        // each stretch is drawn over a dark edge, so it reads on a dark sea and on a light one; the part behind the satellite is dashed, the part ahead solid
+        const stroke = (runs: readonly TrackRun[], dash: number[], sun: boolean): void => {
+          ctx.setLineDash(dash);
+          for (const run of runs) {
+            if (run.sunlit !== sun || run.points.length < 2) continue;
+            ctx.beginPath();
+            path({ type: "LineString", coordinates: run.points });
+            ctx.stroke();
+          }
+        };
+        for (const pass of [0, 1] as const) {
+          ctx.lineCap = "butt";
+          for (const [runs, dash] of [[lines.past, [4, 4]], [lines.future, []]] as const) {
+            for (const sun of [true, false]) {
+              ctx.lineWidth = pass === 0 ? 4 : 2;
+              ctx.strokeStyle = pass === 0 ? "rgba(4,8,18,0.55)" : sun ? colours.sun : colours.shadow;
+              stroke(runs, [...dash], sun);
+            }
+          }
+        }
         ctx.setLineDash([]);
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.beginPath();
-        path({ type: "LineString", coordinates: lines.future });
-        ctx.stroke();
       }
     }
+    this.#showKey(wantTrack && chosen !== null);
+  }
+
+  /** The colours of the ground track: amber in sunlight, blue in the Earth's shadow, or the page's own (`--chikyu-flat-track-sun`, `--chikyu-flat-track-shadow`). */
+  #trackColours(): { sun: string; shadow: string } {
+    const style = getComputedStyle(this);
+    return { sun: style.getPropertyValue("--chikyu-flat-track-sun").trim() || TRACK_SUNLIT, shadow: style.getPropertyValue("--chikyu-flat-track-shadow").trim() || TRACK_SHADOW };
+  }
+
+  /** The key to the track's two colours, shown while the track is. It changes only when the track appears or goes, or the language does. */
+  #showKey(on: boolean): void {
+    const key = this.#key;
+    if (!key) return;
+    if (key.hidden === !on && (!on || key.lang === this.language)) return;
+    key.hidden = !on;
+    if (!on) return;
+    const lang = this.language;
+    const colours = this.#trackColours();
+    key.lang = lang;
+    key.setAttribute("aria-label", say(lang, "trackKey"));
+    key.replaceChildren(...[["trackSunlit", colours.sun], ["trackShadow", colours.shadow]].map(([word, colour]) => {
+      const item = key.ownerDocument.createElement("span");
+      const line = key.ownerDocument.createElement("i");
+      line.style.setProperty("--k", colour!);
+      item.append(line, say(lang, word!));
+      return item;
+    }));
   }
 
   /** The ground track of the chosen satellite for one orbit, half behind it and half ahead, worked out again when the clock has moved a fortieth of an orbit. */
-  #trackOf(ref: Ref, ms: number): { past: [number, number][]; future: [number, number][] } | null {
+  #trackOf(ref: Ref, ms: number): { past: TrackRun[]; future: TrackRun[] } | null {
     const set = ref.g.sats.sets[ref.i];
     if (!set) return null;
     const shape = orbitShape(set.MEAN_MOTION, set.ECCENTRICITY);
@@ -999,10 +1074,7 @@ export class ChikyuFlat extends HTMLElement {
       this.#trackKey = key;
       const step = Math.max(5, period / 1000 / 160);
       const points = groundTrack(set, ms - period / 2, ms + period / 2, step);
-      this.#trackLines = {
-        past: points.filter((p) => p.ms <= ms).map((p): [number, number] => [p.lon, p.lat]),
-        future: points.filter((p) => p.ms >= ms).map((p): [number, number] => [p.lon, p.lat]),
-      };
+      this.#trackLines = { past: trackRuns(points.filter((p) => p.ms <= ms)), future: trackRuns(points.filter((p) => p.ms >= ms)) };
     }
     return this.#trackLines;
   }
@@ -1091,12 +1163,15 @@ export class ChikyuFlat extends HTMLElement {
     tip.setAttribute("aria-hidden", "true");
     const msg = Object.assign(d.createElement("p"), { className: "msg" });
     msg.setAttribute("role", "status");
+    const key = Object.assign(d.createElement("p"), { className: "key", hidden: true });
+    key.setAttribute("role", "group");
     const live = Object.assign(d.createElement("p"), { className: "sr", id: "live" });
     live.setAttribute("role", "status");
     live.setAttribute("aria-live", "polite");
     const help = Object.assign(d.createElement("p"), { className: "sr", id: "help" });
     dots.setAttribute("aria-describedby", "help live");
-    stage.append(map, dots, selRing, hovRing, tip, msg);
+    stage.append(map, dots, selRing, hovRing, tip, key, msg);
+    this.#key = key;
     root.append(bar, stage, live, help);
     this.#bar = bar;
     this.#stage = stage;
@@ -1291,9 +1366,10 @@ export class ChikyuFlat extends HTMLElement {
   }
 
   #pick(ref: Ref | null, via: FlatPick["via"]): void {
+    const state = ref ? this.#stateOf(ref) : null;
     const detail = ref
-      ? ({ id: ref.g.sats.sets[ref.i]!.NORAD_CAT_ID, index: ref.i, group: ref.g.id, name: this.#nameOf(ref), plane: this.#planeOfRef(ref), altitudeKm: ref.g.alt[ref.i]!, via } satisfies FlatPick)
-      : { id: null, index: -1, group: null, name: null, plane: null, altitudeKm: null, via };
+      ? ({ id: ref.g.sats.sets[ref.i]!.NORAD_CAT_ID, index: ref.i, group: ref.g.id, name: this.#nameOf(ref), plane: this.#planeOfRef(ref), altitudeKm: ref.g.alt[ref.i]!, sunlit: state?.sunlit ?? null, bearingDeg: state?.bearingDeg ?? null, ascending: state?.ascending ?? null, via } satisfies FlatPick)
+      : { id: null, index: -1, group: null, name: null, plane: null, altitudeKm: null, sunlit: null, bearingDeg: null, ascending: null, via };
     this.dispatchEvent(new CustomEvent("chikyu-flat-pick", { detail, bubbles: true, composed: true }));
   }
 
@@ -1314,7 +1390,33 @@ export class ChikyuFlat extends HTMLElement {
   }
 
   #announceLive(ref: Ref): void {
-    if (this.#live) this.#live.textContent = this.#describe(ref);
+    if (!this.#live) return;
+    const state = this.#stateOf(ref);
+    this.#live.textContent = this.#describe(ref) + (state ? say(this.language, state.sunlit ? "sunlitNow" : "shadowNow") : "");
+  }
+
+  /** Where one satellite is over the ground, which way it goes and whether the Sun lights it, at the moment shown (SGP4 placed exactly, one call); null when it cannot be placed then. */
+  #stateOf(ref: Ref): GroundTrackState | null {
+    const out = new Float64Array(6);
+    if (!ref.g.sats.exact(ref.i, this.time, out)) return null;
+    return trackStateOfScene([out[0]!, out[1]!, out[2]!], [out[3]!, out[4]!, out[5]!], this.time);
+  }
+
+  /**
+   * Where a loaded satellite is over the ground at the moment shown, which way its ground track runs and whether the Sun lights it: `{ lat, lon, heightKm, bearingDeg, ascending, sunlit }` (see `GroundTrackState`), placed exactly by SGP4. Null when the number names no loaded satellite
+   * or it cannot be placed at that moment. It is the same state that `chikyu-flat-pick` carries (`sunlit`, `bearingDeg`, `ascending`).
+   *
+   * @param id - The NORAD catalogue number.
+   * @returns The state, or null.
+   */
+  stateOf(id: number): GroundTrackState | null {
+    const ref = this.#index.get(id);
+    return ref ? this.#stateOf(ref) : null;
+  }
+
+  /** The state (`stateOf`) of the chosen satellite, or null when none is chosen. */
+  get selectedState(): GroundTrackState | null {
+    return this.#selected ? this.#stateOf(this.#selected) : null;
   }
 
   #onDown = (event: PointerEvent): void => {

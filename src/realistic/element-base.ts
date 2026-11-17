@@ -199,7 +199,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-hit", "path-priority", "estimate-far"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -568,7 +568,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.soon();
     } else if (name === "hover-path" || name === "names-on-hover") this.#hover?.sync();
-    else if (name === "selected-path") this.#pathControls?.sync();
+    else if (name === "selected-path" || name === "path-light") this.#pathControls?.sync();
     else if (name === "estimate-far") this.#applyEstimate();
     else if (name === "path-hit") { /* read at each press and move */ }
     else if (name === "satellite-streak-max") {
@@ -1595,6 +1595,17 @@ export class ChikyuEarthRealistic extends HTMLElement {
   set selectedPath(value: boolean) {
     if (value) this.removeAttribute("selected-path");
     else this.setAttribute("selected-path", "off");
+  }
+  /**
+   * Colour the chosen satellite's own orbit by the light on it (the attribute `path-light`; on unless `off`): amber where the satellite is in sunlight and blue where it is in the Earth's shadow (a cylinder of the Earth's radius along the line from the Sun; `--chikyu-path-sun` and `--chikyu-path-shadow` change the two colours, read when the attribute, `selected-path` or the element changes). The width, opacity and dash are still those of the `selected` look.
+   * Off, the whole orbit is the `selected` look's one colour, as the orbit always was. The page's other paths (`setPaths`) are not coloured by light. The light is worked out for the moment the orbit was last laid out (it is again every half hour of the clock), and the Sun is taken as fixed over the one revolution the path is.
+   */
+  get pathLight(): boolean {
+    return !/^(off|false|no|0)$/i.test((this.getAttribute("path-light") ?? "").trim());
+  }
+  set pathLight(value: boolean) {
+    if (value) this.removeAttribute("path-light");
+    else this.setAttribute("path-light", "off");
   }
   /**
    * How near, in CSS pixels, the pointer has to be to a path for the pick and hover events to report it (the attribute `path-hit`; 8 when left out, 0 to 40; `0` or `off` turns the test off). A touch is given twice that, and at least 16.
