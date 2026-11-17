@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import v8 from "node:v8";
+import { runInNewContext } from "node:vm";
 import { eciToGeodetic, gstime, json2satrec, sgp4 } from "satellite.js";
 import { frameAt } from "../src/space/ephemeris.ts";
 import { createSatellites, DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
@@ -332,9 +334,14 @@ test("arc works out the orbit's axis once for each pin, not for each call: no SG
   const before = group.propagations;
   for (let frame = 1; frame <= 50; frame += 1) group.arc(t + frame * 16, 120_000, positions, segments);
   assert.equal(group.propagations - before, 50 * eccentric * 2, "a frame between pins calls SGP4 only for the eccentric orbits");
+  // the heap is read after a full collection each time: without one the reading swings by 10 MB either way with the collector's timing, more than the allowance
+  v8.setFlagsFromString("--expose-gc");
+  const collect = runInNewContext("gc") as () => void;
+  collect();
   const heap = process.memoryUsage().heapUsed;
   for (let frame = 0; frame < 20_000; frame += 1) group.arc(t + frame * 16, 120_000, positions, segments);
-  assert.ok(process.memoryUsage().heapUsed - heap < 8_000_000, "20,000 frames grow the heap by less than 8 MB (no per-call allocation)");
+  collect();
+  assert.ok(process.memoryUsage().heapUsed - heap < 1_000_000, "20,000 frames leave less than 1 MB on the heap after a collection");
 });
 
 test("a highly eccentric orbit is capped too, by the speed SGP4 gives it, whether it is fast at its low point or slow at its high one", () => {
