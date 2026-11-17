@@ -173,7 +173,7 @@ console.log(`The horizon is ${pose.earthRadiusDegrees.toFixed(0)} degrees from s
 
 A ride animates continuously, so each line is tested (`e2e/ride.gl.ts`):
 
-- The draws follow the picture: as often as it moves a pixel, 1 to 30 times a second, never more. At rest (paused, or after a glide) nothing is drawn and no frame is asked for.
+- The draws follow the picture: at real time and up to 60 times it, each time the ridden craft, the camera or the quickest thing in view has moved half a pixel, at least once a second and at most `smooth-fps` (15 by default, 1 to 30), so a ride at real time is no longer a step a second. Faster, as often as it moves a pixel, 1 to 30 times a second, never more. At rest (paused, or after a glide) nothing is drawn and no frame is asked for.
 - A reader who asked for reduced motion gets one step a second and a jump instead of a glide.
 - Nothing is drawn out of sight or in a hidden tab, however fast the clock runs.
 - The glide lasts about 1.2 seconds, and its frames are held to the same cap.

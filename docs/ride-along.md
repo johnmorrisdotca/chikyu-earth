@@ -28,7 +28,7 @@ goes round the satellite and the Earth, which is behind it, follows the pointer.
 ## When it draws
 
 The space view draws only when something changes and at most 30 times a second (the shared gate). A ride changes the picture all the time, so the clock draws as often as the picture moves a pixel: the speed of
-the ground under the camera over its height, times the focal length in pixels (for a satellite), or the turn of the direction to the Earth (for a body), times the clock's speed, from 1 to 30 times a second.
+the ground under the camera over its height, times the focal length in pixels (for a satellite), or the turn of the direction to the Earth (for a body), times the clock's speed. Up to 60 times real time the clock draws each time the quickest of that, the Earth's turn and the satellites on show has moved half a pixel, 1 to `smooth-fps` (15) times a second; faster, each time it has moved a pixel, 1 to 30 times a second.
 Paused: no timer, nothing drawn. Out of sight or in a hidden tab: the renderer draws nothing. Reduced motion: one update a second and no glide.
 
 ## The budget, and how each part is tested (`e2e/ride.gl.ts`, `e2e/space.soak.ts`, `e2e/freeze.demo.ts`)

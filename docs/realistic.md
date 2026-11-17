@@ -81,7 +81,8 @@ rest after 4 seconds, and keeps the pictures above as the far view and the fallb
 | `texture-base`, `max-texture` | where the pictures are; the widest one to use |
 | `tiles` | where a tile set is (a folder URL with `manifest.json`); finer tiles load for the part in view. A `max-texture` under 4096 turns them off |
 | `max-ratio` | the most device pixels to a CSS pixel the canvas is drawn at (2 at most; `0.5` draws at half the size and scales it up, for a background). Read when the element connects; the shared renderer keeps it for the whole page |
-| `live-seconds` | how often the Sun and clouds are put right at real time, the time `now` (60); faster time is drawn as often as the Sun's turn moves a pixel, 1 to 30 times a second |
+| `live-seconds` | the longest the Sun and clouds go without being put right at real time, the time `now` (60); with satellites on show, or the globe zoomed in, a step is made each time the quickest thing has moved half a pixel, 1 to `smooth-fps` times a second; faster than 60 times real time, as often as the Sun's turn moves a pixel, 1 to 30 times a second |
+| `smooth-fps` | the most steps a second at real time and up to 60 times it (the property `smoothFps`): 15 when left out, 1 to 30; half as many on a small device or a low battery, one a second for reduced motion |
 
 Properties: `time` (a number of milliseconds, a `Date` or `"now"`; reads `"now"` while it follows the real clock, else the moment reached), `speed`, `centre`, `clouds`, `lights`, `tiles`, `view`, `stats` (with `stats.tiles`). Events: `chikyu-ready`,
 `chikyu-timechange` (`{ time, running }`: four a second at most while the clock runs, not from a hidden tab, and once with `running: false` when it holds), `chikyu-unavailable` (WebGL missing or a picture would not load; `detail.reason`), `chikyu-tier` (`detail.layer`, `detail.width`), `chikyu-tiles` (a tile set has been read; `detail.layers`, the finest width of each). `data-state` is

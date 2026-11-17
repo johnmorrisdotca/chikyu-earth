@@ -38,7 +38,9 @@ One `THREE.Points` a group (one draw call), a shader that draws a soft round dot
 | Nothing at rest | paused: no timer, no frame | 0 GL draws, 0 frame requests, 0 SGP4 calls in 3.5 s with 8,252 satellites on |
 | SGP4 about once a second | two batches a step, then one a step | at 60x, 8,252 satellites: 8,242 SGP4 calls a second (one each); at real time 2,252 satellites: 2,249 a second |
 | One draw call for a group | `THREE.Points` | 34.2 GL draw calls a frame with 6,000 more satellites, 33.4 without |
-| Frame rate capped | the clock draws 1 to 30 times a second as the picture moves | 29.0 frames a second at 60x; at real time 1 a second |
+| Frame rate capped | the clock draws 1 to 30 times a second as the picture moves | 29.0 frames a second at 60x; at real time 1 to 15 (next row) |
+| Real time is smooth, within a cap | a frame each time the quickest dot has moved half a pixel (`Satellites.fastest` times the Earth's radius on the screen), 1 to `smooth-fps` (15) a second | a whole Earth at real time: 1 to 2 frames a second; zoomed in or riding, more; reduced motion 1 (`e2e/freeze.demo.ts`) |
+| What real time costs on a phone | 16,000 satellites besides the 2,252 of the stations and Starlink, a 390 by 844 screen, the CPU slowed to a quarter, SGP4 still once a second | whole Earth: 1.00 frames a second, 28 ms of JavaScript a frame (each frame is the one with the once-a-second SGP4 batch, 25 to 29 ms); zoomed in 1.4 frames a second; riding the ISS 11.2 frames a second at 4.2 ms a frame on average (`e2e/satellites.gl.ts`) |
 | Reduced motion steps | one update a second | `prefers-reduced-motion: reduce` at 60x: 1.00 frames a second |
 | Light on the main thread | interpolation is a loop over 6,000 x 3 numbers | 0.09 ms of JavaScript a frame on average at 60x with 8,252 satellites, the longest SGP4 batch 2.6 ms |
 | Out of sight draws nothing | the renderer pauses | 0 GL draws scrolled away or in a hidden tab, with 6,000 satellites at 60x |
