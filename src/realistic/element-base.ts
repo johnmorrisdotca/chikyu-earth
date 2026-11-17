@@ -48,7 +48,8 @@ import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryN
 import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
-import { createGate, frameCap, type Gate } from "./gate.ts";
+import { createGate, frameCap, smallDevice, type Gate } from "./gate.ts";
+import { framesPerSecond, readSmoothFps, smoothCap, SMOOTH_UP_TO, waitFor, watchLowBattery } from "./pace.ts";
 import { setSharedRenderer, setThreeLoader, takeRenderer } from "./shared.ts";
 export { setSharedRenderer, setThreeLoader };
 export type { CameraMode };
@@ -199,13 +200,17 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "smooth-fps", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
   #mode: number | "now" = "now";
   #view: View | undefined;
   #gate: Gate | undefined;
+  /** Whether the battery is low (at 20% or less and not charging): the smooth frame rate is halved. */
+  #lowBattery = false;
+  /** What `#wait` last worked out, for `stats`. */
+  #pace = { pixelsPerSecond: 0, perSecond: 0, cap: 0, waitMs: 0 };
   #tick: ReturnType<typeof setTimeout> | undefined;
   /** The clock's speed when `speed` is given (attribute or property); `null` follows `time`: real time for "now", held for a date. */
   #speed: number | null = null;
@@ -350,12 +355,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
     const nav = navigator as Navigator & { deviceMemory?: number; getBattery?: () => Promise<{ charging: boolean; level: number }> };
     const cap = frameCap(30, { deviceMemory: nav.deviceMemory, hardwareConcurrency: nav.hardwareConcurrency });
     this.#gate = createGate(1000 / cap, () => this.#view?.invalidate());
-    nav.getBattery?.().then(
-      (battery) => {
-        if (!battery.charging && battery.level <= 0.2) this.#gate?.setMinMs(1000 / Math.min(cap, 15));
-      },
-      () => undefined,
-    );
+    this.#lowBattery = false;
+    watchLowBattery(nav, () => {
+      this.#lowBattery = true;
+      this.#gate?.setMinMs(1000 / Math.min(cap, 15));
+      this.#startTick();
+    });
 
     const maxRatio = readRatio(this.getAttribute("max-ratio"));
     if (maxRatio) this.#model.ratio = () => Math.min(globalThis.devicePixelRatio || 1, 2, maxRatio);
@@ -503,7 +508,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "clouds") this.clouds = value !== "off";
     else if (name === "lights") this.lights = value !== "off";
     else if (name === "light") this.light = readLight(value);
-    else if (name === "live-seconds") this.#startTick();
+    else if (name === "live-seconds" || name === "smooth-fps") this.#startTick();
     else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.soon();
     else if (name === "data") {
       this.#door.book.ownOnly(value === "own");
@@ -1224,6 +1229,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     tiers: Record<EarthLayer, number>;
     tiles: TileStats;
     satellites: SatelliteStats;
+    /** How often the running clock draws, as last worked out: the quickest thing's speed on the screen (CSS pixels a second of real time), the frames a second that asks for, the most allowed (`smooth-fps`, halved on a small device or a low battery) and the wait before the next step in milliseconds. */
+    pace: { pixelsPerSecond: number; perSecond: number; cap: number; waitMs: number };
     /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
     lightFade: { mix: number; fading: boolean };
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
@@ -1260,6 +1267,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       state: this.#state,
       tiers: { ...this.#tiers },
       satellites: this.#satelliteStats(),
+      pace: { ...this.#pace },
       lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
       tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false },
@@ -1309,6 +1317,26 @@ export class ChikyuEarthRealistic extends HTMLElement {
   set satelliteTint(value: "off" | "orbit") {
     if (value === "orbit") this.setAttribute("satellite-tint", "orbit");
     else this.removeAttribute("satellite-tint");
+  }
+
+  /**
+   * The most steps a second drawn for a clock at real time, or up to 60 times it (the attribute `smooth-fps`; 15 when the page says nothing; 1 to 30). The picture is drawn each time the quickest thing in it (the Sun's turn at this zoom, a satellite dot)
+   * has moved half a pixel, at least once a second while satellites are on show, and at most this many. Half as many on a small device or a battery at 20% or lower; one a second for a reader who asked for reduced motion.
+   *
+   * @example
+   * ```ts
+   * import "@johnmorrisdotca/chikyu-earth/realistic/element";
+   *
+   * const earth = document.querySelector("chikyu-earth-realistic")!;
+   * earth.smoothFps = 24;
+   * ```
+   */
+  get smoothFps(): number {
+    return readSmoothFps(this.getAttribute("smooth-fps"));
+  }
+  set smoothFps(value: number) {
+    if (Number.isFinite(value) && value > 0) this.setAttribute("smooth-fps", String(value));
+    else this.removeAttribute("smooth-fps");
   }
 
   /**
@@ -1708,17 +1736,32 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#last = now;
   }
 
-  /** The wait before the next step: real time every `live-seconds` (a minute by default); faster time as often as the Sun's turn moves a pixel, 1 to 30 times a second (once a second for a reader who prefers reduced motion). */
+  /** The quickest a satellite on show goes, in Earth radii for each second of game time: the quickest the groups report between their two SGP4 moments, or, before they have any (and above the interpolation limit, where they do not), a low orbit's. */
+  #satelliteRate(): number {
+    let most = 0;
+    for (const [name, group] of this.#model.satellites.groups) if (satelliteEmphasis(name, group.visible, this.#model.satellites.focus).drawn) most = Math.max(most, group.satellites.fastest);
+    return most > 0 && Math.abs(this.speed) <= SMOOTH_UP_TO ? most : SATELLITE_RATE * RAD;
+  }
+
+  /**
+   * The wait before the next step: a step each time the quickest thing in the picture has moved half a pixel (the Sun's turn at this zoom, or a satellite dot: the quickest of the groups on show, from the places they hold for the interpolation),
+   * at most `smooth-fps` a second (15), half as many on a small device or a low battery, and at least once a second while satellites are on show. With only the Earth turning, real time waits up to `live-seconds` (a minute by default).
+   * A reader who asked for reduced motion gets one a second at most. Faster than 60 times real time it is a step for each pixel, up to 30 a second.
+   */
   #wait(): number {
     const seconds = Number(this.getAttribute("live-seconds"));
     const live = Number.isFinite(seconds) && seconds > 0 ? Math.max(MIN_TICK_MS, seconds * 1000) : LIVE_TICK_MS;
     const speed = Math.abs(this.speed);
     const satellites = this.#satellitesMoving();
-    // satellites go round in 90 minutes, so with any on show even real time is drawn about once a second
-    if (speed <= 1 && !satellites) return live;
-    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return Math.min(live, 1000);
     const radius = this.#model.drawn?.radius ?? 200;
-    return Math.min(live, 1000 / Math.min(30, Math.max(1, (satellites ? SATELLITE_RATE : SUN_RATE) * RAD * speed * radius)));
+    const pixelsPerSecond = Math.max(SUN_RATE * RAD * speed * radius, satellites ? this.#satelliteRate() * speed * radius : 0);
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const cap = smoothCap(this.smoothFps, this.#lowBattery || smallDevice({ deviceMemory: nav.deviceMemory, hardwareConcurrency: nav.hardwareConcurrency }));
+    const perSecond = framesPerSecond({ pixelsPerSecond, speed: this.speed, cap, reduced: prefersLessMotion(), always: satellites });
+    // a hidden tab is not drawn: it is looked at once a second, as the browser would have it anyway
+    const wait = Math.max(waitFor(perSecond, live), document.visibilityState === "hidden" ? 1000 : 0);
+    this.#pace = { pixelsPerSecond, perSecond, cap, waitMs: wait };
+    return wait;
   }
 
   /** Is anything on show that moves faster than the Earth turns: a group of satellites, including above the interpolation limit where they are drawn as streaks? */

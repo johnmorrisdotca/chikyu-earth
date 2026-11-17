@@ -121,6 +121,10 @@ export function createGate(minMs: number, fire: () => void, timers: Timers = bro
  * ```
  */
 export function frameCap(maxFps = 30, device: { deviceMemory?: number; hardwareConcurrency?: number } = {}): number {
-  const small = (device.deviceMemory !== undefined && device.deviceMemory <= 2) || (device.hardwareConcurrency !== undefined && device.hardwareConcurrency <= 2);
-  return Math.max(1, small ? Math.min(maxFps, 20) : maxFps);
+  return Math.max(1, smallDevice(device) ? Math.min(maxFps, 20) : maxFps);
+}
+
+/** Whether this is a small device: 2 GB of memory or less, or 2 cores or fewer (`deviceMemory` and `hardwareConcurrency` from `navigator`, either may be left out). */
+export function smallDevice(device: { deviceMemory?: number; hardwareConcurrency?: number } = {}): boolean {
+  return (device.deviceMemory !== undefined && device.deviceMemory <= 2) || (device.hardwareConcurrency !== undefined && device.hardwareConcurrency <= 2);
 }

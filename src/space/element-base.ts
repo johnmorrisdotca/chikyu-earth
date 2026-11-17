@@ -30,7 +30,8 @@ import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryN
 import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
-import { createGate, frameCap, type Gate } from "../realistic/gate.ts";
+import { createGate, frameCap, smallDevice, type Gate } from "../realistic/gate.ts";
+import { framesPerSecond, readSmoothFps, smoothCap, SMOOTH_UP_TO, waitFor, watchLowBattery } from "../realistic/pace.ts";
 import { createFinerHolder, GIBS_ID } from "../door/gibs.ts";
 import { folderSource } from "../door/map.ts";
 import type { TileSources, TileStats } from "../realistic/tile-set.ts";
@@ -307,7 +308,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "smooth-fps"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -345,6 +346,10 @@ export class ChikyuSpace extends HTMLElement {
   #toldTrack = "";
   #bodiesNote: HTMLElement | undefined;
   #gate: Gate | undefined;
+  /** Whether the battery is low (at 20% or less and not charging): the smooth frame rate is halved. */
+  #lowBattery = false;
+  /** What `#schedule` last worked out, for `stats`. */
+  #pace = { pixelsPerSecond: 0, perSecond: 0, cap: 0, waitMs: 0 };
   #taken: { renderer: SharedRenderer<Three>; release(): void } | undefined;
   #stage: HTMLElement | undefined;
   #labelBox: HTMLElement | undefined;
@@ -476,6 +481,11 @@ export class ChikyuSpace extends HTMLElement {
 
     const nav = navigator as Navigator & { deviceMemory?: number };
     this.#gate = createGate(1000 / frameCap(30, { deviceMemory: nav.deviceMemory, hardwareConcurrency: nav.hardwareConcurrency }), () => this.#view?.invalidate());
+    this.#lowBattery = false;
+    watchLowBattery(nav, () => {
+      this.#lowBattery = true;
+      this.#schedule();
+    });
     this.#stage.addEventListener("webglcontextlost", this.#lost, true);
     this.#stage.addEventListener("webglcontextrestored", this.#restored, true);
 
@@ -694,7 +704,8 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "satellite-streak-max") {
       this.#model.satellites.streakMax = readStreakMax(value);
       this.#gate?.request();
-    } else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.request();
+    } else if (name === "smooth-fps") this.#schedule();
+    else if (name === "tiles" || name === "tiles-finer" || name === "tiles-finer-layer" || name === "tiles-finer-date" || name === "tiles-finer-timeout") this.#gate?.request();
     if (name === "air-thickness" || name === "air-label" || name === "lang") setAirNote(this.#airNote, this, this.#model.airThickness);
     if (name === "bodies-credit" || name === "lang") this.#showBodiesCredit();
     if (name === "lang") this.#showFinerCredit();
@@ -2036,6 +2047,26 @@ export class ChikyuSpace extends HTMLElement {
   }
 
   /**
+   * The most frames a second drawn for a clock at real time, or up to 60 times it (the attribute `smooth-fps`; 15 when the page says nothing; 1 to 30). The picture is drawn each time the quickest thing in it (the Earth's turn at this zoom, a satellite dot,
+   * the ridden craft and the camera in a ride) has moved half a pixel, at least once a second while anything but the Earth is moving, and at most this many. Half as many on a small device or a battery at 20% or lower; one a second for a reader who asked for reduced motion.
+   *
+   * @example
+   * ```ts
+   * import "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.querySelector("chikyu-space")!;
+   * space.smoothFps = 24;
+   * ```
+   */
+  get smoothFps(): number {
+    return readSmoothFps(this.getAttribute("smooth-fps"));
+  }
+  set smoothFps(value: number) {
+    if (Number.isFinite(value) && value > 0) this.setAttribute("smooth-fps", String(value));
+    else this.removeAttribute("smooth-fps");
+  }
+
+  /**
    * Show a group of satellites (made by `createSatellites`) under a name, or take the group away with `null`. A group is one draw call however many satellites it holds. Giving the name of a group
    * that is already shown replaces it. `style`: `color` and `size` (CSS pixels) of the dots, and `orbits` to draw every orbit (only for a group of 40 or fewer, such as the stations).
    * The groups are placed by SGP4 about once a second and interpolated between. Above `MAX_SATELLITE_SPEED` each satellite is a short streak along its orbit instead of being hidden.
@@ -2515,6 +2546,8 @@ export class ChikyuSpace extends HTMLElement {
     time: number;
     lookups: number;
     satellites: SatelliteStats;
+    /** How often the running clock draws, as last worked out: the quickest thing's speed on the screen (CSS pixels a second of real time), the frames a second that asks for, the most allowed (`smooth-fps`, halved on a small device or a low battery) and the wait before the next step in milliseconds. */
+    pace: { pixelsPerSecond: number; perSecond: number; cap: number; waitMs: number };
     /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
     lightFade: { mix: number; fading: boolean };
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
@@ -2568,6 +2601,7 @@ export class ChikyuSpace extends HTMLElement {
       time: this.#model.time,
       lookups: this.#model.lookups,
       satellites: this.#satelliteStats(),
+      pace: { ...this.#pace },
       lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
       ride: { track: this.#model.rideTrack ? { ...this.#model.rideTrack } : null, compass: this.#compass?.shown ? { ...this.#compass.shown } : null, riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null || this.#model.rideFrame.moving, facing: this.facing, groundKm: this.#model.rideFrame.groundKm },
@@ -2618,18 +2652,34 @@ export class ChikyuSpace extends HTMLElement {
     return false;
   }
 
-  /** While time runs, draw as often as it shows: real time once a minute; faster time as often as the Earth's turn moves a pixel (1 to 30 times a second). Satellites go round in 90 minutes and a ride along moves the whole picture, so with either on show real time draws about as often as a pixel moves (once a second at least), and a reader who asked for reduced motion gets one step a second. */
+  /** The quickest a satellite on show goes, in Earth radii for each second of game time: the quickest the groups report between their two SGP4 moments, or, before they have any (and above the interpolation limit, where they do not), a low orbit's. */
+  #satelliteRate(): number {
+    let most = 0;
+    for (const [name, group] of this.#model.satellites.groups) if (satelliteEmphasis(name, group.visible, this.#model.satellites.focus).drawn) most = Math.max(most, group.satellites.fastest);
+    return most > 0 && Math.abs(this.#speed) <= SMOOTH_UP_TO ? most : SATELLITE_RATE * RAD;
+  }
+
+  /**
+   * While time runs, draw each time the quickest thing in the picture has moved half a pixel: the Earth's turn at this zoom, a satellite dot (the quickest of the groups on show, from the places they hold for the interpolation), the ridden craft and the camera in a ride.
+   * At most `smooth-fps` a second (15), half as many on a small device or a low battery, and at least once a second while a satellite or a ride moves; real time with only the Earth turning waits up to a minute. A reader who asked for reduced motion gets one a second at most.
+   * Faster than 60 times real time it is a frame for each pixel, up to 30 a second.
+   */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
     if (!this.isConnected || this.#speed === 0) return;
     const satellites = this.#satellitesMoving();
     const riding = this.#model.ride !== null;
+    const speed = Math.abs(this.#speed);
     const radius = this.#model.drawn?.radiusPx ?? 200;
-    const pixelsPerSecond = Math.max((satellites ? SATELLITE_RATE : EARTH_RATE) * RAD * Math.abs(this.#speed) * radius, this.#model.rideMotion * Math.abs(this.#speed));
-    let perSecond = Math.min(30, Math.max(1, pixelsPerSecond));
-    if ((satellites || riding) && matchMedia("(prefers-reduced-motion: reduce)").matches) perSecond = 1;
-    const wait = !satellites && !riding && this.#speed === 1 ? REAL_TIME_TICK_MS : 1000 / perSecond;
+    const pixelsPerSecond = Math.max(EARTH_RATE * RAD * speed * radius, satellites ? this.#satelliteRate() * speed * radius : 0, this.#model.rideMotion * speed);
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const cap = smoothCap(this.smoothFps, this.#lowBattery || smallDevice({ deviceMemory: nav.deviceMemory, hardwareConcurrency: nav.hardwareConcurrency }));
+    // a reader who asked for reduced motion gets one a second while satellites or a ride move or the clock is at real time; a clock the reader set running faster over a bare Earth is theirs to ask for (as before)
+    const perSecond = framesPerSecond({ pixelsPerSecond, speed: this.#speed, cap, reduced: prefersLessMotion() && (satellites || riding || speed <= 1), always: satellites || riding });
+    // a hidden tab is not drawn: it is looked at once a second, as the browser would have it anyway
+    const wait = Math.max(waitFor(perSecond, REAL_TIME_TICK_MS), document.visibilityState === "hidden" ? 1000 : 0);
+    this.#pace = { pixelsPerSecond, perSecond, cap, waitMs: wait };
     this.#timer = setTimeout(this.#tick, wait);
   }
 
