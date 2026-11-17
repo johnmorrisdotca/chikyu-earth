@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A published accuracy table, and a test that holds it** (MODULES-523). The new guide "How accurate it is" (English and Japanese) gives the measured error of the Sun's overhead point and of the line between day and night against NASA/JPL Horizons (eight moments from 1950 to 2075; worst 0.0074 degree, 0.8 km on the ground), and of the SGP4 places that `createSatellites` gives against Vallado's published verification set ("Revisiting Spacetrack Report #3", AIAA 2006-6753; four element sets, near Earth, strong drag and deep space; worst 0.000000007 km, agreement to every published digit). Each reference value is copied into `test/accuracy/references.ts` with its source and the date it was read. `test/accuracy.test.ts` holds the errors under stated limits (0.010 degree for the Sun and the line, 1 millimetre for SGP4), each the worst measured plus a margin, and each shown to fail when the code or the limit is broken. Not covered, and said so in the guide: NOAA's calculator (a page to operate, no file of values), the paper's printed tables and `tcppver.out` (only in a zip), the sunrise line with refraction, and the Earth-fixed step. No code of the package changed.
+
 ## 0.56.0 - 2026-11-17
 
 
