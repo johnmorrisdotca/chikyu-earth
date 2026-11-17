@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.57.0 - 2026-11-17
 
 - **A ride's tilt range follows its facing; the outside distance and the glide length are options** (MODULES-1471). `rideTiltLimits(distance, look, zoom)` ignored the facing, so a ride that opened facing up (the site's Below step, 25 km under the satellite) could look down only to about 40 degrees above the horizon.
   - **Tilt range.** `rideTiltLimits` takes the facing as a fourth argument (`face`, left out or `null` for none) and gives the range from where the facing rests to straight down (`rest - cap` to `rest + 90` degrees, worked from the same resting elevation `ridePose` uses): facing `up` from straight up to straight down, facing `down` from straight down to 20 degrees above the horizon, the other facings as before. The element passes the ride's facing. Rides with no facing, and the `down` look, are unchanged.
