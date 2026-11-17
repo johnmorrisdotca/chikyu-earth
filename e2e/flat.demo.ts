@@ -90,6 +90,8 @@ test("a pointer over a dot and a tap on it send the pick event with its number",
   await page.mouse.move(place.x, place.y);
   await expect.poll(() => page.evaluate(() => (Reflect.get(window, "__picks") as { via: string }[]).map((p) => p.via))).toContain("hover");
   await page.mouse.click(place.x, place.y);
+  // the tap's event can land a frame after the click returns (WebKit on a phone), so wait for it rather than read once
+  await expect.poll(() => page.evaluate(() => (Reflect.get(window, "__picks") as { via: string }[]).some((p) => p.via === "tap"))).toBe(true);
   const picks = await page.evaluate(() => Reflect.get(window, "__picks") as { id: number; name: string; group: string; via: string; plane: string }[]);
   const tap = picks.find((p) => p.via === "tap")!;
   expect(tap).toMatchObject({ id, group: "gps", via: "tap" });
@@ -98,7 +100,7 @@ test("a pointer over a dot and a tap on it send the pick event with its number",
   // a tap on the sea clears it
   const box = (await flat(page).evaluate((el) => el.shadowRoot!.querySelector(".dots")!.getBoundingClientRect().toJSON())) as { x: number; y: number; width: number };
   await page.mouse.click(box.x + 3, box.y + 3);
-  expect(await read(page, (el) => el.selected)).toBe(null);
+  await expect.poll(() => read(page, (el) => el.selected)).toBe(null);
   expect((await page.evaluate(() => Reflect.get(window, "__picks") as { id: number | null }[])).at(-1)!.id).toBe(null);
 });
 
