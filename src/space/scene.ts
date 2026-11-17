@@ -13,7 +13,7 @@ import type { LightMode } from "../realistic/earth.ts";
 import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3 } from "./ephemeris.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
-import { faceOffset, outsidePose, ridePose, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
+import { faceOffset, outsidePose, rideGlideMs, ridePose, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { stripLights, type ModelSun } from "./model-lights.ts";
 import { newLightFade, stepLightFade, type LightFade } from "../realistic/light-fade.ts";
 import { prefersLessMotion } from "../meteors/note.ts";
@@ -181,6 +181,8 @@ export interface RideState {
   distanceKm: number;
   /** `outside`: a ridden satellite is in the picture (the camera a little behind and above it in `from`, a drawing of it where the page has no model); `inside`: as a ride was before, the camera at the satellite and no drawing of it where the page has no model. */
   viewpoint: RideViewpoint;
+  /** How far back an outside ride keeps the camera from the satellite, in kilometres. */
+  outsideKm: number;
   /** How the model of a satellite seen from above is sized as the camera rises: `distance` shrinks it and hands over to the mark, `fixed` keeps one share of the picture. */
   modelSize: RideModelSize;
   /** What a drag does in an outside ride from the satellite: `head` turns the view where the camera is, `orbit` takes the camera round the satellite. */
@@ -276,7 +278,7 @@ export interface SpaceModel {
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
   rideLost: boolean;
   /** A camera move in progress from where the last draw left it: when it began (ms of the page's clock), how long it takes. */
-  transition: { start: number; duration: number; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
+  transition: { start: number; duration: number; scaled?: { minMs: number; maxMs: number }; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
   /** The shared controls' view as the last draw used it, and how tall the view was (CSS pixels): `setView` skips a draw for a turn that moves nothing by half a pixel. */
   drawnView: { yaw: number; tilt: number; zoom: number } | null;
   /** The point of the ground the view would look at with yaw and tilt 0, as of the last draw (the middle of the view is this less the yaw and tilt), or null while the camera rides or looks at another body. */
@@ -1061,7 +1063,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             if (ridden && ride!.viewpoint === "outside") {
               // a drag turns the view where the camera is (`head`: the camera's place is the one it has with no drag), or takes the camera round the satellite (`orbit`)
               const rest = ride!.drag === "orbit" ? undefined : ridePose({ position: rideFrom.position, velocity: rideFrom.velocity, look: ride!.look, yaw: 0, tilt: 0, zoom: model.view.zoom, turn: 0, ...(ride!.face ? { face: ride!.face } : {}) });
-              const out = outsidePose(pose, ride!.look, framing ? (framing.seat - 0.5) / 0.5 : undefined, rest);
+              const out = outsidePose(pose, ride!.look, framing ? (framing.seat - 0.5) / 0.5 : undefined, rest, ride!.outsideKm);
               pose = out.pose;
               outsideAway = out.distance;
             }
@@ -1126,6 +1128,12 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           // a ride that changed: glide from where the last draw left the camera (a jump for a reader who asked for reduced motion; the element does not start one then)
           const glide = model.transition;
           if (glide) {
+            // a glide that follows the distance takes its length from how far the camera has to go, at its first frame
+            if (glide.scaled) {
+              const km = Math.hypot(camera.position.x - glide.from.p[0], camera.position.y - glide.from.p[1], camera.position.z - glide.from.p[2]) * 6371;
+              glide.duration = rideGlideMs(km, glide.scaled.minMs, glide.scaled.maxMs);
+              delete glide.scaled;
+            }
             const k = Math.min(1, (performance.now() - glide.start) / glide.duration);
             const ease = k * k * (3 - 2 * k);
             desiredQ.copy(camera.quaternion);

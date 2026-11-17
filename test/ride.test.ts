@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { faceOffset, outsidePose, ridePose, RIDE_FACES, RIDE_FOV, type RideFace, type RideInput, type RideLook, type RidePose } from "../src/space/ride.ts";
+import { faceOffset, OUTSIDE_KM, outsidePose, ridePose, RIDE_FACES, RIDE_FOV, rideGlideMs, type RideFace, type RideInput, type RideLook, type RidePose } from "../src/space/ride.ts";
 import { aboveAxes } from "../src/space/satellite-model.ts";
 
 const dot = (a: number[], b: number[]): number => a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
@@ -183,6 +183,76 @@ test("the tilt that does something is from straight down to a little above the h
   assert.equal(rideTiltLimits(1.066, "down", 1), null, "the down look has no range");
   const narrow = rideTiltLimits(1.066, "horizon", 6)!;
   assert.ok(narrow.max > range.max * 3, "at a high zoom the same tilt moves less, so the range is wider");
+});
+
+test("the tilt range follows the facing: each one can tip from where it rests to straight down, and up to the highest the facing opens", () => {
+  // the Below step of the site: facing up, 25 km under the satellite; and the satellite's own height, 420 km
+  for (const distance of [1 + 25 / 6371, 1.066]) {
+    const position: [number, number, number] = [distance, 0, 0];
+    const rested = (face: RideFace | undefined, tilt: number, zoom = 1): RidePose => ridePose({ position, velocity: [0, 0, -7.66], look: "horizon", yaw: 0, tilt, zoom, ...(face ? { face } : {}) });
+    const none = rideTiltLimits(distance, "horizon", 1)!;
+    for (const face of [undefined, ...RIDE_FACES]) {
+      const range = rideTiltLimits(distance, "horizon", 1, face)!;
+      const what = `${face ?? "no facing"} at ${distance.toFixed(4)}`;
+      assert.ok(range.min <= 0 && range.max > 0 || face === "down" && range.max === 0, `${what}: the resting tilt of 0 is inside ${range.min}..${range.max}`);
+      // the highest the camera can look: 20 degrees above the horizon, or straight up when the facing is up
+      const highest = face === "up" ? 1 : Math.sin((20 * Math.PI) / 180);
+      near(upness(position, rested(face, range.min).forward), highest, 1e-6, `${what}: the top of the range`);
+      near(upness(position, rested(face, range.max).forward), -1, 1e-6, `${what}: the bottom of the range is straight down`);
+      // past either end nothing moves, and just inside either end something does
+      near(upness(position, rested(face, range.min - 30).forward), upness(position, rested(face, range.min).forward), 1e-9, `${what}: past the top changes nothing`);
+      near(upness(position, rested(face, range.max + 30).forward), -1, 1e-9, `${what}: past the bottom changes nothing`);
+      assert.ok(Math.abs(upness(position, rested(face, range.max - 2).forward) - -1) > 1e-6, `${what}: a tilt just inside the bottom still moves the view`);
+      if (face !== "up") assert.ok(Math.abs(upness(position, rested(face, range.min + 2).forward) - highest) > 1e-6, `${what}: a tilt just inside the top still moves the view`);
+      // a facing other than up or down rests where there is none, so its range is the same
+      if (face !== "up" && face !== "down") {
+        near(range.min, none.min, 1e-9, `${what}: the same top`);
+        near(range.max, none.max, 1e-9, `${what}: the same bottom`);
+      }
+    }
+    // facing up from 25 km under the satellite: the whole way down, not the 40 degrees above the horizon that held the view before
+    const up = rideTiltLimits(distance, "horizon", 1, "up")!;
+    near(up.min, 0, 1e-9, "up cannot tip further up");
+    assert.ok(up.max > none.max + 20, `up reaches straight down: ${up.max} against ${none.max}`);
+    const down = rideTiltLimits(distance, "horizon", 1, "down")!;
+    near(down.max, 0, 1e-9, "down cannot tip further down");
+    assert.ok(down.min < -70, `down tips up to 20 degrees above the horizon: ${down.min}`);
+  }
+  assert.equal(rideTiltLimits(1.066, "down", 1, "up"), null, "the down look has no range, whatever the facing");
+  assert.deepEqual(rideTiltLimits(1.066, "horizon", 3, null), rideTiltLimits(1.066, "horizon", 3), "no facing is the same as null");
+});
+
+test("an outside ride keeps the camera back as far as it is asked, 25 km by default, and never beyond half the height", () => {
+  const at = ridePose({ position: [1.066, 0, 0], velocity: [0, 0, -7.66], look: "horizon", yaw: 0, tilt: 0, zoom: 1 });
+  const back = (km?: number): number => outsidePose(at, "horizon", undefined, undefined, km).distance * 6371;
+  near(OUTSIDE_KM, 25, 0, "the default");
+  near(back(), 25, 1e-6, "by default");
+  near(back(undefined), 25, 1e-6, "undefined is the default");
+  near(back(60), 60, 1e-6, "60 km");
+  near(back(5), 5, 1e-6, "5 km");
+  near(back(0), 25, 1e-6, "0 is no distance: the default");
+  near(back(Number.NaN), 25, 1e-6, "not a number: the default");
+  near(back(1e6), 0.066 * 6371 * 0.5, 1e-6, "never more than half the height");
+  const far = outsidePose(at, "horizon", undefined, undefined, 80).pose.position;
+  const near25 = outsidePose(at, "horizon").pose.position;
+  assert.ok(Math.hypot(far[0] - at.position[0], far[1] - at.position[1], far[2] - at.position[2]) > Math.hypot(near25[0] - at.position[0], near25[1] - at.position[1], near25[2] - at.position[2]) * 3, "the camera is further back");
+});
+
+test("a glide that follows the distance is between its shortest and longest, and longer for a longer way", () => {
+  near(rideGlideMs(0), 800, 0, "no way: the shortest");
+  near(rideGlideMs(10), 800, 0, "10 km: the shortest");
+  near(rideGlideMs(1e9), 4000, 0, "past the Moon: the longest");
+  near(rideGlideMs(25), 1164, 1, "25 km is about the old 1.2 s");
+  near(rideGlideMs(3000), 3065, 1, "3,000 km takes about 3 s");
+  let last = 0;
+  for (const km of [0, 10, 25, 100, 1000, 3000, 10_000, 30_000, 400_000]) {
+    const ms = rideGlideMs(km);
+    assert.ok(ms >= last, `${km} km: ${ms} is not shorter than ${last}`);
+    last = ms;
+  }
+  near(rideGlideMs(3000, 500, 2000), 500 + 1500 * (Math.log10(300) / 3.5), 1, "its own shortest and longest");
+  near(rideGlideMs(3000, 3000, 1000), 3000, 0, "a longest below the shortest is the shortest");
+  near(rideGlideMs(Number.NaN), 800, 0, "not a number: the shortest");
 });
 
 const unitOf = (a: number[]): number[] => {

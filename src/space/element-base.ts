@@ -54,7 +54,7 @@ import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHov
 import { clampFollow, retargetFollow } from "./follow.ts";
 import { COMPASS_HTML, COMPASS_STYLE, createCompass, readCompass, type Compass } from "./compass.ts";
 import type { RideUp } from "./north-up.ts";
-import { RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
+import { OUTSIDE_KM, RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import { BODY_NAMES, type CameraMode, createSpaceItem, DEFAULT_EARTH_SIZE, newSpaceModel, type BodyName, type BodyPainter, type BodyPlace, type RideTarget, type RideTrack, type SatellitePainter, type SpaceModel } from "./scene.ts";
 import { createPaintState, paintedGround, paintedPeriod, type PaintSpec } from "../paint/buffer.ts";
@@ -179,6 +179,10 @@ export interface RideOptions {
   drag?: RideDrag;
   /** Which way is up in the view above a satellite (`view: "above"`): `travel` (the default, or the element's `ride-up`) puts the way the satellite is going at the top of the picture, `north` puts north there, so the satellite is seen to go the way it really goes over the ground. Within 3 degrees of a pole it is `travel` (mixed in smoothly out to 6). A drag turns the picture from there. */
   up?: RideUp;
+  /** How far back the camera is kept from the satellite in an outside ride, in kilometres (`view: "from"`; the element's `ride-outside-km` when not given, else 25). It is never more than half the satellite's height. */
+  outsideKm?: number;
+  /** How long the glide to this ride lasts: a number of milliseconds (1200 by default), or `{ minMs, maxMs }` for a length that follows how far the camera has to move (`rideGlideMs`: 800 to 4000 ms by default, about 1.2 s for a 25 km hop and 3 s for 3,000 km). */
+  glide?: number | { minMs?: number; maxMs?: number };
   distanceKm?: number;
   smooth?: boolean;
 }
@@ -202,6 +206,8 @@ export interface Riding {
   distanceKm: number;
   /** `outside` or `inside` (see `RideOptions`). */
   viewpoint: RideViewpoint;
+  /** How far back an outside ride keeps the camera, in kilometres (see `RideOptions`). */
+  outsideKm: number;
   /** `distance` or `fixed` (see `RideOptions`). */
   modelSize: RideModelSize;
   /** `head` or `orbit` (see `RideOptions`). */
@@ -243,6 +249,21 @@ function readFrame(value: string | null, min: number, max: number): number | nul
   if (value === null || value.trim() === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : null;
+}
+/** The distance an outside ride keeps, in kilometres, from an option or an attribute: a positive number, else `null`. */
+function readOutsideKm(value: number | string | null | undefined): number | null {
+  const number = typeof value === "string" ? (value.trim() === "" ? NaN : Number(value)) : value;
+  return typeof number === "number" && Number.isFinite(number) && number > 0 ? number : null;
+}
+/** The length of the glide to a ride: a number of milliseconds as given (0 to 20,000), or a length that follows the distance (the option's `minMs` and `maxMs`), with the length the glide has until the first draw knows the distance. */
+function readGlide(value: RideOptions["glide"]): { duration: number; scaled?: { minMs: number; maxMs: number } } {
+  if (typeof value === "number" && Number.isFinite(value)) return { duration: Math.min(20_000, Math.max(0, value)) };
+  if (value && typeof value === "object") {
+    const minMs = typeof value.minMs === "number" && Number.isFinite(value.minMs) ? Math.min(20_000, Math.max(0, value.minMs)) : 800;
+    const maxMs = typeof value.maxMs === "number" && Number.isFinite(value.maxMs) ? Math.min(20_000, Math.max(minMs, value.maxMs)) : Math.max(minMs, 4000);
+    return { duration: minMs, scaled: { minMs, maxMs } };
+  }
+  return { duration: 1200 };
 }
 /** An option's number held between `min` and `max`, or `undefined` when it is not given. */
 function clampFrame(value: number | undefined, min: number, max: number): number | undefined {
@@ -308,7 +329,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "smooth-fps"];
+  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "smooth-fps"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -617,6 +638,7 @@ export class ChikyuSpace extends HTMLElement {
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === "ride-viewpoint") this.#applyViewpoint();
     else if (name === "ride-model-size") this.#applyModelSize();
+    else if (name === "ride-outside-km") this.#applyOutsideKm();
     else if (name === "ride-drag") this.#applyDrag();
     else if (name === "ride-up") this.#applyUp();
     else if (name === "compass") this.#showCompass();
@@ -1557,7 +1579,7 @@ export class ChikyuSpace extends HTMLElement {
     if (view.yaw !== now.yaw) model.rideTurn += rideTurnDegrees(wrapYaw(view.yaw - now.yaw), view.zoom);
     // and the tilt is held to what does something in the look: past it a drag would have to come back before anything moved (the controls driving the view are handed the held tilt, the bar's own when one is bound)
     let tilt = view.tilt;
-    const limits = model.ride && model.ride.view === "from" && model.rideDistance !== null ? rideTiltLimits(model.rideDistance, model.ride.look, view.zoom) : null;
+    const limits = model.ride && model.ride.view === "from" && model.rideDistance !== null ? rideTiltLimits(model.rideDistance, model.ride.look, view.zoom, model.ride.face) : null;
     if (limits) tilt = Math.max(limits.min, Math.min(limits.max, tilt));
     this.#model.view = { yaw: view.yaw, tilt, zoom: view.zoom };
     // the whole view is handed back, the yaw as it is, so the controls keep what they held and the element hears nothing it did not already have
@@ -1628,7 +1650,7 @@ export class ChikyuSpace extends HTMLElement {
       // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
       const faceable = !(view === "follow" && typeof target === "string");
       const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
-      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize, drag: options.drag === "head" || options.drag === "orbit" ? options.drag : this.rideDrag, up: options.up === "north" || options.up === "travel" ? options.up : this.rideUp };
+      model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, outsideKm: readOutsideKm(options.outsideKm) ?? this.rideOutsideKm ?? OUTSIDE_KM, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize, drag: options.drag === "head" || options.drag === "orbit" ? options.drag : this.rideDrag, up: options.up === "north" || options.up === "travel" ? options.up : this.rideUp };
       if (face) {
         model.view = { yaw: 0, tilt: 0, zoom: model.view.zoom };
         model.rideTurn = 0;
@@ -1640,7 +1662,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#zoomRange(model.ride?.view === "from");
     this.#lostTold = false;
     const pose = model.pose;
-    model.transition = (options.smooth ?? true) && !reduced && pose.valid ? { start: performance.now(), duration: 1200, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    const glide = readGlide(options.glide);
+    model.transition = (options.smooth ?? true) && !reduced && pose.valid ? { start: performance.now(), duration: glide.duration, ...(glide.scaled ? { scaled: glide.scaled } : {}), from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
     this.#last = performance.now();
     this.#schedule();
     this.#gate?.request();
@@ -1752,6 +1775,44 @@ export class ChikyuSpace extends HTMLElement {
     const next = list[(((current < 0 ? (step > 0 ? -1 : 0) : current) + step) % list.length + list.length) % list.length]!;
     this.ride(next.ref, { view: "follow" });
     return next;
+  }
+
+  /**
+   * How far back an outside ride keeps the camera from the satellite, in kilometres (the attribute `ride-outside-km`), or `null` for the package's own, `OUTSIDE_KM` (25). It is the default for the next `ride` (`RideOptions.outsideKm`) and, set while riding,
+   * moves the camera there in a glide of 0.8 s (a jump for a reader who asked for less motion). The camera is never more than half the satellite's height back.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.rideOutsideKm = 100;
+   * console.log(space.rideOutsideKm);
+   * ```
+   */
+  get rideOutsideKm(): number | null {
+    return readOutsideKm(this.getAttribute("ride-outside-km"));
+  }
+  set rideOutsideKm(value: number | null) {
+    if (readOutsideKm(value) === null) this.removeAttribute("ride-outside-km");
+    else this.setAttribute("ride-outside-km", String(value));
+  }
+
+  #applyOutsideKm(): void {
+    const model = this.#model;
+    const ride = model.ride;
+    const next = this.rideOutsideKm ?? OUTSIDE_KM;
+    if (!ride || ride.outsideKm === next) return;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const pose = model.pose;
+    model.ride = { ...ride, outsideKm: next };
+    // only an outside ride from the satellite has a camera that far back: the others have nothing to glide
+    const moves = ride.view === "from" && ride.viewpoint === "outside" && typeof ride.target !== "string";
+    model.transition = moves && !reduced && pose.valid ? { start: performance.now(), duration: 800, from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    this.#last = performance.now();
+    this.#schedule();
+    this.#gate?.request();
+    this.dispatchEvent(new CustomEvent("chikyu-ride", { detail: this.riding }));
   }
 
   /**

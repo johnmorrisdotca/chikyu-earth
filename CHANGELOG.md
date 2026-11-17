@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **A ride's tilt range follows its facing; the outside distance and the glide length are options** (MODULES-1471). `rideTiltLimits(distance, look, zoom)` ignored the facing, so a ride that opened facing up (the site's Below step, 25 km under the satellite) could look down only to about 40 degrees above the horizon.
+  - **Tilt range.** `rideTiltLimits` takes the facing as a fourth argument (`face`, left out or `null` for none) and gives the range from where the facing rests to straight down (`rest - cap` to `rest + 90` degrees, worked from the same resting elevation `ridePose` uses): facing `up` from straight up to straight down, facing `down` from straight down to 20 degrees above the horizon, the other facings as before. The element passes the ride's facing. Rides with no facing, and the `down` look, are unchanged.
+  - **Outside distance.** `outsideKm` in `ride()` options, the attribute `ride-outside-km` and the property `rideOutsideKm` set how far back an outside ride keeps the camera (25 km, `OUTSIDE_KM`, by default; never more than half the satellite's height). `outsidePose` takes it as a fifth argument, and `riding.outsideKm` reports it. Changed while riding it glides in 0.8 s.
+  - **Glide length.** `glide` in `ride()` options is a number of milliseconds (1200 by default, as before) or `{ minMs, maxMs }` for a length that follows how far the camera has to move. The new pure `rideGlideMs(km, minMs = 800, maxMs = 4000)` grows with each tenfold of the distance from 10 km to 30,000 km: about 1.2 s for 25 km and 3 s for 3,000 km. Nothing changes for a page that does not pass it.
+  - **Tests and docs.** Unit tests of the tilt range for every facing at 25 km and at 420 km (both ends of the range, nothing moving past them, something moving just inside), of `outsidePose`'s distance and of `rideGlideMs`; the ride guide in English and Japanese (the Japanese read by the Japanese reviewer) and `docs/ride-along.md`.
+
 ## 0.56.0 - 2026-11-17
 
 

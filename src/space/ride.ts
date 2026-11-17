@@ -63,6 +63,13 @@ export const RIDE_FACES: readonly RideFace[] = ["ahead", "behind", "left", "righ
 /** How far each facing turns from the way it goes, in degrees, to the left, in the view from the body. */
 const FACE_TURN: Record<RideFace, number> = { ahead: 0, behind: 180, left: 90, right: -90, down: 0, up: 0 };
 
+/** Where the horizon look rests, as an elevation in radians (0 the horizon, a quarter turn up or down at the ends): straight at the Earth for `down`, straight away from it for `up`, and for every other facing the horizon a little above the middle. */
+function restElevation(earthRadiusDegrees: number, face?: RideFace | null): number {
+  if (face === "down") return -Math.PI / 2;
+  if (face === "up") return Math.PI / 2;
+  return Math.max(0, earthRadiusDegrees - 12) * RAD - Math.PI / 2;
+}
+
 /**
  * Yaw and tilt, in radians, that put a camera looking at a satellite on a facing. `down` is straight above it, looking down at it and the Earth. `ahead` looks along the way it goes.
  *
@@ -123,11 +130,13 @@ export function rideTurnDegrees(change: number, zoom: number): number {
 
 /**
  * The range of the controls' tilt that does something in the `horizon` look: from straight down to a little above the horizon. A tilt beyond it moves nothing, so a page holds the tilt to it, and a drag back starts moving at once instead of after the
- * excess is dragged back. It depends on the height (the horizon is further from straight down the higher the camera is) and the zoom. The `down` look has no such range.
+ * excess is dragged back. It depends on the height (the horizon is further from straight down the higher the camera is), the zoom and the facing: the range is the one the facing opens in (`ridePose` rests the camera there), so looking `up` the camera can tip from straight away
+ * from the Earth to straight down, and looking `down` from straight down to a little above the horizon. Leave the facing out for a ride with none (the horizon a little above the middle). The `down` look has no such range.
  *
  * @param distance - The camera's distance from the Earth's centre, in Earth radii.
  * @param look - The look.
  * @param zoom - The shared controls' zoom.
+ * @param face - The facing the ride opened with (`RideFace`), or leave it out or `null` for none.
  * @returns The lowest and highest tilt, or `null` for the `down` look.
  *
  * @example
@@ -135,15 +144,17 @@ export function rideTurnDegrees(change: number, zoom: number): number {
  * import { rideTiltLimits } from "@johnmorrisdotca/chikyu-earth/space";
  *
  * const range = rideTiltLimits(1.066, "horizon", 1);
- * console.log(range && `${range.min.toFixed(0)} to ${range.max.toFixed(0)}`, rideTiltLimits(1.066, "down", 1));
+ * const below = rideTiltLimits(1.066, "horizon", 1, "up");
+ * console.log(range && `${range.min.toFixed(0)} to ${range.max.toFixed(0)}`, below && `${below.min.toFixed(0)} to ${below.max.toFixed(0)}`, rideTiltLimits(1.066, "down", 1));
  * ```
  */
-export function rideTiltLimits(distance: number, look: RideLook, zoom: number): { min: number; max: number } | null {
+export function rideTiltLimits(distance: number, look: RideLook, zoom: number, face?: RideFace | null): { min: number; max: number } | null {
   if (look !== "horizon") return null;
   const radius = distance <= 1 ? 90 : Math.asin(1 / distance) / RAD;
-  const start = Math.max(0, radius - 12) * RAD - Math.PI / 2;
+  const rest = restElevation(radius, face);
+  const cap = Math.max(MAX_ABOVE_HORIZON * RAD, rest);
   const perDegree = (GRAB * rideFov(zoom)) / 60;
-  return { min: (start - (MAX_ABOVE_HORIZON * RAD)) / RAD / perDegree, max: (start + Math.PI / 2) / RAD / perDegree };
+  return { min: (rest - cap) / RAD / perDegree, max: (rest + Math.PI / 2) / RAD / perDegree };
 }
 
 /**
@@ -247,7 +258,7 @@ export type RideDrag = "head" | "orbit";
 export type RideModelSize = "distance" | "fixed";
 
 /**
- * How far an outside ride keeps the camera from the satellite, in kilometres. The satellite itself is a few metres across, so it is drawn far larger than life (a model about a fifth of the picture's height across): not to scale, and the page says so in its caption.
+ * How far an outside ride keeps the camera from the satellite by default, in kilometres (a ride's `outsideKm` and the element's `ride-outside-km` change it). The satellite itself is a few metres across, so it is drawn far larger than life (a model about a fifth of the picture's height across): not to scale, and the page says so in its caption.
  *
  * @example
  * ```ts
@@ -257,6 +268,29 @@ export type RideModelSize = "distance" | "fixed";
  * ```
  */
 export const OUTSIDE_KM = 25;
+
+/**
+ * How long a glide between two cameras lasts, in milliseconds, when it follows the distance the camera has to move: the shortest at a hop of 10 km or less, the longest at 30,000 km or more (a camera that goes to the Moon takes the longest),
+ * and in between the length grows with each tenfold of the distance (3,000 km is about 70 per cent of the way). A fixed 1.2 seconds is quick for a hop of thousands of kilometres and slow for one of tens. Pure.
+ *
+ * @param km - How far the camera moves, in kilometres.
+ * @param minMs - The shortest glide, in milliseconds; 800 by default.
+ * @param maxMs - The longest glide, in milliseconds; 4,000 by default (never below `minMs`).
+ * @returns The length of the glide in milliseconds, between `minMs` and `maxMs`.
+ *
+ * @example
+ * ```ts
+ * import { rideGlideMs } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(rideGlideMs(25), rideGlideMs(3000), rideGlideMs(400_000));
+ * ```
+ */
+export function rideGlideMs(km: number, minMs = 800, maxMs = 4000): number {
+  const low = Math.max(0, Number.isFinite(minMs) ? minMs : 800);
+  const high = Math.max(low, Number.isFinite(maxMs) ? maxMs : 4000);
+  const share = Number.isFinite(km) && km > 10 ? Math.min(1, Math.log10(km / 10) / 3.5) : 0;
+  return Math.round(low + (high - low) * share);
+}
 
 /** How far below the middle of the picture the satellite's middle is drawn in an outside ride that looks along the way it goes, as a share of half the picture's height (0.8: at 90 per cent of the height, so with the model drawn 17 per cent of the height in radius it crosses the bottom edge). */
 const OUTSIDE_LOW = 0.8;
@@ -271,6 +305,7 @@ const OUTSIDE_LOW = 0.8;
  * @param look - The look the pose was made with.
  * @param low - How far below the middle of the picture the satellite is, as a share of half its height (0 the middle, 1 the bottom edge); by default 0.8 looking along and 0 looking down.
  * @param rest - The pose from `ridePose` for the same camera with no drag (yaw, tilt and turn of 0): where the camera is kept. Leave it out for the camera to go round the satellite as it looks about.
+ * @param km - How far back the camera is kept, in kilometres: `OUTSIDE_KM` (25) by default. Never more than half the satellite's height.
  * @returns The pose moved back from the satellite, with how far the camera is from it in Earth radii and how many degrees below the middle of the picture the satellite is.
  *
  * @example
@@ -284,10 +319,10 @@ const OUTSIDE_LOW = 0.8;
  * console.log(out.distance.toFixed(4), out.below.toFixed(1), out.pose.position.map((n) => n.toFixed(4)).join(","), head.pose.position.map((n) => n.toFixed(4)).join(","));
  * ```
  */
-export function outsidePose(pose: RidePose, look: RideLook, low?: number, rest?: RidePose): { pose: RidePose; distance: number; below: number } {
+export function outsidePose(pose: RidePose, look: RideLook, low?: number, rest?: RidePose, km: number = OUTSIDE_KM): { pose: RidePose; distance: number; below: number } {
   const base = rest ?? pose;
   const height = Math.max(0, norm(pose.position) - 1);
-  const distance = Math.max(1e-5, Math.min(OUTSIDE_KM / 6371, height * 0.5));
+  const distance = Math.max(1e-5, Math.min((Number.isFinite(km) && km > 0 ? km : OUTSIDE_KM) / 6371, height * 0.5));
   const lowNow = low ?? (look === "horizon" ? OUTSIDE_LOW : 0);
   const below = Math.atan(Math.max(0, lowNow) * Math.tan((base.fov / 2) * RAD));
   // the satellite is along the line of sight turned `below` down (towards the bottom of the picture): the camera is back along that line. The line is the pose's own, so the camera goes round the satellite as it looks about, or the line of the pose with no drag (`rest`), so the camera keeps its place and only turns
@@ -329,7 +364,7 @@ export function ridePose(input: RideInput): RidePose {
   const fov = rideFov(input.zoom);
   const turn = ((input.turn ?? input.yaw * (GRAB * fov / 180)) + faced) * RAD;
   const lift = input.tilt * (GRAB * fov / 60) * RAD;
-  const rest = input.face === "down" ? -Math.PI / 2 : input.face === "up" ? Math.PI / 2 : base - Math.PI / 2;
+  const rest = restElevation(earthRadiusDegrees, input.face);
   const cap = Math.max(MAX_ABOVE_HORIZON * RAD, rest);
   if (input.look === "horizon") {
     // looking round on the spot: a drag sideways turns the camera about the local vertical, all the way round, and a drag up or down tips it up or down in the vertical plane it faces, from straight down to a little above the horizon,
