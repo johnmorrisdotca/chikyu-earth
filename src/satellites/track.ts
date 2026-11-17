@@ -130,7 +130,6 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   }
 
   const n = recs.length;
-  const normal = new Float32Array(n * 3);
   const rate = new Float64Array(n);
   const classColour = new Float32Array(n * 3);
   const eccentric: number[] = [];
@@ -139,13 +138,6 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
     const set = usable[i]!;
     const epoch = epochs[i]!;
     if (epoch > newestEpochMs) newestEpochMs = epoch;
-    const iRad = (set.INCLINATION * Math.PI) / 180;
-    const oRad = (set.RA_OF_ASC_NODE * Math.PI) / 180;
-    const si = Math.sin(iRad);
-    const ci = Math.cos(iRad);
-    normal[i * 3] = Math.sin(oRad) * si;
-    normal[i * 3 + 1] = ci;
-    normal[i * 3 + 2] = Math.cos(oRad) * si;
     rate[i] = (set.MEAN_MOTION * 2 * Math.PI) / DAY_MS;
     if (set.ECCENTRICITY >= ECCENTRIC_FROM) eccentric.push(i);
     const kind = classOfElements(set.MEAN_MOTION, set.ECCENTRICITY) ?? "other";
@@ -184,6 +176,9 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   const tooLow = (x: number, y: number, z: number): boolean => Math.hypot(x, y, z) < 1 + LOWEST_ESTIMATE_KM / EARTH_RADIUS_KM;
   const pinned = new Float32Array(n * 3);
   const pinOk = new Uint8Array(n);
+  // the unit normal of the orbit plane at each satellite's pin, from the pinned place and SGP4's velocity there (the plane of the moment pinned, not the plane of the elements: a low orbit's plane turns about 5 degrees a day).
+  // Worked out once for each pin, in `sample`, and only read by `arc`.
+  const pinNormal = new Float32Array(n * 3);
   // when each satellite was last pinned (NaN: never), so a group can be pinned a slice at a time and `arc` turns each from its own pin
   const pinMsOf = new Float64Array(n).fill(Number.NaN);
   let pinnedCount = 0;
@@ -203,7 +198,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
   for (const i of eccentric) isEccentric[i] = 1;
 
   /** SGP4 for satellites `from` up to (not including) `to` at one moment (the whole group by default), into `buffer` in the space view's axes (TEME x, z, -y: x to the vernal equinox, y north). */
-  const sample = (buffer: Float32Array, ok: Uint8Array, ms: number, from = 0, to = n, skipEccentric = false): void => {
+  const sample = (buffer: Float32Array, ok: Uint8Array, ms: number, from = 0, to = n, skipEccentric = false, axis?: Float32Array): void => {
     const started = performance.now();
     for (let i = from; i < to; i += 1) {
       // an eccentric orbit is placed by SGP4 at every frame by `arc` and never read from a pin
@@ -224,6 +219,31 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       buffer[i * 3] = p.x / EARTH_RADIUS_KM;
       buffer[i * 3 + 1] = p.z / EARTH_RADIUS_KM;
       buffer[i * 3 + 2] = -p.y / EARTH_RADIUS_KM;
+      if (axis) {
+        // the orbit's normal is the place crossed with the velocity (both in the scene's axes: x, z, -y)
+        const v = result!.velocity;
+        if (!v) {
+          ok[i] = 0;
+          continue;
+        }
+        const rx = p.x;
+        const ry = p.z;
+        const rz = -p.y;
+        const vx = v.x;
+        const vy = v.z;
+        const vz = -v.y;
+        const cx = ry * vz - rz * vy;
+        const cy = rz * vx - rx * vz;
+        const cz = rx * vy - ry * vx;
+        const length = Math.hypot(cx, cy, cz);
+        if (!(length > 0)) {
+          ok[i] = 0;
+          continue;
+        }
+        axis[i * 3] = cx / length;
+        axis[i * 3 + 1] = cy / length;
+        axis[i * 3 + 2] = cz / length;
+      }
     }
     timing.lastBatchMs = performance.now() - started;
     if (timing.lastBatchMs > timing.maxBatchMs) timing.maxBatchMs = timing.lastBatchMs;
@@ -289,7 +309,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       const from = Math.max(0, Math.min(n, Math.floor(first)));
       const to = Math.max(from, Math.min(n, from + Math.floor(count)));
       if (to === from) return;
-      sample(pinned, pinOk, ms, from, to, true);
+      sample(pinned, pinOk, ms, from, to, true, pinNormal);
       for (let i = from; i < to; i += 1) {
         if (Number.isNaN(pinMsOf[i])) pinnedCount += 1;
         pinMsOf[i] = ms;
@@ -301,7 +321,7 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
       const cap = maxLength > 0 && Number.isFinite(maxLength) ? maxLength : 0;
       // a satellite never pinned is pinned now, all together
       if (pinnedCount < n) {
-        sample(pinned, pinOk, ms, 0, n, true);
+        sample(pinned, pinOk, ms, 0, n, true, pinNormal);
         pinMsOf.fill(ms);
         pinnedCount = n;
       }
@@ -353,9 +373,9 @@ export function createSatellites(sets: readonly ElementSet[], options: Satellite
           shown[i] = 0;
           continue;
         }
-        const nx = normal[k]!;
-        const ny = normal[k + 1]!;
-        const nz = normal[k + 2]!;
+        const nx = pinNormal[k]!;
+        const ny = pinNormal[k + 1]!;
+        const nz = pinNormal[k + 2]!;
         let sweep = Math.max(-Math.PI, Math.min(Math.PI, rate[i]! * span));
         if (cap > 0) {
           // along the orbit a turn of `sweep` is `sweep` times the height in Earth radii, so the cap is a turn of cap / height
