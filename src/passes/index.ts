@@ -3,6 +3,7 @@ export {
   compassOf,
   findPasses,
   groundTrack,
+  groundTrackState,
   passPath,
   satelliteAt,
   skyAt,
@@ -21,3 +22,4 @@ export {
 } from "./passes.ts";
 export { ESTIMATED_CROSS_SECTIONS, magnitude, standardMagnitude, STANDARD_MAGNITUDES } from "./magnitudes.ts";
 export { skySvg, type SkyLabels, type SkyOptions } from "./sky.ts";
+export type { GroundTrackState } from "../flat/track-state.ts";

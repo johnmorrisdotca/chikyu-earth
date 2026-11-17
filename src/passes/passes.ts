@@ -1,6 +1,7 @@
 // When a satellite crosses the sky over a place. SGP4 (satellite.js, an optional peer) puts the satellite in the sky, this package's own Sun position says whether the watcher's sky is dark and whether
 // the satellite is in sunlight, and the brightness follows from the standard magnitude. Pure: no DOM, no clock (the window is given), no state; it imports on a server.
 import { ecfToLookAngles, eciToEcf, eciToGeodetic, geodeticToEcf, gstime, json2satrec, sgp4 } from "satellite.js";
+import { inEarthShadow, trackStateOf, type GroundTrackState } from "../flat/track-state.ts";
 import { subsolarPoint } from "../realistic/sun.ts";
 import { DEFAULT_DIM_AFTER_DAYS, DEFAULT_MAX_AGE_DAYS } from "../satellites/limits.ts";
 import type { ElementSet } from "../satellites/types.ts";
@@ -627,6 +628,8 @@ export interface GroundPoint {
   lon: number;
   /** Height above the Earth's surface, kilometres. */
   altitudeKm: number;
+  /** True when the Sun lights the satellite there, false when it is in the Earth's shadow (the cylindrical model, as `satelliteAt` and `passPath` use). */
+  sunlit: boolean;
 }
 
 /**
@@ -670,10 +673,50 @@ export function groundTrack(set: ElementSet, fromMs: number, toMs: number, stepS
     const t = Math.min(ms, toMs);
     const sample = sgp4(rec, (t - epoch) / 60_000) as Sample;
     if (sample && sample.position && Number.isFinite(sample.position.x)) {
-      const place = eciToGeodetic(sample.position, gstime(new Date(t)));
-      out.push({ ms: t, lat: place.latitude / RAD, lon: ((((place.longitude / RAD) % 360) + 540) % 360) - 180, altitudeKm: place.height });
+      const gmst = gstime(new Date(t));
+      const place = eciToGeodetic(sample.position, gmst);
+      const ecf = eciToEcf(sample.position, gmst);
+      out.push({ ms: t, lat: place.latitude / RAD, lon: ((((place.longitude / RAD) % 360) + 540) % 360) - 180, altitudeKm: place.height, sunlit: !inEarthShadow([ecf.x, ecf.y, ecf.z], sunVector(t)) });
     }
     if (t >= toMs) break;
   }
   return out;
+}
+
+/**
+ * Where one satellite is over the ground at one moment, which way it is going and whether the Sun lights it: latitude, longitude, height, the bearing of its ground track (degrees clockwise from north, with the Earth's turn taken out), ascending or descending, and sunlit
+ * (the cylindrical shadow model). SGP4 places it; the rest is {@link trackStateOf}, which does the same from a place and a velocity you already have. Undefined where SGP4 gives no place.
+ *
+ * @param set - The satellite's elements.
+ * @param ms - The moment, milliseconds since the Unix epoch.
+ * @returns The state, or undefined.
+ *
+ * @example
+ * ```ts
+ * import { groundTrackState } from "@johnmorrisdotca/chikyu-earth/passes";
+ *
+ * const iss = {
+ *   OBJECT_NAME: "ISS (ZARYA)",
+ *   EPOCH: "2026-11-02T10:25:21.580320",
+ *   MEAN_MOTION: 15.49150046,
+ *   ECCENTRICITY: 0.0007139,
+ *   INCLINATION: 51.6332,
+ *   RA_OF_ASC_NODE: 335.9757,
+ *   ARG_OF_PERICENTER: 339.3739,
+ *   MEAN_ANOMALY: 20.6961,
+ *   NORAD_CAT_ID: 25544,
+ *   BSTAR: 0.00012,
+ *   MEAN_MOTION_DOT: 0.0001,
+ *   MEAN_MOTION_DDOT: 0,
+ * };
+ * const state = groundTrackState(iss, Date.UTC(2026, 10, 3, 12));
+ * console.log(state && `${state.bearingDeg.toFixed(0)} degrees, ${state.ascending ? "ascending" : "descending"}, ${state.sunlit ? "sunlit" : "in shadow"}`);
+ * ```
+ */
+export function groundTrackState(set: ElementSet, ms: number): GroundTrackState | undefined {
+  const rec = json2satrec(set as never);
+  const sample = sgp4(rec, (ms - epochOf(set.EPOCH)) / 60_000) as { position: { x: number; y: number; z: number } | false; velocity: { x: number; y: number; z: number } | false } | null;
+  if (!sample || !sample.position || !sample.velocity || !Number.isFinite(sample.position.x)) return undefined;
+  const { position: p, velocity: v } = sample;
+  return trackStateOf([p.x, p.y, p.z], [v.x, v.y, v.z], ms);
 }

@@ -50,3 +50,27 @@ export const PLANE_COLOURS: readonly string[] = ["#ff7a59", "#ffd23f", "#6ee7a0"
  * ```
  */
 export const SPARE_COLOUR = "#9aa5b1";
+
+/**
+ * The colour of a ground track where the satellite is in sunlight: a warm amber. It is one half of a pair chosen to be told apart by a reader who cannot tell red from green (amber and blue differ in lightness as well as in hue), and each stretch is drawn over a dark edge so it reads on a dark sea and on a light one. The element's `--chikyu-flat-track-sun` overrides it.
+ *
+ * @example
+ * ```ts
+ * import { TRACK_SUNLIT } from "@johnmorrisdotca/chikyu-earth/flat";
+ *
+ * console.log(TRACK_SUNLIT);
+ * ```
+ */
+export const TRACK_SUNLIT = "#ffb02e";
+
+/**
+ * The colour of a ground track where the satellite is in the Earth's shadow: a cool blue. The element's `--chikyu-flat-track-shadow` overrides it.
+ *
+ * @example
+ * ```ts
+ * import { TRACK_SHADOW } from "@johnmorrisdotca/chikyu-earth/flat";
+ *
+ * console.log(TRACK_SHADOW);
+ * ```
+ */
+export const TRACK_SHADOW = "#5aa9ff";
