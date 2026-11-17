@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.54.0 - 2026-11-17
+
 - **North up in the view above a satellite, a compass, and sunlit or in shadow on the ground track** (MODULES-1437). Riding above the ISS the way it is going was always at the top of the picture, so a reader could not tell its real direction (astroviewer shows it heading south-east).
   - **North up.** `ride(ref, { view: "above", up: "north" })`, the attribute `ride-up="north"` and the property `rideUp` put north at the top of the picture, so the satellite is seen to move the way it really moves over the ground. `"travel"` is the default and today's look. Set while riding, the picture turns to the new up in a glide of 0.8 s (a jump for reduced motion). **Pole rule:** within 3 degrees of a pole north-up gives way to travel-up, mixed in by a smooth step out to 6 degrees, so the picture never jumps; `NORTH_UP_POLE_DEG`, `NORTH_UP_BLEND_DEG`, `northUpYaw`, `localNorth` and `screenAngle` are in `/space`. **A drag** turns the picture from north by the amount dragged, and the compass shows where north has gone.
   - **Compass.** A DOM overlay in the shadow root (an arrow to north with an N, a dot on the rim for the way it is going, and "Heading SE 128°"), in English and Japanese, in every ride of a satellite. It is updated by the draw that moves it, only when it moved by half a degree (a degree for the words): nothing at rest, no timer. `compass="off"` hides it, `compass="north"` keeps the arrow only; `--chikyu-compass-colour` and `--chikyu-compass-travel`.
