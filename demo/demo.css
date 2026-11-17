@@ -123,6 +123,15 @@ chikyu-passes { --chikyu-picture: 270px; }
 .flat-picks .field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
 .flat-picks input[type="datetime-local"] { border-radius: 999px; padding: 0 14px; }
 chikyu-flat { display: flex; width: 100%; --chikyu-flat-sea: #0b1830; }
+.flat-photo { display: grid; gap: 10px; }
+.flat-photo .fam-row { flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.flat-photo .fam-seg { flex-wrap: wrap; }
+.flat-photo .fam-seg button, .flat-photo .fam-button { min-height: 48px; min-width: 48px; font-family: inherit; }
+.photo-figure { margin: 0; display: grid; gap: 6px; max-width: 512px; }
+.photo-frame { position: relative; display: flex; aspect-ratio: 1; background: var(--rule); border-radius: 8px; overflow: hidden; }
+.photo-frame img { display: block; height: 100%; object-fit: fill; }
+.photo-frame::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; }
+.photo-figure figcaption { display: grid; gap: 4px; }
 .flat-facts { overflow-x: auto; }
 .flat-table { border-collapse: collapse; font-size: .9rem; width: 100%; font-variant-numeric: tabular-nums; }
 .flat-table th, .flat-table td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }

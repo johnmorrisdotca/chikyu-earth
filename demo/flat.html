@@ -25,6 +25,23 @@
           </div>
         </div>
         <chikyu-flat id="flat" data-testid="flat" group="gps" off="starlink" colour-by="plane" home-lon="139.69" home-lat="35.69"></chikyu-flat>
+        <section class="flat-photo" aria-labelledby="ph-heading">
+          <h2 id="ph-heading" data-say="ph_heading">The ground under it</h2>
+          <p class="fam-fine" data-say="ph_lede"></p>
+          <div class="fam-row">
+            <span class="fam-label" data-say="ph_size">Width of the box</span>
+            <span class="fam-seg" id="photo-size" role="group" data-say-label="ph_size" data-testid="photo-size"></span>
+            <button type="button" class="fam-button" id="photo-show" data-testid="photo-show" disabled></button>
+          </div>
+          <p class="fam-fine" id="photo-status" role="status" data-testid="photo-status"></p>
+          <figure class="photo-figure" id="photo-figure" data-testid="photo-figure" hidden>
+            <div class="photo-frame" id="photo-frame"></div>
+            <figcaption>
+              <span id="photo-caption" data-testid="photo-caption"></span>
+              <span class="fam-fine" id="photo-credit" data-testid="photo-credit"></span>
+            </figcaption>
+          </figure>
+        </section>
         <div class="flat-facts" id="facts" data-testid="facts"></div>
         <p class="fam-fine" id="status" role="status" data-testid="status"></p>
         <details class="flat-call"><summary data-say="fl_code">The call that draws it</summary><pre><code id="code"></code></pre></details>

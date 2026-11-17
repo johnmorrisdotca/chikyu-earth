@@ -1,7 +1,9 @@
 // The flat map page: every dot is a satellite at the place SGP4 puts it for the time shown, drawn on a canvas by <chikyu-flat>. Choose the groups (the element's own chips), colour by group or by orbital plane,
 // set a "saved place" to see the My place button and its marker, and drive the clock. The orbit data are this demo's own files, read once when the page loads: nothing here asks CelesTrak.
 import "../src/flat/define.ts";
-import { groupFacts } from "../src/flat/index.ts";
+import { groupFacts, type FlatPick } from "../src/flat/index.ts";
+import { samplesAreBlank } from "../src/door/gibs.ts";
+import { photoCredit, photoFallbacks, type PhotoPiece } from "../src/photos/index.ts";
 import type { ChikyuFlat } from "../src/flat/define.ts";
 import { fetchGroup, setsOfGroup, type GroupFile } from "./groups.ts";
 import { TRY_PLACES } from "./passes-places.ts";
@@ -139,9 +141,95 @@ function facts(): void {
 }
 flat.addEventListener("chikyu-flat-filter", () => facts());
 
+// ----- the ground under a satellite: NASA's picture, asked for by this browser when the reader presses the button ------------------------------------------------------------------
+const SIZES = [100, 300, 1000] as const;
+let boxKm: number = SIZES[1];
+let chosen: FlatPick | null = null;
+let clockMs = Date.now();
+let photoState: "idle" | "loading" | "none" | "shown" = "idle";
+let photoAsk = 0;
+let photoShot: { name: string; lat: number; lon: number; day: string; size: number } | null = null;
+buttons("#photo-size", SIZES.map((km) => ({ value: String(km), text: () => say("ph_km", { n: km }) })), () => String(boxKm), (v) => {
+  boxKm = Number(v);
+  render();
+});
+const photoButton = $<HTMLButtonElement>("#photo-show");
+flat.addEventListener("chikyu-flat-pick", (event) => {
+  const pick = (event as CustomEvent<FlatPick>).detail;
+  if (pick.id === null) chosen = null;
+  else if (pick.via !== "hover") chosen = pick;
+  render();
+});
+flat.addEventListener("chikyu-timechange", (event) => {
+  clockMs = (event as CustomEvent<{ time: number }>).detail.time;
+});
+/** The pictures of the pieces, ready to lie side by side: the images, or null when a picture is black (the day is not ready) or does not arrive. */
+function loadPieces(pieces: readonly PhotoPiece[]): Promise<HTMLImageElement[] | null> {
+  const total = Math.max(...pieces.map((piece) => piece.offsetPx + piece.widthPx));
+  const all = pieces.map(
+    (piece) =>
+      new Promise<HTMLImageElement | null>((resolve) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.alt = say("ph_alt");
+        image.style.width = `${(piece.widthPx / total) * 100}%`;
+        image.addEventListener("error", () => resolve(null));
+        image.addEventListener("load", () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 24;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context) return resolve(image);
+          context.drawImage(image, 0, 0, 24, 24);
+          resolve(samplesAreBlank(context.getImageData(0, 0, 24, 24).data) ? null : image);
+        });
+        image.src = piece.url;
+      }),
+  );
+  return Promise.all(all).then((images) => (images.every((image) => image !== null) ? (images as HTMLImageElement[]) : null));
+}
+async function showPhoto(): Promise<void> {
+  const pick = chosen;
+  const there = pick ? flat.placeOf(pick.id) : null;
+  if (!pick || !there) return;
+  const ask = ++photoAsk;
+  photoState = "loading";
+  photoShot = null;
+  render();
+  // the day shown by the clock, or yesterday if that is today or later: NASA's picture of a day is made after the day
+  const yesterday = Date.now() - 86_400_000;
+  const shots = photoFallbacks({ lat: there.lat, lon: there.lon, sizeKm: boxKm, date: Math.min(clockMs, yesterday) }, 3);
+  for (const shot of shots) {
+    const images = await loadPieces(shot.pieces);
+    if (ask !== photoAsk) return;
+    if (!images) continue;
+    $("#photo-frame").replaceChildren(...images);
+    photoShot = { name: pick.name, lat: there.lat, lon: there.lon, day: shot.date, size: boxKm };
+    photoState = "shown";
+    render();
+    return;
+  }
+  photoState = "none";
+  render();
+}
+photoButton.addEventListener("click", () => void showPhoto());
+function renderPhoto(): void {
+  photoButton.disabled = !chosen || photoState === "loading";
+  photoButton.textContent = chosen ? say("ph_show", { name: chosen.name }) : say("ph_pick");
+  const status = { idle: "", loading: say("ph_loading"), none: say("ph_none"), shown: "" }[photoState];
+  $("#photo-status").textContent = status;
+  const figure = $("#photo-figure");
+  figure.hidden = photoState !== "shown" || !photoShot;
+  if (photoShot) {
+    const point = (value: number, plus: string, minus: string): string => `${Math.abs(value).toFixed(1)}°${value >= 0 ? plus : minus}`;
+    $("#photo-caption").textContent = say("ph_caption", { name: photoShot.name, lat: point(photoShot.lat, "N", "S"), lon: point(photoShot.lon, "E", "W"), day: photoShot.day, size: photoShot.size });
+  }
+  $("#photo-credit").textContent = photoCredit(lang());
+}
+
 // ----- the page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 function render(): void {
   for (const row of rows) row();
+  renderPhoto();
   for (const button of clockBox.children as HTMLCollectionOf<HTMLButtonElement>) {
     const act = button.dataset["act"]!;
     button.textContent = say(act === "pause" ? (flat.paused ? "fl_play" : "fl_pause") : `fl_${act}`);
