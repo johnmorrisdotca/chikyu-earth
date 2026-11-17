@@ -309,12 +309,12 @@ if (flat && controls && stage) {
   async function groupOf(name: string): Promise<Satellites> {
     const found = made.get(name);
     if (found) return found;
-    const [{ createSatellites }, data] = await Promise.all([import("../src/satellites/index.ts"), once<GroupFile>(`${name}.json`, () => fetchGroup(name))]);
+    const [{ createSatellites, createSatelliteHistory }, data] = await Promise.all([import("../src/satellites/index.ts"), once<GroupFile>(`${name}.json`, () => fetchGroup(name))]);
     filesOf.set(name, data);
     const sets = setsOfGroup(data);
     const group = createSatellites(sets);
     made.set(name, group);
-    Reflect.set(globalThis, "chikyuSatellites", { createSatellites, groups: made });
+    Reflect.set(globalThis, "chikyuSatellites", { createSatellites, createSatelliteHistory, groups: made });
     return group;
   }
   const ageText = (days: number): string => (Math.abs(days) < 2 ? say("satAgeHours", { n: Math.round(Math.abs(days) * 24) }) : say("satAgeDays", { n: Math.round(Math.abs(days)) }));

@@ -11,3 +11,4 @@ export { genericSatellite, satelliteKind, type SatelliteKind } from "./generic-s
 export { BEAM_ATTRIBUTES, BEAM_COLOUR, BEAM_ELEVATION, beamCells, footprintAngle, footprintKm, readBeam, type BeamCells, type BeamOptions } from "../beam/geometry.ts";
 export type { BeamStats } from "../beam/layer.ts";
 export { RIDE_PATH_FADE_KM } from "./path-ribbons.ts";
+export { createTrailBuilder, TRAIL_DEFAULT_ORBITS, TRAIL_MAX_ORBITS, TRAIL_MAX_POINTS, TRAIL_POINTS_PER_ORBIT, trailOrbits, type PlaceAt, type TrailBuilder } from "./trail.ts";
