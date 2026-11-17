@@ -87,6 +87,12 @@ const flatFacts = flat.groupFacts([node(10), node(12), node(130), node(133), nod
 if (flatFacts.planeCount !== 3 || flatFacts.planes[0].id !== "A" || Math.abs(flatFacts.meanAltitudeKm - 20_200) > 300 || flat.wrapLongitude(190) !== -170 || Math.abs(flat.projectFlat({ width: 720, height: 360, centerLon: 155, centerLat: 0, zoom: 1 }, -170, 0).x - 430) > 1e-9) throw new Error("the flat map's pure parts are off");
 console.log("flat ok");
 
+// the photo addresses import with no browser: a box over the date line is two requests, and the credit names NASA
+const photos = await import(new URL("../dist/photos/index.js", import.meta.url).href);
+const photoOptions = { lat: -17.7, lon: 179.9, sizeKm: 200, date: "2026-11-10" };
+if (photos.photoPieces(photoOptions).length !== 2 || !photos.photoUrl(photoOptions).includes("TIME=2026-11-10") || !photos.photoCredit("en").includes("NASA")) throw new Error("the photo addresses are off");
+console.log("photos ok");
+
 // the package's own types never import an optional peer a page may not have: following the imports of every entry's .d.ts, none reaches hoshi-stars (the star names' look is `SkyLabelStyle`, written out here)
 {
   const { readFileSync } = await import("node:fs");

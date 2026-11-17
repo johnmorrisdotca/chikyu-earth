@@ -89,6 +89,11 @@
       "en": "The place under a point: country, sea, continent and the nearest city",
       "ja": "地点の場所: 国、海、大陸、最も近い都市",
       "platform": "node"
+    },
+    "./photos": {
+      "en": "Real satellite pictures of the ground under a point: NASA GIBS snapshot addresses, the days to try and the credit line",
+      "ja": "地点の真下の実際の衛星画像: NASA GIBSのスナップショットのアドレス、試す日付、クレジット表記",
+      "platform": "browser"
     }
   }
 }
