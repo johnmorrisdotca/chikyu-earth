@@ -28,10 +28,11 @@ export default defineConfig({
   },
   projects: [
     // The realistic Earth: Chromium only (WebGL in software), with precise memory readings and gc() for the leak checks. `pnpm test:soak` runs the long one.
+    // The page's own pictures are drawn by the CPU here too (CPU_RASTER): the line globe's drag tests took 45 s of their 60 on a busy Mac with them on the emulated GPU, and 12 s with them on the CPU.
     {
       name: "chromium-gl",
       testMatch: "*.gl.ts",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, CPU_RASTER, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
     },
     {
       name: "soak",
