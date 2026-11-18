@@ -144,6 +144,25 @@ export async function untilStill(page: Page, timeout = 20_000): Promise<void> {
 }
 
 /**
+ * The element's draw count, taken once the browser has delivered five frames in a row in which it drew nothing. A frame asked for before the clock was held or the controls stopped can still be waiting for the browser, and on a slow
+ * machine (software GL, a throttled CPU) it runs more than a gather window later, long after the count has stood still: a fixed wait, or a count that stands still for a while, can take its reading just before it. Frames run in the
+ * order they were asked for and a page's own frame callbacks run before the ones made after them, so five delivered frames without a draw are rest. `selector` is the element with `stats.draws`.
+ */
+export async function drawsAtRest(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).evaluate(async (el) => {
+    const count = (): number => (Reflect.get(el, "stats") as { draws: number }).draws;
+    let seen = count();
+    for (let quiet = 0; quiet < 5; ) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const now = count();
+      quiet = now === seen ? quiet + 1 : 0;
+      seen = now;
+    }
+    return seen;
+  });
+}
+
+/**
  * Wait until the space view has drawn everything that a change of its view brought, so a count of its draws afterwards counts only what comes later. A body that comes into view is made by the painter, and each picture that arrives asks
  * for a draw, which a reader with less motion has gathered to one a `ARRIVAL_GATHER_MS` after the last: those draws land seconds after the change on a loaded machine, past any fixed wait (MODULES-1192, 1195).
  * The element says what is still to come (`stats.bodies.pending`: pictures asked for and not yet here, and a gathered draw waiting for its second), and the draw count must then stay where it is for longer than that gather window,

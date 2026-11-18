@@ -2,7 +2,7 @@
 import { checkGestures } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
 import { ATMOSPHERE_OUTER, discRadius } from "../src/realistic/earth.ts";
-import { COUNT_SCRIPT, readCounts, settle } from "./gl.ts";
+import { COUNT_SCRIPT, drawsAtRest, readCounts, settle } from "./gl.ts";
 
 const EARTH = "chikyu-earth-realistic";
 const NOV10 = "2026-11-10T04:00Z";
@@ -20,7 +20,8 @@ async function open(page: Page, query: string): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/fullscreen.html?${query}`);
   await page.locator(`${EARTH}[data-state=live]`).waitFor({ timeout: 60_000 });
-  await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(0);
+  // the first draw comes when the page's software drawing gets to it, which on a busy or throttled machine is more than the five seconds a poll is given: wait for it, bounded by the test's own time
+  await page.waitForFunction((tag) => ((Reflect.get(document.querySelector(tag)!, "stats") as { draws: number }).draws > 0), EARTH);
   await settle(page);
 }
 
@@ -97,8 +98,7 @@ test("with every group shown and the clock running the page draws at most 30 tim
   const b = (await statsOf(page)).draws;
   expect((b - a) / 3, "draws a second").toBeLessThanOrEqual(31);
   await page.locator("#play").click();
-  await settle(page, 1200);
-  const held = (await statsOf(page)).draws;
+  const held = await drawsAtRest(page, EARTH);
   await page.waitForTimeout(2500);
   expect((await statsOf(page)).draws, "nothing drawn while held").toBe(held);
 });
