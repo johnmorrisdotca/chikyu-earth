@@ -208,11 +208,12 @@ test.describe("moving", () => {
     expect((await counts(page)).draws - before.draws, "nothing drawn at rest").toBe(0);
   });
 
-  test("toggled twenty times it leaves the GPU's objects where they were", async ({ page }) => {
+  test("toggled eight times it leaves the GPU's objects where they were", async ({ page }) => {
     await ownClock(page);
     await open(page, "outside", "horizon");
     const start = await counts(page);
-    for (let i = 0; i < 20; i += 1) {
+    // each toggle builds or frees the model and plays out a 1.2 s glide in software drawing: twenty of them took 30 s of the test's 60 on a quiet machine and more than the 60 on a loaded one, and eight (four there and back) show a leak as plainly
+    for (let i = 0; i < 8; i += 1) {
       await page.locator(SPACE).evaluate((el, value) => Reflect.set(el, "rideViewpoint", value), i % 2 === 0 ? "inside" : "outside");
       await passTime(page, 1500);
     }
