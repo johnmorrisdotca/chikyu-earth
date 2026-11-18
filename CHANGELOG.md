@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **A fly-to on the space view, and moves that bend instead of stopping** (MODULES-1582).
+  - **`flyTo(lat, lon, { height, phase, smooth, signal })`** on `<chikyu-space>`: across, the Earth turns under the camera at the height it has until the place is below (a great circle, eased), then down to `height` km over it (30 by default, never under 15). `phase` is `across`, `down` or `both`. It resolves to `FlyEnd` (`arrived`, `redirected` or `stopped`, the place, the height then and what held the descent) and sends `chikyu-fly-start` and `chikyu-fly-end`; `stats.fly` says what it is doing. The controls' own turn is paused for it.
+  - **A new move bends the running one.** A `flyTo` or `goToPlace` while a move is going starts with the camera's own speed and acceleration and curves to the new place, so the speed and the way it goes are continuous (no stop, no jump); a descent cut short slows to rest without turning back. The realistic Earth's `goToPlace` is unchanged.
+  - **A hand ends it where it is**: a drag, pinch, wheel or key (from the element's own hands or a bound bar), or the `signal`. Reduced motion, `smooth: false` or a picture not live yet jumps there.
+  - **The floor.** The descent comes all the way down only with `tiles-finer` over land from 60 degrees south to 80 degrees north (the place is looked up in the 1:110m outlines, loaded only then); elsewhere it stops at 400 km (`FLY_FLOOR_KM`, the height the package's own pictures stay sharp, as the site's ride-above floor), and at a `zoom-max` the page set. Below about 320 km the look camera's nearest distance and near plane follow the descent, and the zoom limit is raised under the page's own; a page that never calls `flyTo` draws as before.
+  - **Pure parts** in `/space`: `planFly`, `flyAt`, `flyStateAt`, `flyStill`, `flyAim`, `flyLonLat`, `flyAcrossMs`, `flyDownMs`, `flyDistance`, `descentFloorKm` and the `FLY_*` constants, with unit tests (a redirect mid-turn and mid-descent: the speed carries across within 1 per cent, no step stops or jumps, the height never turns back); `e2e/fly.gl.ts` (the same in a real browser, a drag and a signal ending a move, reduced motion jumping 30 km over Tokyo and holding at 400 km over the sea) and a freeze check (one frame at a time, nothing at rest after). The places guide in English and Japanese.
+  - **Not yet:** the next tile level is not fetched ahead of the descent; the tiles load as the camera comes down, as they do for a zoom.
+
 ## 0.61.0 - 2026-11-18
 
 - **Places get a press event, a size and look each, layers, and names that give way to cities** (MODULES-1578). All of it is optional and a page that uses none of it draws as before.

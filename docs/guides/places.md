@@ -111,6 +111,27 @@ if (!place) console.log("no such place");
 - **The zoom stays.** Only the turn changes; the page zooms if it wants to.
 - **Looking at the Earth.** In the space view the camera must be looking at the Earth: while it rides along or looks at another body, nothing moves and the call resolves `undefined`.
 - **The tilt is held to 90 degrees** either way from `center`, as a drag is: a place more than 90 degrees of latitude from `center` comes as near the middle as that allows. Set `center` near the reader's own place.
+- **A new place bends the turn.** A `goToPlace` while one is still turning does not stop it and start again: the view keeps the speed and the way it is going and curves smoothly toward the new place (on both elements, and in the space view also into and out of a `flyTo`).
+
+## Fly to a place
+
+In the space view, `flyTo(lat, lon, options)` takes the camera to a place in two parts: **across**, the Earth turns under the camera at the height it has until the place is below (along a great circle), then **down**, a descent to `height` kilometres over it (30 by default: the whole of a city in view, still sharp with the finer 30 m pictures). It resolves once the move has ended:
+
+```js no-run
+const space = document.querySelector("chikyu-space");
+space.setAttribute("tiles-finer", "gibs");
+const end = await space.flyTo(35.69, 139.69, { height: 30 });
+console.log(end.reason, Math.round(end.heightKm), end.held); // "arrived" 30 null
+```
+
+- **One part at a time.** `phase: "across"` only turns, `phase: "down"` only comes down, and `"both"` (the default) does one after the other, so a page can take a reader there one press at a time.
+- **A new move bends the one running.** A `flyTo` or `goToPlace` while one is moving never stops it dead: the camera keeps its speed and the way it is going and curves into the new path, and a descent cut short slows to rest without turning back before the new move goes across. The move taken over resolves `"redirected"`.
+- **A hand ends it where it is.** A drag, a pinch, the wheel or a key on the view, or `signal` (an `AbortSignal`), ends it at once, `"stopped"`; so do a ride and the element leaving the page.
+- **Where the pictures stop being sharp.** The descent comes all the way down only over land with `tiles-finer` on, from 60 degrees south to 80 degrees north, where the finer pictures are. Over the sea, Antarctica and the far north, or without `tiles-finer`, it stops at 400 km (`FLY_FLOOR_KM`), as low as the package's own pictures stay sharp, and `held` is `"no-finer"`. A `zoom-max` the page set holds it too (`"zoom-max"`). It never goes below 15 km (`FLY_MIN_KM`).
+- **The zoom follows it down.** Once a fly-to has come lower than about 320 km, the zoom reaches as low as it came, so a reader can zoom out and back in. The view's own turn (Auto-turn) is paused, so the place stays below.
+- **Less motion.** A reader who asked for less motion, `smooth: false`, or a picture that is not live yet goes straight there, height and all.
+- **Events and stats.** `chikyu-fly-start` (`{ lon, lat, phase, heightKm, held }`) and `chikyu-fly-end` (what `flyTo` resolves to) are sent; `stats.fly` says whether a move is going and in which part, the height now, what held the last descent and how many moves were taken over. Nothing runs at rest: a move asks for one frame at a time, at the view's own frame cap, and none once it ends.
+- **The pure parts.** `planFly`, `flyAt` and `flyStateAt` in `@johnmorrisdotca/chikyu-earth/space` are the move itself, for a test or a page's own camera: the turn and the height are each a quintic that starts with the speed and acceleration the camera has, so the speed and the way it goes are continuous at a change.
 
 ## The reader's own place
 
