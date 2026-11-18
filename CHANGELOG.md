@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The clouds fade out when the view is close, so the sharp ground shows** (MODULES-1356). The cloud layer is one whole-Earth picture at most 2048 pixels across (about 20 km a texel) drawn over the ground, so from a few hundred kilometres up it blurred the finer tiles under it (a satellite ride's Below step, 486 km up, showed it). Its strength now goes from 1 to 0 as a texel grows from 4 to 16 device pixels wide, worked out from the Earth's radius in device pixels the map tiles use. Both `<chikyu-earth-realistic>` and `<chikyu-space>` do it. `cloud-fade="8"` sets the width at which the clouds are gone (16 when left out, 1 to 1000), `cloud-fade="off"` (or `0`) keeps them at any zoom, and `stats.cloudFade` says how much is shown. Nothing is drawn at rest. A unit test, `e2e/cloud-fade.gl.ts` on both elements, and the earth-tiles guide in English and Japanese.
+
 ## 0.61.0 - 2026-11-18
 
 - **Places get a press event, a size and look each, layers, and names that give way to cities** (MODULES-1578). All of it is optional and a page that uses none of it draws as before.

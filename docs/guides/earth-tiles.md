@@ -67,6 +67,8 @@ The package's pictures are sharp to about 5 times; the demo's zoom limit was 5. 
 
 The clouds stay at the package's 2048 picture: they are soft, and NASA's finer cloud files are no longer served. The city lights go to level 4 (16384 across), half the day map's detail, where there is little more to see.
 
+**The clouds give way to the ground.** A 2048 picture has a texel about 20 km of ground wide, so over the sharp tiles it would blur the view from a few hundred kilometres up. The cloud layer therefore fades out as its texel grows much wider than a device pixel. It is worked out from the same figure the tiles use, the Earth's radius in device pixels at the nearest ground: a texel is `2π × radius ÷ 2048` pixels wide, the clouds are whole while that is 4 pixels or less, and gone at 16 (about 1.2 km of ground a pixel, where the finest day tiles take over). It works in `<chikyu-earth-realistic>` and `<chikyu-space>` and draws nothing at rest: the strength changes only when the view does. `cloud-fade="8"` has them gone at 8 pixels (a smaller number fades them sooner, a larger one keeps them closer), `cloud-fade="off"` keeps them at full strength at any zoom, and on `<chikyu-earth-realistic>` `clouds="off"` still switches the layer off. `stats.cloudFade` is the share shown at the last draw, 1 to 0.
+
 ## Closer than these tiles
 
 The pyramid stops at day level 5 (about 1.2 km a pixel, from a 500 m source). For a view closer than that, `tiles-finer="gibs"` asks the browser to read finer pictures of the land from NASA's Global Imagery Browse Services. It is off unless a page sets it: the page is then depending on that service.
