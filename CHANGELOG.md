@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Places get a press event, a size and look each, layers, and names that give way to cities** (MODULES-1578). All of it is optional and a page that uses none of it draws as before.
+  - **Press.** A press on a place's marker or ring sends `chikyu-place-click` from `<chikyu-space>` and `<chikyu-earth-realistic>` with `detail: { id, kind, layer?, label?, lon, lat, x, y }` (`PlaceClickDetail`), so a page need not read the markers' boxes. A group of several places sends nothing.
+  - **Size and look.** A place may have `size: "small"` (a stick about half as long, a ring about 30 per cent smaller) and `look` (`beam`, `pin` or `ring`, over `places-look`).
+  - **Layers.** A place may have a `layer`; `place-layers` (`placeLayers`, `setPlaceLayer(name, shown)`) is a JSON object of a layer's name to true or false, and only `false` hides a layer's places, wholly (not drawn, named, grouped or pressable). `stats.places.hidden` counts them. `readPlaceLayers` and `shownPlaces` are the pure parts.
+  - **Names.** A place with `namePriority: "low"` has its name laid after the cities' names and left out where a city's name lies; the marker stays. The sea, country and star names keep clear of it once laid.
+  - **Tests and docs.** Unit tests for each part, `e2e/places.gl.ts` (a press, a layer, a look, a name giving way to Tokyo's, on both elements), and the places guide in English and Japanese.
+
 ## 0.60.2 - 2026-11-17
 
 - **The realistic look's clouds no longer stand up from the Earth's edge** (MODULES-1498). Its clouds sat on the 38 km shell (radius 1.006) that made lumps on the outline in the space view: 0.006 of the globe's radius in pixels, 12 pixels on a 4096 pixel canvas. They now use the space view's near shell (1.0016, about 10 km up, `CLOUD_SHELL_NEAR`), which stays above the finer map tiles' shells (1.0008) by more than a face of the sphere dips. The realistic picture is orthographic, so there is no distance to switch by and no far shell is needed: its depth is linear and the low shell does not fight the ground. A test holds the radius, the clearance and the size of the lump.

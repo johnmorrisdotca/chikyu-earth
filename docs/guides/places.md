@@ -17,7 +17,8 @@ description: "Mark the reader's own place and any number of favourite places on 
 
 | Attribute | Property | Means |
 |---|---|---|
-| `places` | `places` | A JSON array of places, each `{ id, lon, lat, label, kind, color }`. Setting the property writes the attribute; an empty list takes the attribute away. |
+| `places` | `places` | A JSON array of places, each `{ id, lon, lat, label, kind, color }`, and optionally `layer`, `size`, `look` and `namePriority` (below). Setting the property writes the attribute; an empty list takes the attribute away. |
+| `place-layers` | `placeLayers` | A JSON object of a layer's name to true or false, such as `{"harbours":false}`: the layers shown and hidden (see "Layers of places"). |
 | `places-look` | `placesLook` | `beam` (the default): a light rising out of the ground with a ring at its foot. `pin`: a thin stick with a round head. `ring`: only the ring on the ground. |
 | `here-city` | `hereCity` | Off by default (`false`). Set the attribute, or `on`, to name each `here` place with the nearest city within 100 km. A number is that limit in kilometres. `false` on the property turns it off. |
 
@@ -41,7 +42,62 @@ space.places = [...(here ? [here] : []), ...places];
 - **Markers of their own for the first few.** The first `PLACE_MARKS` (32) places in sight, `here` first and then in the order given, stand up out of the ground with their names. Put the places that matter most first.
 - **One draw call for the rest.** Every other place is a ring lying on the ground, all of them drawn together in one draw call, however many there are. The rings keep their size in pixels, turn with the Earth, fade at its edge, are left out on its far side and are dimmer on its night side, as the markers are.
 - **Crowds are gathered.** Places closer than about `PLACE_GROUP_PX` (24) pixels on the screen become one larger ring with their count beside it. The ground is cut into cells fixed to it, so the groups turn with the Earth and change only when the zoom changes by about half or double. Zoom in and they come apart. The reader's own place is never gathered. `groupPlaces` and `groupCell` are the same rule for a page or a server. Gathering is on by default; `place-groups="off"` (or `placeGroups = false`) leaves every place its own ring.
-- **What it costs.** `stats.places` has `places` (handed over), `shown` (in sight, those in groups counted), `marks` (standing on their own), `labels` (named), `sprites` (rings in the picture's one draw call; 0 when the picture cannot draw them), `dots` (those rings drawn instead as small circles in the page), `groups` (of the rings, the groups), `omitted` (places in sight that had no room) and `renders` (times laid out). Without three.js's `Points` (a subset of three.js that leaves it out) the picture cannot draw the rings, so the element draws them itself as small circles in the page, at most `PLACE_DOTS` (600). Those circles fade at the Earth's edge and are dimmer at night, as the rings in the picture are. Places in sight beyond that room are counted in `omitted`, and the element sends `chikyu-places-unavailable` once when that happens (`detail.reason` says why, `detail.omitted` how many): not merely because `Points` is missing, and not again. No place is left out without a count.
+- **What it costs.** `stats.places` has `places` (handed over), `hidden` (of those, left out because their layer is off), `shown` (in sight, those in groups counted), `marks` (standing on their own), `labels` (named), `sprites` (rings in the picture's one draw call; 0 when the picture cannot draw them), `dots` (those rings drawn instead as small circles in the page), `groups` (of the rings, the groups), `omitted` (places in sight that had no room) and `renders` (times laid out). Without three.js's `Points` (a subset of three.js that leaves it out) the picture cannot draw the rings, so the element draws them itself as small circles in the page, at most `PLACE_DOTS` (600). Those circles fade at the Earth's edge and are dimmer at night, as the rings in the picture are. Places in sight beyond that room are counted in `omitted`, and the element sends `chikyu-places-unavailable` once when that happens (`detail.reason` says why, `detail.omitted` how many): not merely because `Points` is missing, and not again. No place is left out without a count.
+
+## A press on a place
+
+A press that does not turn the view, on a place's marker (its stick or its foot) or on its ring, sends `chikyu-place-click` with the place's `id` and `kind`, so a page need not read the markers' boxes:
+
+```js no-run
+space.addEventListener("chikyu-place-click", (event) => {
+  const { id, kind, layer, label, lon, lat, x, y } = event.detail;
+  console.log(id, kind, layer, label, lon, lat, x, y);
+});
+```
+
+- **What it carries.** `id` and `kind` (`here` or `favourite`) always; `layer`, `label`, `lon`, `lat` and `x`, `y` (where the press was, in CSS pixels inside the element). The place is the one the last picture drew: a place whose layer is off, or one on the far side, cannot be pressed, and nothing can be pressed between the list or a switch changing and the next picture.
+- **The nearest within 12 pixels.** A press reaches a marker's stick from its foot to its top, and a ring. A group of several places is not a place: it sends nothing. The press is also `chikyu-satellite-click`'s and `chikyu-body-click`'s, as before: the event is added to them, it takes nothing from them, and a satellite's dot is heard first.
+- **Nothing at rest.** The element looks for the place when the reader presses, from what the last picture drew, and not otherwise.
+
+## A look and a size of each place
+
+A place can be drawn differently from the rest, so a harbour is a short mark beside a city, and "You are here" stays the tall beam:
+
+```js no-run
+space.places = [
+  { id: "me", lon: -79.4, lat: 43.7, label: "You are here", kind: "here" },
+  { id: "cavan", lon: -123.1, lat: 49.29, label: "Vancouver harbour", size: "small", look: "ring" },
+];
+```
+
+- **`size: "small"`** is a stick about half as long and a ring about 30 per cent smaller than the kind's own. The default is the kind's size.
+- **`look`** is `beam`, `pin` or `ring`, and wins over `places-look` for this place. Left out, the place takes `places-look`.
+
+## Layers of places
+
+Give places a `layer` (a name of your own, up to 40 letters) and switch the layers with `place-layers`, so the page hands the list over once instead of building one for every switch:
+
+```js no-run
+space.places = [...spaceports.map((p) => ({ ...p, layer: "spaceports" })), ...harbours.map((p) => ({ ...p, layer: "harbours", size: "small" }))];
+space.placeLayers = { harbours: false };
+space.setPlaceLayer("harbours", true);
+```
+
+- **Shown unless switched off.** A place with no layer is always shown, and so is a layer that `place-layers` does not name. Only `false` hides one. `placeLayers` reads the switches back; `setPlaceLayer(name, shown)` changes one and keeps the others.
+- **Left out whole.** A place of a layer that is off is not drawn, not named, not gathered into a group and not pressable, and it takes none of the `PLACE_MARKS`. `stats.places.hidden` counts them, and `stats.places.places` is still what was handed over. `readPlaceLayers` and `shownPlaces` are the same rules for a page or a server.
+- **No fetching.** The package loads nothing for a layer. A page that fetches a layer's places when its switch goes on hands them over as it likes.
+
+## Names that give way to the cities' names
+
+A place's name is laid before the cities' names, which keep clear of it. A place with `namePriority: "low"` is the other way round: its name is laid after the cities' names, and is left out where a city's name lies, while its marker is still drawn:
+
+```js no-run
+space.places = [{ id: "cape-canaveral", lon: -80.58, lat: 28.39, label: "Cape Canaveral", layer: "spaceports", namePriority: "low" }];
+```
+
+- **After the cities, before the other names.** The sea and country names, and the stars' names, keep clear of a low-priority name once it is laid, as they keep clear of the others.
+- **Cities first.** With `city-names` on, a city's name stays where it would be with no place there; the place's name takes the room that is left, and a name with none is left out. With `city-names` off there is nothing to give way to, and the name is laid as the others are.
+- **Still nothing at rest.** The low-priority names are laid in the same picture as the others, and again only when the cities' names change.
 
 ## Go to a place
 
@@ -104,4 +160,4 @@ space.places = [...(here ? [here] : []), ...saved];
 
 ## The parts without a browser
 
-`@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box), `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`, and with `sun` how far into the night each is), `groupPlaces` with `groupCell` (crowded places gathered, for an Earth so many pixels across), and `readHereCity` with `hereCityLabels` (the nearest city's name for a `here` place, from a list that has `nearest`, within a kilometre limit).
+`@johnmorrisdotca/chikyu-earth/markers` has the pure parts, for a page that draws places itself or on a server: `readPlaces` and `cleanPlaces` (a list made safe to draw), `readPlaceLayers` and `shownPlaces` (the layers' switches and the places they leave), `nearby`, `orthoView` (a picture drawn straight on, from its centre point, radius and box), `layoutPlaces` (where each marker and name go in a picture, from a `PlaceView`, and with `sun` how far into the night each is), `groupPlaces` with `groupCell` (crowded places gathered, for an Earth so many pixels across), and `readHereCity` with `hereCityLabels` (the nearest city's name for a `here` place, from a list that has `nearest`, within a kilometre limit).
