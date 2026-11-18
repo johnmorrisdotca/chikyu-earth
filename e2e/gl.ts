@@ -148,18 +148,23 @@ export async function untilStill(page: Page, timeout = 20_000): Promise<void> {
  * machine (software GL, a throttled CPU) it runs more than a gather window later, long after the count has stood still: a fixed wait, or a count that stands still for a while, can take its reading just before it. Frames run in the
  * order they were asked for and a page's own frame callbacks run before the ones made after them, so five delivered frames without a draw are rest. `selector` is the element with `stats.draws`.
  */
-export async function drawsAtRest(page: Page, selector: string): Promise<number> {
-  return page.locator(selector).evaluate(async (el) => {
+export async function drawsAtRest(page: Page, selector: string, timeout = 10_000): Promise<number> {
+  return page.locator(selector).evaluate(async (el, limit) => {
     const count = (): number => (Reflect.get(el, "stats") as { draws: number }).draws;
+    const end = performance.now() + limit;
     let seen = count();
+    let frames = 0;
     for (let quiet = 0; quiet < 5; ) {
+      // a view that keeps drawing is the fault this is there to find: say so, not "test timeout"
+      if (performance.now() > end) throw new Error(`still drawing after ${frames} frames (${limit} ms): the draw count kept changing`);
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      frames += 1;
       const now = count();
       quiet = now === seen ? quiet + 1 : 0;
       seen = now;
     }
     return seen;
-  });
+  }, timeout);
 }
 
 /**

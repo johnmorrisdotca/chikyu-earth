@@ -20,8 +20,12 @@ async function open(page: Page, query: string): Promise<void> {
   await page.addInitScript(COUNT_SCRIPT);
   await page.goto(`/chikyu-earth/fullscreen.html?${query}`);
   await page.locator(`${EARTH}[data-state=live]`).waitFor({ timeout: 60_000 });
-  // the first draw comes when the page's software drawing gets to it, which on a busy or throttled machine is more than the five seconds a poll is given: wait for it, bounded by the test's own time
-  await page.waitForFunction((tag) => ((Reflect.get(document.querySelector(tag)!, "stats") as { draws: number }).draws > 0), EARTH);
+  // the first draw comes when the page's software drawing gets to it, which on a busy or throttled machine is more than the five seconds a poll is given: wait for it as a state, with a bound of its own
+  await page
+    .waitForFunction((tag) => (Reflect.get(document.querySelector(tag)!, "stats") as { draws: number }).draws > 0, EARTH, { timeout: 15_000 })
+    .catch(() => {
+      throw new Error("no first draw within 15 s");
+    });
   await settle(page);
 }
 
