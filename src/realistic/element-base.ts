@@ -1000,7 +1000,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
    */
   #relayNames(cities: boolean, sky: boolean): void {
     if (cities && this.#nameFrame) this.#cities?.frame(this.#nameFrame, this.#boxesBeforeCities());
-    this.#placeLayer?.late([...(this.#cities?.boxes ?? []), ...[...this.#claimedNames.values()].flat()]);
+    this.#placeLayer?.late(() => [...(this.#cities?.boxes ?? []), ...[...this.#claimedNames.values()].flat()]);
     this.#seaFrame();
     this.#countryFrame();
     if (sky) this.#sky?.relayout();

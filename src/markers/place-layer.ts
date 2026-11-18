@@ -152,10 +152,10 @@ export interface PlaceLayer {
    */
   frame(view: PlaceView | null, taken?: readonly Box[], marks?: readonly SatelliteMark[], sun?: GeoPoint | null): void;
   /**
-   * Lay the names of the places whose `namePriority` is `low`, after the layers that come before them: `taken` is those layers' boxes (the cities' names), and a name with no free place is left out. Call it after each `frame`
+   * Lay the names of the places whose `namePriority` is `low`, after the layers that come before them: `taken` gives those layers' boxes (the cities' names), asked for only when there is a name to lay, and a name with no free place is left out. Call it after each `frame`
    * and again when those layers change; with no such place it does nothing.
    */
-  late(taken?: readonly Box[]): void;
+  late(taken?: () => readonly Box[]): void;
   /** The place under a point of the element (CSS pixels from its top left) in the last picture: a marker's stick or foot, or a ring, within a few pixels; null when there is none. A group of several is not a place. */
   pick(x: number, y: number): Place | null;
   /** The rings the picture draws for the places that are not markers of their own, as of the last `frame`; null while there are none. */
@@ -710,9 +710,9 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     get earlyBoxes() {
       return earlyBoxes;
     },
-    late(taken = []) {
+    late(taken) {
       if (lateItems.length === 0 || !lastView) return;
-      const placed = placeLabels(lateItems, lastView.width, lastView.height, 16, 64, [...taken, ...earlyBoxes]);
+      const placed = placeLabels(lateItems, lastView.width, lastView.height, 16, 64, [...(taken?.() ?? []), ...earlyBoxes]);
       let at = lateFrom;
       const added: Box[] = [];
       for (const spot of placed) {

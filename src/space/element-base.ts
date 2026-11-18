@@ -1157,7 +1157,7 @@ export class ChikyuSpace extends HTMLElement {
    */
   #relayNames(cities: boolean, sky: boolean): void {
     if (cities) this.#cities?.frame(this.#lastNameFrame, this.#boxesBeforeCities());
-    this.#placeLayer?.late([...this.#bodyNameBoxes(), ...(this.#cities?.boxes ?? [])]);
+    this.#placeLayer?.late(() => [...this.#bodyNameBoxes(), ...(this.#cities?.boxes ?? [])]);
     this.#seaFrame();
     this.#countryFrame();
     if (sky) this.#sky?.relayout();

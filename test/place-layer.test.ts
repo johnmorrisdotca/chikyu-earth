@@ -297,19 +297,19 @@ test("a name of low priority is laid after the cities' names and is left out whe
   assert.equal(layer.stats.marks, 3, "the markers are all drawn");
   const early = layer.earlyBoxes.length;
 
-  layer.late([]);
+  layer.late(() => []);
   assert.deepEqual(names(box).sort(), ["Favourite", "Harbour", "Spaceport"]);
   assert.equal(layer.stats.labels, 3);
   assert.equal(layer.boxes.length, early + 2, "the late names are boxes for the layers after them");
   assert.equal(layer.earlyBoxes.length, early, "and not for the cities, which come first");
 
   // a city's name lies over the harbour's: the harbour loses its name, and the marker stays
-  layer.late([{ left: 0, top: 0, width: 420, height: 420 }]);
+  layer.late(() => [{ left: 0, top: 0, width: 420, height: 420 }]);
   assert.deepEqual(names(box), ["Favourite"]);
   assert.equal(layer.stats.marks, 3);
 
   // and it comes back when the city goes
-  layer.late([]);
+  layer.late(() => []);
   assert.equal(names(box).length, 3);
   layer.frame(view());
   assert.deepEqual(names(box), ["Favourite"], "a new picture waits for the cities again");
@@ -320,7 +320,7 @@ test("with no low-priority name, late does nothing and the boxes are the early o
   layer.set(crowd(20));
   layer.frame(view());
   const before = layer.boxes;
-  layer.late([]);
+  layer.late(() => []);
   assert.equal(layer.boxes, before);
   assert.equal(layer.boxes, layer.earlyBoxes);
 });
