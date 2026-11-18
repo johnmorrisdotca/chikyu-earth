@@ -13,7 +13,7 @@ import { cleanPlaces, readPlaceGroups, readPlaceLayers, readPlaces, type Place, 
 import { readHereCity } from "../markers/here-city.ts";
 import { createHereCity, type HereCityHost } from "../markers/here-city-host.ts";
 import { createPlaceLayer, PLACE_STYLE, placeClick, placesLostNotice, readPlaceLook, type PlaceLayer, type SatelliteMark } from "../markers/place-layer.ts";
-import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
+import { aimAt, findPlace, PLACE_GLIDE_MS } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "../realistic/sun.ts";
 import { SHORT_NAMES } from "../satellites/names.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
@@ -46,6 +46,7 @@ import { MAX_TEXTURE, type Layer } from "../realistic/tiers.ts";
 import type { SatelliteInfo, SatelliteRef, Satellites } from "../satellites/types.ts";
 import type { SatelliteHistory } from "../satellites/history.ts";
 import { trailOrbits } from "./trail.ts";
+import { descentFloorKm, FLY_HEIGHT_KM, FLY_MIN_KM, flyAim, flyAt, flyDistance, flyLonLat, flyStateAt, flyStill, planFly, type FlyPhase, type FlyPlan, type FlyPoint } from "./fly.ts";
 import { AU_IN_EARTH_RADII, EARTH_RADIUS_KM, frameAt, type PlanetName } from "./ephemeris.ts";
 import { MAX_ORBIT_GROUP, readStreakMax, type SatelliteScreen, type SatelliteStyle } from "./satellite-layer.ts";
 import { applySatelliteFocus, satelliteEmphasis, satelliteGroupRows, shellRadiusOf, zoomForPerspectiveShell, type SatelliteOthers } from "./satellite-focus.ts";
@@ -212,6 +213,63 @@ export interface ObserveOptions {
 }
 
 /**
+ * The options of `flyTo`.
+ *
+ * @example
+ * ```ts no-run
+ * import type { FlyOptions } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const options: FlyOptions = { height: 30, phase: "both" };
+ * console.log(options.height);
+ * ```
+ */
+export interface FlyOptions {
+  /** The height to come down to, in kilometres above the ground (`FLY_HEIGHT_KM`, 30, when left out; never under `FLY_MIN_KM`, 15). `across` keeps the height it has. */
+  height?: number;
+  /** `across`, `down` or `both` (the default): see `FlyPhase`. */
+  phase?: FlyPhase;
+  /** Fly (true when left out); false, a reader who asked for reduced motion, or a picture that is not live yet, jumps there. */
+  smooth?: boolean;
+  /** Ends the move where it is, as a hand on the view does. */
+  signal?: AbortSignal;
+}
+
+/**
+ * How a fly-to ended, as `flyTo` gives it and `chikyu-fly-end` sends it: `arrived`, `redirected` (a new `flyTo` or `goToPlace` took it over, carrying its speed on), or `stopped` (a hand on the view, the
+ * signal, a ride, or the element leaving the page); the place, the phase, the camera's height then, and what held the descent up (`held`: `no-finer` where no finer picture lies under the place,
+ * `zoom-max` at a `zoom-max` the page set, else `null`).
+ *
+ * @example
+ * ```ts no-run
+ * import type { FlyEnd } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const say = (end: FlyEnd): string => `${end.reason} at ${Math.round(end.heightKm)} km`;
+ * console.log(typeof say);
+ * ```
+ */
+export interface FlyEnd {
+  reason: "arrived" | "redirected" | "stopped";
+  lon: number;
+  lat: number;
+  phase: FlyPhase;
+  heightKm: number;
+  held: FlyHeld;
+}
+
+/**
+ * What held a descent above the height asked for: `no-finer` (no finer picture under the place: `FLY_FLOOR_KM`), `zoom-max` (the page's own `zoom-max`), or `null`.
+ *
+ * @example
+ * ```ts no-run
+ * import type { FlyHeld } from "@johnmorrisdotca/chikyu-earth/space/element";
+ *
+ * const held: FlyHeld = "no-finer";
+ * console.log(held);
+ * ```
+ */
+export type FlyHeld = "no-finer" | "zoom-max" | null;
+
+/**
  * What the camera is riding along with now: the body or satellite, how (`from`, `follow` or `above`), where it looks, the facing it looks round from (`null` when none was chosen), and the distance kept for a satellite.
  *
  * @example
@@ -268,6 +326,8 @@ const TIME_EVENT_MS = 250;
  * Riding at a body looking at the Earth, the zoom only narrows the camera's field a little either way: 0.5 to 6.
  */
 const LIMITS = { tiltMax: 90, zoomMin: 0.000001, zoomMax: 2.5 };
+/** What the controls say a reader's own hand did: any of these ends a fly-to where it is. */
+const HANDS = new Set(["drag", "pinch", "wheel", "key", "zoom", "pan", "front", "fit"]);
 /** A number from an attribute, held between `min` and `max`; `null` when it is absent or not a number. */
 function readFrame(value: string | null, min: number, max: number): number | null {
   if (value === null || value.trim() === "") return null;
@@ -428,8 +488,15 @@ export class ChikyuSpace extends HTMLElement {
   /** Whether the page has been told that places in sight were left undrawn. */
   #placesLost = { told: false };
   #placeList: Place[] = [];
-  /** Counts the turns to a place, so a new one stops the one before. */
-  #placeGlide = 0;
+  /** Counts the moves asked for (`flyTo`, `goToPlace`), so one still finding its floor gives way to a later one. */
+  #flyAsks = 0;
+  /** The move running (`flyTo`, `goToPlace`): its plan and how to end it. */
+  #flight: { plan: FlyPlan; phase: FlyPhase; finish(reason: FlyEnd["reason"]): void } | null = null;
+  #flyStats = { moves: 0, redirects: 0, held: null as FlyHeld };
+  /** A frame of the move is asked for and not yet run. */
+  #flyAsked = false;
+  /** The zoom limit under the attributes: the controls' own, raised once a fly-to has come lower. */
+  #flyZoomMax = LIMITS.zoomMax;
   #nameBoxes = new Map<string, { width: number; height: number }>();
   /** A font that arrives after the names were measured: the boxes are read again on the next layout. The satellites' marks are not touched, or the page would be told again about each one already in view. */
   #onFonts = (): void => {
@@ -618,7 +685,15 @@ export class ChikyuSpace extends HTMLElement {
     this.addEventListener("wheel", this.#wheel, { capture: true, passive: false });
     this.addEventListener("keydown", this.#faceKey);
     if (!this.hasAttribute("tabindex")) this.tabIndex = 0;
-    this.#hands = carryControls(this, { initial: this.#model.view, limits: LIMITS, onChange: (state, info) => this.setView(state, info.final) });
+    this.#hands = carryControls(this, {
+      initial: this.#model.view,
+      limits: { ...LIMITS, zoomMax: this.#flyZoomMax },
+      onChange: (state, info) => {
+        // a hand on the view ends a fly-to where it is
+        if (HANDS.has(info.reason)) this.#flight?.finish("stopped");
+        this.setView(state, info.final);
+      },
+    });
     this.#labelBox.addEventListener("click", this.#labelClick);
     this.#labelBox.addEventListener("focusin", this.#labelFocus);
   }
@@ -1026,7 +1101,8 @@ export class ChikyuSpace extends HTMLElement {
   /**
    * Turn the view so a place of `places` is in the middle, at a pace a reader can follow (at once with `smooth: false`, for a reader who asked for less motion, or before the picture is live); the zoom stays.
    * The place is named by its `id`, or by its label in any case. The camera must be looking at the Earth: while it rides along or looks at another body nothing moves. The tilt is held to 90 degrees either
-   * way, so a place more than 90 degrees of latitude from `center` comes as near the middle as that allows.
+   * way, so a place more than 90 degrees of latitude from `center` comes as near the middle as that allows. A new `goToPlace` or `flyTo` while it turns does not stop it: the turn keeps its speed and
+   * the way it is going and curves to the new place. A hand on the view ends it where it is.
    *
    * @param text - The place's id or label.
    * @param options - `smooth` (true by default).
@@ -1034,18 +1110,168 @@ export class ChikyuSpace extends HTMLElement {
    */
   async goToPlace(text: string, options: { smooth?: boolean } = {}): Promise<Place | undefined> {
     const place = findPlace(this.#placeList, text);
-    const base = this.#model.lookBase;
-    if (!place || !base || this.#model.ride) return undefined;
-    const controls = this.#controls();
-    const from = { yaw: this.#model.view.yaw, tilt: this.#model.view.tilt };
-    const to = aimAt(base, place, from);
-    const glide = (this.#placeGlide += 1);
-    const set = (yaw: number, tilt: number, final: boolean): void => {
-      if (controls) controls.set({ yaw, tilt, zoom: this.#model.view.zoom }, final, "place");
-      else this.setView({ yaw, tilt, zoom: this.#model.view.zoom }, final);
-    };
-    glideView(set, from, to, options.smooth !== false && !prefersLessMotion() && this.#view?.live === true, () => glide === this.#placeGlide && this.isConnected);
+    if (!place || !this.#model.lookBase || this.#model.ride) return undefined;
+    this.#flyAsks += 1;
+    this.#startFlight(place, { phase: "across", heightKm: null, acrossMs: PLACE_GLIDE_MS, smooth: options.smooth !== false, held: null });
     return { ...place };
+  }
+
+  /**
+   * Fly the camera to a place: across, the Earth turns under the camera at the height it has until the place is below (along a great circle, eased), then down, a descent to `height` kilometres over
+   * it (30 by default). `phase` asks for one part alone, so a page can take a reader there one press at a time. A new `flyTo` or `goToPlace` while one is moving does not stop it: the camera keeps its
+   * speed and the way it is going and curves smoothly into the new move, and a descent cut short slows to rest without turning back before the new move goes across. A hand on the view (a drag, a pinch,
+   * the wheel, a key) or `signal` ends it where it is; a reader who asked for reduced motion, `smooth: false` or a picture that is not live yet goes there at once. The controls' own turn (Auto-turn) is
+   * paused, so the place stays below.
+   *
+   * The descent comes all the way down only where finer pictures lie under the place (`tiles-finer`, over land from 60 degrees south to 80 degrees north); elsewhere it stops at `FLY_FLOOR_KM` (400 km), and
+   * at a `zoom-max` the page set, and says so in `held` and `stats.fly`. Once a fly-to has come below about 320 km the zoom reaches as low as it came. The camera must be looking at the Earth: while it
+   * rides along or looks at another body nothing moves. `chikyu-fly-start` is sent when it starts, with `{ lon, lat, phase, heightKm, held }`, and `chikyu-fly-end` when it ends, with what it resolves to.
+   *
+   * @param lat - Degrees north.
+   * @param lon - Degrees east.
+   * @param options - `height`, `phase`, `smooth` and `signal` (`FlyOptions`).
+   * @returns How it ended, once it has; `undefined` when it cannot fly (a latitude or longitude that is not a number, or the camera not looking at the Earth).
+   */
+  async flyTo(lat: number, lon: number, options: FlyOptions = {}): Promise<FlyEnd | undefined> {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90) return undefined;
+    const ask = (this.#flyAsks += 1);
+    const phase = options.phase ?? "both";
+    let heightKm = phase === "across" ? null : Math.max(FLY_MIN_KM, Number.isFinite(options.height) ? options.height! : FLY_HEIGHT_KM);
+    let held: FlyHeld = null;
+    if (heightKm !== null) {
+      const finer = this.tilesFiner !== null;
+      // only with finer pictures asked for is it worth knowing whether the place is on land: the outlines are loaded then, and once
+      const land = finer ? await import("../place/land.ts").then(({ landAt }) => landAt(lon, lat)).then((answer) => answer.country !== null || answer.near !== null) : false;
+      const floor = descentFloorKm({ finer, land, lat });
+      if (floor !== null && floor > heightKm) {
+        heightKm = floor;
+        held = "no-finer";
+      }
+    }
+    const where = { lon, lat, phase, heightKm: this.#model.lookBase ? this.#heightKm() : 0, held };
+    // a later move was asked for while this one found its floor
+    if (ask !== this.#flyAsks) return { ...where, reason: "redirected" };
+    if (!this.#model.lookBase || this.#model.ride) return undefined;
+    if (options.signal?.aborted) return { ...where, reason: "stopped" };
+    return new Promise((resolve) => {
+      this.#startFlight({ lon, lat }, {
+        phase,
+        heightKm,
+        smooth: options.smooth !== false,
+        held,
+        ...(options.signal ? { signal: options.signal } : {}),
+        pause: true,
+        start: (detail) => this.dispatchEvent(new CustomEvent("chikyu-fly-start", { detail, bubbles: true, composed: true })),
+        done: (end) => {
+          this.dispatchEvent(new CustomEvent("chikyu-fly-end", { detail: end, bubbles: true, composed: true }));
+          resolve(end);
+        },
+      });
+    });
+  }
+
+  /** The camera's height above the ground in kilometres while it looks at the Earth, from the zoom and the box's fit. */
+  #heightKm(zoom = this.#model.view.zoom): number {
+    return (Math.max(this.#model.nearest, this.#model.fit / Math.max(1e-9, zoom)) - 1) * EARTH_RADIUS_KM;
+  }
+
+  /**
+   * Start a move to `to`: the one running hands its speed and turn on to it and ends `redirected`. A descent first lets the controls' zoom reach its height (under a `zoom-max` the page set, which holds it).
+   */
+  #startFlight(
+    to: GeoPoint,
+    options: { phase: FlyPhase; heightKm: number | null; acrossMs?: number; smooth: boolean; held: FlyHeld; signal?: AbortSignal; pause?: boolean; start?: (detail: { lon: number; lat: number; phase: FlyPhase; heightKm: number; held: FlyHeld }) => void; done?: (end: FlyEnd) => void },
+  ): void {
+    const base = this.#model.lookBase!;
+    const at = performance.now();
+    const view = this.#model.view;
+    const now = this.#flight ? flyStateAt(this.#flight.plan, at) : flyStill(flyAim(base.lon - view.yaw, Math.max(-90, Math.min(90, base.lat - view.tilt))), this.#heightKm());
+    if (this.#flight) {
+      this.#flyStats.redirects += 1;
+      this.#flight.finish("redirected");
+    }
+    let heightKm = options.heightKm;
+    let held = options.held;
+    if (heightKm !== null) {
+      const zoom = this.#model.fit / flyDistance(heightKm);
+      this.#model.nearest = Math.min(this.#model.nearest, flyDistance(heightKm));
+      if (zoom > this.#flyZoomMax) {
+        this.#flyZoomMax = zoom;
+        this.#hands?.setLimits({ zoomMax: zoom });
+      }
+      const limit = (this.#controls() as { limits?: { zoomMax: number } } | undefined)?.limits?.zoomMax ?? zoom;
+      if (zoom > limit * (1 + 1e-9)) {
+        heightKm = (this.#model.fit / limit - 1) * EARTH_RADIUS_KM;
+        held = "zoom-max";
+      }
+    }
+    this.#flyStats.moves += 1;
+    this.#flyStats.held = held;
+    // the view's own turn would carry the place away from below the camera
+    if (options.pause) (this.#controls() as { pause?(): void } | undefined)?.pause?.();
+    const plan = planFly(now, flyAim(to.lon, to.lat), { at, phase: options.phase, ...(heightKm !== null ? { heightKm } : {}), ...(options.acrossMs !== undefined ? { acrossMs: options.acrossMs } : {}) });
+    const lifts = plan.lifts.length > 0;
+    const abort = (): void => flight.finish("stopped");
+    const flight: { plan: FlyPlan; phase: FlyPhase; finish(reason: FlyEnd["reason"]): void } = {
+      plan,
+      phase: options.phase,
+      finish: (reason: FlyEnd["reason"]): void => {
+        if (this.#flight !== flight) return;
+        this.#flight = null;
+        options.signal?.removeEventListener("abort", abort);
+        bar?.removeEventListener("kazoku-viewchange", hand);
+        options.done?.({ reason, lon: to.lon, lat: to.lat, phase: options.phase, heightKm: this.#heightKm(), held });
+      },
+    };
+    // a bar bound to the view has the hands: a change it makes for one ends the move too
+    const bar = this.#bar();
+    const hand = (event: Event): void => {
+      if (HANDS.has((event as CustomEvent<{ reason?: string }>).detail?.reason ?? "")) flight.finish("stopped");
+    };
+    this.#flight = flight;
+    options.signal?.addEventListener("abort", abort, { once: true });
+    bar?.addEventListener("kazoku-viewchange", hand);
+    options.start?.({ lon: to.lon, lat: to.lat, phase: options.phase, heightKm: heightKm ?? this.#heightKm(), held });
+    if (!options.smooth || prefersLessMotion() || this.#view?.live !== true) {
+      this.#flyView(flyAt(plan, plan.end), true, base, lifts);
+      flight.finish("arrived");
+      return;
+    }
+    this.#askFlyFrame();
+  }
+
+  /** Ask for the next frame of the move running, once: a move that takes over another goes on in the frame already asked for. */
+  #askFlyFrame(): void {
+    if (this.#flyAsked) return;
+    this.#flyAsked = true;
+    requestAnimationFrame(this.#flyFrame);
+  }
+
+  /** One frame of the move running: the point it has now handed to the view, until it ends or the camera stops looking at the Earth. */
+  #flyFrame = (): void => {
+    this.#flyAsked = false;
+    const flight = this.#flight;
+    if (!flight) return;
+    const looking = this.#model.lookBase;
+    if (!looking || this.#model.ride || !this.isConnected) {
+      flight.finish("stopped");
+      return;
+    }
+    const now = performance.now();
+    const last = now >= flight.plan.end;
+    this.#flyView(flyAt(flight.plan, now), last, looking, flight.plan.lifts.length > 0);
+    if (last) flight.finish("arrived");
+    else this.#askFlyFrame();
+  };
+
+  /** Hand one point of a move to the controls (or the view, with none): the yaw and tilt that put it in the middle, and the zoom of its height when the move changes the height. */
+  #flyView(point: FlyPoint, final: boolean, base: GeoPoint, lifts: boolean): void {
+    const view = this.#model.view;
+    const turn = aimAt(base, flyLonLat(point.aim), view);
+    const next = { yaw: turn.yaw, tilt: turn.tilt, zoom: lifts ? this.#model.fit / flyDistance(point.heightKm) : view.zoom };
+    const controls = this.#controls();
+    if (controls) controls.set(next, final, "fly");
+    else this.setView(next, final);
   }
 
   /**
@@ -1672,13 +1898,15 @@ export class ChikyuSpace extends HTMLElement {
    * The controls that are driving this view: a `<kazoku-view-controls for="...">` bound to it (its hands are then the only ones and its controller holds the yaw and tilt), else the element's own hands.
    */
   #controls(): { set(view: { yaw: number; tilt: number; zoom: number }, final: boolean, why: string): void } | undefined {
-    if (this.hasAttribute("data-kazoku-bar") && this.id) {
-      const root = this.getRootNode() as Document | ShadowRoot;
-      const bar = root.querySelector?.(`kazoku-view-controls[for="${CSS.escape(this.id)}"]`);
-      const held = bar ? (Reflect.get(bar, "controller") as { set(view: unknown, final: boolean, why: string): void } | undefined) : undefined;
-      if (held) return held;
-    }
-    return this.#hands?.controller;
+    const bar = this.#bar();
+    const held = bar ? (Reflect.get(bar, "controller") as { set(view: unknown, final: boolean, why: string): void } | undefined) : undefined;
+    return held ?? this.#hands?.controller;
+  }
+
+  /** The `<kazoku-view-controls for="...">` bound to this view, when there is one. */
+  #bar(): Element | null {
+    if (!this.hasAttribute("data-kazoku-bar") || !this.id) return null;
+    return (this.getRootNode() as Document | ShadowRoot).querySelector?.(`kazoku-view-controls[for="${CSS.escape(this.id)}"]`) ?? null;
   }
 
   /** The body the camera looks at: at zoom 1 it fills the view; the yaw and tilt turn the camera round it. */
@@ -2806,6 +3034,11 @@ export class ChikyuSpace extends HTMLElement {
     countryNames: CountryNamesStats;
     /** The names of oceans, seas and continents: whether `sea-names` is on, the Earth's radius on the screen, the names shown at the last draw, and how many times the layer was laid out. */
     seaNames: SeaNamesStats;
+    /**
+     * The fly-to (`flyTo`, and `goToPlace`'s turn): whether one is moving and in which part, the camera's height above the ground in kilometres while it looks at the Earth (`null` otherwise), what held
+     * the last descent up (`held`, as in `FlyEnd`), and how many moves have started and how many were taken over by a new one.
+     */
+    fly: { flying: boolean; phase: "across" | "down" | null; heightKm: number | null; held: FlyHeld; moves: number; redirects: number };
   } {
     const stats = this.#taken?.renderer.stats;
     return {
@@ -2839,6 +3072,12 @@ export class ChikyuSpace extends HTMLElement {
       route: { ...this.#model.route.stats },
       countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
       seaNames: this.#seas?.stats ?? { on: false, radius: 0, names: 0, renders: 0 },
+      fly: {
+        flying: this.#flight !== null,
+        phase: this.#flight ? (this.#flight.phase === "across" || performance.now() < this.#flight.plan.across ? "across" : "down") : null,
+        heightKm: this.#model.lookBase ? this.#heightKm() : null,
+        ...this.#flyStats,
+      },
     };
   }
 

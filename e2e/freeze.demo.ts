@@ -751,6 +751,40 @@ test("a thousand places, handed over and taken away over and over: one draw call
   expect((await readCounts(page)).contexts, "one WebGL context").toBe(1);
 });
 
+// A fly-to asks for one frame at a time and draws at most once for each, a new one while it moves adds no second loop, and once it has come down nothing is drawn and no frame is asked for.
+test.describe("a fly-to on the space view", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("across and down, taken over half way, asks for one frame at a time, draws at most once a frame, and leaves nothing running at rest", async ({ page }) => {
+    test.setTimeout(120_000);
+    await open(page, "space");
+    const space = page.locator("chikyu-space");
+    const fly = (lat: number, lon: number) => space.evaluate((el, [a, b]) => void (el as HTMLElement & { flyTo(lat: number, lon: number, o?: { height?: number }): Promise<unknown> }).flyTo(a!, b!, { height: 30 }), [lat, lon]);
+    const flying = () => space.evaluate((el) => (Reflect.get(el, "stats") as { fly: { flying: boolean } }).fly.flying);
+    // the demo opens turning for a reader who did not ask for less motion: a fly-to pauses that turn, and the count at rest is read from the pause
+    await page.locator("kazoku-view-controls").evaluate((el) => (el as HTMLElement & { pause(): void }).pause());
+    await drawsStill(page);
+    // what the page has left waiting at rest (a frame the controls let go of when they were paused is never run), so the move's own are counted from there
+    const still = await bounded(page, 500, "space");
+    await fly(35.69, 139.69);
+    await page.waitForTimeout(1200);
+    await fly(51.51, -0.13);
+    const moving = await bounded(page, 2000, "space");
+    console.log("FLYING", JSON.stringify(moving), "at rest before", JSON.stringify(still));
+    expect(moving.callbacks).toBeGreaterThan(5);
+    expect(moving.frames, "frames drawn").toBeLessThanOrEqual(moving.callbacks + 3);
+    expect(moving.requests, "no more frames asked for than the page ran").toBeLessThanOrEqual(moving.callbacks + 3);
+    // the move's one frame, and the one the draw it asks for waits on, as a turn of the controls has
+    expect(moving.outstanding - still.outstanding, "one request of the move waiting at a time").toBeLessThanOrEqual(2);
+    await expect.poll(flying, { timeout: 30_000 }).toBe(false);
+    await drawsStill(page);
+    const rest = await bounded(page, 3000, "space");
+    expect(rest.draws, "nothing drawn at rest after a fly-to").toBe(0);
+    expect(rest.frames).toBe(0);
+    expect(rest.requests).toBeLessThanOrEqual(2);
+  });
+});
+
 // Names of oceans, seas and continents (MODULES-1230): off by default they make nothing, and on they are DOM laid out with the frame the view already drew, so a view at rest draws nothing and asks for nothing.
 for (const look of ["realistic", "space"] as const) {
   test(`the ${look} look names oceans, seas and continents: off it makes nothing, on it leaves nothing drawn at rest`, async ({ page }) => {

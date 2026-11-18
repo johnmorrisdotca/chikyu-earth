@@ -240,6 +240,8 @@ export interface SpaceModel {
   earth: { size: number; x: number; y: number };
   /** The camera's distance at zoom 1 in radii of the body it looks at, as the last draw worked it out from the view's shape and `earth.size`. */
   fit: number;
+  /** The nearest the camera comes to the Earth's centre while it looks at the Earth, in Earth radii: 1.05 (about 320 km up), less once a fly-to has come lower. */
+  nearest: number;
   orbits: boolean;
   labels: boolean;
   /** Milliseconds of game time one second of wall time covers (the ephemeris is looked up once per such span). */
@@ -324,6 +326,7 @@ export const newSpaceModel = (): SpaceModel => ({
   follow: 0,
   earth: { size: DEFAULT_EARTH_SIZE, x: 0.5, y: 0.5 },
   fit: fitDistance(DEFAULT_EARTH_SIZE, 1),
+  nearest: 1.05,
   orbits: true,
   labels: true,
   stepMs: 1000,
@@ -1113,12 +1116,13 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
             } else {
               if (way === 1 && focus === "Earth") model.lookBase = { lon: model.centre.lon + spin - frame.spin, lat: baseLat };
-              distance = Math.max(1.05 * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
+              distance = Math.max((focus === "Earth" ? model.nearest : 1.05) * focusRadius, (fit * focusRadius) / Math.max(1e-9, model.view.zoom));
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
               camera.up.set(0, 1, 0);
               camera.lookAt(target);
-              camera.near = Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01);
+              // within about 130 km of the ground (a fly-to's descent) the near plane comes in to half the height, or it would cut the ground away
+              camera.near = Math.min(Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01), Math.max(1e-6, (distance - focusRadius) * 0.5));
               camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
             }
             if (ride && (ride.view === "follow" || ride.view === "above") && typeof ride.target !== "string") {
