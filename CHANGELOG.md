@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.61.0 - 2026-11-18
 
 - **Places get a press event, a size and look each, layers, and names that give way to cities** (MODULES-1578). All of it is optional and a page that uses none of it draws as before.
   - **Press.** A press on a place's marker or ring sends `chikyu-place-click` from `<chikyu-space>` and `<chikyu-earth-realistic>` with `detail: { id, kind, layer?, label?, lon, lat, x, y }` (`PlaceClickDetail`), so a page need not read the markers' boxes. A group of several places sends nothing.
