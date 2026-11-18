@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cleanPlaces, orthoView, PLACE_DOTS, PLACE_MARKS, readPlaceGroups } from "../src/markers/index.ts";
-import { createPlaceLayer, PLACE_STYLE, placesLostNotice } from "../src/markers/place-layer.ts";
+import { createPlaceLayer, PLACE_STYLE, placeClick, placesLostNotice } from "../src/markers/place-layer.ts";
 import { beginPlaceSprites } from "../src/markers/place-sprites.ts";
 
 // Just enough of a page for the places' layer: elements that take attributes, children, a style and a size.
@@ -215,4 +215,165 @@ test("the place rings are tried once: no data is not a try, and a failure is not
   assert.equal(beginPlaceSprites(state, data, () => { made += 1; return null; }), true);
   assert.equal(beginPlaceSprites(state, data, () => { made += 1; return null; }), false);
   assert.equal(made, 1);
+});
+
+const names = (box: Fake, kind?: string): string[] => box.children.filter((child) => child.className === "pl-name" && !child.hidden && (kind === undefined || child.dataset["kind"] === kind)).map((child) => child.textContent);
+
+test("a layer that is switched off leaves its places out, and switching it on brings them back", () => {
+  const places = cleanPlaces([
+    { id: "a", lon: TOKYO.lon, lat: TOKYO.lat, label: "Airport", layer: "airports" },
+    { id: "h", lon: TOKYO.lon + 12, lat: TOKYO.lat, label: "Harbour", layer: "harbours" },
+    { id: "me", lon: TOKYO.lon, lat: TOKYO.lat + 12, label: "Me", kind: "here" },
+  ]);
+  const box = fakeBox();
+  const layer = createPlaceLayer(box as unknown as HTMLElement);
+  layer.set(places);
+  layer.frame(view());
+  assert.equal(layer.stats.marks, 3);
+  assert.equal(layer.stats.hidden, 0);
+
+  layer.layers = { harbours: false };
+  layer.frame(view());
+  assert.equal(layer.stats.marks, 2);
+  assert.equal(layer.stats.places, 3, "places is what was handed over");
+  assert.equal(layer.stats.hidden, 1);
+  assert.deepEqual(names(box).sort(), ["Airport", "Me"]);
+  const harbour = { x: 0, y: 0, upX: 0, upY: 0, facing: 0 };
+  view().at(places[1]!.lon, places[1]!.lat, harbour);
+  assert.equal(layer.pick(harbour.x, harbour.y), null, "a hidden place cannot be pressed");
+
+  layer.set(places);
+  layer.frame(view());
+  assert.equal(layer.stats.marks, 2, "a new list keeps the switches");
+  layer.layers = {};
+  layer.frame(view());
+  assert.equal(layer.stats.marks, 3);
+  assert.equal(layer.stats.hidden, 0);
+
+  layer.layers = { airports: false, harbours: false };
+  layer.frame(view());
+  assert.equal(layer.stats.marks, 1, "a place with no layer is always shown");
+});
+
+test("a place of a layer that is off is not gathered into a group either", () => {
+  const places = crowd(400).map((place, i) => (i % 2 === 0 ? { ...place, layer: "half" } : place));
+  const layer = createPlaceLayer(fakeBox() as unknown as HTMLElement);
+  layer.set(places);
+  layer.frame(view());
+  const all = layer.stats.shown;
+  layer.layers = { half: false };
+  layer.frame(view());
+  assert.ok(layer.stats.shown < all && layer.stats.shown > 0);
+  assert.equal(layer.stats.hidden, 200);
+});
+
+test("a place's own look and size reach its marker", () => {
+  const box = fakeBox();
+  const layer = createPlaceLayer(box as unknown as HTMLElement);
+  layer.set(cleanPlaces([
+    { id: "a", lon: TOKYO.lon, lat: TOKYO.lat },
+    { id: "b", lon: TOKYO.lon + 4, lat: TOKYO.lat, look: "ring", size: "small" },
+  ]));
+  layer.frame(view());
+  const marks = box.children.filter((child) => child.className === "pl-mark" && !child.hidden);
+  assert.deepEqual(marks.map((mark) => mark.dataset["look"]).sort(), ["beam", "ring"]);
+  const [beam, ring] = ["beam", "ring"].map((look) => marks.find((mark) => mark.dataset["look"] === look)!);
+  const radius = (mark: Fake): number => parseFloat((mark.style as unknown as { getPropertyValue(name: string): string }).getPropertyValue("--r"));
+  assert.ok(radius(ring!) < radius(beam!), "the small ring is smaller");
+  assert.match(PLACE_STYLE, /\.pl-mark\[data-look=ring\] \.pl-stick/);
+});
+
+test("a name of low priority is laid after the cities' names and is left out where one lies over it", () => {
+  const places = cleanPlaces([
+    { id: "city-side", lon: TOKYO.lon, lat: TOKYO.lat, label: "Harbour", namePriority: "low" },
+    { id: "free", lon: TOKYO.lon + 6, lat: TOKYO.lat + 6, label: "Spaceport", namePriority: "low" },
+    { id: "first", lon: TOKYO.lon - 6, lat: TOKYO.lat - 6, label: "Favourite" },
+  ]);
+  const box = fakeBox();
+  const layer = createPlaceLayer(box as unknown as HTMLElement);
+  layer.set(places);
+  layer.frame(view());
+  assert.deepEqual(names(box), ["Favourite"], "before the cities only the ordinary name is laid");
+  assert.equal(layer.stats.marks, 3, "the markers are all drawn");
+  const early = layer.earlyBoxes.length;
+
+  layer.late(() => []);
+  assert.deepEqual(names(box).sort(), ["Favourite", "Harbour", "Spaceport"]);
+  assert.equal(layer.stats.labels, 3);
+  assert.equal(layer.boxes.length, early + 2, "the late names are boxes for the layers after them");
+  assert.equal(layer.earlyBoxes.length, early, "and not for the cities, which come first");
+
+  // a city's name lies over the harbour's: the harbour loses its name, and the marker stays
+  layer.late(() => [{ left: 0, top: 0, width: 420, height: 420 }]);
+  assert.deepEqual(names(box), ["Favourite"]);
+  assert.equal(layer.stats.marks, 3);
+
+  // and it comes back when the city goes
+  layer.late(() => []);
+  assert.equal(names(box).length, 3);
+  layer.frame(view());
+  assert.deepEqual(names(box), ["Favourite"], "a new picture waits for the cities again");
+});
+
+test("with no low-priority name, late does nothing and the boxes are the early ones", () => {
+  const layer = createPlaceLayer(fakeBox() as unknown as HTMLElement);
+  layer.set(crowd(20));
+  layer.frame(view());
+  const before = layer.boxes;
+  layer.late(() => []);
+  assert.equal(layer.boxes, before);
+  assert.equal(layer.boxes, layer.earlyBoxes);
+});
+
+test("a press finds the place under it: a marker's stick, a ring, never a group, a far place or a hidden one", () => {
+  const v = view();
+  const at = (lon: number, lat: number): { x: number; y: number } => {
+    const out = { x: 0, y: 0, upX: 0, upY: 0, facing: 0 };
+    v.at(lon, lat, out);
+    return out;
+  };
+  const places = cleanPlaces([
+    { id: "mark", lon: TOKYO.lon, lat: TOKYO.lat, kind: "here", label: "Here", layer: "mine" },
+    { id: "far", lon: TOKYO.lon + 40, lat: TOKYO.lat - 20 },
+    { id: "behind", lon: TOKYO.lon + 180, lat: 0 },
+  ]);
+  const layer = createPlaceLayer(fakeBox() as unknown as HTMLElement);
+  assert.equal(layer.pick(210, 210), null, "nothing before a picture");
+  layer.set(places);
+  layer.frame(v);
+  const foot = at(TOKYO.lon, TOKYO.lat);
+  assert.equal(layer.pick(foot.x + 3, foot.y - 2)?.id, "mark");
+  assert.equal(layer.pick(foot.x, foot.y - 20)?.id, "mark", "up the stick");
+  assert.equal(layer.pick(foot.x + 60, foot.y), null, "away from any place");
+  assert.equal(layer.pick(at(TOKYO.lon + 180, 0).x, at(TOKYO.lon + 180, 0).y), null, "the far side");
+
+  // a ring: a place past the 32 that stand as markers is a ring on the ground
+  const many = cleanPlaces(Array.from({ length: PLACE_MARKS + 10 }, (_, i) => ({ id: `r${i}`, lon: TOKYO.lon - 20 + (i % 10) * 4, lat: TOKYO.lat - 12 + Math.floor(i / 10) * 6 })));
+  const ringed = createPlaceLayer(fakeBox() as unknown as HTMLElement);
+  ringed.grouping = false;
+  ringed.set(many);
+  ringed.frame(v);
+  assert.equal(ringed.stats.sprites, 10);
+  const last = many[many.length - 1]!;
+  assert.equal(ringed.pick(at(last.lon, last.lat).x, at(last.lon, last.lat).y)?.id, last.id);
+
+  // a group of several is not a place
+  const crowded = createPlaceLayer(fakeBox() as unknown as HTMLElement);
+  crowded.set(crowd(800));
+  crowded.frame(v);
+  assert.ok(crowded.stats.groups > 0);
+  const middle = crowded.pick(210, 210);
+  assert.ok(middle === null || middle.id.startsWith("p"), "what is found is a place of the list, never a group");
+
+  layer.layers = { mine: false };
+  assert.equal(layer.pick(foot.x, foot.y), null, "at once, before the picture is drawn again");
+  layer.frame(v);
+  assert.equal(layer.pick(foot.x, foot.y), null, "a hidden layer cannot be pressed");
+  layer.frame(null);
+  assert.equal(layer.pick(foot.x, foot.y), null, "nor a picture that is gone");
+});
+
+test("chikyu-place-click carries the id and the kind, and the layer and name when there are some", () => {
+  assert.deepEqual(placeClick({ id: "cavan", lon: -123.1, lat: 49.29, label: "Vancouver", layer: "harbours" }, 10, 20), { id: "cavan", kind: "favourite", lon: -123.1, lat: 49.29, x: 10, y: 20, layer: "harbours", label: "Vancouver" });
+  assert.deepEqual(placeClick({ id: "me", lon: 1, lat: 2, kind: "here" }, 0, 0), { id: "me", kind: "here", lon: 1, lat: 2, x: 0, y: 0 });
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanPlaces, groupCell, groupPlaces, layoutPlaces, MAX_PLACES, nearby, orthoView, placeLabels, readPlaces, type Place } from "../src/markers/index.ts";
+import { cleanPlaces, groupCell, groupPlaces, layoutPlaces, MAX_PLACES, nearby, orthoView, placeLabels, readPlaceLayers, readPlaces, shownPlaces, type Place } from "../src/markers/index.ts";
 import { aimAt, findPlace, glideView } from "../src/markers/go-to-place.ts";
 
 const view = (lon: number, lat: number) => orthoView({ lon, lat, radius: 200, cx: 210, cy: 210, width: 420, height: 420 });
@@ -164,4 +164,39 @@ test("going to a place: by id or by name, the shorter way round, the tilt held t
   let done: [number, number, boolean] | null = null;
   glideView((yaw, tilt, final) => (done = [yaw, tilt, final]), { yaw: 0, tilt: 0 }, { yaw: 30, tilt: -10 }, false, () => true);
   assert.deepEqual(done, [30, -10, true]);
+});
+
+test("a place can have a layer, a size, a look and a name priority of its own, and only plain values are kept", () => {
+  const [kept, bare] = cleanPlaces([
+    { id: "a", lon: 0, lat: 0, layer: " harbours ", size: "small", look: "ring", namePriority: "low" },
+    { id: "b", lon: 0, lat: 0, layer: "", size: "huge", look: "star", namePriority: "high" },
+  ]);
+  assert.deepEqual(kept, { id: "a", lon: 0, lat: 0, kind: "favourite", layer: "harbours", size: "small", look: "ring", namePriority: "low" });
+  assert.deepEqual(bare, { id: "b", lon: 0, lat: 0, kind: "favourite" }, "a place that says nothing new is as it was");
+  assert.equal(cleanPlaces([{ lon: 0, lat: 0, layer: "x".repeat(100) }])[0]!.layer!.length, 40);
+});
+
+test("a small place has a shorter stick and a smaller ring than its kind, and a look of its own beats the look given", () => {
+  const places: Place[] = [
+    { id: "n", lon: 0, lat: 0 },
+    { id: "s", lon: 0.001, lat: 0, size: "small" },
+    { id: "r", lon: 0.002, lat: 0, look: "ring" },
+    { id: "b", lon: 0.003, lat: 0, look: "beam" },
+  ];
+  const [normal, small, ring, beam] = layoutPlaces(places, view(0, 30), "pin").shapes;
+  assert.ok(small!.length < normal!.length && small!.ring < normal!.ring);
+  assert.equal(ring!.length, 0, "a ring among pins");
+  assert.ok(Math.abs(beam!.length - normal!.length) < 0.01, "a beam among pins is as long as a pin");
+  assert.ok(layoutPlaces([{ id: "h", lon: 0, lat: 0, kind: "here", size: "small" }], view(0, 30), "beam").shapes[0]!.length < layoutPlaces([{ id: "h", lon: 0, lat: 0, kind: "here" }], view(0, 30), "beam").shapes[0]!.length);
+});
+
+test("the switches of the layers: read from JSON, a layer not named is shown, and a place with no layer always is", () => {
+  assert.deepEqual(readPlaceLayers('{"harbours":false,"airports":true,"x":1}'), { harbours: false, airports: true });
+  assert.deepEqual(readPlaceLayers("nonsense"), {});
+  assert.deepEqual(readPlaceLayers("[1]"), {});
+  assert.deepEqual(readPlaceLayers(null), {});
+  const places: Place[] = [{ id: "a", lon: 0, lat: 0, layer: "airports" }, { id: "h", lon: 1, lat: 0, layer: "harbours" }, { id: "me", lon: 2, lat: 0 }];
+  assert.deepEqual(shownPlaces(places, { harbours: false }).map((place) => place.id), ["a", "me"]);
+  assert.deepEqual(shownPlaces(places, { harbours: false, airports: false }).map((place) => place.id), ["me"]);
+  assert.equal(shownPlaces(places, {}), places, "nothing left out, the same list");
 });

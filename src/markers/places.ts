@@ -43,6 +43,14 @@ export interface Place {
   kind?: PlaceKind;
   /** A CSS colour for this place alone (`#e8475f`, `rgb(...)`, `hsl(...)` or a colour's name); left out, the kind's colour. */
   color?: string;
+  /** A set of places (spaceports, harbours) the page shows or hides together with `place-layers`; left out, the place is always shown. */
+  layer?: string;
+  /** `small` draws a shorter, narrower mark; left out, the kind's own size. */
+  size?: PlaceSize;
+  /** How this place is drawn, over `places-look`; left out, `places-look`. */
+  look?: PlaceLook;
+  /** `low` lays this place's name after the cities' names, so it is shown only where it lies over none of them; left out (`high`), it is laid before them. */
+  namePriority?: PlaceNamePriority;
 }
 
 /**
@@ -69,6 +77,32 @@ export type PlaceLook = "beam" | "pin" | "ring";
  * ```
  */
 export const PLACE_LOOKS: readonly PlaceLook[] = ["beam", "pin", "ring"];
+
+/**
+ * How big a place's mark is: `normal` (the default) or `small`, a shorter, narrower stick and a smaller ring, so a harbour can stand beside a city and "You are here" stays the tall beam.
+ *
+ * @example
+ * ```ts
+ * import type { PlaceSize } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const size: PlaceSize = "small";
+ * console.log(size);
+ * ```
+ */
+export type PlaceSize = "normal" | "small";
+
+/**
+ * Where a place's name is laid among the others: `high` (the default) before the cities' names, which then keep clear of it, or `low`, after them, so the name is left out where a city's name is.
+ *
+ * @example
+ * ```ts
+ * import type { PlaceNamePriority } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const priority: PlaceNamePriority = "low";
+ * console.log(priority);
+ * ```
+ */
+export type PlaceNamePriority = "high" | "low";
 
 /**
  * The most places one element draws; the rest of a longer list are left out.
@@ -218,6 +252,9 @@ const EDGE = 0.02;
 const FADE = 0.12;
 const MARGIN = 60;
 const SIZES: Record<PlaceKind, { length: number; ring: number }> = { here: { length: 46, ring: 9 }, favourite: { length: 28, ring: 6 } };
+/** What a `small` place's stick and ring are of the kind's own. */
+export const SMALL_LENGTH = 0.55;
+export const SMALL_RING = 0.7;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 /** A colour a page may give a place: a hex colour, `rgb()`/`hsl()` with numbers only, or a colour's name. Anything else is left out, so no other CSS gets in. */
@@ -236,8 +273,8 @@ const nightOf = (cosine: number): number => {
 
 /**
  * The places of a list a page handed over, made safe to draw: each needs a longitude from -180 to 180 and a latitude from -90 to 90; one without an `id` is given its place in the list, a
- * label is cut to 80 letters, a kind that is not `here` is `favourite`, and a colour is kept only when it is a hex colour, `rgb()` or `hsl()` with numbers, or a colour's name. Anything else is left out,
- * and at most {@link MAX_PLACES} are kept.
+ * label is cut to 80 letters, a kind that is not `here` is `favourite`, and a colour is kept only when it is a hex colour, `rgb()` or `hsl()` with numbers, or a colour's name. A `layer` is cut to 40 letters,
+ * a `size` is kept only when it is `small`, a `look` only when it is one of {@link PLACE_LOOKS} and a `namePriority` only when it is `low`. Anything else is left out, and at most {@link MAX_PLACES} are kept.
  *
  * @param list - What the page gave: an array of places, or anything.
  * @returns The places to draw.
@@ -246,7 +283,7 @@ const nightOf = (cosine: number): number => {
  * ```ts
  * import { cleanPlaces } from "@johnmorrisdotca/chikyu-earth/markers";
  *
- * console.log(cleanPlaces([{ lon: 2.35, lat: 48.86, label: "Paris", color: "#e8475f" }, { lon: 500, lat: 0 }]));
+ * console.log(cleanPlaces([{ lon: 2.35, lat: 48.86, label: "Paris", color: "#e8475f" }, { lon: 500, lat: 0 }, { id: "yvr", lon: -123.18, lat: 49.19, layer: "airports", size: "small", look: "ring" }]));
  * ```
  */
 export function cleanPlaces(list: unknown): Place[] {
@@ -261,6 +298,10 @@ export function cleanPlaces(list: unknown): Place[] {
     const place: Place = { id: typeof item["id"] === "string" && item["id"] ? item["id"] : String(i), lon, lat, kind: item["kind"] === "here" ? "here" : "favourite" };
     if (typeof item["label"] === "string" && item["label"].trim()) place.label = item["label"].trim().slice(0, 80);
     if (typeof item["color"] === "string" && COLOR.test(item["color"].trim())) place.color = item["color"].trim();
+    if (typeof item["layer"] === "string" && item["layer"].trim()) place.layer = item["layer"].trim().slice(0, 40);
+    if (item["size"] === "small") place.size = "small";
+    if ((PLACE_LOOKS as readonly unknown[]).includes(item["look"])) place.look = item["look"] as PlaceLook;
+    if (item["namePriority"] === "low") place.namePriority = "low";
     out.push(place);
   }
   return out;
@@ -354,7 +395,7 @@ export function orthoView(pose: Pose & { width: number; height: number }): Place
  *
  * @param places - The places, as {@link cleanPlaces} makes them.
  * @param view - The picture.
- * @param look - `beam`, `pin` or `ring`.
+ * @param look - `beam`, `pin` or `ring`, for each place that has no `look` of its own; a `small` place has a shorter stick and a smaller ring.
  * @param options - The size of each name, boxes already used, the most names (16) and where the Sun is overhead.
  * @returns The markers to draw and where the names go.
  *
@@ -377,6 +418,8 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
     if (!view.at(place.lon, place.lat, point) || point.facing <= EDGE) continue;
     if (point.x < -MARGIN || point.y < -MARGIN || point.x > view.width + MARGIN || point.y > view.height + MARGIN) continue;
     const size = SIZES[place.kind === "here" ? "here" : "favourite"];
+    const small = place.size === "small";
+    const own = place.look ?? look;
     const side = Math.min(1, Math.hypot(point.upX, point.upY));
     // straight up from the ground as seen, bent towards the top of the screen as the reader comes to look straight down on it
     let dx = point.upX;
@@ -389,7 +432,7 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
       dx /= norm;
       dy /= norm;
     }
-    const length = look === "ring" ? 0 : size.length * (0.55 + 0.45 * side);
+    const length = own === "ring" ? 0 : size.length * (small ? SMALL_LENGTH : 1) * (0.55 + 0.45 * side);
     const shape: PlaceShape = {
       index,
       x: point.x,
@@ -400,14 +443,14 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
       length,
       ringAngle: side > 1e-4 ? Math.atan2(point.upX, -point.upY) / RAD : 0,
       squash: Math.max(0.08, Math.min(1, point.facing)),
-      ring: size.ring,
+      ring: size.ring * (small ? SMALL_RING : 1),
       opacity: Math.min(1, (point.facing - EDGE) / FADE),
       night: sun ? nightOf(dotUnit(place.lon, place.lat, sun)) : 0,
     };
     shapes.push(shape);
     const box = place.label ? options.size?.(place, index) : null;
     if (box) {
-      items.push({ x: shape.tipX, y: shape.tipY, r: look === "ring" ? size.ring : 3, w: box.width, h: box.height, priority: place.kind === "here" ? 1 : 0 });
+      items.push({ x: shape.tipX, y: shape.tipY, r: own === "ring" ? shape.ring : 3, w: box.width, h: box.height, priority: place.kind === "here" ? 1 : 0 });
       named.push(index);
     }
   }
@@ -536,3 +579,50 @@ export function groupPlaces(places: readonly Place[], cell: number): PlaceGroup[
  * ```
  */
 export const readPlaceGroups = (value: string | null): boolean => (value ?? "").trim().toLowerCase() !== "off";
+
+/**
+ * Which layers of places are shown (the attribute `place-layers`): a JSON object of layer names to true or false, such as `{"harbours":false}`. A layer that is not named is shown, and so is a place with no layer. Anything
+ * that is not an object of that kind is no switches.
+ *
+ * @param value - The attribute's text, or null.
+ * @returns The switches, a name to whether it is shown.
+ *
+ * @example
+ * ```ts
+ * import { readPlaceLayers } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(readPlaceLayers('{"harbours":false,"airports":true}')); // { harbours: false, airports: true }
+ * ```
+ */
+export function readPlaceLayers(value: string | null | undefined): Record<string, boolean> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!isObject(parsed)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [name, on] of Object.entries(parsed)) if (typeof on === "boolean") out[name] = on;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The places whose layer is shown: a place with no layer is always in, and a layer is in unless `layers` says `false` for it. The list is returned as it came when nothing is left out.
+ *
+ * @param places - The places, as {@link cleanPlaces} makes them.
+ * @param layers - The switches, a layer's name to whether it is shown ({@link readPlaceLayers}).
+ * @returns The places to draw.
+ *
+ * @example
+ * ```ts
+ * import { shownPlaces } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const places = [{ id: "yvr", lon: -123.18, lat: 49.19, layer: "airports" }, { id: "cavan", lon: -123.1, lat: 49.29, layer: "harbours" }, { id: "me", lon: -79.4, lat: 43.7 }];
+ * console.log(shownPlaces(places, { harbours: false }).map((place) => place.id)); // ["yvr", "me"]
+ * ```
+ */
+export function shownPlaces(places: readonly Place[], layers: Readonly<Record<string, boolean>>): readonly Place[] {
+  const shown = places.filter((place) => !place.layer || layers[place.layer] !== false);
+  return shown.length === places.length ? places : shown;
+}
