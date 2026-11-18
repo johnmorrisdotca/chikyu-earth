@@ -102,7 +102,8 @@ test.describe("a reader with no motion preference", () => {
     await page.locator("#replay button[data-v=\"86400\"]").dispatchEvent("click");
     await page.locator("#replay [data-act=\"play\"]").dispatchEvent("click");
     await settle(page, 500);
-    const { before: s0, after: s1, seconds } = await timed(page, 5000, () => statsOf(page));
+    // two seconds of the page's time, not five: every frame in it is drawn in software, and on a slow or throttled machine five took the whole minute of the test (the rates are per second, so the span does not change them)
+    const { before: s0, after: s1, seconds } = await timed(page, 2000, () => statsOf(page));
     const perSecond = (s1.time - s0.time) / 86_400_000 / seconds;
     const draws = (s1.draws - s0.draws) / seconds;
     const lookups = (s1.lookups - s0.lookups) / seconds;

@@ -236,10 +236,11 @@ test.describe("moving", () => {
     const before = await measure(page, 100);
     await setSpeed(page, 60);
     await settle(page, 600);
-    const base = await measure(page, 3000);
+    // the spans are short because every frame of them is drawn in software, and the GPU is waited for after each (`timed`): at 3 s and 6 s they took 90 s with three tests drawing at once on a throttled machine; rates are counted per second, so the span does not change them
+    const base = await measure(page, 1500);
     await addMany(page);
     await settle(page, 1500);
-    const many = await measure(page, 6000);
+    const many = await measure(page, 3000);
     console.log(
       `6,000 satellites at 60x: ${many.gameSeconds.toFixed(1)}x, ${many.frames.toFixed(1)} frames a second, ${many.glPerFrame.toFixed(1)} GL draw calls a frame (${base.glPerFrame.toFixed(1)} without them), ${many.propagations.toFixed(0)} SGP4 calls a second, ` +
         `${many.stats.satellites.averageUpdateMs.toFixed(2)} ms of JavaScript a frame on average (the longest ${many.stats.satellites.maxUpdateMs.toFixed(1)}), the longest SGP4 batch ${many.stats.satellites.maxBatchMs.toFixed(1)} ms`,
