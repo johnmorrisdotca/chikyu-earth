@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.60.1 - 2026-11-17
+
 - **The Earth's edge is round from a low orbit** (MODULES-1498). In the space view the clouds were drawn on a shell 38 km above the ground, so wherever there was cloud at the Earth's edge the outline stood up from it: from 640 km a lump more than half a degree tall, several pixels in a ride. The shell is now about 10 km up while the camera is within 60 Earth radii (`cloudShell`, `src/space/cloud-shell.ts`), still above the finer map tiles, and the old height only from further away, where the difference is under half a pixel.
 
 ## 0.60.0 - 2026-11-17
