@@ -63,7 +63,8 @@ test("while the view moves it is drawn at most 30 times a second", async ({ page
   const drawsBefore = (await statsOf(page)).draws;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  for (let i = 0; i < 150; i += 1) {
+  // the drag lasts a span of wall time, not a count of moves: each move waits for the page, so on a slow or throttled machine 150 of them took the test's whole minute, and the rate is the same however many were made
+  for (let i = 0; Date.now() - t0 < 3000; i += 1) {
     await page.mouse.move(x + ((i * 7) % 160) - 80, y + ((i * 3) % 60) - 30);
     await page.waitForTimeout(8);
   }

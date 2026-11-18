@@ -10,6 +10,8 @@ interface Stats {
   labels: number;
   renders: number;
 }
+/** How long the drag in the 5000 places test lasts. */
+const DRAG_MS = 3000;
 const markerStats = (page: Page): Promise<Stats> => page.evaluate(() => (Reflect.get(globalThis, "chikyuMarkers") as { stats: Stats }).stats);
 
 test("a place is drawn over the Earth where it is: Tokyo at the centre of a globe centred on it", async ({ page }) => {
@@ -38,7 +40,8 @@ test("with 5000 places the Earth is still drawn at most 30 times a second, and r
   const rendersBefore = (await markerStats(page)).renders;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  for (let i = 0; i < 120; i += 1) {
+  // the drag lasts a span of wall time, not a count of moves: each move waits for the page, so on a slow or throttled machine 120 of them took most of the test's minute, and the rate is the same however many were made
+  for (let i = 0; Date.now() - t0 < DRAG_MS; i += 1) {
     await page.mouse.move(x + ((i * 7) % 160) - 80, y + ((i * 3) % 60) - 30);
     await page.waitForTimeout(8);
   }
