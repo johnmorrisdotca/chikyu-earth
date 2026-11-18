@@ -10,8 +10,8 @@ interface Stats {
   labels: number;
   renders: number;
 }
-/** How long the drag in the 5000 places test lasts. */
-const DRAG_MS = 3000;
+/** The fewest draws a rate is counted from. */
+const MIN_DRAWS = 30;
 const markerStats = (page: Page): Promise<Stats> => page.evaluate(() => (Reflect.get(globalThis, "chikyuMarkers") as { stats: Stats }).stats);
 
 test("a place is drawn over the Earth where it is: Tokyo at the centre of a globe centred on it", async ({ page }) => {
@@ -40,8 +40,9 @@ test("with 5000 places the Earth is still drawn at most 30 times a second, and r
   const rendersBefore = (await markerStats(page)).renders;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  // the drag lasts a span of wall time, not a count of moves: each move waits for the page, so on a slow or throttled machine 120 of them took most of the test's minute, and the rate is the same however many were made
-  for (let i = 0; Date.now() - t0 < DRAG_MS; i += 1) {
+  // the drag lasts until the page has drawn enough for a rate to mean something, not for a count of moves or a span: each move waits for the page, so on a slow or throttled machine (2 to 4 draws a second here) 120 of them took most of the
+  // test's minute, and a fixed span drew too few. It gives up after 30 s, and the check below then says how many draws there were.
+  for (let i = 0; (await statsOf(page)).draws - drawsBefore < MIN_DRAWS && Date.now() - t0 < 30_000; i += 1) {
     await page.mouse.move(x + ((i * 7) % 160) - 80, y + ((i * 3) % 60) - 30);
     await page.waitForTimeout(8);
   }
@@ -50,6 +51,7 @@ test("with 5000 places the Earth is still drawn at most 30 times a second, and r
   const draws = (await statsOf(page)).draws - drawsBefore;
   const renders = (await markerStats(page)).renders - rendersBefore;
   console.log(`5000 places, drag: ${draws} Earth draws and ${renders} marker renders in ${seconds.toFixed(2)} s`);
+  expect(draws, `a rate needs at least ${MIN_DRAWS} draws to count: the drag drew ${draws}`).toBeGreaterThanOrEqual(MIN_DRAWS);
   expect(draws / seconds).toBeLessThanOrEqual(32);
   expect(renders, "the markers are drawn with the Earth, not on their own").toBeLessThanOrEqual(draws + 2);
   await settle(page, 1500);

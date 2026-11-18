@@ -105,6 +105,7 @@ test.describe("a reader with no motion preference", () => {
     // two seconds of the page's time, not five: every frame in it is drawn in software, and on a slow or throttled machine five took the whole minute of the test (the rates are per second, so the span does not change them)
     const { before: s0, after: s1, seconds } = await timed(page, 2000, () => statsOf(page));
     const perSecond = (s1.time - s0.time) / 86_400_000 / seconds;
+    expect(s1.draws - s0.draws, `a rate needs at least 30 draws to count: the span drew ${s1.draws - s0.draws}`).toBeGreaterThanOrEqual(30);
     const draws = (s1.draws - s0.draws) / seconds;
     const lookups = (s1.lookups - s0.lookups) / seconds;
     console.log(`1 day a second: ${perSecond.toFixed(2)} days a second, ${draws.toFixed(1)} draws a second, ${lookups.toFixed(2)} ephemeris lookups a second`);

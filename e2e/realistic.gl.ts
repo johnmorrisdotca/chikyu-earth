@@ -54,6 +54,9 @@ test("at rest nothing is drawn and no animation frame is asked for", async ({ pa
   expect((await statsOf(page)).draws).toBe(drawsBefore);
 });
 
+/** The fewest draws a rate is counted from. */
+const MIN_DRAWS = 30;
+
 test("while the view moves it is drawn at most 30 times a second", async ({ page }) => {
   await openEarth(page);
   const box = (await page.locator(EARTH).boundingBox())!;
@@ -63,8 +66,9 @@ test("while the view moves it is drawn at most 30 times a second", async ({ page
   const drawsBefore = (await statsOf(page)).draws;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  // the drag lasts a span of wall time, not a count of moves: each move waits for the page, so on a slow or throttled machine 150 of them took the test's whole minute, and the rate is the same however many were made
-  for (let i = 0; Date.now() - t0 < 3000; i += 1) {
+  // the drag lasts until the page has drawn enough for a rate to mean something, not for a count of moves or a span: each move waits for the page, so on a slow or throttled machine (2 to 4 draws a second here) 150 of them took
+  // the test's whole minute, and a fixed span drew too few. It gives up after 30 s, and the check below then says how many draws there were.
+  for (let i = 0; (await statsOf(page)).draws - drawsBefore < MIN_DRAWS && Date.now() - t0 < 30_000; i += 1) {
     await page.mouse.move(x + ((i * 7) % 160) - 80, y + ((i * 3) % 60) - 30);
     await page.waitForTimeout(8);
   }
@@ -72,7 +76,7 @@ test("while the view moves it is drawn at most 30 times a second", async ({ page
   const seconds = (Date.now() - t0) / 1000;
   const draws = (await statsOf(page)).draws - drawsBefore;
   console.log(`drag: ${draws} draws in ${seconds.toFixed(2)} s = ${(draws / seconds).toFixed(1)} per second`);
-  expect(draws).toBeGreaterThan(3);
+  expect(draws, `a rate needs at least ${MIN_DRAWS} draws to count: the drag drew ${draws}`).toBeGreaterThanOrEqual(MIN_DRAWS);
   expect(draws / seconds).toBeLessThanOrEqual(32);
   await settle(page, 1500);
   const rest = await counts(page);
