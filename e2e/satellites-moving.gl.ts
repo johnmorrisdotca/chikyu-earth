@@ -1,6 +1,6 @@
 // Satellites in the space view, moving: the same performance budget as everything else, at 6,000 of them at 60 times real time and faster, and the streaks. The rest is in satellites.gl.ts.
 import { expect, test } from "@playwright/test";
-import { ownClock, settle, steppingOnly } from "./gl.ts";
+import { drainGpu, freezeClock, ownClock, settle, steppingOnly } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 import { SPACE, T, addMany, measure, open, setSpeed, statsOf } from "./satellites-common.ts";
 
@@ -124,6 +124,7 @@ test.describe("moving", () => {
     test.use({ reducedMotion: "reduce" });
     test("the streaks shrink with the Earth, and thousands of marks do not darken a small one", async ({ page }) => {
       test.setTimeout(240_000);
+      await ownClock(page);
       await open(page, "&earth-size=0.9", "starlink");
       await addMany(page, 16_000);
       await expect.poll(async () => (await statsOf(page)).satellites.groups).toBe(2);
@@ -131,11 +132,21 @@ test.describe("moving", () => {
         page.locator(SPACE).evaluate((el, v) => {
           for (const name of ["many", "starlink"]) (el as unknown as { showSatellites(g: string, on: boolean): void }).showSatellites(name, v);
         }, on);
-      /** A picture of the element at one moment of the clock: the time is set again just before, so two pictures show the Earth turned the same. */
+      /**
+       * A picture of the element at one moment of the clock, so two pictures show the Earth turned the same. The page's clock is stopped, the time set, and the page's frames run for a fixed 50 ms of its own time:
+       * every picture is then drawn at the same moment however long the software GPU takes. Before, the time was set and two animation frames waited for, and a throttled, busy machine drew the frame seconds later,
+       * after the clock (600 times real time, a step a second) had moved the Earth on by one or two steps (600 s each), and the two pictures of a pair showed the Earth at different turns (MODULES-1586).
+       */
       const shot = async (): Promise<string> => {
+        await freezeClock(page);
+        const asked = (await statsOf(page)).draws;
         await page.locator(SPACE).evaluate((el, at) => Reflect.set(el, "time", Date.parse(at)), T);
-        await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-        return (await page.locator(SPACE).screenshot()).toString("base64");
+        await page.clock.runFor(50);
+        await expect.poll(async () => (await statsOf(page)).draws, { message: "a draw of the set time" }).toBeGreaterThan(asked);
+        await drainGpu(page);
+        const picture = (await page.locator(SPACE).screenshot()).toString("base64");
+        await page.clock.resume();
+        return picture;
       };
       /** How much brighter (negative) or darker the lit side of the Earth is with the satellites on than off, as a share of its luminance: the pixels where the picture without them is lit, inside the disc. */
       const darkening = async (radius: number): Promise<number> => {
