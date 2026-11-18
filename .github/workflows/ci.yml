@@ -40,7 +40,7 @@ jobs:
       - name: The package as npm packs it installs and imports
         run: pnpm test:package
   demo:
-    # The browser suite was one job of 21 minutes. Now one job a slice: the realistic Earth's WebGL tests in three parts (--shard), then the other projects in Chromium in two parts (one job reached its 15 minutes on 2026-11-09), then in WebKit. Each part may take 25 minutes. Every test still runs once.
+    # The browser suite was one job of 21 minutes, then slices of it each reached 25 (MODULES-1528): the realistic Earth's WebGL tests are now six parts (--shard), the graphics-memory file (freeze, 15 minutes in one job) four parts of the Chromium desk, every other file in Chromium desk and phone one job, then WebKit. Each part may take 25 minutes. Every test still runs once.
     name: demo (${{ matrix.name }})
     runs-on: ubuntu-latest
     # In the Playwright image at the lockfile's version, which has the browsers' system libraries: no apt mirror (down on 2026-11-11).
@@ -52,11 +52,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: "realistic Earth 1 of 3", browser: chromium, projects: "--project=chromium-gl --shard=1/3" }
-          - { name: "realistic Earth 2 of 3", browser: chromium, projects: "--project=chromium-gl --shard=2/3" }
-          - { name: "realistic Earth 3 of 3", browser: chromium, projects: "--project=chromium-gl --shard=3/3" }
-          - { name: "desk and phone, Chromium 1 of 2", browser: chromium, projects: "--project=chromium-desk --project=chromium-phone --shard=1/2" }
-          - { name: "desk and phone, Chromium 2 of 2", browser: chromium, projects: "--project=chromium-desk --project=chromium-phone --shard=2/2" }
+          - { name: "realistic Earth 1 of 6", browser: chromium, projects: "--project=chromium-gl --shard=1/6" }
+          - { name: "realistic Earth 2 of 6", browser: chromium, projects: "--project=chromium-gl --shard=2/6" }
+          - { name: "realistic Earth 3 of 6", browser: chromium, projects: "--project=chromium-gl --shard=3/6" }
+          - { name: "realistic Earth 4 of 6", browser: chromium, projects: "--project=chromium-gl --shard=4/6" }
+          - { name: "realistic Earth 5 of 6", browser: chromium, projects: "--project=chromium-gl --shard=5/6" }
+          - { name: "realistic Earth 6 of 6", browser: chromium, projects: "--project=chromium-gl --shard=6/6" }
+          - { name: "graphics memory, Chromium desk 1 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=1/4" }
+          - { name: "graphics memory, Chromium desk 2 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=2/4" }
+          - { name: "graphics memory, Chromium desk 3 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=3/4" }
+          - { name: "graphics memory, Chromium desk 4 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=4/4" }
+          - { name: "desk and phone, Chromium", browser: chromium, set: rest, projects: "--project=chromium-desk --project=chromium-phone" }
           - { name: "desk and phone, WebKit", browser: webkit, projects: "--project=webkit-desk --project=webkit-phone" }
     steps:
       - uses: actions/checkout@v7
@@ -71,6 +77,8 @@ jobs:
           browsers: ${{ matrix.browser }}
       - name: The demo, played in ${{ matrix.name }}
         run: pnpm test:demo:one ${{ matrix.projects }}
+        env:
+          DEMO_SET: ${{ matrix.set }}
   usage:
     runs-on: ubuntu-latest
     # In the Playwright image at the lockfile's version, which has the browsers' system libraries: no apt mirror (down on 2026-11-11).
