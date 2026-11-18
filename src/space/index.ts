@@ -12,3 +12,4 @@ export { BEAM_ATTRIBUTES, BEAM_COLOUR, BEAM_ELEVATION, beamCells, footprintAngle
 export type { BeamStats } from "../beam/layer.ts";
 export { RIDE_PATH_FADE_KM } from "./path-ribbons.ts";
 export { createTrailBuilder, TRAIL_DEFAULT_ORBITS, TRAIL_MAX_ORBITS, TRAIL_MAX_POINTS, TRAIL_POINTS_PER_ORBIT, trailOrbits, type PlaceAt, type TrailBuilder } from "./trail.ts";
+export { descentFloorKm, FLY_FLOOR_KM, FLY_HEIGHT_KM, FLY_MIN_KM, flyAcrossMs, flyAim, flyAt, flyDistance, flyDownMs, flyLonLat, flyStateAt, flyStill, planFly, type FlyPhase, type FlyPlan, type FlyPoint, type FlyState } from "./fly.ts";
