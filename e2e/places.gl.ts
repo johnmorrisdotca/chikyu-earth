@@ -16,6 +16,8 @@ const PLACES = [
 ];
 interface PlaceStats {
   places: number;
+  hidden: number;
+  marks: number;
   shown: number;
   labels: number;
   renders: number;
@@ -109,6 +111,87 @@ test.describe("on the realistic Earth", () => {
   });
 });
 
+test.describe("on the realistic Earth: a press, layers, a look of its own and names that give way", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  interface Told {
+    id: string;
+    kind: string;
+    layer?: string;
+  }
+  /** Record every `chikyu-place-click` in the page, so a count is read after the presses and not raced against them. */
+  const record = (target: Locator): Promise<void> =>
+    target.evaluate((el) => {
+      const told: unknown[] = [];
+      Reflect.set(window, "told", told);
+      el.addEventListener("chikyu-place-click", (event) => told.push((event as CustomEvent).detail));
+    });
+  const told = (page: Page): Promise<Told[]> => page.evaluate(() => Reflect.get(window, "told") as Told[]);
+
+  test("a press on a place tells the page its id and kind, a press on nothing tells it nothing, and a layer switched off cannot be pressed", async ({ page }) => {
+    await openEarth(page, `time=${NOON}&center=${TOKYO.lon},${TOKYO.lat}&hide=Cities,Stadiums`);
+    const earth = page.locator(EARTH);
+    await record(earth);
+    await setPlaces(earth, [{ ...PLACES[0], layer: "mine" }, { ...PLACES[1], layer: "kansai" }]);
+    await expect.poll(async () => (await placesOf(earth)).shown).toBe(2);
+    const box = (await earth.boundingBox())!;
+    const foot = (await hereFoot(earth))!;
+
+    await page.mouse.click(box.x + 6, box.y + 6);
+    await page.mouse.click(foot.x, foot.y - 12);
+    await expect.poll(async () => (await told(page)).length).toBe(1);
+    expect((await told(page))[0]).toMatchObject({ id: "here", kind: "here", layer: "mine", label: "You are here" });
+
+    await earth.evaluate((el) => Reflect.get(el, "setPlaceLayer").call(el, "mine", false));
+    await expect.poll(async () => (await placesOf(earth)).shown).toBe(1);
+    expect(await earth.getAttribute("place-layers")).toBe('{"mine":false}');
+    await page.mouse.click(foot.x, foot.y - 12);
+    await earth.evaluate((el) => Reflect.get(el, "setPlaceLayer").call(el, "mine", true));
+    await expect.poll(async () => (await placesOf(earth)).shown).toBe(2);
+    await page.mouse.click(foot.x, foot.y - 12);
+    await expect.poll(async () => (await told(page)).length).toBe(2);
+    expect((await told(page)).map((detail) => detail.id), "the press on nothing and the press on a hidden layer told nothing").toEqual(["here", "here"]);
+  });
+
+  test("a place's own look and size are drawn, and a low-priority name is shown after the others", async ({ page }) => {
+    await openEarth(page, `time=${NOON}&center=${TOKYO.lon},${TOKYO.lat}&hide=Cities,Stadiums`);
+    const earth = page.locator(EARTH);
+    await setPlaces(earth, [
+      { id: "plain", lon: TOKYO.lon, lat: TOKYO.lat, label: "Plain" },
+      { id: "harbour", lon: TOKYO.lon + 8, lat: TOKYO.lat, label: "Harbour", look: "ring", size: "small", namePriority: "low" },
+    ]);
+    await expect.poll(async () => (await placesOf(earth)).shown).toBe(2);
+    const looks = await earth.evaluate((el) => [...el.shadowRoot!.querySelectorAll<HTMLElement>(".pl-mark:not([hidden])")].map((mark) => mark.dataset["look"]));
+    expect(looks.sort()).toEqual(["beam", "ring"]);
+    const stick = (look: string) => earth.evaluate((el, which) => getComputedStyle(el.shadowRoot!.querySelector(`.pl-mark[data-look=${which}] .pl-stick`)!).display, look);
+    expect(await stick("ring")).toBe("none");
+    expect(await stick("beam")).not.toBe("none");
+    expect((await nameBoxes(earth, ".pl-name:not(.pl-measure)")).map((n) => n.text).sort()).toEqual(["Harbour", "Plain"]);
+  });
+
+  test("a low-priority name gives way to a city's name, which stays where it was, and the marker stays; a name of the default priority takes the place", async ({ page }) => {
+    await openEarth(page, `time=${NOON}&center=${TOKYO.lon},${TOKYO.lat}&hide=Cities,Stadiums`);
+    const earth = page.locator(EARTH);
+    await earth.evaluate((el) => el.setAttribute("city-names", ""));
+    const cities = () => nameBoxes(earth, "#cn-names .cn-name");
+    await expect.poll(async () => (await cities()).some((n) => n.text === "Tokyo")).toBe(true);
+    const home = (await cities()).find((n) => n.text === "Tokyo")!;
+
+    const put = (priority: string) => setPlaces(earth, [{ id: "spaceport", lon: TOKYO.lon, lat: TOKYO.lat, label: "Spaceport", namePriority: priority }]);
+    await put("low");
+    await expect.poll(async () => (await placesOf(earth)).marks).toBe(1);
+    expect((await nameBoxes(earth, ".pl-name:not(.pl-measure)")).map((n) => n.text), "the place's name is the one left out").toEqual([]);
+    const kept = (await cities()).find((n) => n.text === "Tokyo");
+    expect(kept && { l: kept.l, t: kept.t }, "the city's name is where it was").toEqual({ l: home.l, t: home.t });
+
+    await put("high");
+    await expect.poll(async () => (await nameBoxes(earth, ".pl-name:not(.pl-measure)")).map((n) => n.text)).toEqual(["Spaceport"]);
+    const moved = (await cities()).find((n) => n.text === "Tokyo");
+    expect(moved === undefined || moved.l !== home.l || moved.t !== home.t, "before the city, the place's name takes the room and the city gives way").toBe(true);
+    expect(overlapping([...(await nameBoxes(earth, ".pl-name:not(.pl-measure)")), ...(await cities())])).toEqual([]);
+  });
+});
+
 test.describe("in the space view", () => {
   test.use({ reducedMotion: "no-preference" });
 
@@ -146,6 +229,33 @@ test.describe("in the space view", () => {
     await space.evaluate((el) => el.setAttribute("speed", "3600"));
     await expect.poll(async () => ((await hereFoot(space))?.x ?? Infinity) - before.x).toBeGreaterThan(20);
     await space.evaluate((el) => el.setAttribute("speed", "0"));
+  });
+});
+
+test.describe("in the space view: a press on a place", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("tells the page its id and kind, the layer's switch hides it, and a place of low priority keeps its marker", async ({ page }) => {
+    const space = await openSpace(page, `time=2026-11-02T03:00Z&center=${TOKYO.lon},${TOKYO.lat}`);
+    await space.evaluate((el) => {
+      const told: unknown[] = [];
+      Reflect.set(window, "told", told);
+      el.addEventListener("chikyu-place-click", (event) => told.push((event as CustomEvent).detail));
+    });
+    await setPlaces(space, [{ ...PLACES[0], layer: "mine" }, { ...PLACES[1], layer: "kansai", namePriority: "low" }]);
+    await expect.poll(async () => (await placesOf(space)).shown).toBe(2);
+    const foot = (await hereFoot(space))!;
+    const told = (): Promise<{ id: string; kind: string }[]> => page.evaluate(() => Reflect.get(window, "told") as { id: string; kind: string }[]);
+
+    await space.evaluate((el) => el.setAttribute("place-layers", '{"mine":false}'));
+    await expect.poll(async () => (await placesOf(space)).shown).toBe(1);
+    await page.mouse.click(foot.x, foot.y - 12);
+    await space.evaluate((el) => el.removeAttribute("place-layers"));
+    await expect.poll(async () => (await placesOf(space)).shown).toBe(2);
+    await page.mouse.click(foot.x, foot.y - 12);
+    await expect.poll(async () => (await told()).length).toBe(1);
+    expect(await told(), "a press on a hidden layer told nothing").toMatchObject([{ id: "here", kind: "here", layer: "mine" }]);
+    expect((await placesOf(space)).marks).toBe(2);
   });
 });
 

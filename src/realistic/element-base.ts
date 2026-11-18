@@ -29,10 +29,10 @@ import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import type { SkyKeepClear } from "../sky/keep-clear.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
-import { cleanPlaces, orthoView, readPlaceGroups, readPlaces, type Place, type PlaceLook } from "../markers/places.ts";
+import { cleanPlaces, orthoView, readPlaceGroups, readPlaceLayers, readPlaces, type Place, type PlaceLook } from "../markers/places.ts";
 import { readHereCity } from "../markers/here-city.ts";
 import { createHereCity, type HereCityHost } from "../markers/here-city-host.ts";
-import { createPlaceLayer, PLACE_STYLE, placesLostNotice, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
+import { createPlaceLayer, PLACE_STYLE, placeClick, placesLostNotice, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
 import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "./sun.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
@@ -200,7 +200,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "smooth-fps", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
+  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "smooth-fps", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -318,6 +318,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#placeLayer.set(this.#here.named(this.#placeList));
     this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
     this.#placeLayer.grouping = readPlaceGroups(this.getAttribute("place-groups"));
+    this.#placeLayer.layers = readPlaceLayers(this.getAttribute("place-layers"));
     this.#cities = createCityHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -553,6 +554,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
     } else if (name === "place-groups" && this.#placeLayer) {
       this.#placeLayer.grouping = readPlaceGroups(value);
       this.#gate?.soon();
+    } else if (name === "place-layers" && this.#placeLayer) {
+      this.#placeLayer.layers = readPlaceLayers(value);
+      this.#gate?.soon();
     } else if (name === "route") {
       if (applyRoute(this.#model.route, readRoute(value))) this.#gate?.soon();
     }
@@ -699,7 +703,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
    * is a ring on the ground, all of them one draw call, and places that crowd are gathered into one ring with their count. They turn with the Earth, are hidden on its far side, are dimmer on its night side
    * and keep their size in pixels at any zoom. Names never overlap one another; one with no room is left out. The element stores nothing and sends nothing: the page hands the places over and keeps them where
    * it likes. Setting the property writes the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight and for a reader who asked
-   * for less motion.
+   * for less motion. A place may also have a `layer` (shown or hidden with `place-layers`), a `size` (`small`), a `look` of its own (over `places-look`) and a `namePriority` (`low` lays its name after the cities'
+   * names). A press on a place sends `chikyu-place-click` with `detail: { id, kind, layer, label, lon, lat, x, y }`.
    */
   get places(): Place[] {
     return this.#placeList.map((place) => ({ ...place }));
@@ -824,6 +829,49 @@ export class ChikyuEarthRealistic extends HTMLElement {
   set placeGroups(value: boolean) {
     if (value) this.removeAttribute("place-groups");
     else this.setAttribute("place-groups", "off");
+  }
+
+  /**
+   * Which layers of places are shown (the attribute `place-layers`, a JSON object of a layer's name to true or false): a place whose `layer` is named `false` is left out, and so is its name; any other place, and any layer not
+   * named, is shown. The page hands over every place once and switches the layers, instead of building a list for each switch. Setting the property writes the attribute; an empty object takes it away.
+   * `stats.places.hidden` counts the places left out.
+   *
+   * @example
+   * ```ts no-run
+   * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+   *
+   * const earth = document.querySelector("chikyu-earth-realistic") as ChikyuEarthRealistic;
+   * earth.placeLayers = { harbours: false };
+   * earth.getAttribute("place-layers"); // '{"harbours":false}'
+   * earth.setPlaceLayer("harbours", true);
+   * earth.placeLayers; // { harbours: true }
+   * ```
+   */
+  get placeLayers(): Record<string, boolean> {
+    return { ...(this.#placeLayer?.layers ?? readPlaceLayers(this.getAttribute("place-layers"))) };
+  }
+  set placeLayers(value: Readonly<Record<string, boolean>>) {
+    const names = Object.keys(value);
+    if (names.length === 0) this.removeAttribute("place-layers");
+    else this.setAttribute("place-layers", JSON.stringify(value));
+  }
+
+  /**
+   * Show or hide one layer of places, leaving the others as they are: the same as setting `placeLayers` with that layer changed.
+   *
+   * @param name - The layer's name, as in a place's `layer`.
+   * @param shown - Whether its places are shown.
+   *
+   * @example
+   * ```ts no-run
+   * import type { ChikyuEarthRealistic } from "@johnmorrisdotca/chikyu-earth/realistic/element";
+   *
+   * const earth = document.querySelector("chikyu-earth-realistic") as ChikyuEarthRealistic;
+   * earth.setPlaceLayer("airports", false);
+   * ```
+   */
+  setPlaceLayer(name: string, shown: boolean): void {
+    this.placeLayers = { ...this.placeLayers, [name]: shown };
   }
 
   /** The picture said whether it can draw the rings of the places that are not markers of their own. Without `Points` the places' layer draws them itself. */
@@ -952,6 +1000,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
    */
   #relayNames(cities: boolean, sky: boolean): void {
     if (cities && this.#nameFrame) this.#cities?.frame(this.#nameFrame, this.#boxesBeforeCities());
+    this.#placeLayer?.late([...(this.#cities?.boxes ?? []), ...[...this.#claimedNames.values()].flat()]);
     this.#seaFrame();
     this.#countryFrame();
     if (sky) this.#sky?.relayout();
@@ -962,7 +1011,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #boxesBeforeCities(): readonly { left: number; top: number; width: number; height: number }[] {
     const out = this.#beforeCities;
     out.length = 0;
-    out.push(...(this.#placeLayer?.boxes ?? []));
+    out.push(...(this.#placeLayer?.earlyBoxes ?? []));
     for (const boxes of this.#claimedNames.values()) out.push(...boxes);
     return out;
   }
@@ -1246,7 +1295,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     /** The names of the stars and the constellation lines: whether one is asked for, whether hoshi-stars is loaded, the names and figures laid out at the last draw, the figure picked, how many times the layer was drawn, the language its names were last laid out in, and the named stars' own points on the screen (`stars`). */
     sky: { on: boolean; loaded: boolean; names: number; figures: number; picked: string | null; pick: string | null; hover: string | null; constellations: number; culture: string; renders: number; lang: string; stars: { text: string; x: number; y: number }[] };
     /** The places: how many were handed over, how many are drawn and named at the last draw, and how many times they were laid out. `sprites` is the rings in the picture's one draw call (0 when it cannot draw them); `dots` is the circles drawn in the page instead. */
-    places: { places: number; shown: number; labels: number; renders: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
+    places: { places: number; hidden: number; shown: number; labels: number; renders: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
     /** The nearest city on a `here` marker (`here-city`): whether it is on, the kilometre limit (0 when off), whether kuni's cities have arrived, and whether that load is still going. */
     hereCity: { on: boolean; maxKm: number; loaded: boolean; pending: boolean };
     /** The names of cities: whether `city-names` is set and the most it asks for, the Earth's radius on the screen, the tiers of kuni's cities that have arrived and how many cities, the names shown at the last draw and how many times the layer was drawn. */
@@ -1278,7 +1327,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       meteors: { on: this.#model.meteors.on, strength: this.#model.meteors.strength, ...this.#model.meteors.drawn },
       bodyLabel: { on: this.#model.bodyLabel.settings !== null, text: this.#model.bodyLabel.text, ...this.#model.bodyLabel.drawn },
       sky: this.#sky?.stats ?? { on: false, loaded: false, names: 0, figures: 0, picked: null, pick: null, hover: null, constellations: 0, culture: "iau", renders: 0, lang: "", stars: [] },
-      places: { ...(this.#placeLayer?.stats ?? { places: 0, shown: 0, labels: 0, renders: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 }) },
+      places: { ...(this.#placeLayer?.stats ?? { places: 0, hidden: 0, shown: 0, labels: 0, renders: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 }) },
       hereCity: this.#here?.stats ?? { on: false, maxKm: 0, loaded: false, pending: false },
       cityNames: this.#cities?.stats ?? { on: false, max: 0, radius: 0, tiers: [], cities: 0, names: 0, renders: 0 },
       borders: { ...this.#model.borders.stats, shown: { ...this.#model.borders.stats.shown }, loaded: [...this.#model.borders.stats.loaded] },
@@ -1706,7 +1755,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #downX = 0;
   #downY = 0;
   #down = (event: PointerEvent): void => {
-    if (event.button !== 0 || this.#model.satellites.groups.size === 0) return;
+    if (event.button !== 0 || (this.#model.satellites.groups.size === 0 && this.#placeList.length === 0)) return;
     this.#downX = event.clientX;
     this.#downY = event.clientY;
     window.addEventListener("pointerup", this.#up, { capture: true, once: true });
@@ -1723,6 +1772,12 @@ export class ChikyuEarthRealistic extends HTMLElement {
     if (satellite) {
       claimPress(event);
       this.dispatchEvent(new CustomEvent("chikyu-satellite-click", { detail: { ...satellite, info: this.satelliteInfo(satellite), ...this.#estimateOf(satellite) }, bubbles: true, composed: true }));
+      return;
+    }
+    const place = this.#placeLayer?.pick(event.clientX - rect.left, event.clientY - rect.top);
+    if (place) {
+      claimPress(event);
+      this.dispatchEvent(new CustomEvent("chikyu-place-click", { detail: placeClick(place, event.clientX - rect.left, event.clientY - rect.top), bubbles: true, composed: true }));
     }
   };
 

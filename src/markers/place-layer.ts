@@ -2,9 +2,9 @@
 // and every group of crowded places, is a ring in the picture's one draw call (place-sprites.ts), with the group's count as a name. The pulse of a `here` place is a CSS animation, so the picture is never
 // drawn again for it; it stops while the element is out of sight, and a reader who asked for less motion gets none. Names are measured as the page draws them.
 import type { GeoPoint } from "../types.ts";
-import { placeLabels } from "./labels.ts";
+import { placeLabels, type LabelItem } from "./labels.ts";
 import type { PlaceSpriteData } from "./place-sprites.ts";
-import { groupCell, groupPlaces, layoutPlaces, PLACE_LOOKS, type Place, type PlaceGroup, type PlaceLook, type PlaceView, type SurfacePoint } from "./places.ts";
+import { groupCell, groupPlaces, layoutPlaces, PLACE_LOOKS, shownPlaces, SMALL_RING, type Place, type PlaceGroup, type PlaceKind, type PlaceLook, type PlaceView, type SurfacePoint } from "./places.ts";
 
 /** A `places-look` attribute: one of `PLACE_LOOKS`, else `beam`. */
 export const readPlaceLook = (value: string | null): PlaceLook => (PLACE_LOOKS as readonly string[]).includes(value ?? "") ? (value as PlaceLook) : "beam";
@@ -27,10 +27,10 @@ export const PLACE_STYLE =
   ".pl-head{position:absolute;left:-2.5px;top:-2.5px;width:5px;height:5px;border-radius:50%;background:#fff;box-shadow:0 0 6px 1px var(--c)}" +
   ".pl-mark[data-kind=favourite] .pl-stick{width:1.5px;opacity:.8}" +
   ".pl-mark[data-kind=favourite] .pl-head{opacity:.85}" +
-  "#places[data-look=pin] .pl-stick{background:var(--c);box-shadow:none;width:1.5px}" +
-  "#places[data-look=pin] .pl-head{left:-4px;top:-4px;width:8px;height:8px;background:var(--c);box-shadow:0 0 0 1.5px rgba(4,10,20,.75)}" +
-  "#places[data-look=pin] .pl-ring{box-shadow:none;background:none;opacity:.7}" +
-  "#places[data-look=ring] .pl-stick,#places[data-look=ring] .pl-head{display:none}" +
+  ".pl-mark[data-look=pin] .pl-stick{background:var(--c);box-shadow:none;width:1.5px}" +
+  ".pl-mark[data-look=pin] .pl-head{left:-4px;top:-4px;width:8px;height:8px;background:var(--c);box-shadow:0 0 0 1.5px rgba(4,10,20,.75)}" +
+  ".pl-mark[data-look=pin] .pl-ring{box-shadow:none;background:none;opacity:.7}" +
+  ".pl-mark[data-look=ring] .pl-stick,.pl-mark[data-look=ring] .pl-head{display:none}" +
   ".pl-name{position:absolute;left:0;top:0;box-sizing:border-box;padding:1px 6px;font:600 11px/16px system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:.04em;white-space:nowrap;color:#eefcff;background:rgba(4,10,20,.72);border:1px solid color-mix(in srgb,var(--c) 60%,transparent);border-radius:3px;will-change:transform;--c:var(--chikyu-place-favourite,#ffd27a)}" +
   ".pl-name[data-kind=here]{--c:var(--chikyu-place-here,#7df9ff);color:#fff}" +
   ".pl-name[data-kind=group]{padding:0 5px;font-size:10px;line-height:14px;border-radius:7px;background:rgba(4,10,20,.6)}" +
@@ -100,16 +100,64 @@ const FALLBACK = { here: "#7df9ff", favourite: "#ffd27a" };
 type Box = { left: number; top: number; width: number; height: number };
 
 /**
+ * What `chikyu-place-click` carries in `event.detail`: the place that was pressed, and where the press was in CSS pixels inside the element's box.
+ *
+ * @example
+ * ```ts
+ * import type { PlaceClickDetail } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * const on = (event: Event): void => {
+ *   const { id, kind, layer } = (event as CustomEvent<PlaceClickDetail>).detail;
+ *   console.log(id, kind, layer ?? "no layer");
+ * };
+ * console.log(typeof on);
+ * ```
+ */
+export interface PlaceClickDetail {
+  id: string;
+  /** `here` or `favourite`. */
+  kind: PlaceKind;
+  /** The place's `layer`, when it has one. */
+  layer?: string;
+  label?: string;
+  lon: number;
+  lat: number;
+  /** Where the press was, in CSS pixels inside the element's box. */
+  x: number;
+  y: number;
+}
+
+/** The detail of `chikyu-place-click` for a pressed place. */
+export const placeClick = (place: Place, x: number, y: number): PlaceClickDetail => {
+  const detail: PlaceClickDetail = { id: place.id, kind: place.kind === "here" ? "here" : "favourite", lon: place.lon, lat: place.lat, x, y };
+  if (place.layer) detail.layer = place.layer;
+  if (place.label) detail.label = place.label;
+  return detail;
+};
+
+/** How far from a place's mark a press still counts as on it, in CSS pixels, as for a satellite's dot. */
+const PRESS_REACH = 12;
+
+/**
  * The places' markers in one element: hand it the places and the look, and a view at each draw.
  */
 export interface PlaceLayer {
   set(places: readonly Place[]): void;
+  /** Which layers are shown: a layer's name to false hides every place of it (see {@link shownPlaces}). A layer not named is shown. */
+  layers: Readonly<Record<string, boolean>>;
   look: PlaceLook;
   /**
    * Lay the places on the picture just drawn; `null` hides them (the Earth is not in the picture). `taken` is boxes other names use; `marks` are satellites to ring and name, after the places' names and
    * never over them; `sun` is where the Sun is overhead (null when the whole Earth is lit), for the night side's dimmer markers.
    */
   frame(view: PlaceView | null, taken?: readonly Box[], marks?: readonly SatelliteMark[], sun?: GeoPoint | null): void;
+  /**
+   * Lay the names of the places whose `namePriority` is `low`, after the layers that come before them: `taken` is those layers' boxes (the cities' names), and a name with no free place is left out. Call it after each `frame`
+   * and again when those layers change; with no such place it does nothing.
+   */
+  late(taken?: readonly Box[]): void;
+  /** The place under a point of the element (CSS pixels from its top left) in the last picture: a marker's stick or foot, or a ring, within a few pixels; null when there is none. A group of several is not a place. */
+  pick(x: number, y: number): Place | null;
   /** The rings the picture draws for the places that are not markers of their own, as of the last `frame`; null while there are none. */
   readonly sprites: PlaceSpriteData | null;
   /**
@@ -123,9 +171,11 @@ export interface PlaceLayer {
   ringsInPicture: boolean;
   /** Dim a name the Earth hides, and leave its ring off. On by default. Off leaves that name out. */
   dimOccluded: boolean;
-  readonly stats: { places: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
-  /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of. */
+  readonly stats: { places: number; hidden: number; shown: number; labels: number; renders: number; rings: number; satelliteNames: number; marks: number; groups: number; sprites: number; dots: number; omitted: number };
+  /** The boxes the names and the markers' heads take in the picture just drawn, for other names to keep clear of; the low-priority names, once `late` has laid them, are in it. */
   readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
+  /** The same without the low-priority names, which the cities' names are laid out after. */
+  readonly earlyBoxes: readonly { left: number; top: number; width: number; height: number }[];
   dispose(): void;
 }
 
@@ -135,6 +185,7 @@ interface Mark {
   stick: HTMLElement;
   head: HTMLElement;
   kind: string;
+  look: string;
   ring: number;
   color: string;
 }
@@ -149,12 +200,14 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const doc = box.ownerDocument;
   box.setAttribute("aria-hidden", "true");
   box.dataset["look"] = "beam";
+  let everything: readonly Place[] = [];
   let places: readonly Place[] = [];
+  let switches: Readonly<Record<string, boolean>> = {};
   let look: PlaceLook = "beam";
   const marks: Mark[] = [];
   const names: HTMLElement[] = [];
   const sizes = new Map<string, { width: number; height: number }>();
-  const stats = { places: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 };
+  const stats = { places: 0, hidden: 0, shown: 0, labels: 0, renders: 0, rings: 0, satelliteNames: 0, marks: 0, groups: 0, sprites: 0, dots: 0, omitted: 0 };
   let grouping = true;
   let ringsInPicture = true;
   let dimOccluded = true;
@@ -164,7 +217,16 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   let projected = new Float32Array(0);
   // the ring sizes written last, so a frame that changes none does not copy the buffer
   let shapeHeld = new Float32Array(0);
-  let boxes: { left: number; top: number; width: number; height: number }[] = [];
+  let boxes: Box[] = [];
+  let earlyBoxes: Box[] = [];
+  // the names that wait for the layers before them, and the last picture's markers, for `late` and `pick`
+  let lateItems: LabelItem[] = [];
+  let lateOwners: Place[] = [];
+  let lateFrom = 0;
+  let earlyLabels = 0;
+  let lastView: PlaceView | null = null;
+  let lastShapes: ReturnType<typeof layoutPlaces>["shapes"] = [];
+  let lastOwn: Place[] = [];
   const rings: HTMLElement[] = [];
   const measures: HTMLElement[] = [];
   // the groups of the places for the cell they were made with, and the rings' data the picture reads
@@ -234,7 +296,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       head.className = "pl-head";
       root.append(disc, stick, head);
       box.append(root);
-      mark = { root, disc, stick, head, kind: "", ring: 0, color: "" };
+      mark = { root, disc, stick, head, kind: "", look: "", ring: 0, color: "" };
       marks[i] = mark;
     }
     return mark;
@@ -366,6 +428,12 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     stats.groups = 0;
     stats.sprites = 0;
     stats.dots = 0;
+    lastView = null;
+    lastShapes = [];
+    lastOwn = [];
+    lateItems = [];
+    lateOwners = [];
+    earlyLabels = 0;
     if (sprites && sprites.shapes.some((v) => v !== 0)) {
       sprites.shapes.fill(0);
       sprites.shapesVersion += 1;
@@ -374,11 +442,28 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
 
   return {
     set(next) {
-      places = next;
+      everything = next;
+      lastView = null;
+      places = shownPlaces(next, switches);
       stats.places = next.length;
-      if (next.length === 0) {
+      stats.hidden = next.length - places.length;
+      if (places.length === 0) {
         groups = [];
-        groupedFor = next;
+        groupedFor = places;
+        sprites = null;
+      }
+    },
+    get layers() {
+      return switches;
+    },
+    set layers(value) {
+      switches = value;
+      lastView = null;
+      places = shownPlaces(everything, switches);
+      stats.hidden = everything.length - places.length;
+      if (places.length === 0) {
+        groups = [];
+        groupedFor = places;
         sprites = null;
       }
     },
@@ -416,6 +501,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         clear();
         if (places.length > 0) stats.renders += 1;
         boxes = [];
+        earlyBoxes = [];
         return;
       }
       stats.renders += 1;
@@ -443,7 +529,10 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       const chosen = [...singles.filter((g) => places[groups[g]!.members[0]!]!.kind === "here"), ...singles.filter((g) => places[groups[g]!.members[0]!]!.kind !== "here")].slice(0, PLACE_MARKS);
       const own = chosen.map((g) => places[groups[g]!.members[0]!]!);
       measureAll(own);
-      const layout = layoutPlaces(own, view, look, { size: (place) => size(place), taken, sun });
+      const layout = layoutPlaces(own, view, look, { size: (place) => (place.namePriority === "low" ? null : size(place)), taken, sun });
+      lastView = view;
+      lastShapes = layout.shapes;
+      lastOwn = own;
       // favourites first, so a `here` marker is drawn over them
       const order = [...layout.shapes].sort((a, b) => (own[a.index]!.kind === "here" ? 1 : 0) - (own[b.index]!.kind === "here" ? 1 : 0));
       for (const [i, shape] of order.entries()) {
@@ -453,6 +542,11 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         if (mark.kind !== kind) {
           mark.kind = kind;
           mark.root.dataset["kind"] = kind;
+        }
+        const shown = place.look ?? look;
+        if (mark.look !== shown) {
+          mark.look = shown;
+          mark.root.dataset["look"] = shown;
         }
         if (mark.ring !== shape.ring) {
           mark.ring = shape.ring;
@@ -474,6 +568,15 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       }
       hideFrom(marks.map((m) => m.root), order.length);
       const nightOf = new Map(layout.shapes.map((shape) => [shape.index, shape.night]));
+      lateItems = [];
+      lateOwners = [];
+      for (const shape of layout.shapes) {
+        const place = own[shape.index]!;
+        const found = place.namePriority === "low" ? size(place) : null;
+        if (!found) continue;
+        lateItems.push({ x: shape.tipX, y: shape.tipY, r: (place.look ?? look) === "ring" ? shape.ring : 3, w: found.width, h: found.height, priority: 0 });
+        lateOwners.push(place);
+      }
       for (const [i, spot] of layout.labels.entries()) {
         const place = own[spot.index]!;
         showName(nameAt(i), place.label ?? "", place.kind === "here" ? "here" : "favourite", spot.left, spot.top, place.color, (nightOf.get(spot.index) ?? 0) > 0.5);
@@ -506,7 +609,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
           const group = groups[g]!;
           const n = group.members.length;
           const first = places[group.members[0]!]!;
-          const ring = n > 1 ? Math.min(14, 6 + 2.2 * Math.log2(n)) : RING[first.kind === "here" ? "here" : "favourite"];
+          const ring = n > 1 ? Math.min(14, 6 + 2.2 * Math.log2(n)) : RING[first.kind === "here" ? "here" : "favourite"] * (first.size === "small" ? SMALL_RING : 1);
           shapes[g * 2] = ring;
           shapes[g * 2 + 1] = n > 1 ? 0.3 : 0;
           if (fallback) {
@@ -583,11 +686,14 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         used += 1;
       }
       hideFrom(names, used);
-      boxes = busy.slice(taken.length);
-      for (const spot of placed) boxes.push({ left: spot.left, top: spot.top, width: items[spot.item]!.w, height: items[spot.item]!.h });
-      for (const shape of layout.shapes) boxes.push({ left: shape.tipX - 5, top: shape.tipY - 5, width: 10, height: 10 });
+      earlyBoxes = busy.slice(taken.length);
+      for (const spot of placed) earlyBoxes.push({ left: spot.left, top: spot.top, width: items[spot.item]!.w, height: items[spot.item]!.h });
+      for (const shape of layout.shapes) earlyBoxes.push({ left: shape.tipX - 5, top: shape.tipY - 5, width: 10, height: 10 });
       // the ring round each satellite that can be seen: other layers' names keep off it as they keep off its name
-      for (const mark of seen) boxes.push({ left: mark.x - SATELLITE_RING, top: mark.y - SATELLITE_RING, width: SATELLITE_RING * 2, height: SATELLITE_RING * 2 });
+      for (const mark of seen) earlyBoxes.push({ left: mark.x - SATELLITE_RING, top: mark.y - SATELLITE_RING, width: SATELLITE_RING * 2, height: SATELLITE_RING * 2 });
+      boxes = earlyBoxes;
+      lateFrom = used;
+      earlyLabels = layout.labels.length;
       stats.shown = shown;
       stats.marks = order.length;
       stats.labels = layout.labels.length;
@@ -600,6 +706,54 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
     stats,
     get boxes() {
       return boxes;
+    },
+    get earlyBoxes() {
+      return earlyBoxes;
+    },
+    late(taken = []) {
+      if (lateItems.length === 0 || !lastView) return;
+      const placed = placeLabels(lateItems, lastView.width, lastView.height, 16, 64, [...taken, ...earlyBoxes]);
+      let at = lateFrom;
+      const added: Box[] = [];
+      for (const spot of placed) {
+        const place = lateOwners[spot.item]!;
+        showName(nameAt(at), place.label ?? "", place.kind === "here" ? "here" : "favourite", spot.left, spot.top, place.color, false);
+        added.push({ left: spot.left, top: spot.top, width: lateItems[spot.item]!.w, height: lateItems[spot.item]!.h });
+        at += 1;
+      }
+      hideFrom(names, at);
+      boxes = [...earlyBoxes, ...added];
+      stats.labels = earlyLabels + placed.length;
+    },
+    pick(x, y) {
+      if (!lastView || !groupedFor) return null;
+      const marked = new Set<Place>();
+      let best: Place | null = null;
+      let near = PRESS_REACH;
+      for (const shape of lastShapes) {
+        const place = lastOwn[shape.index]!;
+        marked.add(place);
+        // the foot, or anywhere along the stick from the foot to its top
+        const dx = shape.tipX - shape.x;
+        const dy = shape.tipY - shape.y;
+        const along = dx === 0 && dy === 0 ? 0 : Math.max(0, Math.min(1, ((x - shape.x) * dx + (y - shape.y) * dy) / (dx * dx + dy * dy)));
+        const d = Math.hypot(x - (shape.x + dx * along), y - (shape.y + dy * along));
+        if (d < near || (d === near && best === null)) {
+          best = place;
+          near = d;
+        }
+      }
+      for (const group of groups) {
+        if (group.members.length !== 1) continue;
+        const place = groupedFor[group.members[0]!]!;
+        if (marked.has(place) || !lastView.at(group.lon, group.lat, point) || point.facing <= EDGE) continue;
+        const d = Math.hypot(x - point.x, y - point.y);
+        if (d < near) {
+          best = place;
+          near = d;
+        }
+      }
+      return best;
     },
     dispose() {
       watcher?.disconnect();
