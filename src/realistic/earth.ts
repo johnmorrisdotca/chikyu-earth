@@ -8,6 +8,7 @@ import type { SatelliteRef } from "../satellites/types.ts";
 import { HOME_VIEW, lookAt } from "../view.ts";
 import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "./air.ts";
 import { CLOUD_FRAG, SURFACE_FRAG, SURFACE_VERT } from "./shaders.ts";
+import { cloudFade, CLOUD_FADE_DEFAULT } from "./cloud-fade.ts";
 import { newLightFade, stepLightFade, type LightFade } from "./light-fade.ts";
 import { prefersLessMotion } from "../meteors/note.ts";
 import { greenwichSidereal, subsolarPoint, unitVector } from "./sun.ts";
@@ -99,6 +100,9 @@ export interface EarthModel {
   airThickness: number;
   /** How fast the cloud picture is made to move eastward against the ground, degrees an hour: 0 (the default) keeps the clouds where the picture has them. The picture is one snapshot, not a forecast; a drift is only for life. */
   cloudDrift: number;
+  /** The texel width in device pixels at which the clouds are gone (`cloud-fade`), 0 for no fade; and the share of the clouds shown at the last draw. */
+  cloudFade: number;
+  cloudShown: number;
   /** For the `space` camera: the Earth's turn against the stars (degrees) when the camera was set; null until the next draw sets it. */
   cameraSpin: number | null;
   /** Game seconds a second (the clock's speed): the satellites are placed from it. */
@@ -177,6 +181,8 @@ export const newModel = (): EarthModel => ({
   camera: "space",
   airThickness: AIR_THICKNESS_DEFAULT,
   cloudDrift: 0,
+  cloudFade: CLOUD_FADE_DEFAULT,
+  cloudShown: 1,
   cameraSpin: null,
   speed: 1,
   satellites: newSatelliteState(),
@@ -385,12 +391,14 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
             else sunDir.value.set(0, 0, 1);
           }
           cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
-          clouds.visible = model.clouds;
           atmosphere.uniforms["thick"]!.value = model.airThickness;
           glow.scale.setScalar(airTop(model.airThickness));
           surface.uniforms["lights"]!.value = model.lights ? 1 - fade.mix : 0;
           surface.uniforms["boost"]!.value = model.light === "boost" ? 1 : 0;
           const radius = discRadius(size.width, size.height, view.zoom);
+          model.cloudShown = cloudFade(radius * model.ratio(), model.cloudFade);
+          cloudMaterial.uniforms["opacity"]!.value = 0.9 * model.cloudShown;
+          clouds.visible = model.clouds && model.cloudShown > 0;
           camera.left = (-size.width / 2 - view.panX) / radius;
           camera.right = (size.width / 2 - view.panX) / radius;
           camera.top = (size.height / 2 + view.panY) / radius;

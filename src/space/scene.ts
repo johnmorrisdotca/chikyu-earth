@@ -16,6 +16,7 @@ import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scal
 import type { SatelliteRef } from "../satellites/types.ts";
 import { faceOffset, outsidePose, rideGlideMs, ridePose, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { stripLights, type ModelSun } from "./model-lights.ts";
+import { cloudFade, CLOUD_FADE_DEFAULT } from "../realistic/cloud-fade.ts";
 import { newLightFade, stepLightFade, type LightFade } from "../realistic/light-fade.ts";
 import { prefersLessMotion } from "../meteors/note.ts";
 import { genericSatellite, satelliteKind } from "./generic-satellite.ts";
@@ -232,6 +233,9 @@ export interface SpaceModel {
   airThickness: number;
   /** Degrees an hour the cloud picture is made to move eastward against the ground: 0, the default (it is one snapshot, not a forecast). */
   cloudDrift: number;
+  /** The texel width in device pixels at which the clouds are gone (`cloud-fade`), 0 for no fade; and the share of the clouds shown at the last draw. */
+  cloudFade: number;
+  cloudShown: number;
   /** For the `space` camera: the Earth's turn against the stars (degrees) at the moment the camera was set, so it stays in the stars while the Earth turns beneath; null until the next draw sets it. */
   cameraSpin: number | null;
   /** How much of the Earth's turn the space camera takes: 0 holds the stars, 1 turns with the Earth. */
@@ -320,6 +324,8 @@ export const newSpaceModel = (): SpaceModel => ({
   camera: "space",
   airThickness: AIR_THICKNESS_DEFAULT,
   cloudDrift: 0,
+  cloudFade: CLOUD_FADE_DEFAULT,
+  cloudShown: 1,
   cameraSpin: null,
   follow: 0,
   earth: { size: DEFAULT_EARTH_SIZE, x: 0.5, y: 0.5 },
@@ -1252,6 +1258,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 return t < 0 ? null : [eye.x + t * ray.x, eye.y + t * ray.y, eye.z + t * ray.z];
               },
             };
+            // the clouds give way as their texels grow past the map tiles' pixels: the same radius the tiles read
+            model.cloudShown = cloudFade((focal / away) * model.ratio(), model.cloudFade);
+            cloudMaterial.uniforms["opacity"]!.value = 0.9 * model.cloudShown;
+            clouds.visible = model.cloudShown > 0;
             tiles.sync({ lon: 0, lat: 0, width: size.width, height: size.height, panX: 0, panY: 0, radius: focal / away, perspective: look }, [sunLocal.value.x, sunLocal.value.y, sunLocal.value.z], true, model.ratio());
             deps.onTilesDrawn?.();
           }
