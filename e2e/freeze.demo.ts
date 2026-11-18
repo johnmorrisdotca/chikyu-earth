@@ -15,7 +15,8 @@ test.beforeEach(({ page }) => routeElements(page));
 test.beforeEach(({ browserName }, info) => {
   test.skip(browserName !== "chromium" || info.project.name !== "chromium-desk", "WebGL is drawn in the desk Chromium here, in software");
 });
-test.describe.configure({ mode: "serial" });
+// On this machine the file runs one test at a time (the draw counts are read under the load of one software-GL page, so three at once would blur them). On CI there is one worker, so the tests run one after another anyway, and "serial" there only kept the whole file in one `--shard`, 15 minutes of it in a single job.
+if (!process.env.CI) test.describe.configure({ mode: "serial" });
 
 const NOON = "2026-06-21T12:00Z";
 // "satellites" is the space view with the stations and 2,000 Starlink satellites on show, "ride" the same with the camera on the ISS, "above" with the camera over the ISS looking down (both with the satellite's beam on, with 19 spot cells: it is part of the draw that moves the satellite, so it must add no frame, no draw at rest and no object that stays).

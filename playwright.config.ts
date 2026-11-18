@@ -13,7 +13,8 @@ const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile:
 export default defineConfig({
   testDir: "e2e",
   globalSetup: "@johnmorrisdotca/kazoku-ui/testing/global-setup",
-  testMatch: "*.demo.{ts,mjs}",
+  // CI splits the Chromium desk and phone suite: DEMO_SET=freeze is the graphics-memory file alone (15 minutes of the 20 the first half took), DEMO_SET=rest is every other file. Left out, every file runs.
+  testMatch: process.env.DEMO_SET === "freeze" ? /[\\/]freeze\.demo\.ts$/ : process.env.DEMO_SET === "rest" ? /^(?!.*[\\/]freeze\.demo\.ts$).*\.demo\.(ts|mjs)$/ : "*.demo.{ts,mjs}",
   fullyParallel: true,
   forbidOnly: true,
   workers: process.env.CI ? 1 : 3,
