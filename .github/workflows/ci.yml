@@ -40,7 +40,7 @@ jobs:
       - name: The package as npm packs it installs and imports
         run: pnpm test:package
   demo:
-    # The browser suite was one job of 21 minutes, then slices of it each reached 25 (MODULES-1528): the realistic Earth's WebGL tests are now six parts (--shard), the graphics-memory file (freeze, 15 minutes in one job) four parts of the Chromium desk, every other file in Chromium desk and phone one job, then WebKit. Each part may take 25 minutes. Every test still runs once.
+    # The browser suite was one job of 21 minutes, then slices of it each reached 25 (MODULES-1528): the realistic Earth's WebGL tests are now six parts (--shard), the update-cost check one job of its own (one worker, nothing beside it), the graphics-memory file (freeze, 15 minutes in one job) four parts of the Chromium desk, every other file in Chromium desk and phone one job, then WebKit. Each part may take 25 minutes. Every test still runs once.
     name: demo (${{ matrix.name }})
     runs-on: ubuntu-latest
     # In the Playwright image at the lockfile's version, which has the browsers' system libraries: no apt mirror (down on 2026-11-11).
@@ -58,6 +58,7 @@ jobs:
           - { name: "realistic Earth 4 of 6", browser: chromium, projects: "--project=chromium-gl --shard=4/6" }
           - { name: "realistic Earth 5 of 6", browser: chromium, projects: "--project=chromium-gl --shard=5/6" }
           - { name: "realistic Earth 6 of 6", browser: chromium, projects: "--project=chromium-gl --shard=6/6" }
+          - { name: "update cost, Chromium, alone", browser: chromium, projects: "--project=chromium-cost --workers=1" }
           - { name: "graphics memory, Chromium desk 1 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=1/4" }
           - { name: "graphics memory, Chromium desk 2 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=2/4" }
           - { name: "graphics memory, Chromium desk 3 of 4", browser: chromium, set: freeze, projects: "--project=chromium-desk --shard=3/4" }

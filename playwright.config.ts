@@ -8,6 +8,7 @@ const SOFTWARE_GL = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsa
 // The page's own pictures (the line globe, a map, text) are drawn by the CPU, not by the software GPU. With only SOFTWARE_GL, Chromium rasterizes them on the emulated GPU as well, and on the passes page the world map
 // alone took 5 to 10 seconds of that GPU's time, in which the page drew no frame and answered no click (MODULES-804: a click took 6 s, and the 5 s waits ran out). WebGL is still drawn in software, by the flags above.
 const CPU_RASTER = "--disable-gpu-rasterization";
+const COST = "*-cost.gl.ts";
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 
 export default defineConfig({
@@ -33,6 +34,14 @@ export default defineConfig({
     {
       name: "chromium-gl",
       testMatch: "*.gl.ts",
+      // the update-cost check is the next project's, so that it runs alone
+      testIgnore: COST,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, CPU_RASTER, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
+    },
+    // What the satellites cost a frame in JavaScript, timed by the page's wall clock: run it with nothing beside it (`--workers=1`, after the other projects: `pnpm test:demo`, and its own job in CI), or another browser's drawing takes its CPU and the reading doubles (MODULES-1585).
+    {
+      name: "chromium-cost",
+      testMatch: COST,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, launchOptions: { args: [...SOFTWARE_GL, CPU_RASTER, "--enable-precise-memory-info", "--js-flags=--expose-gc"] } },
     },
     {
