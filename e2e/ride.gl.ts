@@ -87,9 +87,8 @@ async function measure(page: Page, ms: number) {
 
 test("riding the ISS puts the camera where the ISS is, 420 km up, and at 60x it goes round the Earth at the ISS's rate", async ({ page }) => {
   await open(page);
-  await rideButton(page, "ISS").click();
-  await expect.poll(async () => (await statsOf(page)).ride.gliding, { timeout: 5000 }).toBe(false);
-  await settle(page, 600);
+  // not a poll for "no glide": before the press has reached the page that reads false too, and the camera is then still where it was
+  await settledAfter(page, () => rideButton(page, "ISS").click());
   const s = await statsOf(page);
   const ms = s.time;
   const there = issAt(ms);
@@ -100,10 +99,14 @@ test("riding the ISS puts the camera where the ISS is, 420 km up, and at 60x it 
   expect(s.camera.fov).toBeCloseTo(60, 5);
   await expect(page.locator("#ride-info")).toContainText("Riding along with");
 
+  // the camera is the one of the last frame drawn, and the time is the clock's now: at 60 times real time a frame a second old (a slow machine) is a minute of the ISS's orbit behind. So both ends are read at rest, the first
+  // before the clock runs (`s`) and the last after it is held and the last frame is drawn, and then each camera is where the clock says it is
+  const first = s.camera.position;
+  const t0 = s.time;
   await setSpeed(page, 60);
-  const first = (await statsOf(page)).camera.position;
-  const t0 = (await statsOf(page)).time;
   await page.waitForTimeout(5000);
+  await setSpeed(page, 0);
+  await untilStill(page);
   const last = await statsOf(page);
   const turned = angle(first, last.camera.position);
   const gameSeconds = (last.time - t0) / 1000;
