@@ -3,6 +3,7 @@
 import type * as THREE from "three";
 import type { AssetCache, BuildContext, Item3D, Scene3D } from "@johnmorrisdotca/kazoku-ui/renderer";
 import { AIR_QUALITY, AIR_THICKNESS_DEFAULT, AIR_VERT, airFrag, airTop } from "../realistic/air.ts";
+import { CLOUD_SHELL_NEAR, cloudShell } from "./cloud-shell.ts";
 import { sphere } from "../realistic/earth.ts";
 import { BODY_FRAG, CLOUD_FRAG, GLOW_FRAG, GLOW_VERT, SURFACE_FRAG, SURFACE_VERT } from "../realistic/shaders.ts";
 import { createTextureSet, type ThreeParts } from "../realistic/textures.ts";
@@ -695,7 +696,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       );
       model.tiles = tiles;
       const clouds = new three.Mesh(grid, cloudMaterial);
-      clouds.scale.setScalar(1.006);
+      clouds.scale.setScalar(CLOUD_SHELL_NEAR);
       clouds.renderOrder = 3;
       const glow = new three.Mesh(grid, atmosphereMaterial);
       glow.scale.setScalar(airTop(model.airThickness));
@@ -892,6 +893,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           cloudShift.value = -(((model.time / 3_600_000) * model.cloudDrift) % 360) / 360;
           atmosphereMaterial.uniforms["thick"]!.value = model.airThickness;
           glow.scale.setScalar(airTop(model.airThickness));
+          clouds.scale.setScalar(cloudShell(camera.position.length())); // where the camera was at the last draw: the two shells differ by under a pixel where they change
           const fade = stepLightFade(model.lightFade, model.light === "lit", performance.now(), prefersLessMotion());
           // one more frame while it moves, and none once it has arrived
           if (fade.fading) deps.invalidate();
