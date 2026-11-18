@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The realistic look's clouds no longer stand up from the Earth's edge** (MODULES-1498). Its clouds sat on the 38 km shell (radius 1.006) that made lumps on the outline in the space view: 0.006 of the globe's radius in pixels, 12 pixels on a 4096 pixel canvas. They now use the space view's near shell (1.0016, about 10 km up, `CLOUD_SHELL_NEAR`), which stays above the finer map tiles' shells (1.0008) by more than a face of the sphere dips. The realistic picture is orthographic, so there is no distance to switch by and no far shell is needed: its depth is linear and the low shell does not fight the ground. A test holds the radius, the clearance and the size of the lump.
+
 ## 0.60.1 - 2026-11-17
 
 - **The Earth's edge is round from a low orbit** (MODULES-1498). In the space view the clouds were drawn on a shell 38 km above the ground, so wherever there was cloud at the Earth's edge the outline stood up from it: from 640 km a lump more than half a degree tall, several pixels in a ride. The shell is now about 10 km up while the camera is within 60 Earth radii (`cloudShell`, `src/space/cloud-shell.ts`), still above the finer map tiles, and the old height only from further away, where the difference is under half a pixel.

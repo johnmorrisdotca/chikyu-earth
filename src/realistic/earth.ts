@@ -21,6 +21,7 @@ import { createBodyLabelLayer, newBodyLabelState, type BodyLabelLayer, type Body
 import { beginPlaceSprites, createPlaceSprites, type PlaceSpriteData, type PlaceSprites } from "../markers/place-sprites.ts";
 import { createMeteorLayer, newMeteorState, type MeteorLayer, type MeteorState } from "../meteors/layer.ts";
 import { createBorderLayer, newBorderState, type BorderLayer, type BorderState } from "../borders/layer.ts";
+import { CLOUD_SHELL_NEAR } from "../space/cloud-shell.ts";
 import { createGridLayer, newGridState, type GridLayer, type GridState } from "../grid/layer.ts";
 import { createRouteLayer, newRouteState, type RouteLayer, type RouteState } from "../route/layer.ts";
 import { pointOnEarth } from "./tiles.ts";
@@ -41,7 +42,14 @@ const RAD = Math.PI / 180;
  * ```
  */
 export const ATMOSPHERE_OUTER = 1.08;
-const CLOUD_RADIUS = 1.006;
+/**
+ * The radius of the clouds' shell in the realistic look (the Earth's radius is 1): the space view's near shell, about 10 km up. A shell 38 km up (1.006) stood above the ground at the Earth's edge wherever there
+ * was cloud, a lump of 0.006 of the globe's radius in pixels (12 pixels on a 4096 pixel canvas). The picture is orthographic, so there is no distance to switch by, and the depth is linear (1 to 120 over 24 bits),
+ * so the low shell never fights the ground; it stays above the finer map tiles' own shells (1.0008 at most) by more than a face of the sphere dips (`GRID_COLUMNS`).
+ */
+export const CLOUD_RADIUS = CLOUD_SHELL_NEAR;
+/** The columns of the sphere the Earth, its clouds and its air are drawn on. */
+export const GRID_COLUMNS = 128;
 const LAYERS: Layer[] = ["day", "night", "clouds", "water"];
 
 /** What the scene reads at each draw; the element changes it and asks for a draw. */
@@ -286,7 +294,7 @@ export function createEarthItem(model: EarthModel, deps: EarthDeps): Item3D<Thre
       /** The Sun in the Earth's own axes (before the view turns it), which the surface needs to find where a cloud's shadow falls. */
       const sunLocal = { value: new three.Vector3(1, 0, 0) };
       const cloudShift = { value: 0 };
-      const grid = sphere(three, 128, 64);
+      const grid = sphere(three, GRID_COLUMNS, 64);
       const surface = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: SURFACE_FRAG,

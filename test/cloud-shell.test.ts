@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CLOUD_RADIUS, GRID_COLUMNS } from "../src/realistic/earth.ts";
 import { CLOUD_SHELL_FAR, CLOUD_SHELL_NEAR, CLOUD_SHELL_REACH, cloudShell } from "../src/space/cloud-shell.ts";
 
 const KM = 6371;
@@ -26,4 +27,14 @@ test("the far shell is used only where the change is under half a pixel", () => 
   // a canvas at most 4096 pixels tall, a field of view of 35 degrees: the Earth's radius in pixels at the reach, times the change of the shell
   const radiusPx = 4096 / 2 / Math.tan((35 / 2) * (Math.PI / 180)) / CLOUD_SHELL_REACH;
   assert.ok(radiusPx * (CLOUD_SHELL_FAR - CLOUD_SHELL_NEAR) < 0.5, `${radiusPx * (CLOUD_SHELL_FAR - CLOUD_SHELL_NEAR)}`);
+});
+
+test("the realistic look's clouds sit on the near shell, clear of the finer map tiles, and stand a few pixels at most above the edge of a 4096 pixel globe", () => {
+  assert.equal(CLOUD_RADIUS, CLOUD_SHELL_NEAR);
+  const dip = 1 - Math.cos(Math.PI / GRID_COLUMNS);
+  assert.ok(CLOUD_RADIUS * (1 - dip) > 1.0008, `${CLOUD_RADIUS * (1 - dip)}`);
+  // an orthographic globe at most 4096 pixels across: the lump is the shell's height in pixels (it was 12 pixels at 1.006)
+  const radiusPx = 4096 / 2;
+  assert.ok(radiusPx * (CLOUD_RADIUS - 1) < 3.5, `${radiusPx * (CLOUD_RADIUS - 1)}`);
+  assert.ok(radiusPx * (CLOUD_SHELL_FAR - 1) > 10);
 });
