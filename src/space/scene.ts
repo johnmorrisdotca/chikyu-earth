@@ -16,7 +16,7 @@ import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scal
 import type { SatelliteRef } from "../satellites/types.ts";
 import { faceOffset, outsidePose, rideGlideMs, ridePose, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { stripLights, type ModelSun } from "./model-lights.ts";
-import { cloudFade, CLOUD_FADE_DEFAULT } from "../realistic/cloud-fade.ts";
+import { cloudFade, CLOUD_FADE_DEFAULT, CLOUD_WIDTH } from "../realistic/cloud-fade.ts";
 import { newLightFade, stepLightFade, type LightFade } from "../realistic/light-fade.ts";
 import { prefersLessMotion } from "../meteors/note.ts";
 import { genericSatellite, satelliteKind } from "./generic-satellite.ts";
@@ -678,7 +678,7 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
       const cloudMaterial = new three.ShaderMaterial({
         vertexShader: SURFACE_VERT,
         fragmentShader: CLOUD_FRAG,
-        uniforms: { cloudMap: uniform.clouds, sunDir: sunEarth, shift: cloudShift, opacity: { value: 0.9 } },
+        uniforms: { cloudMap: uniform.clouds, sunDir: sunEarth, shift: cloudShift, opacity: { value: 0.9 }, fadeGone: { value: 0 }, texelK: { value: 0 } },
         transparent: true,
         depthWrite: false,
       });
@@ -1258,10 +1258,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
                 return t < 0 ? null : [eye.x + t * ray.x, eye.y + t * ray.y, eye.z + t * ray.z];
               },
             };
-            // the clouds give way as their texels grow past the map tiles' pixels: the same radius the tiles read
+            // the clouds give way as their texels grow past the map tiles' pixels, fragment by fragment: the tiles' radius is `focal / distance`, so a texel is `texelK / distance` pixels wide; `cloudShown` is the nearest ground's
             model.cloudShown = cloudFade((focal / away) * model.ratio(), model.cloudFade);
-            cloudMaterial.uniforms["opacity"]!.value = 0.9 * model.cloudShown;
-            clouds.visible = model.cloudShown > 0;
+            cloudMaterial.uniforms["fadeGone"]!.value = model.cloudFade;
+            cloudMaterial.uniforms["texelK"]!.value = (2 * Math.PI * focal * model.ratio()) / CLOUD_WIDTH;
             tiles.sync({ lon: 0, lat: 0, width: size.width, height: size.height, panX: 0, panY: 0, radius: focal / away, perspective: look }, [sunLocal.value.x, sunLocal.value.y, sunLocal.value.z], true, model.ratio());
             deps.onTilesDrawn?.();
           }

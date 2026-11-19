@@ -2774,7 +2774,7 @@ export class ChikyuSpace extends HTMLElement {
     pace: { pixelsPerSecond: number; perSecond: number; cap: number; waitMs: number };
     /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
     lightFade: { mix: number; fading: boolean };
-    /** The share of the clouds shown at the last draw, 1 to 0: they give way to the ground as the cloud picture's texels grow past a few device pixels (`cloud-fade`). */
+    /** The share of the clouds shown at the last draw, 1 to 0: they give way to the ground as the cloud picture's texels grow past a few device pixels (`cloud-fade`). In the space view it is the share at the nearest ground (the point the map tiles' level is chosen for); the far ground and the horizon keep more, as each fragment is faded by its own distance. */
     cloudFade: number;
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
     paths: PathStats;

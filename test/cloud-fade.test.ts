@@ -27,10 +27,11 @@ test("they go from whole at a quarter of the width to gone at the width, and onl
   }
 });
 
-test("it is the ground a pixel that decides: gone where the finest day tiles take over, still whole where a pixel is 5 km", () => {
+test("it is the ground a pixel that decides: whole at 5 km and 2.4 km a pixel, on its way at 1.2 km, gone at 0.6 km", () => {
   assert.equal(cloudFade(radiusFor(5), CLOUD_FADE_DEFAULT), 1, "5 km a pixel");
-  assert.ok(cloudFade(radiusFor(3), CLOUD_FADE_DEFAULT) < 1 && cloudFade(radiusFor(3), CLOUD_FADE_DEFAULT) > 0, "3 km a pixel: on its way");
-  assert.ok(cloudFade(radiusFor(1.22), CLOUD_FADE_DEFAULT) < 0.01, "1.2 km a pixel: level 5 ground");
+  assert.equal(cloudFade(radiusFor(2.45), CLOUD_FADE_DEFAULT), 1, "2.4 km a pixel: a texel is 8 pixels");
+  assert.ok(cloudFade(radiusFor(1.22), CLOUD_FADE_DEFAULT) < 1 && cloudFade(radiusFor(1.22), CLOUD_FADE_DEFAULT) > 0, "1.2 km a pixel (level 5 ground): on its way");
+  assert.ok(cloudFade(radiusFor(0.6), CLOUD_FADE_DEFAULT) < 0.01, "0.6 km a pixel");
   // a ride 486 km up with a 35 degree view 900 CSS pixels tall on a 2x screen: about 0.17 km a pixel at the nearest ground
   const focal = 900 / 2 / Math.tan((35 / 2) * (Math.PI / 180));
   const radiusPx = (focal / (486 / KM)) * 2;
@@ -38,12 +39,12 @@ test("it is the ground a pixel that decides: gone where the finest day tiles tak
   assert.equal(cloudFade(radiusPx, CLOUD_FADE_DEFAULT), 0);
 });
 
-test("it reads the same radius the tiles do: the clouds are gone before the tiles' finest day level is wanted", () => {
+test("it reads the same radius the tiles do: whole where the tiles first start, on its way where their finest day level is wanted", () => {
   const day = { tileSize: 512, levels: [{ level: 3, width: 8192 }, { level: 4, width: 16384 }, { level: 5, width: 32768 }] };
   // the radius at which the tiles want level 5: texels 32768 wide at a texel about a pixel (1.25 slack)
   const radius = (32768 * TEXEL_SLACK) / (2 * Math.PI);
   assert.equal(tileLevel(radius, day, 4096), 5);
-  assert.equal(cloudFade(radius, CLOUD_FADE_DEFAULT), 0);
+  assert.ok(cloudFade(radius, CLOUD_FADE_DEFAULT) > 0 && cloudFade(radius, CLOUD_FADE_DEFAULT) < 1);
   // and where the tiles first start (a texel 4096 across is a pixel), the clouds are still whole
   assert.equal(cloudFade((4096 * TEXEL_SLACK) / (2 * Math.PI), CLOUD_FADE_DEFAULT), 1);
 });
