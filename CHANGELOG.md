@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **From one satellite to another a ride glides round the Earth** (MODULES-1735). A `ride` call that goes from one satellite to another moved the camera in a straight line, which for a satellite behind the Earth ran through the Earth (held 1 km over the ground since 0.63.0), so a page had to climb, cross and come down in steps of its own. The camera now glides along the great circle round the Earth's centre, its height going evenly from the one ride's to the other's and never under 100 km above the ground (`GLIDE_FLOOR_KM`). The look is carried along the circle and goes over from the first look to the second, so a facing (ahead, down and the rest) stays level, nothing rolls over against the local vertical, and the view turns once towards its end. The glide back is the same flight the other way.
+  - **One glide for near and far.** For a satellite in sight the circle is all but the straight line (about 10 m off half way along a 25 km hop), so the great circle is the glide between any two satellites; every other change of ride (to or from a body, the same satellite in another view, a facing, the viewpoint) is the straight glide as before.
+  - **Its length.** `glide` sets it as for any glide; with `{ minMs, maxMs }` it follows the way along the circle (`satelliteGlideKm`).
+  - **Pure parts** in `/space`: `satelliteGlide(from, to, ease, floorKm?)`, `satelliteGlideKm(from, to)`, `GLIDE_FLOOR_KM` and the types `GlidePose` and `Quat`, with unit tests (`test/ride-glide.test.ts`: behind the Earth, in sight and across the far side, facing ahead and down; the floor; the same way back; a short hop against the straight line).
+  - **Tests.** `e2e/ride-glide.gl.ts` reads every frame of a glide on a stepped clock, from the ISS to a station in sight and to one behind the Earth, outside and inside, facing ahead and down: the distance to the end only falls, the camera keeps 100 km over the ground and never rises over both ends, the view only turns towards its end, neither its up nor its line of sight rolls over against the vertical, it arrives facing the way it faced, and the glide back is the same way. It fails on 0.63.0. The ride guide in English and Japanese, `docs/ride-along.md` and the README.
+
 ## 0.63.0 - 2026-11-19
 
 - **The view above a satellite has no facings, and a ride's camera never goes under the ground** (MODULES-1685).
