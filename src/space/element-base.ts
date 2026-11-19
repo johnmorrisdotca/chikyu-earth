@@ -185,7 +185,7 @@ export interface RideOptions {
   up?: RideUp;
   /** How far back the camera is kept from the satellite in an outside ride, in kilometres (`view: "from"`; the element's `ride-outside-km` when not given, else 25). It is never more than half the satellite's height. */
   outsideKm?: number;
-  /** How long the glide to this ride lasts: a number of milliseconds (1200 by default), or `{ minMs, maxMs }` for a length that follows how far the camera has to move (`rideGlideMs`: 800 to 4000 ms by default, about 1.2 s for a 25 km hop and 3 s for 3,000 km). */
+  /** How long the glide to this ride lasts: a number of milliseconds (1200 by default), or `{ minMs, maxMs }` for a length that follows how far the camera has to move (`rideGlideMs`: 800 to 4000 ms by default, about 1.2 s for a 25 km hop and 3 s for 3,000 km; from one satellite to another, the way along the great circle, `satelliteGlideKm`). */
   glide?: number | { minMs?: number; maxMs?: number };
   distanceKm?: number;
   smooth?: boolean;
@@ -1929,7 +1929,7 @@ export class ChikyuSpace extends HTMLElement {
   /**
    * Ride along with a body or a satellite. By default the camera sits at it and looks at the Earth, with the way it is going at the top of the picture, at its real place for the moment shown, so the
    * Earth turns and slides beneath as it moves along its orbit (an ISS view goes round about every 90 minutes). A drag looks about from there (a drag right turns the camera to its left and a drag up tips it towards the bottom of its picture, so the ground follows the pointer), the shared controls' zoom narrows the view.
-   * A satellite is `{ group, index }` of a group set with `setSatellites`; it is placed exactly, one SGP4 call a frame, at any speed. Another call switches smoothly; `null` stops. The draw rate follows how
+   * A satellite is `{ group, index }` of a group set with `setSatellites`; it is placed exactly, one SGP4 call a frame, at any speed. Another call switches smoothly; `null` stops. From one satellite to another the glide goes round the Earth along the great circle, never through it and at least 100 km above the ground, with the look carried along so a facing stays level (`satelliteGlide`); the glide back is the same flight the other way. The draw rate follows how
    * fast the picture moves, never more than 30 a second (one a second for a reader who asked for reduced motion), and nothing is drawn out of sight.
    * Whatever the view, facing, drag or glide, the camera is never under the ground: one that would be lower than 1 km above it is held there. A camera that looks at a satellite comes in towards it along its line of sight, so the satellite stays where it is in the picture; any other moves out along its line from the Earth's centre.
    *
@@ -1940,6 +1940,9 @@ export class ChikyuSpace extends HTMLElement {
     const model = this.#model;
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const wasRiding = model.ride !== null;
+    const was = model.ride?.target;
+    // from one satellite to another the glide goes round the Earth along the great circle (`satelliteGlide`), never through it; any other change of ride glides in a straight line
+    const round = !!was && typeof was !== "string" && !!target && typeof target !== "string" && (was.group !== target.group || was.index !== target.index);
     model.rideFrame.share = clampFrame(options.modelShare, 0.02, 1.2) ?? this.rideModelShare;
     model.rideFrame.seat = clampFrame(options.modelSeat, 0.5, 1.4) ?? this.rideModelSeat;
     model.rideFrame.ms = reduced ? 0 : 400;
@@ -1973,7 +1976,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#lostTold = false;
     const pose = model.pose;
     const glide = readGlide(options.glide);
-    model.transition = (options.smooth ?? true) && !reduced && pose.valid ? { start: performance.now(), duration: glide.duration, ...(glide.scaled ? { scaled: glide.scaled } : {}), from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
+    model.transition = (options.smooth ?? true) && !reduced && pose.valid ? { start: performance.now(), duration: glide.duration, ...(glide.scaled ? { scaled: glide.scaled } : {}), ...(round ? { round } : {}), from: { p: [pose.p[0], pose.p[1], pose.p[2]], q: [pose.q[0], pose.q[1], pose.q[2], pose.q[3]], fov: pose.fov } } : null;
     this.#last = performance.now();
     this.#schedule();
     this.#gate?.request();

@@ -15,6 +15,7 @@ import { createTrack, orbitPath, PLANETS, type Frame, type PlanetName, type Vec3
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
 import type { SatelliteRef } from "../satellites/types.ts";
 import { faceOffset, outsidePose, rideGlideMs, ridePose, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
+import { satelliteGlide, satelliteGlideKm } from "./ride-glide.ts";
 import { stripLights, type ModelSun } from "./model-lights.ts";
 import { cloudFade, CLOUD_FADE_DEFAULT, CLOUD_WIDTH } from "../realistic/cloud-fade.ts";
 import { newLightFade, stepLightFade, type LightFade } from "../realistic/light-fade.ts";
@@ -286,8 +287,11 @@ export interface SpaceModel {
   ride: RideState | null;
   /** Set at each draw: the target of the ride could not be placed (a satellite whose elements are too old, or that is gone), so the ordinary camera was used. */
   rideLost: boolean;
-  /** A camera move in progress from where the last draw left it: when it began (ms of the page's clock), how long it takes. */
-  transition: { start: number; duration: number; scaled?: { minMs: number; maxMs: number }; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
+  /**
+   * A camera move in progress from where the last draw left it: when it began (ms of the page's clock), how long it takes. `round`: a ride that went from one satellite to another, which glides along the great circle
+   * round the Earth's centre (`satelliteGlide`); every other move is a straight line.
+   */
+  transition: { start: number; duration: number; scaled?: { minMs: number; maxMs: number }; round?: boolean; from: { p: Vec3; q: [number, number, number, number]; fov: number } } | null;
   /** The shared controls' view as the last draw used it, and how tall the view was (CSS pixels): `setView` skips a draw for a turn that moves nothing by half a pixel. */
   drawnView: { yaw: number; tilt: number; zoom: number } | null;
   /** The point of the ground the view would look at with yaw and tilt 0, as of the last draw (the middle of the view is this less the yaw and tilt), or null while the camera rides or looks at another body. */
@@ -1175,16 +1179,23 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
           if (glide) {
             // a glide that follows the distance takes its length from how far the camera has to go, at its first frame
             if (glide.scaled) {
-              const km = Math.hypot(camera.position.x - glide.from.p[0], camera.position.y - glide.from.p[1], camera.position.z - glide.from.p[2]) * 6371;
+              const km = glide.round ? satelliteGlideKm(glide.from.p, [camera.position.x, camera.position.y, camera.position.z]) : Math.hypot(camera.position.x - glide.from.p[0], camera.position.y - glide.from.p[1], camera.position.z - glide.from.p[2]) * 6371;
               glide.duration = rideGlideMs(km, glide.scaled.minMs, glide.scaled.maxMs);
               delete glide.scaled;
             }
             const k = Math.min(1, (performance.now() - glide.start) / glide.duration);
             const ease = k * k * (3 - 2 * k);
-            desiredQ.copy(camera.quaternion);
-            camera.position.set(glide.from.p[0] + (camera.position.x - glide.from.p[0]) * ease, glide.from.p[1] + (camera.position.y - glide.from.p[1]) * ease, glide.from.p[2] + (camera.position.z - glide.from.p[2]) * ease);
-            fromQ.set(glide.from.q[0], glide.from.q[1], glide.from.q[2], glide.from.q[3]);
-            camera.quaternion.copy(fromQ.slerp(desiredQ, ease));
+            if (glide.round) {
+              // from one satellite to another: round the Earth along the great circle, the look carried with it, so it never goes through the Earth and a facing stays level
+              const at = satelliteGlide(glide.from, { p: [camera.position.x, camera.position.y, camera.position.z], q: [camera.quaternion.x, camera.quaternion.y, camera.quaternion.z, camera.quaternion.w] }, ease);
+              camera.position.set(at.p[0], at.p[1], at.p[2]);
+              camera.quaternion.set(at.q[0], at.q[1], at.q[2], at.q[3]);
+            } else {
+              desiredQ.copy(camera.quaternion);
+              camera.position.set(glide.from.p[0] + (camera.position.x - glide.from.p[0]) * ease, glide.from.p[1] + (camera.position.y - glide.from.p[1]) * ease, glide.from.p[2] + (camera.position.z - glide.from.p[2]) * ease);
+              fromQ.set(glide.from.q[0], glide.from.q[1], glide.from.q[2], glide.from.q[3]);
+              camera.quaternion.copy(fromQ.slerp(desiredQ, ease));
+            }
             fovNow = glide.from.fov + (fovNow - glide.from.fov) * ease;
             if (k >= 1) model.transition = null;
           }
