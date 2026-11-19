@@ -67,9 +67,7 @@ kazoku-view-controls, kazoku-speed-buttons, #replay { --kazoku-ink: var(--ink); 
 @media (min-width: 641px) {
   [data-wide="on"] .kazoku-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   [data-wide="on"] .kazoku-stage > .kazoku-view, [data-wide="on"] .kazoku-stage > kazoku-view-controls, [data-wide="on"] .kazoku-stage > .kazoku-side { grid-column: 1; grid-row: auto; }
-  /* the whole width: wide.css's 16:9 with a greatest height would otherwise narrow the view to 16:9 of that height, and leave it at the left */
-  [data-wide="on"] .kazoku-stage > .kazoku-view { width: 100%; }
-  /* the globe takes the largest square the felt holds: its content box, never taller than the view's own 16:9 */
+  /* the globe takes the largest square the felt holds: its content box, never taller than the view */
   [data-wide="on"] .earth-stage { container-type: size; }
   [data-wide="on"] .globe-view { width: min(100cqw, 100cqh); }
   [data-wide="on"] .earth-stage[data-look="realistic"] .globe-view, [data-wide="on"] .earth-stage[data-look="space"] .globe-view { width: 100%; height: 100%; }

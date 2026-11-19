@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The demo no longer sets the Wide view's width itself** (MODULES-1503). kazoku-ui 0.49.0 keeps that view at the full width of the page, so the demo's own `width: 100%` on it is gone. The dependency is `^0.49.0`. The spec follows that package's Japanese word for the ordinary layout.
+
 ## 0.63.0 - 2026-11-19
 
 - **The view above a satellite has no facings, and a ride's camera never goes under the ground** (MODULES-1685).
