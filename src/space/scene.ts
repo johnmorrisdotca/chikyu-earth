@@ -47,7 +47,7 @@ type Three = ThreeParts;
 const MAX_MARKED = 80;
 const RAD = Math.PI / 180;
 const FOV = 35;
-/** The nearest a camera comes to the Earth's centre, in Earth radii: 1 km above the ground. A ride (or a glide into or out of one) that would put the camera lower, or under the ground, puts it here instead, on the same line from the centre. */
+/** The nearest a camera comes to the Earth's centre, in Earth radii: 1 km above the ground. A ride (or a glide into or out of one) that would put the camera lower, or under the ground, puts it here instead (`clearGround`). */
 const GROUND_CLEAR = 1 + 1 / 6371;
 /** How big a satellite seen from outside by a ride from itself is drawn: its radius is this share of the height of the view (a model about a fifth of the height across; the satellite is a few metres, so this is not to scale). */
 /** A number easing from one value to another (the model's share, its seat, how much of it is there): `cur` is where it is. */
@@ -565,6 +565,30 @@ const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
 };
+
+/**
+ * Keep a camera at least `GROUND_CLEAR` from the Earth's centre. One looking at a point above the ground (`at`) is brought towards it along its line of sight, to where that line comes out of the ground, so the point stays where it is in the
+ * picture; any other is moved out along its line from the centre. Changes `camera` in place, and brings the near plane in to half its height when it moves it.
+ */
+function clearGround(camera: THREE.PerspectiveCamera, at: Vec3 | null): void {
+  const p = camera.position;
+  const from = p.length();
+  if (from >= GROUND_CLEAR) return;
+  const atFrom = at ? Math.hypot(at[0], at[1], at[2]) : 0;
+  if (at && atFrom > GROUND_CLEAR) {
+    // the first point from `at` towards the camera where the line is GROUND_CLEAR from the centre
+    const d: Vec3 = [p.x - at[0], p.y - at[1], p.z - at[2]];
+    const a = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    const b = 2 * (at[0] * d[0] + at[1] * d[1] + at[2] * d[2]);
+    const c = atFrom * atFrom - GROUND_CLEAR * GROUND_CLEAR;
+    const t = (-b - Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a);
+    p.set(at[0] + d[0] * t, at[1] + d[1] * t, at[2] + d[2] * t);
+  } else {
+    if (from < 1e-9) p.set(0, 0, 1);
+    p.multiplyScalar(GROUND_CLEAR / p.length());
+  }
+  camera.near = Math.min(camera.near, (GROUND_CLEAR - 1) * 0.5);
+}
 
 /** A square facing +z, 2 x 2, with uvs 0 to 1. */
 function quad(three: Three): THREE.BufferGeometry {
@@ -1123,11 +1147,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               const top = Math.abs(Math.sin(base.tilt)) > 0.5 ? unit([sky[0] - skyward * up.offset[0], sky[1] - skyward * up.offset[1], sky[2] - skyward * up.offset[2]]) : up.up;
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + up.offset[0] * distance, target.y + up.offset[1] * distance, target.z + up.offset[2] * distance);
-              const from = camera.position.length();
-              if (from < GROUND_CLEAR) camera.position.multiplyScalar(GROUND_CLEAR / Math.max(1e-9, from));
+              camera.near = Math.max(1e-4, distance * 0.02);
+              clearGround(camera, focusPos);
               camera.up.set(top[0], top[1], top[2]);
               camera.lookAt(target);
-              camera.near = from < GROUND_CLEAR ? (GROUND_CLEAR - 1) * 0.5 : Math.max(1e-4, distance * 0.02);
               camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
             } else {
               if (way === 1 && focus === "Earth") model.lookBase = { lon: model.centre.lon + spin - frame.spin, lat: baseLat };
@@ -1135,9 +1158,10 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + aim[0] * distance, target.y + aim[1] * distance, target.z + aim[2] * distance);
               camera.up.set(0, 1, 0);
-              camera.lookAt(target);
               // within about 130 km of the ground (a fly-to's descent) the near plane comes in to half the height, or it would cut the ground away
               camera.near = Math.min(Math.max(0.0005, distance * 0.02 - focusRadius * 0.5, focusRadius * 0.01), Math.max(1e-6, (distance - focusRadius) * 0.5));
+              clearGround(camera, focusPos);
+              camera.lookAt(target);
               camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
             }
             if (ride && (ride.view === "follow" || ride.view === "above") && typeof ride.target !== "string") {
@@ -1164,15 +1188,8 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             fovNow = glide.from.fov + (fovNow - glide.from.fov) * ease;
             if (k >= 1) model.transition = null;
           }
-          // never under the ground: a ride from a satellite that has come down, a camera following one from the far side of the Earth, or a glide whose straight line runs through the Earth is held 1 km above it, on its line from the centre
-          {
-            const from = camera.position.length();
-            if (from < GROUND_CLEAR) {
-              if (from < 1e-9) camera.position.set(0, 0, 1);
-              camera.position.multiplyScalar(GROUND_CLEAR / Math.max(1e-9, camera.position.length()));
-              camera.near = Math.min(camera.near, (GROUND_CLEAR - 1) * 0.5);
-            }
-          }
+          // never under the ground: a ride from a satellite that has come down, or a glide whose straight line runs through the Earth, is held 1 km above it, on its line from the centre
+          clearGround(camera, null);
           camera.fov = fovNow;
           camera.aspect = size.width / Math.max(1, size.height);
           // the ground the picture spans straight below a ridden satellite, in kilometres: the height above the ground over the vertical field of view (flat-ground, to compare with a tile level's size)

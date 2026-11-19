@@ -108,6 +108,16 @@ for (const mode of MODES) {
       await settle(page, 300);
       const opened = await at(page, 1);
       expect(away(opened), `${mode.name}, opened facing ${face ?? "nothing"}: ${((away(opened) - 1) * 6371).toFixed(0)} km up`).toBeGreaterThanOrEqual(GROUND - 1e-9);
+      // following it or above it, a camera kept out of the ground still has the satellite in the middle of the picture
+      if (mode.ride.view !== "from") {
+        const off = await page.locator(SPACE).evaluate((el) => {
+          const own = el.getBoundingClientRect();
+          const api = el as unknown as { placeSatellite(ref: { group: string; index: number }): { x: number; y: number } | null };
+          const place = api.placeSatellite({ group: "stations", index: 0 });
+          return place ? Math.hypot(place.x - own.width / 2, place.y - own.height / 2) : Infinity;
+        });
+        expect(off, `${mode.name}, opened facing ${face ?? "nothing"}: the satellite is in the middle`).toBeLessThan(3);
+      }
       if (!face) continue;
       await rideIss(page, mode.ride);
       await page.locator(SPACE).evaluate((el, face) => (el as unknown as { face(face: string): boolean }).face(face), face);

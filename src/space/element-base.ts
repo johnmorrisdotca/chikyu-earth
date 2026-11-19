@@ -1931,7 +1931,7 @@ export class ChikyuSpace extends HTMLElement {
    * Earth turns and slides beneath as it moves along its orbit (an ISS view goes round about every 90 minutes). A drag looks about from there (a drag right turns the camera to its left and a drag up tips it towards the bottom of its picture, so the ground follows the pointer), the shared controls' zoom narrows the view.
    * A satellite is `{ group, index }` of a group set with `setSatellites`; it is placed exactly, one SGP4 call a frame, at any speed. Another call switches smoothly; `null` stops. The draw rate follows how
    * fast the picture moves, never more than 30 a second (one a second for a reader who asked for reduced motion), and nothing is drawn out of sight.
-   * Whatever the view, facing, drag or glide, the camera is never under the ground: one that would be lower than 1 km above it is held there, on its line from the Earth's centre.
+   * Whatever the view, facing, drag or glide, the camera is never under the ground: one that would be lower than 1 km above it is held there. A camera that looks at a satellite comes in towards it along its line of sight, so the satellite stays where it is in the picture; any other moves out along its line from the Earth's centre.
    *
    * @param target - A body name (`"Moon"`, `"Mars"`, ...) or a satellite `{ group, index }`, or `null` to stop.
    * @param options - `view`, `look`, `distanceKm`, `smooth` (see `RideOptions`).
