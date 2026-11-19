@@ -77,6 +77,16 @@ function turnBy([qx, qy, qz, qw]: Q, [x, y, z]: readonly number[]): V {
   const ix = qw * x! + qy * z! - qz * y!, iy = qw * y! + qz * x! - qx * z!, iz = qw * z! + qx * y! - qy * x!, iw = -qx * x! - qy * y! - qz * z!;
   return [ix * qw + iw * -qx + iy * -qz - iz * -qy, iy * qw + iw * -qy + iz * -qx - ix * -qz, iz * qw + iw * -qz + ix * -qy - iy * -qx];
 }
+/** The way from look `a` to look `b`, a share `t` along it. */
+function slerp(a: Q, b: Q, t: number): Q {
+  let c = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  const s = c < 0 ? -1 : 1;
+  c *= s;
+  const half = Math.acos(Math.min(1, c)), sin = Math.sin(half);
+  const ka = sin < 1e-9 ? 1 - t : Math.sin((1 - t) * half) / sin, kb = (sin < 1e-9 ? t : Math.sin(t * half) / sin) * s;
+  const q: Q = [a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb, a[3] * ka + b[3] * kb], n = Math.hypot(...q);
+  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+}
 const angleDeg = (a: Q, b: Q): number => (2 * Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3])))) * 180 / Math.PI;
 
 /** What is wrong with a glide, if anything. */
@@ -106,8 +116,8 @@ function judge(seen: Camera[]): string[] {
 }
 
 /**
- * The glide back goes the same way: every place of it is on the glide there, with the look the glide there had at that place. Off by no more than a thousandth of the way (5 km at the least): the frames are
- * points on the circle read as straight pieces between them, and an outside ride's framing settles in its first 0.4 s, at the other end each way.
+ * The glide back goes the same way: every place of it is on the glide there, with the look the glide there had at that place (between the two frames either side of it). Off by no more than a thousandth of the
+ * way (5 km at the least) and 1.5 degrees: the frames are points on the circle read as straight pieces between them, and an outside ride's framing settles in its first 0.4 s, at the other end each way.
  */
 function sameWayBack(there: Camera[], back: Camera[]): string[] {
   const wrong: string[] = [];
@@ -120,10 +130,10 @@ function sameWayBack(there: Camera[], back: Camera[]): string[] {
       const a = there[j - 1]!.position, b = there[j]!.position, d = sub(b, a), l = dot(d, d);
       const t = l > 0 ? Math.max(0, Math.min(1, dot(sub(c.position, a), d) / l)) : 0;
       const km = len(sub(c.position, [a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t])) * EARTH_KM;
-      if (km < best) { best = km; look = Math.min(angleDeg(c.quaternion, there[j - 1]!.quaternion), angleDeg(c.quaternion, there[j]!.quaternion)); }
+      if (km < best) { best = km; look = angleDeg(c.quaternion, slerp(there[j - 1]!.quaternion, there[j]!.quaternion, t)); } // the look there at that point, between the two frames either side of it
     }
     if (best > off) { wrong.push(`frame ${i} of the glide back is ${best.toFixed(0)} km off the glide there (${off.toFixed(0)} km allowed)`); break; }
-    if (look > 3) { wrong.push(`frame ${i} of the glide back looks ${look.toFixed(1)} degrees from the glide there at that place`); break; }
+    if (look > 1.5) { wrong.push(`frame ${i} of the glide back looks ${look.toFixed(1)} degrees from the glide there at that place`); break; }
   }
   return wrong;
 }
