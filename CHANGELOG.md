@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.63.0 - 2026-11-19
+
 - **The view above a satellite has no facings, and a ride's camera never goes under the ground** (MODULES-1685).
   - **Above.** `face()` in a ride with `view: "above"` returns `false` and leaves the camera as it was, and a `face` in `ride`'s options is left out there (`riding.face` is `null`). A facing there used to put the camera beside the satellite looking along the ground with the top of the picture (`aboveAxes`) along the line of sight, so three.js's `lookAt` had no way to turn the camera and took one from rounding, a different one each draw: the picture turned by up to 176 degrees between two reads and never settled. `up` put the camera under the satellite, inside the Earth (2,575 km under the ground for the ISS at the default 3,000 km).
   - **Following a satellite** (`view: "follow"`) keeps its facings, and they now settle: along the ground (ahead, behind, left, right) the top of the picture is the sky, square to the line of sight.
