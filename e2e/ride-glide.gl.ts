@@ -2,7 +2,7 @@
 // towards its end look with nothing rolling over against the local vertical, and arrives facing the way it faced. To a satellite in sight it is all but the straight glide; to one behind the Earth it goes over
 // the Earth's edge. The glide back is the same flight the other way. The page's clock is the test's own and is stepped by hand, so every frame of the glide is drawn and read; the satellites' clock is held (speed 0).
 import { expect, test, type Page } from "@playwright/test";
-import { freezeClock, ownClock, settle } from "./gl.ts";
+import { drainGpu, freezeClock, ownClock, settle } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
 test.beforeEach(({ page }) => routeElements(page));
@@ -66,6 +66,8 @@ async function glideTo(page: Page, ref: Ref, options: Record<string, unknown>): 
     seen.push(now.camera);
     if (!now.gliding && ms > GLIDE_MS) break;
   }
+  // the stepped clock fired the glide's frames faster than software drawing keeps up with: wait for the GPU here, with the clock still held, or the next ride's draw waits behind them (over 30 s in CI)
+  await drainGpu(page);
   await page.clock.resume();
   return seen;
 }
