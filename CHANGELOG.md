@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **The view above a satellite has no facings, and a ride's camera never goes under the ground** (MODULES-1685).
+  - **Above.** `face()` in a ride with `view: "above"` returns `false` and leaves the camera as it was, and a `face` in `ride`'s options is left out there (`riding.face` is `null`). A facing there used to put the camera beside the satellite looking along the ground with the top of the picture (`aboveAxes`) along the line of sight, so three.js's `lookAt` had no way to turn the camera and took one from rounding, a different one each draw: the picture turned by up to 176 degrees between two reads and never settled. `up` put the camera under the satellite, inside the Earth (2,575 km under the ground for the ISS at the default 3,000 km).
+  - **Following a satellite** (`view: "follow"`) keeps its facings, and they now settle: along the ground (ahead, behind, left, right) the top of the picture is the sky, square to the line of sight.
+  - **Never under the ground.** In every view, facing, drag and glide the camera is held at least 1 km above the ground, on its line from the Earth's centre, and the near plane comes in when it is: a satellite that has come down, a camera following one from the far side of the Earth (it was 90 km under the ground in the test), a facing that would put it under the satellite, the straight line of a glide.
+  - **Tests.** `e2e/ride-steady.gl.ts`: above, each facing is refused and the camera holds its look; for every view and facing the camera stays above the ground; from the satellite and following it, every facing turns the camera and it holds still to under half a degree a second. They fail on 0.62.0. The ride guide in English and Japanese, `docs/ride-along.md` and the README.
+
 ## 0.62.0 - 2026-11-19
 
 - **A fly-to on the space view, and moves that bend instead of stopping** (MODULES-1582).

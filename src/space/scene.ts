@@ -47,6 +47,8 @@ type Three = ThreeParts;
 const MAX_MARKED = 80;
 const RAD = Math.PI / 180;
 const FOV = 35;
+/** The nearest a camera comes to the Earth's centre, in Earth radii: 1 km above the ground. A ride (or a glide into or out of one) that would put the camera lower, or under the ground, puts it here instead, on the same line from the centre. */
+const GROUND_CLEAR = 1 + 1 / 6371;
 /** How big a satellite seen from outside by a ride from itself is drawn: its radius is this share of the height of the view (a model about a fifth of the height across; the satellite is a few metres, so this is not to scale). */
 /** A number easing from one value to another (the model's share, its seat, how much of it is there): `cur` is where it is. */
 export interface FrameEase {
@@ -1114,11 +1116,18 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
               // north up (the view above a satellite only): the picture is turned so north is at the top, less near a pole; a drag turns it from there
               const north = ride.view === "above" && ride.up === "north" ? northUpYaw(followed.place, followed.velocity) : null;
               const up = aboveAxes(followed.place, followed.velocity, base.yaw + (north ? north.yaw * north.weight : 0) + model.view.yaw * RAD, base.tilt + Math.max(-80, Math.min(80, model.view.tilt)) * RAD);
+              // a facing along the ground (ahead, behind, left, right) looks along the top `aboveAxes` gives, so that top would be the line of sight itself and the camera's turn would come from rounding, a different one each draw:
+              // the top of the picture is the sky there (straight away from the Earth, square to the line of sight)
+              const sky = unit(followed.place);
+              const skyward = sky[0] * up.offset[0] + sky[1] * up.offset[1] + sky[2] * up.offset[2];
+              const top = Math.abs(Math.sin(base.tilt)) > 0.5 ? unit([sky[0] - skyward * up.offset[0], sky[1] - skyward * up.offset[1], sky[2] - skyward * up.offset[2]]) : up.up;
               target.set(focusPos[0], focusPos[1], focusPos[2]);
               camera.position.set(target.x + up.offset[0] * distance, target.y + up.offset[1] * distance, target.z + up.offset[2] * distance);
-              camera.up.set(up.up[0], up.up[1], up.up[2]);
+              const from = camera.position.length();
+              if (from < GROUND_CLEAR) camera.position.multiplyScalar(GROUND_CLEAR / Math.max(1e-9, from));
+              camera.up.set(top[0], top[1], top[2]);
               camera.lookAt(target);
-              camera.near = Math.max(1e-4, distance * 0.02);
+              camera.near = from < GROUND_CLEAR ? (GROUND_CLEAR - 1) * 0.5 : Math.max(1e-4, distance * 0.02);
               camera.far = Math.max(2000, distance * 4 + (mode === "true" ? 40 * 23_481 : 400));
             } else {
               if (way === 1 && focus === "Earth") model.lookBase = { lon: model.centre.lon + spin - frame.spin, lat: baseLat };
@@ -1154,6 +1163,15 @@ export function createSpaceItem(model: SpaceModel, deps: SpaceDeps): Item3D<Thre
             camera.quaternion.copy(fromQ.slerp(desiredQ, ease));
             fovNow = glide.from.fov + (fovNow - glide.from.fov) * ease;
             if (k >= 1) model.transition = null;
+          }
+          // never under the ground: a ride from a satellite that has come down, a camera following one from the far side of the Earth, or a glide whose straight line runs through the Earth is held 1 km above it, on its line from the centre
+          {
+            const from = camera.position.length();
+            if (from < GROUND_CLEAR) {
+              if (from < 1e-9) camera.position.set(0, 0, 1);
+              camera.position.multiplyScalar(GROUND_CLEAR / Math.max(1e-9, camera.position.length()));
+              camera.near = Math.min(camera.near, (GROUND_CLEAR - 1) * 0.5);
+            }
           }
           camera.fov = fovNow;
           camera.aspect = size.width / Math.max(1, size.height);

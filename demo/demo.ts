@@ -605,6 +605,8 @@ if (flat && controls && stage) {
       const on = b.dataset["rideFace"] === facing;
       b.classList.toggle("on", on);
       b.setAttribute("aria-pressed", String(on));
+      // the view above a satellite looks down on it: it has no ways to face
+      b.disabled = rideView === "above";
     }
   };
   const setRideZoom = (keepTurn = false): void => {

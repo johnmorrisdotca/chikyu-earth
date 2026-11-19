@@ -41,7 +41,8 @@ test("each facing is within a degree, the button shows pressed, and the address 
   await expect(face.getByRole("button", { name: "Ahead", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect.poll(() => new URL(page.url()).searchParams.get("face")).toBeNull();
 
-  for (const view of ["from", "follow", "above"] as const) {
+  // above the satellite there is no way to face (MODULES-1685: ride-steady.gl.ts)
+  for (const view of ["from", "follow"] as const) {
     await rideIss(page, view);
     const before = await page.locator(SPACE).evaluate((el) => {
       const space = el as unknown as { face(face: string): boolean; stats: { draws: number } };

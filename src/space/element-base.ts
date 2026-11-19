@@ -169,7 +169,7 @@ export type SpacePreset = "earth" | "moon" | "sun" | "inner" | "solar-system" | 
 export interface RideOptions {
   view?: "from" | "follow" | "above";
   look?: RideLook;
-  /** Face this way as the ride opens (`face`). */
+  /** Face this way as the ride opens (`face`). Left out of a ride above a satellite and of a body followed, which have no ways to face. */
   face?: RideFace;
   /** The radius of the ridden satellite's model as a share of the picture's height (0.02 to 1.2), for this ride: the element's `ride-model-share` when not given. Along the way it goes the default is 0.22, above the satellite 0.17 (its size at the lowest height). */
   modelShare?: number;
@@ -1931,6 +1931,7 @@ export class ChikyuSpace extends HTMLElement {
    * Earth turns and slides beneath as it moves along its orbit (an ISS view goes round about every 90 minutes). A drag looks about from there (a drag right turns the camera to its left and a drag up tips it towards the bottom of its picture, so the ground follows the pointer), the shared controls' zoom narrows the view.
    * A satellite is `{ group, index }` of a group set with `setSatellites`; it is placed exactly, one SGP4 call a frame, at any speed. Another call switches smoothly; `null` stops. The draw rate follows how
    * fast the picture moves, never more than 30 a second (one a second for a reader who asked for reduced motion), and nothing is drawn out of sight.
+   * Whatever the view, facing, drag or glide, the camera is never under the ground: one that would be lower than 1 km above it is held there, on its line from the Earth's centre.
    *
    * @param target - A body name (`"Moon"`, `"Mars"`, ...) or a satellite `{ group, index }`, or `null` to stop.
    * @param options - `view`, `look`, `distanceKm`, `smooth` (see `RideOptions`).
@@ -1956,8 +1957,8 @@ export class ChikyuSpace extends HTMLElement {
       const asked = options.view ?? "from";
       // above a body is meant for a satellite: a body is followed
       const view = typeof target === "string" && (target === "Earth" || asked === "above") ? "follow" : asked;
-      // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns: it has no ways to face
-      const faceable = !(view === "follow" && typeof target === "string");
+      // a body followed (a planet, the Moon, the Earth) is looked at from round it as the view turns, and the view above a satellite looks down on it: neither has ways to face
+      const faceable = !(view === "follow" && typeof target === "string") && view !== "above";
       const face = faceable && options.face && RIDE_FACES.includes(options.face) ? options.face : null;
       model.ride = { target: typeof target === "string" ? target : { group: target.group, index: target.index }, view, look: face && view === "from" ? "horizon" : (options.look ?? "down"), face, distanceKm: Math.max(100, options.distanceKm ?? 3000), viewpoint: options.viewpoint === "inside" || options.viewpoint === "outside" ? options.viewpoint : this.rideViewpoint, outsideKm: readOutsideKm(options.outsideKm) ?? this.rideOutsideKm ?? OUTSIDE_KM, modelSize: options.modelSize === "fixed" || options.modelSize === "distance" ? options.modelSize : this.rideModelSize, drag: options.drag === "head" || options.drag === "orbit" ? options.drag : this.rideDrag, up: options.up === "north" || options.up === "travel" ? options.up : this.rideUp };
       if (face) {
@@ -1982,11 +1983,11 @@ export class ChikyuSpace extends HTMLElement {
 
   /**
    * Face one way while riding: `ahead` along the way it goes, `behind`, `left` or `right` (as seen facing ahead), `down` straight at the Earth, `up` straight away from it.
-   * In the `above` view, `down` looks straight down at the satellite and the Earth below it. The camera glides there in half a second (at once for a reader who asked for reduced motion) and keeps the zoom.
+   * The camera glides there in half a second (at once for a reader who asked for reduced motion) and keeps the zoom.
    * The facing stays pressed until the view is turned or tipped. `chikyu-ride-face` is sent with `{ face }` (`null` when it is let go). Keys, while the element is focused: W ahead, S behind, A left, D right, R up, F down. The arrow keys stay with the view controls.
    *
    * @param face - The way to face.
-   * Following a body (a planet, the Moon) there is no way to face: it returns `false`. Held keys do not repeat, and keys typed in a field or in editable text are left to it.
+   * Following a body (a planet, the Moon) there is no way to face, and none in the view above a satellite (`view: "above"`, which looks down on it): it returns `false` and the camera stays as it was. Held keys do not repeat, and keys typed in a field or in editable text are left to it.
    *
    * @returns Whether the camera faces that way now (`true` too when it already did, and nothing moves).
    */
@@ -1994,8 +1995,8 @@ export class ChikyuSpace extends HTMLElement {
     const model = this.#model;
     const ride = model.ride;
     if (!ride || !RIDE_FACES.includes(face)) return false;
-    // following a body there is no way to face: only from a body or a satellite, following a satellite, or above it
-    if (ride.view === "follow" && typeof ride.target === "string") return false;
+    // following a body there is no way to face, nor above a satellite (the view looks down on it): only from a body or a satellite, or following a satellite
+    if ((ride.view === "follow" && typeof ride.target === "string") || ride.view === "above") return false;
     // already facing that way: nothing to turn, and no glide started again
     if (this.facing === face) return true;
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
