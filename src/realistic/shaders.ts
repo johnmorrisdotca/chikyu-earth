@@ -1,5 +1,6 @@
 // The programs of the realistic Earth, as GLSL strings: the surface (day, night, sun glint), the cloud layer and the Moon and the Sun's glow. The air is `air.ts`.
 // Colours are shaded in the textures' own (sRGB) space: a look, not a radiometric model.
+import { CLOUD_FADE_START } from "./cloud-fade.ts";
 
 export const SURFACE_VERT = /* glsl */ `
 varying vec2 vUv;
@@ -136,13 +137,22 @@ uniform sampler2D cloudMap;
 uniform vec3 sunDir;
 uniform float shift;
 uniform float opacity;
+uniform float fadeGone;
+uniform float texelK;
 varying vec2 vUv;
 varying vec3 vNormal;
+varying vec3 vWorld;
 void main() {
   vec3 n = normalize(vNormal);
   float ndl = dot(n, sunDir);
   float c = texture2D(cloudMap, vec2(vUv.x + shift, vUv.y)).r;
   float a = smoothstep(0.28, 0.88, c) * opacity;
+  // a texel of the cloud picture is texelK / distance device pixels wide here; the clouds fade out as it grows (cloud-fade.ts, per fragment: the near ground goes sharp, the far ground and the horizon keep their clouds)
+  if (fadeGone > 0.0 && texelK > 0.0) {
+    float texel = texelK / length(vWorld - cameraPosition);
+    float t = clamp((texel - fadeGone * ${CLOUD_FADE_START}) / (fadeGone * ${1 - CLOUD_FADE_START}), 0.0, 1.0);
+    a *= 1.0 - t * t * (3.0 - 2.0 * t);
+  }
   float day = smoothstep(-0.10, 0.25, ndl);
   vec3 col = mix(vec3(0.015, 0.02, 0.04), vec3(1.0), day * (0.18 + 0.82 * pow(max(ndl, 0.0), 0.45)));
   col += vec3(0.55, 0.28, 0.14) * smoothstep(-0.14, 0.0, ndl) * (1.0 - smoothstep(0.0, 0.25, ndl)) * 0.35;

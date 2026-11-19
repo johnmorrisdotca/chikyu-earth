@@ -55,6 +55,7 @@ export { setSharedRenderer, setThreeLoader };
 export type { CameraMode };
 import type { OverlayHost, OverlayPose } from "../markers/layer.ts";
 import { MAX_TEXTURE, TIERS, type Layer } from "./tiers.ts";
+import { readCloudFade } from "./cloud-fade.ts";
 import type { TileSources, TileStats } from "./tile-set.ts";
 import { mayWriteZoomMax, raisedZoomMax } from "./zoom-reach.ts";
 
@@ -200,7 +201,7 @@ export const readTime = (value: string | null): number | "now" => {
  * ```
  */
 export class ChikyuEarthRealistic extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "smooth-fps", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
+  static observedAttributes = ["cloud-drift", "cloud-fade", "center", "time", "speed", "clouds", "lights", "light", "live-seconds", "smooth-fps", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "data", "camera", "immersive", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "satellite-tint", "satellite-streak-max", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far"];
 
   #model: EarthModel = newModel();
   #paint = createPaintState();
@@ -287,6 +288,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#model.light = readLight(this.getAttribute("light"));
     this.#model.camera = readCamera(this.getAttribute("camera"));
     this.#model.cloudDrift = readDrift(this.getAttribute("cloud-drift"));
+    this.#model.cloudFade = readCloudFade(this.getAttribute("cloud-fade"));
     this.#model.airThickness = readAirThickness(this.getAttribute("air-thickness"));
     this.#applyBodyLabel();
     this.#door.book.ownOnly(this.getAttribute("data") === "own");
@@ -518,6 +520,10 @@ export class ChikyuEarthRealistic extends HTMLElement {
     else if (name === "camera") this.camera = readCamera(value);
     else if (name === "cloud-drift") {
       this.#model.cloudDrift = readDrift(value);
+      this.#gate?.soon();
+    }
+    else if (name === "cloud-fade") {
+      this.#model.cloudFade = readCloudFade(value);
       this.#gate?.soon();
     }
     else if (name === "meteors") this.meteors = this.#meteorsAsked();
@@ -1282,6 +1288,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     pace: { pixelsPerSecond: number; perSecond: number; cap: number; waitMs: number };
     /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
     lightFade: { mix: number; fading: boolean };
+    /** The share of the clouds shown at the last draw, 1 to 0: they give way to the ground as the cloud picture's texels grow past a few device pixels (`cloud-fade`). The disc is orthographic, so it is the same over the whole disc. */
+    cloudFade: number;
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
     paths: PathStats;
     draws: number;
@@ -1318,6 +1326,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       satellites: this.#satelliteStats(),
       pace: { ...this.#pace },
       lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
+      cloudFade: this.#model.cloudShown,
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
       tiles: this.#model.tiles?.stats ?? { ready: false, level: null, held: 0, shown: 0, loading: 0, failed: 0, requested: 0, heldBytes: 0, refused: 0, used: {}, finer: null, fading: false },
       draws: stats?.draws ?? 0,

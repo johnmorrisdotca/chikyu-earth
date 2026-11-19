@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.62.0 - 2026-11-19
 
 - **A fly-to on the space view, and moves that bend instead of stopping** (MODULES-1582).
   - **`flyTo(lat, lon, { height, phase, smooth, signal })`** on `<chikyu-space>`: across, the Earth turns under the camera at the height it has until the place is below (a great circle, eased), then down to `height` km over it (30 by default, never under 15). `phase` is `across`, `down` or `both`. It resolves to `FlyEnd` (`arrived`, `redirected` or `stopped`, the place, the height then and what held the descent) and sends `chikyu-fly-start` and `chikyu-fly-end`; `stats.fly` says what it is doing. The controls' own turn is paused for it.
@@ -9,6 +9,8 @@
   - **The floor.** The descent comes all the way down only with `tiles-finer` over land from 60 degrees south to 80 degrees north (the place is looked up in the 1:110m outlines, loaded only then); elsewhere it stops at 400 km (`FLY_FLOOR_KM`, the height the package's own pictures stay sharp, as the site's ride-above floor), and at a `zoom-max` the page set. Below about 320 km the look camera's nearest distance and near plane follow the descent, and the zoom limit is raised under the page's own; a page that never calls `flyTo` draws as before.
   - **Pure parts** in `/space`: `planFly`, `flyAt`, `flyStateAt`, `flyStill`, `flyAim`, `flyLonLat`, `flyAcrossMs`, `flyDownMs`, `flyDistance`, `descentFloorKm` and the `FLY_*` constants, with unit tests (a redirect mid-turn and mid-descent: the speed carries across within 1 per cent, no step stops or jumps, the height never turns back); `e2e/fly.gl.ts` (the same in a real browser, a drag and a signal ending a move, reduced motion jumping 30 km over Tokyo and holding at 400 km over the sea) and a freeze check (one frame at a time, nothing at rest after). The places guide in English and Japanese.
   - **Not yet:** the next tile level is not fetched ahead of the descent; the tiles load as the camera comes down, as they do for a zoom.
+
+- **The clouds fade out when the view is close, so the sharp ground shows** (MODULES-1356). The cloud layer is one whole-Earth picture at most 2048 pixels across (about 20 km a texel) drawn over the ground, so from a few hundred kilometres up it blurred the finer tiles under it (a satellite ride's Below step, 486 km up, showed it). Its strength now goes from 1 to 0 as a texel grows from 8 to 32 device pixels wide, worked out from the pixel scale the map tiles use. Both `<chikyu-earth-realistic>` and `<chikyu-space>` do it; the space view does it for each point of the clouds by its own distance from the camera, so the ground under the camera goes sharp and the far ground and the horizon keep their clouds. `cloud-fade="16"` sets the width at which the clouds are gone (32 when left out, 1 to 1000), `cloud-fade="off"` (or `0`) keeps them at any zoom, and `stats.cloudFade` says how much is shown at the nearest ground (the space view) or over the disc (the realistic Earth). Nothing is drawn at rest. A unit test, `e2e/cloud-fade.gl.ts` on both elements, and the earth-tiles guide in English and Japanese.
 
 ## 0.61.0 - 2026-11-18
 

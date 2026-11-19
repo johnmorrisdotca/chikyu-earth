@@ -5,6 +5,7 @@ import { carryControls, wrapYaw, type ElementControls, type ViewController } fro
 import { adoptStyles } from "../adopt.ts";
 import type { GeoPoint } from "../types.ts";
 import { airFor, readAirThickness } from "../realistic/air.ts";
+import { readCloudFade } from "../realistic/cloud-fade.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "../realistic/body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import type { SkyKeepClear } from "../sky/keep-clear.ts";
@@ -413,7 +414,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "smooth-fps"];
+  static observedAttributes = ["cloud-drift", "cloud-fade", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "smooth-fps"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -521,6 +522,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#model.light = readLight(this.getAttribute("light"));
     this.#model.camera = readCamera(this.getAttribute("camera"));
     this.#model.cloudDrift = Number.isFinite(Number(this.getAttribute("cloud-drift") ?? "0")) ? Number(this.getAttribute("cloud-drift") ?? "0") : 0;
+    this.#model.cloudFade = readCloudFade(this.getAttribute("cloud-fade"));
     this.#model.earth = { size: readNumber(this.getAttribute("earth-size"), DEFAULT_EARTH_SIZE, 0.02, 50), x: readNumber(this.getAttribute("earth-x"), 0.5, -2, 3), y: readNumber(this.getAttribute("earth-y"), 0.5, -2, 3) };
     this.#model.stepMs = Math.max(1000, Math.abs(this.#speed) * 1000);
     this.#model.speed = this.#speed;
@@ -758,6 +760,10 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "camera") this.camera = readCamera(value);
     else if (name === "cloud-drift") {
       this.#model.cloudDrift = Number.isFinite(Number(value ?? "0")) ? Number(value ?? "0") : 0;
+      this.#gate?.request();
+    }
+    else if (name === "cloud-fade") {
+      this.#model.cloudFade = readCloudFade(value);
       this.#gate?.request();
     }
     else if (name === "earth-size") this.earthSize = readNumber(value, DEFAULT_EARTH_SIZE, 0.02, 50);
@@ -2996,6 +3002,8 @@ export class ChikyuSpace extends HTMLElement {
     pace: { pixelsPerSecond: number; perSecond: number; cap: number; waitMs: number };
     /** The cross-fade when `light` changes to or from `lit` (300 ms, a cut under reduced motion): `mix` is 0 for the true light and 1 for `lit`, and `fading` is true while it moves and another frame is wanted. */
     lightFade: { mix: number; fading: boolean };
+    /** The share of the clouds shown at the last draw, 1 to 0: they give way to the ground as the cloud picture's texels grow past a few device pixels (`cloud-fade`). In the space view it is the share at the nearest ground (the point the map tiles' level is chosen for); the far ground and the horizon keep more, as each fragment is faded by its own distance. */
+    cloudFade: number;
     /** The page's paths: asked for, drawn (with the chosen satellite's own), left out over the cap of 16, unmatched, whether the chosen satellite's own orbit is drawn, draw calls they took at the last draw (0 or 1), the path under the mouse and the `chikyu-path-click` events sent. */
     paths: PathStats;
     ride: { track: RideTrack | null; compass: { northDeg: number; travelDeg: number | null; text: string } | null; riding: boolean; lost: boolean; gliding: boolean; facing: RideFace | null; groundKm: { across: number; tall: number } | null };
@@ -3054,6 +3062,7 @@ export class ChikyuSpace extends HTMLElement {
       satellites: this.#satelliteStats(),
       pace: { ...this.#pace },
       lightFade: { mix: this.#model.lightFade.mix, fading: this.#model.lightFade.fading },
+      cloudFade: this.#model.cloudShown,
       paths: this.#pathControls?.stats() ?? emptyPathStats(),
       ride: { track: this.#model.rideTrack ? { ...this.#model.rideTrack } : null, compass: this.#compass?.shown ? { ...this.#compass.shown } : null, riding: this.#model.ride !== null, lost: this.#model.rideLost, gliding: this.#model.transition !== null || this.#model.rideFrame.moving, facing: this.facing, groundKm: this.#model.rideFrame.groundKm },
       camera: { position: [this.#model.pose.p[0], this.#model.pose.p[1], this.#model.pose.p[2]], quaternion: [this.#model.pose.q[0], this.#model.pose.q[1], this.#model.pose.q[2], this.#model.pose.q[3]], fov: this.#model.pose.fov },
