@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Looking at Jupiter waits until the camera has arrived** (MODULES-1233). The space test no longer reads the distance a few seconds after the click. It waits until the element says the body is Jupiter and the distance has held still, then requires that distance, and a camera kept off Jupiter still fails. Test only.
+
 - **The page chooses where a ride's compass goes** (MODULES-1732). The compass was fixed in the top-left corner, 8 pixels in, so a page with a card at the top left had to start it about 85 pixels lower to clear the compass. Two attributes, each with a property, now place it. With neither set the compass is where it always was.
   - **`compass-place`** (property `compassPlace`): `top-left` (the default), `top-right`, `bottom-left` or `bottom-right`. A value that is not one of the four reads as `top-left`.
   - **`compass-offset`** (property `compassOffset`, `{ x, y }`): pixels in from that corner, written `x,y` (`x` from the side, `y` from the top or the bottom, such as `16,96`) or as one number for both; 8,8 by default. A value that is not one or two numbers of 0 or more reads as `8,8`. Each attribute is read by itself.

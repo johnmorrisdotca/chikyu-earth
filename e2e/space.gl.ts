@@ -169,15 +169,54 @@ test("a body can be looked at: the camera goes to it, and choosing its name by k
   await open(page);
   // pressed by dispatching the click: a real click scrolls the page to the button, taking the view out of sight, where nothing is drawn, so the distance read is the one from before the press
   await page.getByRole("group", { name: "Look at" }).getByRole("button", { name: "Jupiter", exact: true }).dispatchEvent("click");
-  await expect.poll(async () => (await statsOf(page)).distance).toBeCloseTo(3.4 * 1.8, 0);
+  // the click sets the body at once; the drawn distance follows a frame later, and on a loaded machine that frame is past any few seconds (MODULES-1233)
+  await expectSettledOn(page, "Jupiter", 3.4 * 1.8);
   await expect(page.locator("#body-info")).toContainText("Jupiter: radius 69,911 km");
   await jump(page, "Solar system");
   await settle(page, 800);
   await page.locator(SPACE).evaluate((el) => (el.shadowRoot!.querySelector('button.sp-label[data-body="Mars"]') as HTMLButtonElement).focus());
   await page.keyboard.press("Enter");
-  await expect.poll(async () => (await statsOf(page)).distance).toBeCloseTo(3.4 * 0.6, 0);
+  await expectSettledOn(page, "Mars", 3.4 * 0.6);
   await expect(page.locator("#body-info")).toContainText("Mars: radius 3,390 km");
 });
+
+test("a camera kept off Jupiter after the click is still a miss", async ({ page }) => {
+  await open(page);
+  await page.locator("kazoku-view-controls").evaluate((el) => {
+    const controller = Reflect.get(el, "controller") as { set(view: { zoom?: number }, final: boolean, why: string): void };
+    const set = controller.set.bind(controller);
+    controller.set = (view, final, why) => set(why === "body" ? { ...view, zoom: 0.05 } : view, final, why);
+  });
+  await page.getByRole("group", { name: "Look at" }).getByRole("button", { name: "Jupiter", exact: true }).dispatchEvent("click");
+  await expect(page.locator("#body-info")).toContainText("Jupiter");
+  let missed = false;
+  try {
+    await expectSettledOn(page, "Jupiter", 3.4 * 1.8, 4_000);
+  } catch {
+    missed = true;
+  }
+  expect(missed, "a camera kept off Jupiter was taken for arrived").toBe(true);
+});
+
+/** The camera has arrived when the element says it is looking at `body` and the drawn distance has held within half a radius of `radii` across two readings. A click that never selects the body, or a camera that settles somewhere else, fails when `timeout` runs out. */
+async function expectSettledOn(page: Page, body: string, radii: number, timeout = 30_000): Promise<void> {
+  let previous = Number.NaN;
+  await expect
+    .poll(
+      async () => {
+        const now = await page.locator(SPACE).evaluate((el) => {
+          const node = el as HTMLElement & { body: string };
+          return { body: node.body, distance: (Reflect.get(el, "stats") as { distance: number }).distance };
+        });
+        const close = now.body === body && Math.abs(now.distance - radii) < 0.5;
+        const held = close && Math.abs(now.distance - previous) < 0.05;
+        previous = now.distance;
+        return held;
+      },
+      { timeout, intervals: [250], message: `the camera never settled on ${body}` },
+    )
+    .toBe(true);
+}
 
 async function moonPlace(page: Page): Promise<{ x: number; y: number }> {
   await open(page);
