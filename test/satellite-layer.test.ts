@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSatelliteLayer, CROWD_COVER_DOTS, CROWD_COVER_STREAKS, crowdFade, DEFAULT_STREAK_MAX, markWeight, newSatelliteState, readStreakMax, STREAK_REACH } from "../src/space/satellite-layer.ts";
+import { createSatelliteLayer, CROWD_COVER_DOTS, CROWD_COVER_STREAKS, crowdFade, DEFAULT_STREAK_MAX, markWeight, newSatelliteState, pinSliceSize, readStreakMax, STREAK_REACH } from "../src/space/satellite-layer.ts";
 import { createSatellites, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
 import { madeUp } from "./madeup-elements.ts";
 
@@ -125,28 +125,46 @@ test("a jump in the time above 60 times real time pins the satellites again at o
   assert.ok(group.propagations - before >= group.count, "five days on, the whole group is pinned again in that frame");
 });
 
-test("above 60 times real time a big group is pinned whole once, then a slice a frame: no frame runs SGP4 for the whole group", () => {
+/** A frame pins the slice for the wall time since the last one. A whole group after a short gap is a miss (MODULES-1744). */
+function expectPinnedSlice(count: number, elapsedMs: number, used: number): void {
+  assert.equal(used, pinSliceSize(count, elapsedMs), `a frame ${elapsedMs} ms after the last pinned ${used} of ${count}`);
+}
+
+test("above 60 times real time a big group is pinned whole once, then the slice for the gap since the last frame", () => {
   const state = newSatelliteState();
   const group = createSatellites(madeUp("starlink", 3000, "2026-11-02T12:00:00") as unknown as ElementSet[]);
   state.groups.set("many", { satellites: group, color: "#fff", size: 4, orbits: false, visible: true });
   const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
   const time = Date.parse("2026-11-02T18:00:00Z");
   const speed = MAX_SATELLITE_SPEED * 10;
-  const first = group.propagations;
-  layer.update(time, speed, 300);
-  assert.equal(group.propagations - first, group.count, "the first frame pins every satellite, so none is left without a place");
-  let widest = 0;
-  let total = 0;
-  for (let frame = 1; frame <= 40; frame += 1) {
-    const before = group.propagations;
-    layer.update(time + speed * 16 * frame, speed, 300);
-    const used = group.propagations - before;
-    widest = Math.max(widest, used);
-    total += used;
+  let now = 1_000;
+  const clock = performance.now;
+  performance.now = () => now;
+  try {
+    const first = group.propagations;
+    layer.update(time, speed, 300);
+    assert.equal(group.propagations - first, group.count, "the first frame pins every satellite, so none is left without a place");
+    // 200 ms is the gap that pinned 600 of 3,000 and failed the old tenth-of-the-group check. 1,000 ms pins the whole group, which is the rule for a second's pause.
+    const gaps = [16, 16, 200, 33, 16, 1000, 16];
+    let total = 0;
+    for (let step = 0; step < gaps.length; step += 1) {
+      const gap = gaps[step]!;
+      now += gap;
+      const before = group.propagations;
+      layer.update(time + speed * 16 * (step + 1), speed, 300);
+      const used = group.propagations - before;
+      expectPinnedSlice(group.count, gap, used);
+      total += used;
+    }
+    assert.ok(total > 0, "slices are pinned: the places do not go stale");
+    assert.equal(state.drawn.placed, group.count, "every satellite is still drawn");
+  } finally {
+    performance.now = clock;
   }
-  assert.ok(widest < group.count / 10, `a frame pinned ${widest} of ${group.count} satellites`);
-  assert.ok(total > 0, "slices are pinned: the places do not go stale");
-  assert.equal(state.drawn.placed, group.count, "every satellite is still drawn");
+});
+
+test("a frame that pins every satellite after a short gap is still a miss", () => {
+  assert.throws(() => expectPinnedSlice(3000, 16, 3000));
 });
 
 test("focusing one group dims the other through the dim uniform, hiding draws it not at all, and clearing puts both back", () => {
