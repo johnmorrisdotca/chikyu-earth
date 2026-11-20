@@ -131,6 +131,10 @@ test("the default painter makes a sphere in a colour for each planet and a facin
   for (const name of names) {
     const drawing = plainPainter.make(three, name);
     assert.ok(drawing.object);
+    const mesh = drawing.object as unknown as { frustumCulled?: boolean; onAfterRender?: () => void };
+    assert.equal(mesh.frustumCulled, false, "the plain sphere is drawn once, so its buffers are on the card before it is culled");
+    mesh.onAfterRender?.();
+    assert.equal(mesh.frustumCulled, true);
     assert.equal(typeof drawing.light, "function");
     drawing.light?.([1, 0, 0]);
     drawing.dispose();

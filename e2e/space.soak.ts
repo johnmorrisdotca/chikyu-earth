@@ -36,6 +36,20 @@ const addMany = (page: Page): Promise<void> =>
 const rideButton = (page: Page, name: string) => ({ click: () => page.getByRole("group", { name: "Ride along" }).getByRole("button", { name, exact: true }).dispatchEvent("click") });
 const removeMany = (page: Page): Promise<void> => page.locator(SPACE).evaluate((el) => (el as unknown as { setSatellites(n: string, g: null): void }).setSatellites("many", null));
 
+/** Once the view has settled, the buffers and the GPU objects equal the warm reading. One leftover geometry (3 buffers, 4 GPU objects) is a leak (MODULES-1198). */
+function expectHoldings(warm: { textures: number; buffers: number; programs: number; all: number }, last: { textures: number; buffers: number; programs: number; all: number }): void {
+  expect(last.textures, "textures").toBeLessThanOrEqual(warm.textures);
+  expect(last.buffers, "buffers").toBe(warm.buffers);
+  expect(last.programs, "programs").toBeLessThanOrEqual(warm.programs);
+  expect(last.all, "GPU objects").toBe(warm.all);
+}
+
+test("one leftover geometry after the soak is still a leak", () => {
+  const warm = { textures: 60, buffers: 70, programs: 8, all: 330 };
+  const leaked = { textures: 60, buffers: 73, programs: 8, all: 334 };
+  expect(() => expectHoldings(warm, leaked)).toThrow();
+});
+
 async function sample(page: Page, t0: number) {
   await page.locator(SPACE).scrollIntoViewIfNeeded();
   await page.evaluate(() => (globalThis as unknown as { gc(): void }).gc());
@@ -230,15 +244,8 @@ test(`soak: ${MINUTES} minutes in the space view`, async ({ page }) => {
   const drawsPerSecond = (last.draws - warm!.draws) / (last.at - warm!.at);
   console.log(`space soak ${MINUTES} min: ${step} steps, heap ${warm!.heapMB} -> ${last.heapMB} MB, textures ${warm!.textures} -> ${last.textures}, buffers ${warm!.buffers} -> ${last.buffers}, programs ${warm!.programs} -> ${last.programs}, GPU objects ${warm!.all} -> ${last.all}, ${drawsPerSecond.toFixed(2)} frames a second after warm-up`);
   expect(last.heapMB - warm!.heapMB, "JS heap grew").toBeLessThanOrEqual(4);
-  // The same view, still and settled (in `rest`), holds the same objects: the made set is the same (`stats.bodies`), so no texture or program may be more than at the start. The view was turning on its own at several degrees a second, and which bodies are in the
-  // background of an Earth view (Jupiter and its moons come into it at some yaws) then depended on the yaw the count happened to be taken at: 17 textures against 9 in one run (MODULES-1198); the view is now still, and textures and programs
-  // are equal in every run. What still varies is the buffers, in steps of three (one geometry and its array object): the still view came out at 70, 73 and 76, warm and at the end, and one run ended a geometry above where it began, with the made set the same
-  // and the tiles and satellites flat. So one geometry is allowed (3 buffers, 4 GPU objects); a body let go without its geometry disposed takes the one-minute soak from 60 textures to 87 and from 330 GPU objects to 416.
-  const band = { buffers: 3, all: 4 };
-  expect(last.textures, "textures").toBeLessThanOrEqual(warm!.textures);
-  expect(last.buffers, "buffers").toBeLessThanOrEqual(warm!.buffers + band.buffers);
-  expect(last.programs, "programs").toBeLessThanOrEqual(warm!.programs);
-  expect(last.all, "GPU objects").toBeLessThanOrEqual(warm!.all + band.all);
+  // The same view, still and settled (in `rest`), holds the same buffers and GPU objects as the warm reading. 0.42.0 allowed one leftover geometry (3 buffers, 4 GPU objects); that is the leak (MODULES-1198).
+  expectHoldings(warm!, last);
   expect(Math.max(...samples.map((s) => s.canvasMP)), "canvas megapixels").toBeLessThanOrEqual(6);
   expect(drawsPerSecond, "frames a second").toBeLessThanOrEqual(30);
   expect((await statsOf(page)).contexts, "WebGL contexts made").toBe(1);
