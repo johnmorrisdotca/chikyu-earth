@@ -56,7 +56,7 @@ import { bindPaths, emptyPathStats, pointerOf, readPathPriority, type PathContro
 import { styleTable, type PathHit, type PathRequest, type PathStyle } from "./paths.ts";
 import { bindSatelliteHover, hoverPathOn, hoverStyleOf, namesOnHover as namesHoverOn, type SatelliteHover } from "./satellite-hover.ts";
 import { clampFollow, retargetFollow } from "./follow.ts";
-import { COMPASS_HTML, COMPASS_STYLE, createCompass, readCompass, type Compass } from "./compass.ts";
+import { COMPASS_HTML, COMPASS_STYLE, createCompass, readCompass, readCompassOffset, readCompassPlace, type Compass, type CompassOffset, type CompassPlace } from "./compass.ts";
 import type { RideUp } from "./north-up.ts";
 import { OUTSIDE_KM, RIDE_FACES, rideTiltLimits, rideTurnDegrees, type RideDrag, type RideFace, type RideLook, type RideModelSize, type RideViewpoint } from "./ride.ts";
 import { placeAround, placeMoon, placeSun, RADIUS, type ScaleMode } from "./scale.ts";
@@ -414,7 +414,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "cloud-fade", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "smooth-fps"];
+  static observedAttributes = ["cloud-drift", "cloud-fade", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "compass-place", "compass-offset", "smooth-fps"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -533,6 +533,7 @@ export class ChikyuSpace extends HTMLElement {
     root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="labels" aria-hidden="true"></div>${COMPASS_HTML}<div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="bodies-note" hidden></p><p id="finer-credit" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#compass = createCompass(root);
+    this.#placeCompass();
     this.#stage = root.getElementById("stage")!;
     this.#labelBox = root.getElementById("labels")!;
     this.#note = root.getElementById("meteor-note")!;
@@ -746,6 +747,7 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "ride-drag") this.#applyDrag();
     else if (name === "ride-up") this.#applyUp();
     else if (name === "compass") this.#showCompass();
+    else if (name === "compass-place" || name === "compass-offset") this.#placeCompass();
     else if (name === "ride-model-share" || name === "ride-model-seat") this.#applyFrame();
     else if (name === "ride-zoom") this.#applyRideZoom();
     else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
@@ -2250,6 +2252,50 @@ export class ChikyuSpace extends HTMLElement {
    */
   get rideTrack(): RideTrack | null {
     return this.#model.rideTrack ? { ...this.#model.rideTrack } : null;
+  }
+
+  /**
+   * The corner of the picture the compass of a ride is in (the attribute `compass-place`): `top-left` (the default, and where it always was), `top-right`, `bottom-left` or `bottom-right`. Anything else reads as `top-left`.
+   * Set while riding, it moves the compass at once. The compass is held inside the picture on every side, so on a narrow picture it is still all there. See `compassOffset`.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.compassPlace = "top-right";
+   * console.log(space.compassPlace);
+   * ```
+   */
+  get compassPlace(): CompassPlace {
+    return readCompassPlace(this.getAttribute("compass-place"));
+  }
+  set compassPlace(value: CompassPlace) {
+    this.setAttribute("compass-place", value);
+  }
+
+  /**
+   * How far in from its corner the compass of a ride is, in pixels (the attribute `compass-offset`, written `x,y`, such as `16,96`, or one number for both): `x` from the side, `y` from the top or the bottom. It is `{ x: 8, y: 8 }` by default, where the compass always was.
+   * A value that is not two numbers of 0 or more reads as the default. The offset is held to the room the picture has, so a large one leaves the compass against the far edge, not outside it. Set while riding, it moves the compass at once. See `compassPlace`.
+   *
+   * @example
+   * ```ts
+   * import type { ChikyuSpace } from "@johnmorrisdotca/chikyu-earth/space/element";
+   *
+   * const space = document.createElement("chikyu-space") as ChikyuSpace;
+   * space.compassOffset = { x: 16, y: 96 };
+   * console.log(space.compassOffset);
+   * ```
+   */
+  get compassOffset(): CompassOffset {
+    return readCompassOffset(this.getAttribute("compass-offset"));
+  }
+  set compassOffset(value: CompassOffset) {
+    this.setAttribute("compass-offset", `${value.x},${value.y}`);
+  }
+
+  #placeCompass(): void {
+    this.#compass?.place(this.compassPlace, this.compassOffset);
   }
 
   /** Shows the compass for the last draw (the language, the mode of the attribute `compass`), and tells the page when the heading changed by a whole degree, or the satellite went into or out of the Earth's shadow. Called with the draw. */

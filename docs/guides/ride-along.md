@@ -124,6 +124,23 @@ space.rideUp = "travel";
 
 **The compass.** A small compass sits on the picture of a ride (the above view and the two others, for a satellite): an arrow that points to north with an **N** beyond its tip, a yellow dot on the rim for the way the satellite is going, and its heading in words under it, such as "Heading SE 128°". It is a few DOM nodes in the element's shadow root, not part of the WebGL picture, and it is changed only by the draw that moves it, and only when what it shows has moved by half a degree (the words, by a whole degree): a picture at rest touches nothing. `compass="off"` takes it away, `compass="north"` keeps the arrow and leaves out the words, and `--chikyu-compass-colour` and `--chikyu-compass-travel` change its colours. Its words are English and Japanese, by the page's language.
 
+**Where the compass sits.** It is in the top-left corner, 8 pixels in, unless the page says otherwise: `compass-place` is one of `top-left` (the default), `top-right`, `bottom-left` or `bottom-right`, and `compass-offset` is how far in from that corner it sits, in pixels, written `x,y` (`x` from the side, `y` from the top or the bottom) or as one number for both. A page whose own card sits at the top left can move the compass out of its way:
+
+```html
+<chikyu-space compass-place="top-right" compass-offset="16,96"></chikyu-space>
+```
+
+```ts no-run
+const space = document.querySelector("chikyu-space")!;
+// the same as the attributes, and read back as the page's own values
+space.compassPlace = "bottom-left";
+space.compassOffset = { x: 16, y: 96 };
+```
+
+- **Live.** Setting either while riding moves the compass at once, with no wait for a draw. Taking an attribute away puts that part back to the default.
+- **Bad values.** A corner that is not one of the four reads as `top-left`, and an offset that is not one or two numbers of 0 or more (`-4,10`, `16,x`, `1,2,3`) reads as `8,8`; each is read by itself, so a good offset stays when the corner is bad. `readCompassPlace` and `readCompassOffset` in `/space` are the same reading.
+- **Always inside.** The compass is held inside the picture on every side: an offset larger than the room the picture has leaves it against the far edge, so on a narrow phone it is still all there.
+
 **The heading as numbers.** The element's `rideTrack` property (also `stats.ride.track`) says where the ridden satellite is and how it is going, as of the last draw: `lat`, `lon`, `heightKm`, `bearingDeg` (the way its ground track runs, degrees clockwise from north, with the Earth's turn taken out), `ascending` (going north), `sunlit`, and where north is in the picture, `northDeg` and `travelDeg` (degrees clockwise from the top of the picture). `chikyu-ride-track` is sent with the same object when the whole degree of the heading, `ascending` or `sunlit` changes, and at no other time, so a page can print "heading SE 128°" with no maths of its own and costs nothing while the clock is held.
 
 **On a server, with no browser.** `groundTrackState(elements, ms)` in `/passes` runs SGP4 and gives the same state for any moment, and `trackStateOf(position, velocity, ms)` in `/flat` gives it from a place and a velocity you already have (it needs no dependency at all):
