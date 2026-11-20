@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The big-group pin test follows the gap** (MODULES-1744). It asked that no frame pin a tenth of 3,000 satellites. The slice grows with the wall time since the last frame, and a slow frame is meant to pin more, so under load a frame pinned 600 and the check failed. The test now holds the clock and asks each frame to pin the slice for the gap it was given, including a second's pause, which pins the whole group. A frame that pins every satellite after a short gap still fails.
+
 - **The page chooses where a ride's compass goes** (MODULES-1732). The compass was fixed in the top-left corner, 8 pixels in, so a page with a card at the top left had to start it about 85 pixels lower to clear the compass. Two attributes, each with a property, now place it. With neither set the compass is where it always was.
   - **`compass-place`** (property `compassPlace`): `top-left` (the default), `top-right`, `bottom-left` or `bottom-right`. A value that is not one of the four reads as `top-left`.
   - **`compass-offset`** (property `compassOffset`, `{ x, y }`): pixels in from that corner, written `x,y` (`x` from the side, `y` from the top or the bottom, such as `16,96`) or as one number for both; 8,8 by default. A value that is not one or two numbers of 0 or more reads as `8,8`. Each attribute is read by itself.
