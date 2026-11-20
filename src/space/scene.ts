@@ -636,8 +636,15 @@ export const plainPainter: { make(three: ThreeParts, name: string): BodyDrawing 
     const geometry = sphere(three, 48, 24);
     const sun = { value: new three.Vector3(1, 0, 0) };
     const material = new three.ShaderMaterial({ vertexShader: SURFACE_VERT, fragmentShader: BODY_FRAG, uniforms: { map: { value: null }, tint: { value: new three.Color(PLAIN_COLOR(name)) }, textured: { value: 0 }, sunDir: sun, ambient: { value: 0.2 } } });
+    const mesh = new three.Mesh(geometry, material);
+    // The sphere this one replaces was drawn, so its buffers are on the card. This one is off screen (the body has left the view) and a culled mesh is not drawn, so the new buffers never arrive and the same settled view holds three buffers more or three fewer as that body had or had not been on screen (MODULES-1198). Draw it once, whichever view, and cull it after that.
+    mesh.frustumCulled = false;
+    mesh.onAfterRender = () => {
+      mesh.frustumCulled = true;
+      mesh.onAfterRender = () => undefined;
+    };
     return {
-      object: new three.Mesh(geometry, material),
+      object: mesh,
       light(toSun) {
         sun.value.set(toSun[0], toSun[1], toSun[2]);
       },

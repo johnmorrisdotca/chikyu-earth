@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The soak's settled counts have to match** (MODULES-1198). Once the space soak has returned to the opening view and the counts have held still, the buffers and the GPU objects equal the warm reading. 0.42.0 allowed one leftover geometry (3 buffers, 4 GPU objects). A plain sphere made for a body that has left the view was not drawn, so the buffers of the sphere it replaced were freed and the new ones never reached the card: the same view then held three buffers more, or three fewer, as that body had or had not been on screen. The new sphere is drawn once, so its buffers are on the card, and culled after that. A count that differs fails.
+
 - **The page chooses where a ride's compass goes** (MODULES-1732). The compass was fixed in the top-left corner, 8 pixels in, so a page with a card at the top left had to start it about 85 pixels lower to clear the compass. Two attributes, each with a property, now place it. With neither set the compass is where it always was.
   - **`compass-place`** (property `compassPlace`): `top-left` (the default), `top-right`, `bottom-left` or `bottom-right`. A value that is not one of the four reads as `top-left`.
   - **`compass-offset`** (property `compassOffset`, `{ x, y }`): pixels in from that corner, written `x,y` (`x` from the side, `y` from the top or the bottom, such as `16,96`) or as one number for both; 8,8 by default. A value that is not one or two numbers of 0 or more reads as `8,8`. Each attribute is read by itself.
