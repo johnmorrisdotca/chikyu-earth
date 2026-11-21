@@ -75,7 +75,7 @@ type Three = ThreeParts;
  */
 export type EarthState = "loading" | "live" | "unavailable" | "lost" | "idle";
 
-const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + SEA_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
+const STYLE = ":host{display:block;aspect-ratio:1/1;position:relative;isolation:isolate}" + IMMERSIVE_STYLE + "#stage,#overlay{position:absolute;inset:0}#overlay{pointer-events:none}:host([data-state=\"lost\"]) #stage~*{visibility:hidden}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}" + PLACE_STYLE + SKY_STYLE + COUNTRY_NAMES_STYLE + SEA_NAMES_STYLE + CITY_NAMES_STYLE + METEOR_NOTE_STYLE + NOTES_STYLE;
 const RAD = Math.PI / 180;
 /** The Sun and the clouds are re-placed this often at real time: 15 degrees an hour is 0.25 degree a minute. */
 const LIVE_TICK_MS = 60_000;
@@ -272,6 +272,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #airNote: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
+    // A context the browser never gave back is made again by the shared renderer, which then says so here (the canvas it makes sends no event of its own).
+    else if (state === "restored") this.#set("live");
   };
   // The canvas's own events reach the stage in the capture phase (they do not bubble); the shared renderer handles them and this follows.
   #lost = (): void => this.#set("lost");

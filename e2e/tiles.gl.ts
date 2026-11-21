@@ -196,6 +196,26 @@ test("a lost WebGL context is recovered with the tiles still on the sphere", asy
   expect(log.tiles.length - asked, "the held tiles are drawn again, not fetched again").toBeLessThanOrEqual(4);
 });
 
+test("a lost WebGL context the browser never gives back is made again on a new canvas, and the overlay is hidden meanwhile", async ({ page }) => {
+  test.setTimeout(90_000);
+  await openEarth(page, `time=${NOON}&center=0,23`);
+  const overlayShown = (): Promise<boolean> => page.locator(EARTH).evaluate((el) => getComputedStyle(el.shadowRoot!.getElementById("overlay")!).visibility === "visible");
+  expect(await overlayShown()).toBe(true);
+  await page.locator(EARTH).evaluate((el) => {
+    const canvas = el.shadowRoot!.querySelector("canvas")!;
+    Reflect.set(window, "__first", canvas);
+    (canvas.getContext("webgl2") as WebGL2RenderingContext).getExtension("WEBGL_lose_context")!.loseContext();
+  });
+  await expect(page.locator(EARTH)).toHaveAttribute("data-state", "lost");
+  expect(await overlayShown()).toBe(false);
+  await expect(page.locator(EARTH)).toHaveAttribute("data-state", "live", { timeout: 20_000 });
+  expect(await overlayShown()).toBe(true);
+  expect(await page.locator(EARTH).evaluate((el) => el.shadowRoot!.querySelector("canvas") !== Reflect.get(window, "__first"))).toBe(true);
+  const draws = (await statsOf(page)).draws;
+  await page.locator(EARTH).evaluate((el) => Reflect.set(el, "time", "2026-06-21T13:00Z"));
+  await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(draws);
+});
+
 /**
  * Watch the element frame by frame (from the page's own animation frames): how many draws each frame holds, and how many frames had something new to show: a tile arrived (the tiles fetched minus
  * those still loading went up), or one of the package's own pictures was swapped for a sharper one (the zoom needs those too, and they are not tiles).

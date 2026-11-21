@@ -101,7 +101,7 @@ sight, everything disposed, a lost context recovered), and these for time:
 | Real time and slow time are smooth, and capped | a draw each time the quickest thing (the Earth's turn at this zoom, a satellite dot, the craft and the camera in a ride) has moved half a pixel, 1 to `smooth-fps` (15) a second, 1 a second for reduced motion | `e2e/freeze.demo.ts`: whole Earth at real time with 2,252 satellites 1 to 2 frames a second, zoomed in and riding more, reduced motion 1 |
 | The ephemeris is looked up about once a second, not once a frame | two lookups a game-second span, interpolated between (`createTrack`) | a day a second: 2.0 lookups a second for 29 draws a second; the interpolation is within 0.1 degree of the Moon's true place (unit test) |
 | Out of sight a running clock draws nothing | the renderer pauses | 0 draws, 0 frames while scrolled away at a day a second |
-| Dispose and recover | as the Earth | removal frees our textures, buffers and programs; a lost context is restored without error |
+| Dispose and recover | as the Earth | removal frees our textures, buffers and programs; a lost context is restored without error; one the browser never gives back is made again on a new canvas, with the labels hidden meanwhile, and if none can be made `chikyu-unavailable` is sent |
 | Soak | `pnpm test:soak` runs `e2e/space.soak.ts` too: Earth to solar system and back, speeds, scales, toggles | heap, GPU objects and draws compared with the start (numbers in the changelog) |
 
 The ephemeris module (`@johnmorrisdotca/chikyu-earth/space`: `frameAt`, `createTrack`, `orbitPath`, `compress`, `placeAround`) imports on a server and has unit tests: the Sun's distance and declination in the

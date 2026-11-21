@@ -117,7 +117,7 @@ Chikyu Earth's 3D is lightweight by construction, and each line below is checked
 | Texture caps | 4096 at most, only what the zoom needs, freed after | the textures alive grow by 1 a layer and are back to the start after the zoom |
 | Paused out of sight and in a hidden tab | the renderer's `IntersectionObserver` and `visibilitychange` | 0 draw calls and 0 frames while scrolled away or hidden; draws again on return |
 | Disposed on removal | geometry, materials, textures and the context itself | after `remove()`: 0 buffers, 0 programs, no picture of ours left; and it can be added again |
-| Context loss | the renderer prevents the default and the pictures upload again | lost: nothing drawn; restored: drawn again, not black, no error |
+| Context loss | the renderer prevents the default and the pictures upload again; a context the browser never gives back is made again by the renderer after a few seconds (kazoku-ui `restoreMs`) | lost: nothing drawn and the overlay hidden; restored (or made again on a new canvas): drawn again, not black, no error; if none can be made, `chikyu-unavailable` |
 | No WebGL | `chikyu-unavailable`; the demo shows the line globe | tested with `getContext` returning null |
 | Reduced motion | no Auto-turn (the controls), no animation of its own | the whole suite runs with `reducedMotion: reduce` |
 | A 10-minute soak | `pnpm test:soak` turns, zooms, re-times and toggles for `SOAK_MINUTES` | JS heap, GPU objects, canvas and draws are checked at the end against the start (numbers in the changelog) |

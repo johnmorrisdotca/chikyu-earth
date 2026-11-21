@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A lost context that the browser never gives back no longer leaves the labels over a black view** (MODULES-1499). On a phone that lost the WebGL context (iOS Safari under memory pressure) the Earth and the stars stopped being drawn while the city, star and place names stayed where the last frame put them, for good. Two changes, in `chikyu-space` and `chikyu-earth-realistic`. While `data-state` is `lost` the names, places, compass and notes are hidden, so nothing is left over a view that is not drawn. And the element now follows the shared renderer's own state: when kazoku-ui's renderer makes a new context after `restoreMs` (its next release; this is the half that needs it) the element goes back to `live`, and when none can be made it sends `chikyu-unavailable`, as for a browser with no WebGL. Tests: `e2e/space.gl.ts` (a context never restored is made again on a new canvas with the names hidden meanwhile and the Earth drawn; one that cannot be made ends as `chikyu-unavailable`) and `e2e/tiles.gl.ts` (the same for the realistic Earth). With a kazoku-ui from before the fix the first of them stays on `lost` and fails.
+
 ## 0.65.1 - 2026-11-20
 
 - **Looking at Jupiter waits until the camera has arrived** (MODULES-1233). The space test no longer reads the distance a few seconds after the click. It waits until the element says the body is Jupiter and the distance has held still, then requires that distance, and a camera kept off Jupiter still fails. Test only.

@@ -165,6 +165,53 @@ test("a lost context is recovered", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("a lost context the browser never gives back is made again: the labels are hidden meanwhile and the Earth is drawn on a new canvas", async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page);
+  const labelsShown = (): Promise<boolean> => page.locator(SPACE).evaluate((el) => getComputedStyle(el.shadowRoot!.getElementById("labels")!).visibility === "visible");
+  expect(await labelsShown()).toBe(true);
+  await page.locator(SPACE).evaluate((el) => {
+    const canvas = el.shadowRoot!.querySelector("canvas")!;
+    Reflect.set(window, "__first", canvas);
+    (canvas.getContext("webgl2") as WebGL2RenderingContext).getExtension("WEBGL_lose_context")!.loseContext();
+  });
+  await expect(page.locator(SPACE)).toHaveAttribute("data-state", "lost");
+  expect(await labelsShown(), "no label is left over an Earth that is not drawn").toBe(false);
+  // No restoreContext: the shared renderer waits a few seconds, then makes a new context.
+  await expect(page.locator(SPACE)).toHaveAttribute("data-state", "live", { timeout: 20_000 });
+  expect(await labelsShown()).toBe(true);
+  const fresh = await page.locator(SPACE).evaluate((el) => {
+    const canvas = el.shadowRoot!.querySelector("canvas")!;
+    return { replaced: canvas !== Reflect.get(window, "__first"), lost: (canvas.getContext("webgl2") as WebGL2RenderingContext).isContextLost() };
+  });
+  expect(fresh).toEqual({ replaced: true, lost: false });
+  const draws = (await statsOf(page)).draws;
+  await page.locator(SPACE).evaluate((el) => Reflect.set(el, "scale", "true"));
+  await expect.poll(async () => (await statsOf(page)).draws).toBeGreaterThan(draws);
+  const sum = (c: number[]): number => c[0]! + c[1]! + c[2]!;
+  expect(sum(await pixelAt(page, page.locator(SPACE), 0.7, 0.5)), "the lit side of the Earth is drawn, not black").toBeGreaterThan(60);
+  expect(errors).toEqual([]);
+});
+
+test("a lost context that cannot be made again is tried again, then the element tells the page it is unavailable", async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page);
+  await page.locator(SPACE).evaluate((el) => {
+    const first = el.shadowRoot!.querySelector("canvas")!;
+    Reflect.set(window, "__told", 0);
+    el.addEventListener("chikyu-unavailable", () => Reflect.set(window, "__told", (Reflect.get(window, "__told") as number) + 1));
+    const make = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+      return this !== first && /webgl/.test(type) ? null : (make as (...a: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof make;
+    (first.getContext("webgl2") as WebGL2RenderingContext).getExtension("WEBGL_lose_context")!.loseContext();
+  });
+  // the page's own fallback may take the element out when it is told, so the event is what is read
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, "__told")), { timeout: 40_000 }).toBe(1);
+});
+
 test("a body can be looked at: the camera goes to it, and choosing its name by keyboard does the same and says how big and far it is", async ({ page }) => {
   await open(page);
   // pressed by dispatching the click: a real click scrolls the page to the button, taking the view out of sight, where nothing is drawn, so the distance read is the one from before the press
