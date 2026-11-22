@@ -5,4 +5,5 @@ export { FLATTENED, MAX_ZOOM, clampView, groundPoint, pixelsPerDegree, projectFl
 export { COMPASS_POINTS, SHADOW_RADIUS_KM, compassPoint, inEarthShadow, shadowFlags, sunDirection, sunDirectionScene, trackStateOf, trackStateOfScene, type CompassPoint, type GroundTrackState } from "./track-state.ts";
 export { GROUP_COLOURS, PLANE_COLOURS, SPARE_COLOUR, TRACK_SHADOW, TRACK_SUNLIT } from "./colours.ts";
 export { FLAT_WORDS, type FlatLang } from "./words.ts";
+export { MASK_COLS, MASK_ROWS, nightWeights, photoPieces, photoWidth, readLook, type FlatLook, type PhotoPiece } from "./photo.ts";
 export type { ChikyuFlat, FlatPick, FlatPlane, GroupStyle } from "./element.ts";

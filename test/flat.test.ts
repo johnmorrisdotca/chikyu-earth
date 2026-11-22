@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { FLAT_WORDS, GROUP_COLOURS, MAX_ZOOM, PLANE_COLOURS, clampView, clusterPlanes, groundPoint, groupFacts, pixelsPerDegree, planeLetter, projectFlat, unprojectFlat, wrapLongitude, zoomAbout, type FlatView } from "../src/flat/index.ts";
+import { FLAT_WORDS, GROUP_COLOURS, MASK_COLS, MAX_ZOOM, PLANE_COLOURS, clampView, clusterPlanes, groundPoint, groupFacts, nightWeights, photoPieces, photoWidth, pixelsPerDegree, planeLetter, projectFlat, readLook, unprojectFlat, wrapLongitude, zoomAbout, type FlatView } from "../src/flat/index.ts";
 import { SATELLITE_GROUPS } from "../src/satellites/index.ts";
 
 interface File {
@@ -147,4 +147,84 @@ test("the words: every key in both languages, with the same places to fill", () 
 test("the colours: every group of the package has one, and the planes have twelve", () => {
   for (const g of SATELLITE_GROUPS) assert.match(GROUP_COLOURS[g.id] ?? "", /^#[0-9a-f]{6}$/, g.id);
   assert.equal(new Set(PLANE_COLOURS).size, 12);
+});
+
+test("the look is the drawn map unless the page says photo", () => {
+  assert.deepEqual([null, "", "map", "photo", " Photo ", "satellite"].map(readLook), ["map", "map", "map", "photo", "photo", "map"]);
+});
+
+test("the photo lands where the map puts a place: the Nile delta and Florida, whatever the centre, zoom and box", () => {
+  const places = [{ lon: 31, lat: 30.9 }, { lon: -81, lat: 27.5 }, { lon: 139.7, lat: 35.7 }];
+  const views: FlatView[] = [
+    { width: 720, height: 360, centerLon: 0, centerLat: 0, zoom: 1 },
+    { width: 1000, height: 500, centerLon: 150, centerLat: 0, zoom: 1 },
+    { width: 390, height: 292, centerLon: -100, centerLat: 0, zoom: 1 },
+    { width: 800, height: 400, centerLon: 31, centerLat: 28, zoom: 5 },
+    { width: 800, height: 400, centerLon: -80, centerLat: 25, zoom: 8 },
+  ];
+  for (const view of views) {
+    for (const size of [2048, 4096]) {
+      const pieces = photoPieces(view, size, size / 2);
+      for (const place of places) {
+        const at = projectFlat(view, place.lon, place.lat);
+        // the picture's own pixel of that place: longitude -180 at the left edge, 90 degrees north at the top
+        const want = { x: ((place.lon + 180) / 360) * size, y: ((90 - place.lat) / 180) * (size / 2) };
+        const hits = pieces.filter((p) => at.x >= p.dx && at.x <= p.dx + p.dw && at.y >= p.dy && at.y <= p.dy + p.dh);
+        // a place off the box (the world is wider than the box) is in none; every place in the box is in a piece, at the picture's pixel
+        const inBox = at.x >= 0 && at.x <= view.width && at.y >= 0 && at.y <= view.height;
+        if (inBox) assert.ok(hits.length >= 1, `${place.lon} in ${view.width}`);
+        for (const p of hits) {
+          const x = p.sx + ((at.x - p.dx) / p.dw) * p.sw;
+          const y = p.sy + ((at.y - p.dy) / p.dh) * p.sh;
+          assert.ok(Math.abs(y - want.y) < 1e-6, `y ${y} ${want.y}`);
+          // the picture repeats round the world: the same pixel
+          assert.ok(Math.abs(x - want.x) < 1e-6, `x ${x} ${want.x} at ${view.centerLon}`);
+        }
+      }
+    }
+  }
+});
+
+test("the photo's pieces fill the box and stay inside the picture", () => {
+  for (const view of [{ width: 720, height: 360, centerLon: 170, centerLat: 0, zoom: 1 }, { width: 390, height: 520, centerLon: -179, centerLat: 0, zoom: 1 }, { width: 800, height: 400, centerLon: 0, centerLat: 80, zoom: 4 }] as FlatView[]) {
+    const pieces = photoPieces(view, 2048, 1024);
+    assert.ok(pieces.length >= 1 && pieces.length <= 3);
+    assert.ok(Math.abs(pieces.reduce((sum, p) => sum + p.dw, 0) - view.width) < 1e-6, "the pieces cover the box's width");
+    for (const p of pieces) {
+      assert.ok(p.sx >= -1e-9 && p.sx + p.sw <= 2048 + 1e-9 && p.sy >= -1e-9 && p.sy + p.sh <= 1024 + 1e-9);
+    }
+    // joined side by side without a gap
+    pieces.slice(1).forEach((p, i) => assert.ok(Math.abs(p.dx - (pieces[i]!.dx + pieces[i]!.dw)) < 1e-6));
+  }
+});
+
+test("the picture's size follows the zoom, up to 4096 and never above the cap", () => {
+  assert.equal(photoWidth("day", 500), 1024);
+  assert.equal(photoWidth("day", 1800), 2048);
+  assert.equal(photoWidth("day", 9000), 4096);
+  assert.equal(photoWidth("day", 9000, 2048), 2048);
+  assert.equal(photoWidth("night", 9000), 2048);
+  assert.equal(photoWidth("day", 9000, 100), 1024);
+});
+
+test("the night: no darkening or lights under the Sun, full at the other side of the Earth, a soft edge between, and the grid is the picture's", () => {
+  const { veil, lights } = nightWeights(20, 10);
+  const cell = (lon: number, lat: number): number => Math.floor(90 - lat) * MASK_COLS + Math.floor(lon + 180);
+  assert.equal(veil[cell(20, 10)], 0);
+  assert.equal(lights[cell(20, 10)], 0);
+  assert.equal(lights[cell(-160, -10)], 255);
+  assert.ok(Math.abs(veil[cell(-160, -10)]! - 219) <= 1);
+  // along the equator, 90 degrees from a Sun on it is the terminator: the day picture is already half darkened and the lights are not yet in; 96 degrees on, in twilight, they are half in or more
+  const sunUp = nightWeights(0, 0);
+  const at90 = sunUp.veil[cell(90, 0)]!;
+  assert.ok(at90 > 100 && at90 < 219, `veil at the terminator ${at90}`);
+  assert.ok(sunUp.lights[cell(90, 0)]! < 60);
+  assert.ok(sunUp.lights[cell(96, 0)]! > 100);
+  // darker the further into the night
+  let last = -1;
+  for (let lon = 20; lon <= 200; lon += 10) {
+    const v = veil[cell(lon > 180 ? lon - 360 : lon, 10)]!;
+    assert.ok(v >= last, "never lighter further into the night");
+    last = v;
+  }
 });

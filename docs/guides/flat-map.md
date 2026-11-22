@@ -76,6 +76,10 @@ The map is plate carree (longitude and latitude to equal widths) with the countr
 | `track` | Draw the ground track of the chosen satellite: one orbit, dashed behind it and solid ahead, **amber where the satellite is in sunlight and blue where it is in the Earth's shadow**, with a key. It follows the clock. |
 | `selected` | The NORAD number of the chosen satellite. |
 | `shade` | `off` for no night side. |
+| `look` | `map` (the default: the drawn map of countries) or `photo`: NASA's picture of the Earth, see below. |
+| `borders` | `off` for no country lines over the photo. Pale, thin lines by default. |
+| `texture-base` | Where the pictures are served from, as on `<chikyu-earth-realistic>`; the package's own `textures/` folder beside the code by default. |
+| `max-texture` | The widest picture to hold, 4096 at most (2048 on a device that reports 2 GB of memory or less). |
 | `dot-size` | The dot's width in pixels. |
 | `controls` | `none`, or any of `centre zoom footprint track chips`: the built-in buttons and filter chips. All by default. A page that draws its own controls sets `none` and drives the attributes. |
 | `lang` | `en` or `ja`; the page's language by default. |
@@ -100,6 +104,21 @@ A pointer going over a dot, a tap or click on it, or the keyboard sends `chikyu-
 ### Sunlit and in the shadow
 
 The ground track is drawn in two colours: **amber where the satellite is in sunlight, blue where it is in the Earth's shadow**, over a dark edge so it reads on a dark sea and a light one. The part behind the satellite is dashed and the part ahead solid, as before, and a key under the map names the two colours while the track is on. Amber and blue differ in lightness as well as in hue, so a reader who cannot tell red from green can read them. The shadow is the Earth's cylinder of shadow, not the cone (see [Riding along](ride-along.md) for what that means and how it is tested): a satellite is lit or it is not, with no penumbra. A page that wants other colours sets `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `groundTrack(set, from, to)` of `/passes` gives every point of a track a `sunlit` too, for a page that draws its own.
+
+### The photo look
+
+`look="photo"` lays NASA's picture of the Earth (Blue Marble) on the map instead of the drawn countries; `look="map"`, or no attribute, is the drawn map as before, so a page that does not ask for the photo changes in nothing. The property `look` does the same, and `lookState` says how it stands: `map`, `loading` (the drawn map shows while the picture comes), `photo` or `failed` (the picture could not be fetched: the drawn map stays). `chikyu-flat-look` carries `{ look, state }` when either changes.
+
+```js no-run
+const flat = document.querySelector("chikyu-flat");
+flat.setAttribute("look", "photo"); // back to the drawn map: flat.setAttribute("look", "map")
+flat.setAttribute("texture-base", "/textures/"); // where you serve the package's textures/ folder from
+```
+
+- **The same pictures as the 3D Earth.** The day and night pictures are the files `<chikyu-earth-realistic>` loads (`textures/day-*.webp` and `night-*.webp`: NASA Earth Observatory's Blue Marble and Black Marble, public domain; `NOTICE.md` has the terms), so a page that has one has the other. Their credit shows in the corner of the map while the photo is on.
+- **Lined up with the map.** The picture is the map's own projection (plate carree, longitude -180 at its left edge): it follows the centre, the zoom and the wrap round the date line to the pixel, and the satellites, footprints, ground track and the Sun's and your place's marks lie on it where they lie on the drawn map. The satellites have a dark rim and the footprint a dark edge, so they read on cloud and desert.
+- **Day and night.** Where the map shows night the day picture is darkened, and the night picture's city lights come on across the terminator, from the Sun 15 degrees up the sky to 7 degrees below the horizon, for the moment the clock shows. `shade="off"` shows the day picture everywhere.
+- **Cost.** The pictures are fetched only when the look is `photo`, one size of each at a time (1024, 2048 or, for the day, 4096 pixels across: the smallest with a pixel for each one the world is across at the zoom), a larger one at once and a smaller one after the zoom has stayed out for 4 seconds; they are freed when the look goes back to `map` or the element leaves the page. The canvases keep to 6 million pixels and 4096 a side. The map is drawn only when the view or the Sun's place (half a degree) changes, and not at all at rest, out of sight or with the clock held; a reader who asked for reduced motion gets a frame a second at most while time runs.
 
 ### Style
 

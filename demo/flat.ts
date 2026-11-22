@@ -21,6 +21,7 @@ const flat = $<ChikyuFlat>("#flat");
 const query = new URLSearchParams(location.search);
 let by: "group" | "plane" = query.get("by") === "group" ? "group" : "plane";
 let place = query.get("place") ?? "tokyo";
+let look: "map" | "photo" = query.get("look") === "photo" ? "photo" : "map";
 const files: GroupFile[] = [];
 let failed = false;
 
@@ -48,6 +49,12 @@ buttons("#by", [{ value: "group", text: () => say("fl_by_group") }, { value: "pl
   flat.setAttribute("colour-by", by);
   render();
 });
+buttons("#look", [{ value: "map", text: () => say("fl_look_map") }, { value: "photo", text: () => say("fl_look_photo") }], () => look, (v) => {
+  look = v as typeof look;
+  flat.setAttribute("look", look);
+  render();
+});
+flat.addEventListener("chikyu-flat-look", () => render());
 buttons("#places", [{ value: "none", text: () => say("fl_place_none") }, ...TRY_PLACES.slice(0, 4).map((one) => ({ value: one.id, text: () => (lang() === "ja" ? one.ja : one.name) }))], () => place, (v) => {
   place = v;
   applyPlace();
@@ -230,6 +237,7 @@ function renderPhoto(): void {
 function render(): void {
   for (const row of rows) row();
   renderPhoto();
+  $("#look-note").textContent = flat.lookState === "failed" ? say("fl_look_failed") : "";
   for (const button of clockBox.children as HTMLCollectionOf<HTMLButtonElement>) {
     const act = button.dataset["act"]!;
     button.textContent = say(act === "pause" ? (flat.paused ? "fl_play" : "fl_pause") : `fl_${act}`);
@@ -242,7 +250,7 @@ function render(): void {
   $("#status").textContent = failed ? say("fl_failed") : newest > 0 ? say("fl_source", { date: new Date(newest).toISOString().slice(0, 10) }) : say("fl_loading");
   if (flat.groups.length > 0) facts();
   $("#code").textContent =
-    `import "@johnmorrisdotca/chikyu-earth/flat/define";\n\nconst flat = document.querySelector("chikyu-flat");\nflat.setGroup("gps", gpsElements); // OMM element sets from your own file\nflat.setAttribute("colour-by", "plane");\nflat.setAttribute("home-lon", "139.69"); // the reader's saved place, never asked for\nflat.setAttribute("home-lat", "35.69");\nflat.addEventListener("chikyu-flat-pick", (event) => console.log(event.detail.name));`;
+    `import "@johnmorrisdotca/chikyu-earth/flat/define";\n\nconst flat = document.querySelector("chikyu-flat");\nflat.setGroup("gps", gpsElements); // OMM element sets from your own file\nflat.setAttribute("colour-by", "plane");\nflat.setAttribute("home-lon", "139.69"); // the reader's saved place, never asked for\nflat.setAttribute("home-lat", "35.69");${look === "photo" ? `\nflat.setAttribute("look", "photo"); // NASA's picture of the Earth, with the night side's city lights` : ""}\nflat.addEventListener("chikyu-flat-pick", (event) => console.log(event.detail.name));`;
 }
 document.addEventListener("kazoku-languagechange", () =>
   queueMicrotask(() => {
@@ -253,6 +261,8 @@ document.addEventListener("kazoku-languagechange", () =>
 applyPlace();
 flat.setAttribute("lang", lang());
 flat.setAttribute("colour-by", by);
+flat.setAttribute("texture-base", "textures/");
+flat.setAttribute("look", look);
 render();
 void Promise.all(
   GROUPS.map((id) =>

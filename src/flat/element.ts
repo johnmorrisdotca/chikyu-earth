@@ -5,6 +5,8 @@ import { adoptStyles } from "../adopt.ts";
 import { footprintAngle, BEAM_ELEVATION } from "../beam/geometry.ts";
 import { orbitShape } from "../catalogue/orbit.ts";
 import { COUNTRIES } from "../countries.ts";
+import { creditLine } from "../data-door.ts";
+import { ownCredit } from "../door/own.ts";
 import { groundTrack } from "../passes/passes.ts";
 import { subsolarPoint, greenwichSidereal } from "../realistic/sun.ts";
 import { SATELLITE_GROUPS } from "../satellites/catalogue.ts";
@@ -17,6 +19,7 @@ import { GROUP_COLOURS, PLANE_COLOURS, SPARE_COLOUR, TRACK_SHADOW, TRACK_SUNLIT 
 import { clusterPlanes, groupFacts, type GroupFacts, type Plane, type PlaneClusters } from "./facts.ts";
 import { FLATTENED, MAX_ZOOM, clampView, pixelsPerDegree, projectFlat, wrapLongitude, zoomAbout, type FlatView } from "./geometry.ts";
 import { trackStateOfScene, type GroundTrackState } from "./track-state.ts";
+import { PhotoPictures, paintPhoto, readLook, type FlatLook } from "./photo.ts";
 import { say, type FlatLang } from "./words.ts";
 
 const RAD = Math.PI / 180;
@@ -190,6 +193,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .key[hidden]{display:none}
 .key span{display:inline-flex;align-items:center;gap:6px}
 .key i{display:inline-block;width:18px;height:0;border-top:3px solid var(--k,#fff);border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+.credit{position:absolute;right:8px;bottom:8px;margin:0;padding:2px 8px;border-radius:6px;background:rgba(8,14,28,.72);color:#fff;font-size:.7em;line-height:1.3;pointer-events:none;max-width:min(60%,calc(100% - 16px));text-align:right}
+.credit[hidden]{display:none}
 .msg{position:absolute;inset:0;display:grid;place-items:center;margin:0;padding:12px;text-align:center;color:#cfe0f5;pointer-events:none}
 .msg:empty{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -224,7 +229,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
  * ```
  */
 export class ChikyuFlat extends HTMLElement {
-  static observedAttributes = ["paused", "trails", "off", "center", "home-lon", "home-lat", "group", "colour-by", "color-by", "plane", "footprint", "track", "footprint-elevation", "selected", "time", "speed", "estimate-far", "shade", "dot-size", "controls", "lang", "elements-src"];
+  static observedAttributes = ["paused", "trails", "off", "center", "home-lon", "home-lat", "group", "colour-by", "color-by", "plane", "footprint", "track", "footprint-elevation", "selected", "time", "speed", "estimate-far", "shade", "dot-size", "controls", "lang", "elements-src", "look", "borders", "texture-base", "max-texture"];
 
   #groups = new Map<string, Group>();
   #index = new Map<number, Ref>();
@@ -260,6 +265,11 @@ export class ChikyuFlat extends HTMLElement {
   #viewSent = "";
   #announced = -Infinity;
   #mapKey = "";
+  #look: FlatLook = "map";
+  #photo: PhotoPictures | null = null;
+  #photoFailed = false;
+  #lookSent = "";
+  #credit: HTMLElement | undefined;
   #trackKey = "";
   #trackLines: { past: TrackRun[]; future: TrackRun[] } | null = null;
   #key: HTMLElement | undefined;
@@ -455,6 +465,20 @@ export class ChikyuFlat extends HTMLElement {
     return (this.getAttribute("lang") ?? this.ownerDocument.documentElement.lang ?? "en").toLowerCase().startsWith("ja") ? "ja" : "en";
   }
 
+  /** The look of the map: `map`, the drawn map of countries (the default), or `photo`, NASA's picture of the Earth with the night side's city lights. The `look` attribute; the pictures are fetched only while the look is `photo`. */
+  get look(): FlatLook {
+    return this.#look;
+  }
+  set look(value: FlatLook) {
+    this.setAttribute("look", readLook(value));
+  }
+
+  /** How the look stands: `map` (the drawn map is chosen), `loading` (the photo is chosen and its picture is on its way, the drawn map shows meanwhile), `photo` (the photo is shown) or `failed` (the picture could not be fetched, the drawn map shows). `chikyu-flat-look` tells the page when it changes. */
+  get lookState(): "map" | "loading" | "photo" | "failed" {
+    if (this.#look === "map") return "map";
+    return this.#photoFailed ? "failed" : this.#photo?.day ? "photo" : "loading";
+  }
+
   /** Counters for a test or a page: draws of the dots, draws of the map, the dots drawn at the last draw, the milliseconds the last draw and the slowest took, and the canvases' size in pixels. */
   get stats(): { draws: number; mapDraws: number; dots: number; lastDrawMs: number; maxDrawMs: number; running: boolean; paused: boolean; fast: boolean; averageDrawMs: number; canvases: { width: number; height: number }[] } {
     const canvases = [this.#mapCanvas, this.#dotCanvas].filter((c): c is HTMLCanvasElement => c !== undefined).map((c) => ({ width: c.width, height: c.height }));
@@ -508,12 +532,16 @@ export class ChikyuFlat extends HTMLElement {
     this.#sizer = undefined;
     this.#watcher = undefined;
     document.removeEventListener("visibilitychange", this.#onVisibility);
+    // the pictures are let go with the element, and fetched again if it comes back
+    this.#photo?.dispose();
+    this.#photo = null;
   }
 
   attributeChangedCallback(name: string): void {
     if (!this.#connected) return;
     this.#read(name);
     if (name === "selected" || name === "footprint-elevation") this.#trackKey = "";
+    if (name === "lang") this.#showCredit();
     if (name === "lang" || name === "controls" || name === "group" || name === "colour-by" || name === "color-by" || name === "home-lon" || name === "home-lat" || name === "plane") this.#buildBar();
     this.#sync();
     this.#request();
@@ -567,7 +595,78 @@ export class ChikyuFlat extends HTMLElement {
     } else if (name === "time" || name === "speed") this.#readClock();
     else if (name === "estimate-far") for (const g of this.#groups.values()) g.sats.estimateFar = estimateFarOf(value);
     else if (name === "elements-src") this.#load();
-    else if (name === "shade" || name === "dot-size") this.#mapKey = "";
+    else if (name === "look") this.#setLook(readLook(value));
+    else if (name === "texture-base" && this.#photo) {
+      this.#photo.dispose();
+      this.#photo = this.#makePhoto();
+      this.#mapKey = "";
+    } else if (name === "shade" || name === "dot-size" || name === "borders" || name === "max-texture") this.#mapKey = "";
+  }
+
+  /** Where the pictures are served from: the `texture-base` attribute, else the package's own `textures/` folder beside this file, as for the realistic Earth. */
+  #textureBase(): string {
+    const base = this.getAttribute("texture-base") ?? new URL("../textures/", import.meta.url).href;
+    return base.endsWith("/") ? base : `${base}/`;
+  }
+
+  /** The widest picture to hold: the `max-texture` attribute, 4096 at most, and 2048 on a device that reports 2 GB of memory or less. */
+  #textureCap(): number {
+    const given = Number(this.getAttribute("max-texture"));
+    const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    const cap = Number.isFinite(given) && given > 0 ? Math.min(given, 4096) : 4096;
+    return memory !== undefined && memory <= 2 ? Math.min(cap, 2048) : cap;
+  }
+
+  #makePhoto(): PhotoPictures {
+    const again = (): void => {
+      this.#mapKey = "";
+      this.#request();
+      this.#announceLook();
+    };
+    return new PhotoPictures({
+      base: () => this.#textureBase(),
+      cap: () => this.#textureCap(),
+      changed: again,
+      failed: () => {
+        this.#photoFailed = true;
+        again();
+      },
+    });
+  }
+
+  #setLook(look: FlatLook): void {
+    if (look === this.#look && (look === "map" || this.#photo)) return;
+    this.#look = look;
+    this.#photoFailed = false;
+    this.#photo?.dispose();
+    this.#photo = look === "photo" ? this.#makePhoto() : null;
+    this.#mapKey = "";
+    this.#showCredit();
+    this.#announceLook();
+  }
+
+  /** `chikyu-flat-look`, when the look or how it stands changes. */
+  #announceLook(): void {
+    const state = this.lookState;
+    const key = `${this.#look}/${state}`;
+    this.#showCredit();
+    if (key === this.#lookSent) return;
+    const first = this.#lookSent === "";
+    this.#lookSent = key;
+    if (!first) this.dispatchEvent(new CustomEvent("chikyu-flat-look", { detail: { look: this.#look, state }, bubbles: true, composed: true }));
+  }
+
+  /** NASA's credit line, over the corner of the map while the photo is shown. */
+  #showCredit(): void {
+    const credit = this.#credit;
+    if (!credit) return;
+    const on = this.#look === "photo" && this.#photo?.day != null;
+    credit.hidden = !on;
+    if (!on) return;
+    const lang = this.language;
+    const line = creditLine([ownCredit("chikyu-pictures", 1)], lang);
+    if (credit.textContent !== line) credit.textContent = line;
+    credit.lang = lang;
   }
 
   #readClock(): void {
@@ -740,9 +839,13 @@ export class ChikyuFlat extends HTMLElement {
     const sun = subsolarPoint(ms);
     const shade = this.getAttribute("shade") !== "off";
     const home = this.#home();
-    // the map is drawn again only when the view, the home or the sun's place (about a quarter of a degree) changed
+    const pictures = this.#look === "photo" ? this.#photo : null;
+    pictures?.want(360 * pixelsPerDegree(v) * this.#dpr);
+    const photo = pictures?.day ? pictures : null;
+    // the map is drawn again only when the view, the home or the sun's place (about a quarter of a degree, half a degree over a photo, which costs more) changed
     const c = this.#colours();
-    const key = [v.width, v.height, this.#dpr, v.centerLon.toFixed(3), v.centerLat.toFixed(3), v.zoom.toFixed(3), shade ? Math.round(sun.lon * 4) : "x", shade ? Math.round(sun.lat * 4) : "x", home ? `${home.lon},${home.lat}` : "", c.sea, c.land, c.line, c.night].join("|");
+    const per = photo ? 2 : 4;
+    const key = [v.width, v.height, this.#dpr, v.centerLon.toFixed(3), v.centerLat.toFixed(3), v.zoom.toFixed(3), shade ? Math.round(sun.lon * per) : "x", shade ? Math.round(sun.lat * per) : "x", home ? `${home.lon},${home.lat}` : "", c.sea, c.land, c.line, c.night, photo ? `${photo.day!.width}/${photo.night?.width ?? 0}/${this.getAttribute("borders") === "off" ? "x" : "b"}` : "m"].join("|");
     if (key === this.#mapKey) return;
     this.#mapKey = key;
     this.#counts.mapDraws += 1;
@@ -753,23 +856,34 @@ export class ChikyuFlat extends HTMLElement {
     ctx.fillRect(0, 0, v.width, v.height);
     const projection = this.#projection();
     const path = geoPath(projection, ctx);
-    ctx.beginPath();
-    path(geoGraticule10());
-    ctx.strokeStyle = c.grid;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.beginPath();
-    path(COUNTRIES as never);
-    ctx.fillStyle = c.land;
-    ctx.fill();
-    ctx.strokeStyle = c.line;
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
+    if (photo) {
+      // NASA's picture on the map, the borders thin and pale on it, then the night (the darkening and the city lights) over both
+      paintPhoto(ctx, v, photo, shade ? sun : null, this.getAttribute("borders") === "off" ? null : () => {
+        ctx.beginPath();
+        path(COUNTRIES as never);
+        ctx.strokeStyle = "rgba(255,255,255,0.32)";
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      });
+    } else {
+      ctx.beginPath();
+      path(geoGraticule10());
+      ctx.strokeStyle = c.grid;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      path(COUNTRIES as never);
+      ctx.fillStyle = c.land;
+      ctx.fill();
+      ctx.strokeStyle = c.line;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
     if (shade) {
       // the night side: four bands from the sunset line towards midnight, each a little darker
       const anti: [number, number] = [wrapLongitude(sun.lon + 180), -sun.lat];
       ctx.fillStyle = c.night;
-      for (const radius of [90, 96, 102, 108]) {
+      for (const radius of photo ? [] : [90, 96, 102, 108]) {
         ctx.beginPath();
         path(geoCircle().center(anti).radius(radius).precision(2)());
         ctx.fill();
@@ -942,21 +1056,26 @@ export class ChikyuFlat extends HTMLElement {
       }
       ctx.globalAlpha = 1;
     }
+    // over a photo each dot has a dark rim, so it reads on white cloud and on pale desert alike
+    const rim = this.#look === "photo" && this.#photo?.day != null;
     for (const [key, list] of buckets) {
       if (list.length === 0) continue;
       const faint = key.endsWith("~");
-      ctx.fillStyle = faint ? key.slice(0, -1) : key;
-      ctx.globalAlpha = faint ? 0.45 : 1;
-      if (radius <= 1.7) {
-        const side = radius * 2;
-        for (let j = 0; j < list.length; j += 2) ctx.fillRect(list[j]! - radius, list[j + 1]! - radius, side, side);
-      } else {
-        ctx.beginPath();
-        for (let j = 0; j < list.length; j += 2) {
-          ctx.moveTo(list[j]! + radius, list[j + 1]!);
-          ctx.arc(list[j]!, list[j + 1]!, radius, 0, Math.PI * 2);
+      for (const pass of rim ? [true, false] : [false]) {
+        const grown = pass ? radius + 1 : radius;
+        ctx.fillStyle = pass ? "rgba(4,8,18,0.7)" : faint ? key.slice(0, -1) : key;
+        ctx.globalAlpha = faint ? 0.45 : 1;
+        if (grown <= 1.7) {
+          const side = grown * 2;
+          for (let j = 0; j < list.length; j += 2) ctx.fillRect(list[j]! - grown, list[j + 1]! - grown, side, side);
+        } else {
+          ctx.beginPath();
+          for (let j = 0; j < list.length; j += 2) {
+            ctx.moveTo(list[j]! + grown, list[j + 1]!);
+            ctx.arc(list[j]!, list[j + 1]!, grown, 0, Math.PI * 2);
+          }
+          ctx.fill();
         }
-        ctx.fill();
       }
     }
     ctx.globalAlpha = 1;
@@ -994,7 +1113,13 @@ export class ChikyuFlat extends HTMLElement {
         path(geoCircle().center([g.lon[i]!, g.lat[i]!]).radius(angle).precision(3)());
         ctx.fillStyle = "rgba(255,255,255,0.07)";
         ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+        const onPhoto = this.#look === "photo" && this.#photo?.day != null;
+        if (onPhoto) {
+          ctx.strokeStyle = "rgba(4,8,18,0.55)";
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+        ctx.strokeStyle = onPhoto ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.45)";
         ctx.lineWidth = 1;
         ctx.stroke();
       };
@@ -1166,13 +1291,15 @@ export class ChikyuFlat extends HTMLElement {
     msg.setAttribute("role", "status");
     const key = Object.assign(d.createElement("p"), { className: "key", hidden: true });
     key.setAttribute("role", "group");
+    const credit = Object.assign(d.createElement("p"), { className: "credit", hidden: true });
     const live = Object.assign(d.createElement("p"), { className: "sr", id: "live" });
     live.setAttribute("role", "status");
     live.setAttribute("aria-live", "polite");
     const help = Object.assign(d.createElement("p"), { className: "sr", id: "help" });
     dots.setAttribute("aria-describedby", "help live");
-    stage.append(map, dots, selRing, hovRing, tip, key, msg);
+    stage.append(map, dots, selRing, hovRing, tip, key, credit, msg);
     this.#key = key;
+    this.#credit = credit;
     root.append(bar, stage, live, help);
     this.#bar = bar;
     this.#stage = stage;

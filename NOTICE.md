@@ -47,6 +47,8 @@ re-encoded as WebP. NASA says its content "generally are not subject to copyrigh
 source of the material" (https://www.nasa.gov/nasa-brand-center/images-and-media/, read 2026-11-02). These are NASA's own images, not third-party
 material, so no other licence applies. This package is not endorsed by NASA and uses none of NASA's insignia or logotype.
 
+`<chikyu-flat look="photo">` draws the `day-*.webp` and `night-*.webp` pictures on its flat map (2026-11-21): the same files, under the same terms, with the credit of `chikyu-pictures` shown in the corner of the map. No other data is added.
+
 | Picture | Source | Credit |
 |---|---|---|
 | `day-*.webp` | Blue Marble: Next Generation with topography and bathymetry, September 2004, 5400 x 2700 (https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73801/world.topo.bathy.200409.3x5400x2700.jpg, Visible Earth 73801) | NASA Earth Observatory (Reto Stöckli, Blue Marble Next Generation) |
