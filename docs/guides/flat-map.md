@@ -81,7 +81,7 @@ The map is plate carree (longitude and latitude to equal widths) with the countr
 | `texture-base` | Where the pictures are served from, as on `<chikyu-earth-realistic>`; the package's own `textures/` folder beside the code by default. |
 | `max-texture` | The widest picture to hold, 4096 at most (2048 on a device that reports 2 GB of memory or less). |
 | `dot-size` | The dot's width in pixels. |
-| `controls` | `none`, or any of `centre zoom footprint track chips`: the built-in buttons and filter chips. All by default. A page that draws its own controls sets `none` and drives the attributes. |
+| `controls` | `none`, or any of `centre zoom footprint track chips key`: the built-in buttons, filter chips and key. All by default. A page that draws its own controls sets `none` and drives the attributes. |
 | `lang` | `en` or `ja`; the page's language by default. |
 
 The filter chips are the legend too: group chips (with the number of satellites; each one a toggle) when two or more groups are loaded, plane chips (`All`, `A`, `B`... with their counts) when one group is on show and coloured by plane. A tap on a chip sends `chikyu-flat-filter` with `{ groups, plane }`, so a page can load a group the reader asked for. The property `planes` lists the planes of every loaded group (`group`, `id`, `count`, `raanDeg`, `colour`) and `chikyu-flat-planes` is sent when they change. `facts(id)` is `groupFacts` of a loaded group, and `groups` lists what is loaded.
@@ -101,13 +101,25 @@ While time runs the map draws a frame whenever a satellite would move half a pix
 
 A pointer going over a dot, a tap or click on it, or the keyboard sends `chikyu-flat-pick` with `{ id, index, group, name, plane, altitudeKm, sunlit, bearingDeg, ascending, via }`; `via` is `hover`, `tap` or `key`, and a tap on nothing sends `id: null` and clears the choice. The canvas takes keyboard focus: the arrow keys move from one dot to the next, from the left of the map to the right, Page Up and Page Down jump ten, Enter chooses, Escape clears. The name of the dot is read out in a live region and written beside it. `pick(id)` chooses one from code, without the event. `placeOf(id)` says where a satellite is on the screen. `stateOf(id)` and `selectedState` say where it is over the ground, which way it goes and whether the Sun lights it: `{ lat, lon, heightKm, bearingDeg, ascending, sunlit }`, placed exactly by SGP4 for the moment shown; it is what the pick carries.
 
+### The key and the marks that name themselves
+
+Under the map is a key (the `key` control) that names every mark the map draws now, each beside a small picture of it, in English or Japanese: **the Sun overhead** (the yellow dot, the point on the Earth where the Sun stands straight up; shown while the night side is), **My place** (the white diamond, when `home-lon` and `home-lat` are given), **a satellite** (and whether its colour means its group or its orbital plane), **a faint satellite** (its orbit data is old, so its place is an estimate; only while there is one), **the satellite you chose** (its ring), **the footprint** (the area that can see the satellite; while it is on), the **ground track in sunlight and in the Earth's shadow** (while it is on) and **the night side** (in the photo look, "darker, with city lights"). What is not drawn is not in the key. It is a row of words under the map, never over it; it is open on a map 600 px wide or more and shut on a narrower one (a phone) until the **Key** button is pressed, and the property `keyOpen` sets it from code. While it is open it carries the track's two colours, so the key over the map steps aside. `controls="centre zoom"` (without `key`) leaves it out.
+
+The two marks painted into the map's own picture name themselves:
+
+- **The Sun's dot** says "The Sun is overhead here: over the Atlantic Ocean, 23°S 15°W" (in Japanese, `ここは太陽が真上にある場所です`), and **My place** says "My place: Japan, 36°N 140°E". The place is the country the point is in (Natural Earth's outlines, as drawn) or else the nearest ocean, sea, gulf or bay; the point is in whole degrees.
+- **Pointed at, pressed or reached with the keyboard.** A mouse over the mark shows the name beside it; a tap or click keeps it there (a finger cannot hover) until a tap elsewhere or Escape, and reads it aloud. Tab goes from the map to the Sun's dot, then to My place (each is a button over the mark that takes no pointer, so a drag that starts on a mark still pans the map); Enter presses it.
+- **`chikyu-flat-mark`** is sent on a press: `{ mark: "sun" | "home", name, text, lon, lat, place, via }`, `via` being `tap` or `key`. `place` is the name of what the point is over, or null. A page can use it, say, to centre the map there.
+
+The marks stay readable over the photo look: the Sun's dot has a dark edge and a pale ring, the diamond a dark edge.
+
 ### Sunlit and in the shadow
 
 The ground track is drawn in two colours: **amber where the satellite is in sunlight, blue where it is in the Earth's shadow**, over a dark edge so it reads on a dark sea and a light one. The part behind the satellite is dashed and the part ahead solid, as before, and a key under the map names the two colours while the track is on. Amber and blue differ in lightness as well as in hue, so a reader who cannot tell red from green can read them. The shadow is the Earth's cylinder of shadow, not the cone (see [Riding along](ride-along.md) for what that means and how it is tested): a satellite is lit or it is not, with no penumbra. A page that wants other colours sets `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `groundTrack(set, from, to)` of `/passes` gives every point of a track a `sunlit` too, for a page that draws its own.
 
 ### The photo look
 
-`look="photo"` lays NASA's picture of the Earth (Blue Marble) on the map instead of the drawn countries; `look="map"`, or no attribute, is the drawn map as before, so a page that does not ask for the photo changes in nothing. The property `look` does the same, and `lookState` says how it stands: `map`, `loading` (the drawn map shows while the picture comes), `photo` or `failed` (the picture could not be fetched: the drawn map stays). `chikyu-flat-look` carries `{ look, state }` when either changes.
+`look="photo"` lays NASA's picture of the Earth (Blue Marble) on the map instead of the drawn countries; `look="map"`, or no attribute, is the drawn map as before, so a page that does not ask for the photo changes in nothing. The property `look` does the same, and `controls="centre look"` adds a **Map / Photo** pair of buttons to the map's own row (not among the defaults: a page that has not asked for it sees no new button). `lookState` says how it stands: `map`, `loading` (the drawn map shows while the picture comes), `photo` or `failed` (the picture could not be fetched: the drawn map stays). `chikyu-flat-look` carries `{ look, state }` when either changes.
 
 ```js no-run
 const flat = document.querySelector("chikyu-flat");

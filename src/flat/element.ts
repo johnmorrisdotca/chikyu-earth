@@ -19,6 +19,7 @@ import { GROUP_COLOURS, PLANE_COLOURS, SPARE_COLOUR, TRACK_SHADOW, TRACK_SUNLIT 
 import { clusterPlanes, groupFacts, type GroupFacts, type Plane, type PlaneClusters } from "./facts.ts";
 import { FLATTENED, MAX_ZOOM, clampView, pixelsPerDegree, projectFlat, wrapLongitude, zoomAbout, type FlatView } from "./geometry.ts";
 import { trackStateOfScene, type GroundTrackState } from "./track-state.ts";
+import { pointText, placeOver } from "./marks.ts";
 import { PhotoPictures, paintPhoto, readLook, type FlatLook } from "./photo.ts";
 import { say, type FlatLang } from "./words.ts";
 
@@ -146,6 +147,15 @@ interface Ref {
   g: Group;
   i: number;
 }
+/** The marks the map paints into its own picture, which have names and can be pressed. */
+type Mark = "sun" | "home";
+/** Where a mark was painted at the last draw: each copy of the world it shows in, and the place on the Earth. */
+interface MarkSpot {
+  xs: number[];
+  y: number;
+  lon: number;
+  lat: number;
+}
 const sameRef = (a: Ref | null, b: Ref | null): boolean => a === b || (a !== null && b !== null && a.g === b.g && a.i === b.i);
 
 const escape = (text: string): string => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -172,6 +182,9 @@ const CSS = `
 .chips>*{flex:none}
 @container (min-width:600px){.chips{flex-wrap:wrap;overflow:visible}}
 .gap{flex:1 1 0}
+.pair{display:inline-flex;gap:0}
+.pair button:first-child{border-radius:999px 0 0 999px}
+.pair button:last-child{border-radius:0 999px 999px 0;margin-left:-1px}
 button{font:inherit;color:inherit;background:transparent;border:1px solid color-mix(in srgb,currentColor 35%,transparent);border-radius:999px;padding:3px 12px;min-height:32px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 button[aria-pressed="true"]{background:color-mix(in srgb,currentColor 14%,transparent);border-color:currentColor}
 button:disabled{opacity:.45;cursor:default}
@@ -193,6 +206,26 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .key[hidden]{display:none}
 .key span{display:inline-flex;align-items:center;gap:6px}
 .key i{display:inline-block;width:18px;height:0;border-top:3px solid var(--k,#fff);border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+button.mark{position:absolute;left:0;top:0;width:26px;height:26px;min-height:0;margin:-13px 0 0 -13px;padding:0;border:0;border-radius:50%;background:transparent;pointer-events:none}
+button.mark[hidden]{display:none}
+button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
+.legend{font-size:.85em;line-height:1.3}
+.legend[hidden],.legend ul[hidden]{display:none}
+.legend button{min-height:28px;padding:1px 10px;font-size:inherit}
+@media (pointer:coarse){.legend button{min-height:40px}}
+.legend ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px}
+.legend li{display:inline-flex;align-items:center;gap:6px}
+.g{display:inline-flex;align-items:center;justify-content:center;gap:2px;flex:none;width:30px;height:20px;border-radius:4px;background:var(--chikyu-flat-sea,#0b1830)}
+.g i{display:block;width:7px;height:7px;border-radius:50%;background:var(--c,#9aa5b1)}
+.g.sun::before{content:"";width:10px;height:10px;border-radius:50%;background:#ffd54f;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+.g.home::before{content:"";width:8px;height:8px;background:#fff;box-shadow:0 0 0 2px #0b1830;transform:rotate(45deg)}
+.g.sat i{width:6px;height:6px}
+.g.faint::before{content:"";width:7px;height:7px;border-radius:50%;background:#9aa5b1;opacity:.45}
+.g.ring::before{content:"";width:12px;height:12px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000}
+.g.footprint::before{content:"";width:16px;height:16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,255,255,.12)}
+.g.line i{width:20px;height:0;border-radius:2px;background:none;border-top:3px solid var(--c)}
+.g.night{background:linear-gradient(90deg,#2a4a73,#07101f)}
+.g.night-photo{background:radial-gradient(circle at 70% 55%,#ffd98a 0 1px,transparent 2px),radial-gradient(circle at 40% 40%,#ffe9b8 0 1px,transparent 2px),linear-gradient(90deg,#41648f,#02060f)}
 .credit{position:absolute;right:8px;bottom:8px;margin:0;padding:2px 8px;border-radius:6px;background:rgba(8,14,28,.72);color:#fff;font-size:.7em;line-height:1.3;pointer-events:none;max-width:min(60%,calc(100% - 16px));text-align:right}
 .credit[hidden]{display:none}
 .msg{position:absolute;inset:0;display:grid;place-items:center;margin:0;padding:12px;text-align:center;color:#cfe0f5;pointer-events:none}
@@ -207,10 +240,12 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
  * Attributes: `center` (the longitude in the middle, degrees; 0, Greenwich, by default; the map wraps round the date line), `home-lon` and `home-lat` (the reader's place: a marker, and the "My place" button, which appear only when given; the element never asks the browser for a place),
  * `group` (which groups to show: `all`, one id, or several with commas), `off` (groups that are loaded but start off when `group` names none, such as `starlink`: the filter chip turns one on), `colour-by` (`group`, or `plane` to colour by orbital plane), `plane` (a plane letter: show that plane only), `footprint` and `track` (draw the coverage circle and the ground track, which is amber in sunlight and blue in the Earth's shadow, a cylinder, with a key: `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow` change the colours; the footprint is of the chosen satellite, or of every one shown when there are 80 or fewer),
  * `paused` (hold the clock and keep the speed; nothing is drawn while it is held), `trails` (`off` for no streaks at a fast clock), `footprint-elevation` (degrees above the horizon the circle is drawn for; 25 like the 3D beam), `selected` (a NORAD number: the chosen satellite), `time` (`now` or an ISO date; live when absent), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `estimate-far` (`steady` keeps each satellite's usual orbit beyond 30 days from its elements), `shade` (`off` for no night),
- * `dot-size` (pixels), `controls` (`none`, or any of `centre zoom footprint track chips`: the built-in buttons and filter chips shown; all by default) and `lang` (`en` or `ja`; the page's language by default).
+ * `dot-size` (pixels), `controls` (`none`, or any of `centre zoom footprint track chips key look`: the built-in buttons, filter chips, key and Map / Photo pair shown; all but `look` by default) and `lang` (`en` or `ja`; the page's language by default).
+ * `look` is `map` (the drawn map, the default) or `photo` (NASA's picture of the Earth, with the night side's city lights; `borders="off"` leaves out the country lines, `texture-base` and `max-texture` are as on the realistic Earth; the pictures are fetched only while it is on, and `lookState` says how it stands).
+ * The key under the map names every mark the map draws (`keyOpen` folds it open or shut: open on a wide map, shut on a phone until asked), and the yellow dot (the Sun overhead) and the white diamond (My place) name themselves, with where, when pointed at, pressed or reached with the Tab key.
  *
  * Events: `chikyu-flat-pick` (a satellite under the pointer, tapped, or reached by the keyboard: a `FlatPick`; `detail.id` is null when a tap lands on nothing and clears the choice), `chikyu-flat-filter` (a chip changed which groups or plane are shown: `{ groups, plane }`),
- * `chikyu-flat-planes` (the planes were worked out: `{ planes }`), `chikyu-flat-view` (the reader panned or zoomed: `{ center, zoom }`) and `chikyu-timechange` (`{ time, running }`, at most four a second while time runs).
+ * `chikyu-flat-planes` (the planes were worked out: `{ planes }`), `chikyu-flat-view` (the reader panned or zoomed: `{ center, zoom }`), `chikyu-flat-look` (the look or how it stands changed: `{ look, state }`), `chikyu-flat-mark` (the Sun's dot or the home diamond was pressed: `{ mark, name, text, lon, lat, place, via }`) and `chikyu-timechange` (`{ time, running }`, at most four a second while time runs).
  * Style it with the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
  *
  * @example
@@ -269,6 +304,15 @@ export class ChikyuFlat extends HTMLElement {
   #photo: PhotoPictures | null = null;
   #photoFailed = false;
   #lookSent = "";
+  #markAt: Record<Mark, MarkSpot | null> = { sun: null, home: null };
+  #markHover: Mark | null = null;
+  #markShown: Mark | null = null;
+  #markNames = new Map<string, string>();
+  #markButtons: Record<Mark, HTMLButtonElement | undefined> = { sun: undefined, home: undefined };
+  #legend: HTMLElement | undefined;
+  #legendKey = "";
+  #legendOpen: boolean | null = null;
+  #faint = false;
   #credit: HTMLElement | undefined;
   #trackKey = "";
   #trackLines: { past: TrackRun[]; future: TrackRun[] } | null = null;
@@ -541,7 +585,10 @@ export class ChikyuFlat extends HTMLElement {
     if (!this.#connected) return;
     this.#read(name);
     if (name === "selected" || name === "footprint-elevation") this.#trackKey = "";
-    if (name === "lang") this.#showCredit();
+    if (name === "lang") {
+      this.#showCredit();
+      this.#placeMarkButtons();
+    }
     if (name === "lang" || name === "controls" || name === "group" || name === "colour-by" || name === "color-by" || name === "home-lon" || name === "home-lat" || name === "plane") this.#buildBar();
     this.#sync();
     this.#request();
@@ -808,6 +855,7 @@ export class ChikyuFlat extends HTMLElement {
     if (width === this.#view.width && height === this.#view.height && dpr === this.#dpr) return;
     this.#dpr = dpr;
     this.#view = clampView({ ...this.#view, width, height });
+    this.#syncLegend();
     for (const canvas of [this.#mapCanvas, this.#dotCanvas]) {
       if (!canvas) continue;
       canvas.width = Math.max(1, Math.round(width * dpr));
@@ -848,6 +896,7 @@ export class ChikyuFlat extends HTMLElement {
     const key = [v.width, v.height, this.#dpr, v.centerLon.toFixed(3), v.centerLat.toFixed(3), v.zoom.toFixed(3), shade ? Math.round(sun.lon * per) : "x", shade ? Math.round(sun.lat * per) : "x", home ? `${home.lon},${home.lat}` : "", c.sea, c.land, c.line, c.night, photo ? `${photo.day!.width}/${photo.night?.width ?? 0}/${this.getAttribute("borders") === "off" ? "x" : "b"}` : "m"].join("|");
     if (key === this.#mapKey) return;
     this.#mapKey = key;
+    this.#markAt = { sun: null, home: null };
     this.#counts.mapDraws += 1;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
@@ -889,23 +938,36 @@ export class ChikyuFlat extends HTMLElement {
         ctx.fill();
       }
       const at = projectFlat(v, sun.lon, sun.lat);
+      const spot: MarkSpot = { xs: [], y: at.y, lon: sun.lon, lat: sun.lat };
       for (const x of [at.x, at.x - 360 * pixelsPerDegree(v), at.x + 360 * pixelsPerDegree(v)]) {
         if (x < -8 || x > v.width + 8) continue;
+        spot.xs.push(x);
         ctx.beginPath();
         ctx.arc(x, at.y, 5, 0, Math.PI * 2);
         ctx.fillStyle = "#ffd54f";
         ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = "rgba(0,0,0,.5)";
+        // over a photo the dot has a dark edge and a pale ring round it, so it reads on cloud, desert and sea
+        ctx.lineWidth = photo ? 2 : 1;
+        ctx.strokeStyle = photo ? "rgba(0,0,0,.75)" : "rgba(0,0,0,.5)";
         ctx.stroke();
+        if (photo) {
+          ctx.beginPath();
+          ctx.arc(x, at.y, 6.8, 0, Math.PI * 2);
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = "rgba(255,255,255,.85)";
+          ctx.stroke();
+        }
         ctx.fillStyle = c.night;
       }
+      if (spot.xs.length > 0) this.#markAt.sun = spot;
     }
     if (home) {
       const at = projectFlat(v, home.lon, home.lat);
       const wrap = 360 * pixelsPerDegree(v);
+      const spot: MarkSpot = { xs: [], y: at.y, lon: home.lon, lat: home.lat };
       for (const x of [at.x, at.x - wrap, at.x + wrap]) {
         if (x < -10 || x > v.width + 10) continue;
+        spot.xs.push(x);
         ctx.save();
         ctx.translate(x, at.y);
         ctx.rotate(Math.PI / 4);
@@ -916,7 +978,10 @@ export class ChikyuFlat extends HTMLElement {
         ctx.fillRect(-4.5, -4.5, 9, 9);
         ctx.restore();
       }
+      if (spot.xs.length > 0) this.#markAt.home = spot;
     }
+    this.#placeMarkButtons();
+    this.#syncLegend();
   }
 
   #home(): { lon: number; lat: number } | null {
@@ -1079,6 +1144,12 @@ export class ChikyuFlat extends HTMLElement {
       }
     }
     ctx.globalAlpha = 1;
+    // the key names the faint dots (old orbit data) only while there are some
+    const faint = [...buckets].some(([colour, list]) => list.length > 0 && colour.endsWith("~"));
+    if (faint !== this.#faint) {
+      this.#faint = faint;
+      this.#syncLegend();
+    }
     this.#counts.draws += 1;
     this.#counts.dots = dots;
     this.#placeMarks();
@@ -1167,9 +1238,10 @@ export class ChikyuFlat extends HTMLElement {
   }
 
   /** The key to the track's two colours, shown while the track is. It changes only when the track appears or goes, or the language does. */
-  #showKey(on: boolean): void {
+  #showKey(wanted: boolean): void {
     const key = this.#key;
     if (!key) return;
+    const on = wanted && !(this.#wants().has("key") && this.#legendIsOpen());
     if (key.hidden === !on && (!on || key.lang === this.language)) return;
     key.hidden = !on;
     if (!on) return;
@@ -1233,18 +1305,162 @@ export class ChikyuFlat extends HTMLElement {
     const over = mark(this.#hovRing, this.#hover && !sameRef(this.#hover, picked) ? this.#hover : null);
     const tip = this.#tip;
     if (!tip) return;
+    // a satellite pointed at is named first, then a mark pointed at, then a mark pressed or reached by the keyboard, then the satellite chosen
+    const named = this.#hover ? null : (this.#markHover ?? this.#markShown);
+    const spot = named ? this.#markAt[named] : null;
     const ref = this.#hover ?? picked;
-    const where = this.#hover ? (over ?? at) : at;
-    if (!ref || !where || ref.g.on[ref.i] !== 1) {
+    const where = spot && named ? { x: spot.xs[0]!, y: spot.y } : this.#hover ? (over ?? at) : at;
+    if (!where || (!spot && (!ref || ref.g.on[ref.i] !== 1))) {
       tip.hidden = true;
       return;
     }
     tip.hidden = false;
-    tip.textContent = this.#describe(ref);
+    tip.textContent = spot && named ? this.#markText(named) : this.#describe(ref!);
     const wide = tip.offsetWidth;
     const left = where.x + 14 + wide > this.#view.width ? Math.max(0, where.x - 14 - wide) : where.x + 14;
     const top = Math.max(0, Math.min(this.#view.height - tip.offsetHeight, where.y - 10));
     tip.style.transform = `translate(${left.toFixed(1)}px,${top.toFixed(1)}px)`;
+  }
+
+  // --- the marks that name themselves ------------------------------------------------------------------------------------------------------------
+
+  /** What a mark says about itself, in the page's language: what it is, what it is over, and where. Worked out once for each place (to a degree). */
+  #markText(mark: Mark): string {
+    const spot = this.#markAt[mark];
+    if (!spot) return "";
+    const lang = this.language;
+    const id = `${mark}|${lang}|${Math.round(spot.lon)}|${Math.round(spot.lat)}`;
+    let text = this.#markNames.get(id);
+    if (text === undefined) {
+      const what = say(lang, mark === "sun" ? "sunMark" : "homeMark");
+      const point = pointText(spot.lon, spot.lat, lang);
+      const place = placeOver(spot.lon, spot.lat, lang);
+      text = place ? say(lang, mark === "sun" ? "sunOver" : "homeOver", { what, place, point }) : say(lang, mark === "sun" ? "sunAt" : "homeAt", { what, point });
+      if (this.#markNames.size > 40) this.#markNames.clear();
+      this.#markNames.set(id, text);
+    }
+    return text;
+  }
+
+  /** Of a satellite and a mark both within reach of a point, the one nearer it: a mark pointed at straight is not lost to a satellite that happens to be close. Returns the mark to use, or null when the satellite is to be. */
+  #markOver(hit: Ref | null, x: number, y: number, reach: number): Mark | null {
+    const mark = this.#markHit(x, y, reach);
+    if (!mark || !hit) return mark;
+    const spot = this.#markAt[mark]!;
+    const away = Math.min(...spot.xs.map((at) => Math.hypot(at - x, spot.y - y)));
+    return away < Math.hypot(hit.g.sx[hit.i]! - x, hit.g.sy[hit.i]! - y) ? mark : null;
+  }
+
+  /** The mark painted within `reach` pixels of a point, or null. */
+  #markHit(x: number, y: number, reach: number): Mark | null {
+    for (const mark of ["sun", "home"] as const) {
+      const spot = this.#markAt[mark];
+      if (spot && Math.abs(spot.y - y) <= reach && spot.xs.some((at) => Math.hypot(at - x, spot.y - y) <= reach)) return mark;
+    }
+    return null;
+  }
+
+  /** A press on a mark, with a finger, a mouse or the keyboard: its name stays beside it (a finger has no pointer to hover), it is read aloud, and the page is told with `chikyu-flat-mark`. */
+  #pressMark(mark: Mark, via: "tap" | "key"): void {
+    const spot = this.#markAt[mark];
+    if (!spot) return;
+    this.#markShown = mark;
+    this.#placeMarks();
+    const lang = this.language;
+    const text = this.#markText(mark);
+    if (this.#live) this.#live.textContent = text;
+    this.dispatchEvent(new CustomEvent("chikyu-flat-mark", { detail: { mark, name: say(lang, mark === "sun" ? "sunMark" : "homeMark"), text, lon: spot.lon, lat: spot.lat, place: placeOver(spot.lon, spot.lat, lang), via }, bubbles: true, composed: true }));
+  }
+
+  /** The keyboard's way to the marks: a button over each, with its name, that takes no pointer. Moved when the map is drawn. */
+  #placeMarkButtons(): void {
+    const lang = this.language;
+    for (const mark of ["sun", "home"] as const) {
+      const button = this.#markButtons[mark];
+      const spot = this.#markAt[mark];
+      if (!button) continue;
+      button.hidden = !spot;
+      if (!spot) {
+        if (this.#markShown === mark) this.#markShown = null;
+        continue;
+      }
+      button.style.transform = `translate(${spot.xs[0]!.toFixed(1)}px,${spot.y.toFixed(1)}px)`;
+      button.setAttribute("aria-label", this.#markText(mark));
+      button.lang = lang;
+    }
+  }
+
+  /** The key under the map: every mark the map draws now, each with the picture of it and its name. Made again only when what is drawn, the words or the fold change. */
+  #syncLegend(): void {
+    const box = this.#legend;
+    if (!box) return;
+    const lang = this.language;
+    const wants = this.#wants().has("key");
+    box.hidden = !wants;
+    if (!wants) return;
+    const open = this.#legendIsOpen();
+    const shade = this.getAttribute("shade") !== "off";
+    const photo = this.#look === "photo" && this.#photo?.day != null;
+    const shown = this.#shownGroups();
+    const byPlane = this.#byPlane(shown);
+    const chosen = this.#selected !== null;
+    const entries: { glyph: string; text: string; colours?: string[] }[] = [];
+    if (shade) entries.push({ glyph: "sun", text: say(lang, "keySun") });
+    if (this.#home()) entries.push({ glyph: "home", text: say(lang, "keyHome") });
+    if (shown.length > 0) entries.push({ glyph: "sat", text: say(lang, byPlane ? "keySatPlane" : "keySatGroup"), colours: byPlane ? PLANE_COLOURS.slice(0, 3) : shown.slice(0, 3).map((g) => g.colour) });
+    if (this.#faint) entries.push({ glyph: "faint", text: say(lang, "keyFaint") });
+    if (chosen) entries.push({ glyph: "ring", text: say(lang, "keyRing") });
+    if (this.#footprint) entries.push({ glyph: "footprint", text: say(lang, "keyFootprint") });
+    if (this.#track && chosen) {
+      const colours = this.#trackColours();
+      entries.push({ glyph: "line", text: say(lang, "trackSunlit"), colours: [colours.sun] }, { glyph: "line", text: say(lang, "trackShadow"), colours: [colours.shadow] });
+    }
+    if (shade) entries.push({ glyph: photo ? "night-photo" : "night", text: say(lang, photo ? "keyNightPhoto" : "keyNight") });
+    const key = JSON.stringify([lang, open, entries]);
+    if (key === this.#legendKey) return;
+    this.#legendKey = key;
+    const d = box.ownerDocument;
+    const toggle = d.createElement("button");
+    toggle.type = "button";
+    toggle.dataset["act"] = "key";
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-controls", "legend-list");
+    toggle.setAttribute("aria-label", say(lang, open ? "keyHide" : "keyShow"));
+    toggle.textContent = `${say(lang, "key")} ${open ? "▾" : "▸"}`;
+    const list = d.createElement("ul");
+    list.id = "legend-list";
+    list.setAttribute("aria-label", say(lang, "keyMarks"));
+    list.hidden = !open;
+    for (const entry of entries) {
+      const item = d.createElement("li");
+      const glyph = d.createElement("span");
+      glyph.className = `g ${entry.glyph}`;
+      glyph.setAttribute("aria-hidden", "true");
+      for (const colour of entry.colours ?? []) {
+        const dot = d.createElement("i");
+        dot.style.setProperty("--c", colour);
+        glyph.append(dot);
+      }
+      item.append(glyph, entry.text);
+      list.append(item);
+    }
+    box.replaceChildren(toggle, list);
+    box.lang = lang;
+  }
+
+  /** Whether the key's list is open: what the reader chose, else open on a wide map and shut on a narrow one. */
+  #legendIsOpen(): boolean {
+    return this.#legendOpen ?? this.#view.width >= 600;
+  }
+
+  /** The key folded open or shut. A property so a page can set it; the reader's button does the same. */
+  get keyOpen(): boolean {
+    return this.#legendIsOpen();
+  }
+  set keyOpen(value: boolean) {
+    this.#legendOpen = Boolean(value);
+    this.#syncLegend();
+    this.#request();
   }
 
   #nameOf(ref: Ref): string {
@@ -1292,15 +1508,36 @@ export class ChikyuFlat extends HTMLElement {
     const key = Object.assign(d.createElement("p"), { className: "key", hidden: true });
     key.setAttribute("role", "group");
     const credit = Object.assign(d.createElement("p"), { className: "credit", hidden: true });
+    const legend = Object.assign(d.createElement("div"), { className: "legend", hidden: true });
+    legend.setAttribute("role", "group");
+    legend.addEventListener("click", this.#onLegend);
+    const marks = (["sun", "home"] as const).map((mark) => {
+      const button = Object.assign(d.createElement("button"), { className: "mark", type: "button", hidden: true });
+      button.dataset["mark"] = mark;
+      button.addEventListener("focus", () => {
+        this.#markShown = mark;
+        this.#placeMarks();
+        if (this.#live) this.#live.textContent = this.#markText(mark);
+      });
+      button.addEventListener("blur", () => {
+        if (this.#markShown !== mark) return;
+        this.#markShown = null;
+        this.#placeMarks();
+      });
+      button.addEventListener("click", () => this.#pressMark(mark, "key"));
+      this.#markButtons[mark] = button;
+      return button;
+    });
     const live = Object.assign(d.createElement("p"), { className: "sr", id: "live" });
     live.setAttribute("role", "status");
     live.setAttribute("aria-live", "polite");
     const help = Object.assign(d.createElement("p"), { className: "sr", id: "help" });
     dots.setAttribute("aria-describedby", "help live");
-    stage.append(map, dots, selRing, hovRing, tip, key, credit, msg);
+    stage.append(map, dots, selRing, hovRing, tip, ...marks, key, credit, msg);
     this.#key = key;
     this.#credit = credit;
-    root.append(bar, stage, live, help);
+    root.append(bar, stage, legend, live, help);
+    this.#legend = legend;
     this.#bar = bar;
     this.#stage = stage;
     this.#mapCanvas = map;
@@ -1329,7 +1566,7 @@ export class ChikyuFlat extends HTMLElement {
   #wants(): Set<string> {
     const raw = (this.getAttribute("controls") ?? "").trim().toLowerCase();
     if (raw === "none" || raw === "off") return new Set();
-    const all = ["centre", "zoom", "footprint", "track", "chips"];
+    const all = ["centre", "zoom", "footprint", "track", "chips", "key"];
     if (raw === "" || raw === "all") return new Set(all);
     return new Set(raw.split(/[\s,]+/).map((one) => (one === "center" ? "centre" : one)));
   }
@@ -1356,6 +1593,8 @@ export class ChikyuFlat extends HTMLElement {
     else first.push(`<span class="gap"></span>`);
     if (wants.has("footprint")) first.push(button("footprint", say(lang, "footprint"), ` aria-pressed="false"`));
     if (wants.has("track")) first.push(button("track", say(lang, "groundTrack"), ` aria-pressed="false"`));
+    // the look's own pair of buttons: not among the defaults, so a page that has not asked for it sees no new button
+    if (wants.has("look")) first.push(`<span class="pair" role="group" aria-label="${escape(say(lang, "lookGroup"))}">${button("look-map", say(lang, "lookMap"), ` aria-pressed="false"`)}${button("look-photo", say(lang, "lookPhoto"), ` aria-pressed="false"`)}</span>`);
     if (first.length > 1) rows.push(`<div class="row">${first.join("")}</div>`);
     if (wants.has("chips")) {
       const groups = this.#shownGroupsForChips();
@@ -1402,6 +1641,8 @@ export class ChikyuFlat extends HTMLElement {
     set('[data-act="home"]', Number.isFinite(home.lon) && Math.abs(wrapLongitude(this.#view.centerLon - home.lon)) < 0.5);
     set('[data-act="footprint"]', this.#footprint);
     set('[data-act="track"]', this.#track);
+    set('[data-act="look-map"]', this.#look === "map");
+    set('[data-act="look-photo"]', this.#look === "photo");
     const shown = this.#shownGroups();
     bar.querySelectorAll<HTMLElement>('[data-act="group"]').forEach((chip) => {
       const id = chip.dataset["group"]!;
@@ -1411,6 +1652,7 @@ export class ChikyuFlat extends HTMLElement {
     bar.querySelector<HTMLButtonElement>('[data-act="zoomin"]')?.toggleAttribute("disabled", this.#view.zoom >= MAX_ZOOM);
     bar.querySelector<HTMLButtonElement>('[data-act="zoomout"]')?.toggleAttribute("disabled", this.#view.zoom <= 1);
     if (this.#dotCanvas) this.#dotCanvas.toggleAttribute("data-zoomed", this.#view.zoom > 1);
+    this.#syncLegend();
   }
 
   #afterFilter(): void {
@@ -1419,6 +1661,12 @@ export class ChikyuFlat extends HTMLElement {
     this.#schedule();
     this.dispatchEvent(new CustomEvent("chikyu-flat-filter", { detail: { groups: this.visibleGroups, plane: this.#plane }, bubbles: true, composed: true }));
   }
+
+  #onLegend = (event: Event): void => {
+    if (!(event.target as Element | null)?.closest("button[data-act=key]")) return;
+    this.keyOpen = !this.#legendIsOpen();
+    this.#legend?.querySelector<HTMLButtonElement>("button[data-act=key]")?.focus();
+  };
 
   #onBar = (event: Event): void => {
     const target = (event.target as Element | null)?.closest<HTMLElement>("button[data-act]");
@@ -1436,6 +1684,9 @@ export class ChikyuFlat extends HTMLElement {
       this.#footprint = !this.#footprint;
       this.#sync();
       this.#request();
+    } else if (act === "look-map" || act === "look-photo") {
+      // the attribute is the look: the page that set the controls sees the change as it sees any other
+      this.setAttribute("look", act === "look-photo" ? "photo" : "map");
     } else if (act === "track") {
       this.#track = !this.#track;
       this.#trackKey = "";
@@ -1614,8 +1865,18 @@ export class ChikyuFlat extends HTMLElement {
       this.#dotCanvas!.style.cursor = "";
       if (drag && !drag.moved) {
         // a tap: a finger needs more room than a mouse
-        const hit = this.#hit(at.x, at.y, event.pointerType === "touch" ? 22 : 9);
+        const near = this.#hit(at.x, at.y, event.pointerType === "touch" ? 22 : 9);
         if (event.pointerType !== "mouse") this.#hover = null;
+        const mark = this.#markOver(near, at.x, at.y, event.pointerType === "touch" ? 22 : 11);
+        const hit = mark ? null : near;
+        if (mark) {
+          this.#pressMark(mark, "tap");
+          return;
+        }
+        // a tap anywhere else puts a pressed mark's name away
+        this.#markShown = null;
+        this.#markHover = null;
+        this.#placeMarks();
         this.#choose(hit, "tap");
       }
     } else if (drag) drag.pinch = this.#spread();
@@ -1630,15 +1891,21 @@ export class ChikyuFlat extends HTMLElement {
   };
 
   #onLeave = (event: PointerEvent): void => {
-    if (event.pointerType !== "mouse" || this.#hover === null) return;
+    if (event.pointerType !== "mouse" || (this.#hover === null && this.#markHover === null)) return;
     this.#hover = null;
+    this.#markHover = null;
+    if (this.#dotCanvas) this.#dotCanvas.style.cursor = "";
     this.#placeMarks();
   };
 
   #hoverAt(x: number, y: number): void {
-    const hit = this.#hit(x, y, 8);
-    if (sameRef(hit, this.#hover)) return;
+    const near = this.#hit(x, y, 8);
+    const mark = this.#markOver(near, x, y, 11);
+    const hit = mark ? null : near;
+    if (this.#dotCanvas) this.#dotCanvas.style.cursor = mark ? "pointer" : "";
+    if (sameRef(hit, this.#hover) && mark === this.#markHover) return;
     this.#hover = hit;
+    this.#markHover = mark;
     this.#placeMarks();
     if (hit) this.#pick(hit, "hover");
   }
@@ -1664,6 +1931,10 @@ export class ChikyuFlat extends HTMLElement {
       return;
     }
     if (key === "Escape") {
+      if (this.#markShown) {
+        this.#markShown = null;
+        this.#placeMarks();
+      }
       if (this.#cursor || this.#selected) {
         this.#cursor = null;
         this.#choose(null, "key");

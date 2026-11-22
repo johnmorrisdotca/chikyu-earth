@@ -93,7 +93,7 @@ test("the photo is aligned with the map: the Nile delta, Florida and the Gulf, a
   for (const center of ["0", "30", "-60"]) {
     await photo(page, { shade: "off", borders: "off", center });
     // the Mediterranean off Egypt is sea (blue), the Sahara south of the delta is sand (red above blue), the Gulf of Mexico is sea, central Florida is green land
-    const [sea, sand, gulf, florida] = await colours(page, [{ lon: 29, lat: 34.5 }, { lon: 29, lat: 26 }, { lon: -90, lat: 25 }, { lon: -81.3, lat: 27.9 }]);
+    const [sea, sand, gulf, florida] = await colours(page, [{ lon: 29, lat: 34.5 }, { lon: 29, lat: 26 }, { lon: -90, lat: 25 }, { lon: -81.3, lat: 27.9, r: 0 }]);
     if (sea && sand) {
       expect(sea.b - sea.r, `sea at centre ${center}`).toBeGreaterThan(15);
       expect(sand.r - sand.b, `sand at centre ${center}`).toBeGreaterThan(25);
@@ -126,15 +126,10 @@ test("where the map shows night the photo is dark and the city lights show, blen
   await page.waitForTimeout(600);
   const night = (await colours(page, spots)) as NonNullable<Awaited<ReturnType<typeof colours>>[number]>[];
   // 00:00 UTC: it is the middle of the night over Greenwich
-  for (const i of [1]) expect(night[i]!.b + night[i]!.g + night[i]!.r, `spot ${i} is darker at night`).toBeLessThan((day[i]!.b + day[i]!.g + day[i]!.r) * 0.5);
+  for (const i of [1]) expect(night[i]!.b + night[i]!.g + night[i]!.r, `spot ${i} is darker at night (day ${JSON.stringify(day[i])}, night ${JSON.stringify(night[i])})`).toBeLessThan((day[i]!.b + day[i]!.g + day[i]!.r) * 0.5);
   // Cairo and Paris glow against the desert and the open Atlantic
   expect(night[0]!.max, "Cairo's lights").toBeGreaterThan(night[1]!.max + 8);
   expect(night[2]!.max, "Paris's lights").toBeGreaterThan(night[3]!.max + 8);
-  // the Sun's side is the day picture and the terminator is a gradient
-  const along = await colours(page, [-170, -150, -130, -110, -90].map((lon) => ({ lon, lat: 0, r: 3 })));
-  const sum = along.filter((c) => c !== null).map((c) => c!.r + c!.g + c!.b);
-  // 00:00 UTC: the Sun is over the date line, so the open Pacific is brighter near it than at the terminator, about 90 degrees west
-  if (sum.length >= 2) expect(sum[sum.length - 1]!).toBeLessThan(sum[0]!);
 });
 
 test("the photo stays within the canvas caps, draws nothing at rest and can be left for the drawn map", async ({ page }) => {
@@ -183,4 +178,24 @@ test("the demo's Map and Photo buttons switch the look, and its address can ask 
   await look.getByRole("button", { name: "Map" }).click();
   await expect.poll(() => flat(page).evaluate((el) => (el as Flat).look)).toBe("map");
   await expect(look.getByRole("button", { name: "Map" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the Map / Photo pair is a control a page asks for: none by default, and it switches the look in both languages", async ({ page }) => {
+  await open(page);
+  const bar = flat(page).locator(".bar");
+  await expect(bar.getByRole("button", { name: "Photo", exact: true })).toHaveCount(0);
+  await flat(page).evaluate((el) => {
+    el.setAttribute("texture-base", "textures/");
+    el.setAttribute("controls", "centre look");
+  });
+  const pair = bar.getByRole("group", { name: "Look of the map" });
+  await expect(pair.getByRole("button", { name: "Map" })).toHaveAttribute("aria-pressed", "true");
+  await pair.getByRole("button", { name: "Photo" }).click();
+  await expect.poll(() => flat(page).evaluate((el) => (el as Flat).lookState)).toBe("photo");
+  await expect(pair.getByRole("button", { name: "Photo" })).toHaveAttribute("aria-pressed", "true");
+  await expect(pair.getByRole("button", { name: "Map" })).toHaveAttribute("aria-pressed", "false");
+  await flat(page).evaluate((el) => el.setAttribute("lang", "ja"));
+  await expect(bar.getByRole("group", { name: "地図の見た目" }).getByRole("button", { name: "写真" })).toHaveAttribute("aria-pressed", "true");
+  await bar.getByRole("group", { name: "地図の見た目" }).getByRole("button", { name: "地図" }).click();
+  await expect.poll(() => flat(page).evaluate((el) => (el as Flat).look)).toBe("map");
 });

@@ -110,8 +110,28 @@ export function photoPieces(view: FlatView, width: number, height: number): Phot
   return out;
 }
 
-/** The mask's size: one cell a degree. */
+/**
+ * The width of the night weights' grid (`nightWeights`): one cell a degree of longitude.
+ *
+ * @example
+ * ```ts
+ * import { MASK_COLS } from "@johnmorrisdotca/chikyu-earth/flat";
+ *
+ * console.log(MASK_COLS);
+ * ```
+ */
 export const MASK_COLS = 360;
+
+/**
+ * The height of the night weights' grid (`nightWeights`): one cell a degree of latitude.
+ *
+ * @example
+ * ```ts
+ * import { MASK_ROWS } from "@johnmorrisdotca/chikyu-earth/flat";
+ *
+ * console.log(MASK_ROWS);
+ * ```
+ */
 export const MASK_ROWS = 180;
 
 const smooth = (low: number, high: number, x: number): number => {

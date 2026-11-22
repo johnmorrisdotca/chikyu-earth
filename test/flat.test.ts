@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { FLAT_WORDS, GROUP_COLOURS, MASK_COLS, MAX_ZOOM, PLANE_COLOURS, clampView, clusterPlanes, groundPoint, groupFacts, nightWeights, photoPieces, photoWidth, pixelsPerDegree, planeLetter, projectFlat, readLook, unprojectFlat, wrapLongitude, zoomAbout, type FlatView } from "../src/flat/index.ts";
+import { FLAT_WORDS, GROUP_COLOURS, MASK_COLS, MAX_ZOOM, PLANE_COLOURS, clampView, clusterPlanes, groundPoint, groupFacts, nightWeights, photoPieces, placeOver, pointText, photoWidth, pixelsPerDegree, planeLetter, projectFlat, readLook, unprojectFlat, wrapLongitude, zoomAbout, type FlatView } from "../src/flat/index.ts";
 import { SATELLITE_GROUPS } from "../src/satellites/index.ts";
 
 interface File {
@@ -227,4 +227,26 @@ test("the night: no darkening or lights under the Sun, full at the other side of
     assert.ok(v >= last, "never lighter further into the night");
     last = v;
   }
+});
+
+test("a point in words: whole degrees, the hemispheres named, the equator and the meridians bare", () => {
+  assert.equal(pointText(-15, -23, "en"), "23°S 15°W");
+  assert.equal(pointText(139.69, 35.69, "en"), "36°N 140°E");
+  assert.equal(pointText(-15, -23, "ja"), "南緯23° 西経15°");
+  assert.equal(pointText(139.69, 35.69, "ja"), "北緯36° 東経140°");
+  assert.equal(pointText(0, 0, "en"), "0° 0°");
+  assert.equal(pointText(180, 10, "en"), "10°N 180°");
+  assert.equal(pointText(190, 10, "en"), "10°N 170°W");
+});
+
+test("what a point is over: its country, else the ocean or sea nearest in proportion to how far that name reaches", () => {
+  assert.equal(placeOver(139.7, 35.7, "en"), "Japan");
+  assert.equal(placeOver(139.7, 35.7, "ja"), "日本");
+  assert.equal(placeOver(31, 27, "en"), "Egypt");
+  assert.equal(placeOver(-15, -23, "en"), "Atlantic Ocean");
+  assert.equal(placeOver(-15, -23, "ja"), "大西洋");
+  assert.equal(placeOver(-150, 0, "en"), "Pacific Ocean");
+  assert.equal(placeOver(80, -30, "en"), "Indian Ocean");
+  assert.equal(placeOver(-90.4, 25.3, "en"), "Gulf of Mexico");
+  assert.equal(placeOver(0, -89, "en"), "Antarctica");
 });
