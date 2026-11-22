@@ -573,7 +573,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [Satellites](docs/guides/satellites.md) | SGP4 and the space view |
 | [Full screen, the camera in the stars and every satellite](docs/guides/full-screen-and-camera.md) | `immersive`, `camera="space"`, the Earth's look, and every satellite group on the realistic Earth |
 | [When can I see the ISS?](docs/guides/passes.md) | Passes over a place, the sky dome, how it was checked |
-| [Satellites on a flat map](docs/guides/flat-map.md) | `<chikyu-flat>`: groups, orbital planes, footprints, the ground track, the clock; the facts of a group |
+| [Satellites on a flat map](docs/guides/flat-map.md) | `<chikyu-flat>`: groups, orbital planes, footprints, the ground track, the clock, the photo look (`look="photo"`); the facts of a group |
 | [Ride along](docs/guides/ride-along.md) | A camera on a moving body |
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |
