@@ -41,7 +41,10 @@ export const PLACE_STYLE =
   ".pl-sat[hidden]{display:none}" +
   ".pl-dot{position:absolute;left:0;top:0;box-sizing:border-box;border:1.5px solid var(--c);border-radius:50%;opacity:.9}" +
   ".pl-dot[hidden]{display:none}" +
-  ".pl-name.pl-measure{visibility:hidden}";
+  ".pl-name.pl-measure{visibility:hidden}" +
+  ".pl-current{position:absolute;left:-14px;top:-14px;width:28px;height:28px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(4,10,20,.85),0 0 0 4px #fff;will-change:transform}" +
+  ".pl-current[hidden]{display:none}" +
+  "#place-live{position:absolute;width:1px;height:1px;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}";
 
 /** A satellite ringed and named in the picture just drawn: its name, where it is and whether it can be seen (in the box and not behind the Earth). */
 export interface SatelliteMark {
@@ -158,6 +161,14 @@ export interface PlaceLayer {
   late(taken?: () => readonly Box[]): void;
   /** The place under a point of the element (CSS pixels from its top left) in the last picture: a marker's stick or foot, or a ring, within a few pixels; null when there is none. A group of several is not a place. */
   pick(x: number, y: number): Place | null;
+  /** The places a press can reach in the last picture, as {@link PlaceLayer.pick} does, from the left of the picture to the right (top first where they share a column); empty while there are none. */
+  reachable(): readonly { place: Place; x: number; y: number }[];
+  /** The place the keys are on, ringed in the picture, or null. Setting a place that is not in the list clears it. */
+  current: Place | null;
+  /** Move the keys' place to the next (or, with a negative step, the previous) reachable one; starts at the first (or the last) when none is current or the current one is out of reach. Null when nothing is reachable. */
+  step(delta: number): { place: Place; position: number; total: number } | null;
+  /** Where a place is in the last picture, in CSS pixels, or null when the picture does not show it (off the box or on the far side). */
+  where(place: Place): { x: number; y: number } | null;
   /** The rings the picture draws for the places that are not markers of their own, as of the last `frame`; null while there are none. */
   readonly sprites: PlaceSpriteData | null;
   /**
@@ -414,7 +425,56 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
   const watcher = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => box.classList.toggle("pl-still", !entries.some((entry) => entry.isIntersecting))) : null;
   watcher?.observe(box);
 
+  const same = (a: Place, b: Place): boolean => a.id === b.id && a.kind === b.kind;
+  let current: Place | null = null;
+  let currentRing: HTMLElement | undefined;
+  const whereIs = (place: Place): { x: number; y: number } | null => {
+    if (!lastView) return null;
+    for (const shape of lastShapes) if (same(lastOwn[shape.index]!, place)) return { x: shape.x, y: shape.y };
+    if (!lastView.at(place.lon, place.lat, point) || point.facing <= EDGE) return null;
+    if (point.x < 0 || point.y < 0 || point.x > lastView.width || point.y > lastView.height) return null;
+    return { x: point.x, y: point.y };
+  };
+  const showCurrent = (): void => {
+    const at = current ? whereIs(current) : null;
+    if (!at) {
+      if (currentRing && !currentRing.hidden) currentRing.hidden = true;
+      return;
+    }
+    if (!currentRing) {
+      currentRing = doc.createElement("i");
+      currentRing.className = "pl-current";
+      box.append(currentRing);
+    }
+    if (currentRing.hidden) currentRing.hidden = false;
+    currentRing.style.transform = `translate(${at.x.toFixed(1)}px,${at.y.toFixed(1)}px)`;
+  };
+  const keep = (): void => {
+    if (!current) return;
+    current = places.find((place) => same(place, current!)) ?? null;
+    showCurrent();
+  };
+  const reach = (): { place: Place; x: number; y: number }[] => {
+    const found: { place: Place; x: number; y: number }[] = [];
+    if (!lastView || !groupedFor) return found;
+    const marked = new Set<Place>();
+    for (const shape of lastShapes) {
+      const place = lastOwn[shape.index]!;
+      marked.add(place);
+      found.push({ place, x: shape.x, y: shape.y });
+    }
+    for (const group of groups) {
+      if (group.members.length !== 1) continue;
+      const place = groupedFor[group.members[0]!]!;
+      if (marked.has(place) || !lastView.at(group.lon, group.lat, point) || point.facing <= EDGE) continue;
+      if (point.x < 0 || point.y < 0 || point.x > lastView.width || point.y > lastView.height) continue;
+      found.push({ place, x: point.x, y: point.y });
+    }
+    return found.sort((a, b) => a.x - b.x || a.y - b.y);
+  };
+
   const clear = (): void => {
+    if (currentRing && !currentRing.hidden) currentRing.hidden = true;
     hideFrom(marks.map((m) => m.root), 0);
     hideFrom(names, 0);
     hideFrom(rings, 0);
@@ -447,6 +507,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       places = shownPlaces(next, switches);
       stats.places = next.length;
       stats.hidden = next.length - places.length;
+      keep();
       if (places.length === 0) {
         groups = [];
         groupedFor = places;
@@ -466,6 +527,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         groupedFor = places;
         sprites = null;
       }
+      keep();
     },
     get look() {
       return look;
@@ -702,6 +764,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       stats.dots = drawnDots;
       stats.rings = seen.length;
       stats.satelliteNames = placed.length;
+      showCurrent();
     },
     stats,
     get boxes() {
@@ -755,10 +818,30 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
       }
       return best;
     },
+    reachable: reach,
+    get current() {
+      return current;
+    },
+    set current(value) {
+      current = value ? (places.find((place) => same(place, value)) ?? null) : null;
+      showCurrent();
+    },
+    step(delta) {
+      const list = reach();
+      if (list.length === 0) return null;
+      const at = current ? list.findIndex((item) => same(item.place, current!)) : -1;
+      const to = at < 0 ? (delta > 0 ? 0 : list.length - 1) : (((at + delta) % list.length) + list.length) % list.length;
+      current = list[to]!.place;
+      showCurrent();
+      return { place: current, position: to + 1, total: list.length };
+    },
+    where: whereIs,
     dispose() {
       watcher?.disconnect();
       fonts?.removeEventListener?.("loadingdone", refit);
       box.replaceChildren();
+      currentRing = undefined;
+      current = null;
       marks.length = 0;
       names.length = 0;
       measures.length = 0;
