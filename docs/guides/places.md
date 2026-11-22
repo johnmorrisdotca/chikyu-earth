@@ -59,6 +59,15 @@ space.addEventListener("chikyu-place-click", (event) => {
 - **The nearest within 12 pixels.** A press reaches a marker's stick from its foot to its top, and a ring. A group of several places is not a place: it sends nothing. The press is also `chikyu-satellite-click`'s and `chikyu-body-click`'s, as before: the event is added to them, it takes nothing from them, and a satellite's dot is heard first.
 - **Nothing at rest.** The element looks for the place when the reader presses, from what the last picture drew, and not otherwise.
 
+## Reaching a place with the keyboard
+
+With `<chikyu-space>` or `<chikyu-earth-realistic>` focused (Tab to it, or a click), `P` goes to the next place in the picture from the left, `Shift`+`P` to the one before, and `Enter` sends the same `chikyu-place-click` as a press, with the place's `id`, `kind` and `label`, and `x`, `y` at the place's foot. `Escape` lets go of the place. The arrow keys, `+`, `-`, `0`, `Home`, `Space` and the ride's `W`, `A`, `S`, `D`, `R`, `F` keep their jobs, and so does `C` for the constellations; `Ctrl`, `Cmd` and `Alt` with a key are left to the browser.
+
+- **Which place it is.** A white ring with a dark edge is drawn on the place the keys are on. It turns with the Earth, so the arrow keys can move the view while a place is chosen. The ring is on the page's own layer, not a new draw: the picture is not drawn again for it.
+- **Said aloud.** The element speaks the place's name through a live region of its own: "Osaka, 2 of 5" (`label`, else `id`), and the same in Japanese on a page whose `lang` is Japanese. An element with places is a `group` for a screen reader, not an `img` (a screen reader skips what is inside an image), unless the page set its own `role`. With no place in sight it says "No places in view".
+- **What it reaches.** The places a press can reach: markers and rings in sight, not the far side, not a layer that is off. A place inside a crowd's counted ring is reached once the zoom opens the crowd (`+`). The keys start at the first place from the left, or the last with `Shift`+`P`, when none is chosen or the chosen one has left the picture.
+- **Letting go.** The place is let go of when focus leaves the element, on `Escape`, and when the page's list no longer has its `id`. `Enter` on a place that has turned out of sight sends nothing and says so.
+
 ## A look and a size of each place
 
 A place can be drawn differently from the rest, so a harbour is a short mark beside a city, and "You are here" stays the tall beam:

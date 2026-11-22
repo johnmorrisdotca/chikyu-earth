@@ -32,6 +32,7 @@ import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, orthoView, readPlaceGroups, readPlaceLayers, readPlaces, type Place, type PlaceLook } from "../markers/places.ts";
 import { readHereCity } from "../markers/here-city.ts";
 import { createHereCity, type HereCityHost } from "../markers/here-city-host.ts";
+import { bindPlaceKeys, type PlaceKeys } from "../markers/place-keys.ts";
 import { createPlaceLayer, PLACE_STYLE, placeClick, placesLostNotice, readPlaceLook, type PlaceLayer } from "../markers/place-layer.ts";
 import { aimAt, findPlace, glideView } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "./sun.ts";
@@ -248,6 +249,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #countriesStyle: CountryNamesStyle = {};
   #listeners = new Set<(pose: OverlayPose) => void>();
   #placeLayer: PlaceLayer | undefined;
+  #placeKeys: PlaceKeys | undefined;
+  #ownRole = false;
   /** The nearest city's name on a `here` marker (`here-city`), loaded only when that is on. */
   #here: HereCityHost | undefined;
   /** Whether the page has been told that places in sight were left undrawn. */
@@ -295,11 +298,14 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#applyBodyLabel();
     this.#door.book.ownOnly(this.getAttribute("data") === "own");
     this.#model.speed = this.speed;
-    if (!this.hasAttribute("role")) this.setAttribute("role", "img");
+    if (!this.hasAttribute("role")) {
+      this.setAttribute("role", "img");
+      this.#ownRole = true;
+    }
     if (!this.hasAttribute("aria-label")) this.setAttribute("aria-label", "The Earth from space, with its sunlit and dark sides");
 
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = `<div id="stage"></div><div id="places"></div><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="finer-credit" hidden></p></div>`;
+    root.innerHTML = `<div id="stage"></div><div id="places"></div><p id="place-live" role="status"></p><div id="overlay"></div><div id="notes"><p id="air-note" hidden></p><p id="meteor-note" hidden></p><p id="finer-credit" hidden></p></div>`;
     adoptStyles(root, STYLE, this.nonce);
     this.#stage = root.getElementById("stage")!;
     this.#overlay = root.getElementById("overlay")!;
@@ -323,6 +329,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#placeLayer.look = readPlaceLook(this.getAttribute("places-look"));
     this.#placeLayer.grouping = readPlaceGroups(this.getAttribute("place-groups"));
     this.#placeLayer.layers = readPlaceLayers(this.getAttribute("place-layers"));
+    this.#placeKeys = bindPlaceKeys(this, () => this.#placeLayer, () => root.getElementById("place-live"), () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"), this.#ownRole);
+    this.#placeKeys.sync(this.#placeList.length);
     this.#cities = createCityHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -496,6 +504,8 @@ export class ChikyuEarthRealistic extends HTMLElement {
     this.#sky = undefined;
     this.#here?.dispose();
     this.#here = undefined;
+    this.#placeKeys?.stop();
+    this.#placeKeys = undefined;
     this.#placeLayer?.dispose();
     this.#placeLayer = undefined;
     this.#cities?.dispose();
@@ -712,7 +722,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
    * and keep their size in pixels at any zoom. Names never overlap one another; one with no room is left out. The element stores nothing and sends nothing: the page hands the places over and keeps them where
    * it likes. Setting the property writes the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight and for a reader who asked
    * for less motion. A place may also have a `layer` (shown or hidden with `place-layers`), a `size` (`small`), a `look` of its own (over `places-look`) and a `namePriority` (`low` lays its name after the cities'
-   * names). A press on a place sends `chikyu-place-click` with `detail: { id, kind, layer, label, lon, lat, x, y }`.
+   * names). A press on a place sends `chikyu-place-click` with `detail: { id, kind, layer, label, lon, lat, x, y }`. With the element focused, `P` and `Shift`+`P` move between the places in the picture from the left (a ring shows which, and its name is said in a live region, in English or Japanese), `Enter` sends the same event and `Escape` lets go.
    */
   get places(): Place[] {
     return this.#placeList.map((place) => ({ ...place }));
@@ -770,6 +780,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
     const layer = this.#placeLayer;
     if (!layer) return;
     layer.set(this.#here?.named(this.#placeList) ?? this.#placeList);
+    this.#placeKeys?.sync(this.#placeList.length);
     this.#gate?.soon();
   }
 
