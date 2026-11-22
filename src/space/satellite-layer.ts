@@ -356,7 +356,7 @@ export interface SatelliteLayer {
   pick(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): SatelliteRef | null;
   /** The path nearest to a point of the view (CSS pixels) within `radius`, if one is drawn there and not hidden by the Earth: the extra paths and the chosen satellite's own. */
   pathAt(x: number, y: number, camera: THREE.Camera, size: { width: number; height: number }, radius: number): Omit<PathHit, "pointer"> | null;
-  /** Where the chosen satellite is in the view, if it is. */
+  /** Where the chosen satellite is in the view, if it is and the Earth is not in the way. */
   place(camera: THREE.Camera, size: { width: number; height: number }): { x: number; y: number } | null;
   /** The chosen satellite's position and velocity now (Earth radii, km/s), or false. */
   exact(ref: SatelliteRef, time: number, out: Float64Array): boolean;
@@ -1011,7 +1011,14 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
 
     place(camera, size) {
       if (!selectedPoints.visible) return null;
-      projected.set(selectedPosition[0]!, selectedPosition[1]!, selectedPosition[2]!).applyMatrix4(scene.matrixWorld).project(camera);
+      const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
+      const centreDepth = ortho ? view.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse).z : 0;
+      world.set(selectedPosition[0]!, selectedPosition[1]!, selectedPosition[2]!).applyMatrix4(scene.matrixWorld);
+      if (ortho) {
+        view.copy(world).applyMatrix4(camera.matrixWorldInverse);
+        if (earthHidesDisc(view.x, view.y, view.z, centreDepth)) return null;
+      } else if (earthHides(camera.position, world)) return null;
+      projected.copy(world).project(camera);
       if (projected.z > 1 || projected.z < -1) return null;
       return { x: ((projected.x + 1) / 2) * size.width, y: ((1 - projected.y) / 2) * size.height };
     },

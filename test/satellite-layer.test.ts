@@ -354,3 +354,50 @@ test("a crowd of marks is drawn fainter on a small Earth, in proportion to what 
   assert.equal(crowdFade(0, 4, 41, CROWD_COVER_DOTS), 1);
   assert.equal(crowdFade(100, 4, 0, CROWD_COVER_DOTS), 1);
 });
+
+// Vectors with enough maths to place a point: no transforms (the scene sits at the origin) and a flat projection; the camera sits on the satellite's side of the Earth or the far side.
+class Point {
+  x = 0;
+  y = 0;
+  z = 0;
+  set(x: number, y: number, z: number): this {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    return this;
+  }
+  copy(other: Point): this {
+    return this.set(other.x, other.y, other.z);
+  }
+  applyMatrix4(): this {
+    return this;
+  }
+  project(camera: { position: Point }): this {
+    const depth = camera.position.z - this.z;
+    this.x = this.x / (depth * 0.3);
+    this.y = this.y / (depth * 0.3);
+    this.z = 0;
+    return this;
+  }
+}
+const placed = (towardCamera: boolean) => {
+  const state = newSatelliteState();
+  const group = createSatellites(stations);
+  state.groups.set("stations", { satellites: group, color: "#fff", size: 4, orbits: false, visible: true });
+  state.selected = { group: "stations", index: 0 };
+  const layer = createSatelliteLayer({ ...(parts(true) as object), Vector3: Point } as never, { ...scene, matrixWorld: {} } as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  layer.update(time, 1, 300);
+  const where = new Float64Array(6);
+  assert.equal(group.exact(0, time, where), true);
+  const length = Math.hypot(where[0]!, where[1]!, where[2]!);
+  const side = towardCamera ? 1 : -1;
+  const camera = { position: new Point().set((side * 4 * where[0]!) / length, (side * 4 * where[1]!) / length, (side * 4 * where[2]!) / length), matrixWorldInverse: {} };
+  return layer.place(camera as never, { width: 800, height: 600 });
+};
+
+test("the chosen satellite has a place on the screen while the Earth is not in the way, and none while it is (its name is not drawn on the Earth)", () => {
+  const front = placed(true);
+  assert.ok(front !== null && Number.isFinite(front.x) && Number.isFinite(front.y), "the camera on its side of the Earth sees it");
+  assert.equal(placed(false), null, "the camera on the far side of the Earth does not");
+});
