@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The places can be reached from the keyboard** (MODULES-1348). The place marks are hidden from a screen reader and take no pointer, so a reader with no mouse could not reach a place, though a press sends `chikyu-place-click`. On `<chikyu-space>` and `<chikyu-earth-realistic>`, the two elements that draw places, a focused element now has a way in.
+  - **The keys.** `P` goes to the next place in the picture from the left and `Shift`+`P` to the one before (round at the ends); `Enter` sends the same `chikyu-place-click` a press does (`id`, `kind`, `layer`, `label`, `lon`, `lat`, and `x`, `y` at the place's foot); `Escape` lets go. The view's keys (arrows, `+`, `-`, `0`, `Home`, `Space`), the ride's `W` `A` `S` `D` `R` `F` and the constellations' `C` are not taken, and a key with `Ctrl`, `Cmd` or `Alt` is left to the browser. `Enter` with no place chosen is the page's.
+  - **Which place.** A white ring with a dark edge is on the chosen place, turns with the Earth and goes when focus leaves, on `Escape`, when the place is taken from the list or its layer is switched off, and when the place is off the picture. No extra draw: the ring is the page layer's own.
+  - **Said aloud.** A live region in the element's shadow root says "Osaka, 2 of 5" (`label`, else `id`), or the same in Japanese on a Japanese page (`lang` of the nearest ancestor that has one); "No places in view" and "{name} is not in view" (when `Enter` is pressed on a place turned out of sight, which sends nothing) in both languages. An element with places is `role="group"` (it was `img`, whose inside a screen reader skips), and back to `img` with none; a `role` the page set is left alone.
+  - **What it reaches.** The places a press can reach (a marker or a ring in sight, not the far side, not a hidden layer); a place gathered into a crowd's counted ring is reached once the zoom opens it.
+  - **API.** `PlaceLayer` gains `reachable()`, `current`, `step(delta)` and `where(place)`; `bindPlaceKeys` and `placeKeyWords` are in `markers/place-keys.ts` (internal).
+  - **Tests.** `test/place-keys.test.ts` (stepping and wrapping, the ring following the picture and letting go, the words in both languages, the keys, `Enter`'s event, the keys left alone, the role) and `e2e/place-keys.gl.ts` on both elements: the ring is on the place, the live region and the accessibility tree carry the name, `Enter` sends the event, the arrow keys still turn the view with a place chosen, and a Japanese page hears Japanese. The places guide and the README, in English and Japanese.
+
 ## 0.65.1 - 2026-11-20
 
 - **Looking at Jupiter waits until the camera has arrived** (MODULES-1233). The space test no longer reads the distance a few seconds after the click. It waits until the element says the body is Jupiter and the distance has held still, then requires that distance, and a camera kept off Jupiter still fails. Test only.
