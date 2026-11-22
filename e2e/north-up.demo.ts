@@ -236,7 +236,7 @@ async function trackPixels(page: Page): Promise<{ sun: number; shadow: number; k
       if (near(i, 0xff, 0xb0, 0x2e)) sun += 1;
       else if (near(i, 0x5a, 0xa9, 0xff)) shadow += 1;
     }
-    return { sun, shadow, key: el.shadowRoot!.querySelector(".key")?.textContent ?? "" };
+    return { sun, shadow, key: el.shadowRoot!.querySelector(".key")?.textContent || el.shadowRoot!.querySelector(".legend")?.textContent || "" }; // the key over the map, or the key under it while that one is open and carries the two colours
   });
 }
 
