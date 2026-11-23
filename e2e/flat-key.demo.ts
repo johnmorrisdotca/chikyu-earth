@@ -63,6 +63,12 @@ test("the key under the map names every mark that is drawn, and never covers the
   });
   await flat(page).evaluate((el, norad) => el.setAttribute("selected", String(norad)), id);
   await expect(items.filter({ hasText: "The satellite you chose" })).toHaveCount(1);
+  // every picture of a mark stays in its row of the key (the ring of the chosen satellite once lay at the map's corner)
+  const lost = await legend.evaluate((box) => {
+    const b = box.getBoundingClientRect();
+    return [...box.querySelectorAll(".g")].filter((g) => { const r = g.getBoundingClientRect(); return r.top < b.top - 1 || r.bottom > b.bottom + 1 || r.left < b.left - 1 || r.width < 10; }).length;
+  });
+  expect(lost, "a picture of a mark is outside the key").toBe(0);
   await expect(items.filter({ hasText: "Footprint: the area that can see the satellite" })).toHaveCount(1);
   await expect(items.filter({ hasText: "In sunlight" })).toHaveCount(1);
   await expect(items.filter({ hasText: "In the Earth's shadow" })).toHaveCount(1);

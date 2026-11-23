@@ -221,7 +221,7 @@ button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
 .g.home::before{content:"";width:8px;height:8px;background:#fff;box-shadow:0 0 0 2px #0b1830;transform:rotate(45deg)}
 .g.sat i{width:6px;height:6px}
 .g.faint::before{content:"";width:7px;height:7px;border-radius:50%;background:#9aa5b1;opacity:.45}
-.g.ring::before{content:"";width:12px;height:12px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000}
+.g.chosen::before{content:"";width:12px;height:12px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000}
 .g.footprint::before{content:"";width:16px;height:16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,255,255,.12)}
 .g.line i{width:20px;height:0;border-radius:2px;background:none;border-top:3px solid var(--c)}
 .g.night{background:linear-gradient(90deg,#2a4a73,#07101f)}
@@ -1409,7 +1409,7 @@ export class ChikyuFlat extends HTMLElement {
     if (this.#home()) entries.push({ glyph: "home", text: say(lang, "keyHome") });
     if (shown.length > 0) entries.push({ glyph: "sat", text: say(lang, byPlane ? "keySatPlane" : "keySatGroup"), colours: byPlane ? PLANE_COLOURS.slice(0, 3) : shown.slice(0, 3).map((g) => g.colour) });
     if (this.#faint) entries.push({ glyph: "faint", text: say(lang, "keyFaint") });
-    if (chosen) entries.push({ glyph: "ring", text: say(lang, "keyRing") });
+    if (chosen) entries.push({ glyph: "chosen", text: say(lang, "keyRing") });
     if (this.#footprint) entries.push({ glyph: "footprint", text: say(lang, "keyFootprint") });
     if (this.#track && chosen) {
       const colours = this.#trackColours();
