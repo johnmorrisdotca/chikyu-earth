@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Near satellites no longer swell into big discs, and the dark rim is for dots big enough to carry it** (MODULES-1794). A dot was drawn up to 2.5 times its size as the Earth was drawn larger than at first, with a dark rim all round, so a crowd over the Earth read as black specks. A dot is now never drawn wider than `MAX_DOT_PX` (6 CSS pixels; a group that asks for more keeps its own size and only stops growing), and the rim fades in only on dots from 5 CSS pixels wide, so small dots are their colour. `dotPx(size, scale)` and `MAX_DOT_PX` are exported from `/space`; `test/satellite-layer.test.ts` holds the cap through a near camera and the shader's rim rule.
+
 ## 0.67.0 - 2026-11-23
 
 - **`<chikyu-flat>`'s marks have names and a key** (MODULES-1768). The yellow dot (the Sun overhead) and the white diamond (My place) were painted into the map and said nothing; nothing on the map was explained.

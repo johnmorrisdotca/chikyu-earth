@@ -204,7 +204,8 @@ test.describe("moving", () => {
       expect(Math.abs(fifth.dark600), "a fifth of the Earth at 10 minutes a second").toBeLessThanOrEqual(0.04);
       expect(Math.abs(fifth.dark1), "a fifth of the Earth at real time").toBeLessThanOrEqual(0.015);
       expect(Math.abs(half.dark600), "half the Earth at 10 minutes a second: no more than the whole Earth plus 2%").toBeLessThanOrEqual(Math.abs(full.dark600) + 0.02);
-      expect(Math.abs(half.dark1), "half the Earth at real time").toBeLessThanOrEqual(0.025);
+      // the dots of a half-size Earth are small (4 px at most), so they have no dark rim now and are their own colour: a little brighter against the Earth than with the rim (2 percent before, 3.8 now)
+      expect(Math.abs(half.dark1), "half the Earth at real time").toBeLessThanOrEqual(0.045);
       expect(Math.abs(fifth.dark600)).toBeLessThanOrEqual(Math.abs(full.dark600));
     });
   });

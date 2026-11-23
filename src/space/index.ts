@@ -5,7 +5,7 @@ export { compress, MOON_COMPRESSED, placeAround, placeMoon, placeSun, RADIUS, SU
 export { fitDistance, plainPainter, type BodyDrawing, type RideTrack, type BodyMoon, type BodyPainter, type BodyView, type PaintContext, type SatellitePainter } from "./scene.ts";
 export { faceOffset, OUTSIDE_KM, outsidePose, RIDE_FACES, RIDE_FOV, rideFov, rideGlideMs, ridePose, rideTiltLimits, rideTurnDegrees, type RideDrag, type RideFace, type RideInput, type RideLook, type RidePose, type RideModelSize, type RideViewpoint } from "./ride.ts";
 export { GLIDE_FLOOR_KM, satelliteGlide, satelliteGlideKm, type GlidePose, type Quat } from "./ride-glide.ts";
-export { earthHides, type SatelliteScreen } from "./satellite-layer.ts";
+export { MAX_DOT_PX, dotPx, earthHides, type SatelliteScreen } from "./satellite-layer.ts";
 export { ABOVE_MODEL_KM, ABOVE_MODEL_SHARE, aboveAxes, aboveModelShare, MODEL_FADE_FROM_KM, MODEL_FADE_TO_KM, MODEL_HANDOVER_PX, MODEL_RADIUS_SHARE, modelMatrix, modelRadius, satelliteAxes } from "./satellite-model.ts";
 export { localNorth, NORTH_UP_BLEND_DEG, NORTH_UP_POLE_DEG, northUpYaw, screenAngle, type RideUp } from "./north-up.ts";
 export { genericSatellite, satelliteKind, type SatelliteKind } from "./generic-satellite.ts";

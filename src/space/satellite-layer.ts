@@ -148,6 +148,39 @@ export const fadeLeft = (elapsedMs: number, from: number): number => from * (1 -
 const ORBIT_REFRESH_GAME_MS = 30 * 60_000;
 const ORBIT_REFRESH_WALL_MS = 1000;
 
+/**
+ * The most a satellite's dot is drawn across, in CSS pixels, however near the camera has come (the drawn size follows the Earth's size, up to 2.5 times): a dot a group asks to be larger than this keeps its own size and only stops growing.
+ *
+ * @example
+ * ```ts
+ * import { MAX_DOT_PX } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(MAX_DOT_PX);
+ * ```
+ */
+export const MAX_DOT_PX = 6;
+
+/** Dots narrower than this (CSS pixels) have no dark rim; it comes in over the next half. */
+const RIM_MIN_PX = 5;
+
+/**
+ * How wide a group's dots are drawn, in CSS pixels: its size grown or shrunk with the Earth (`scale`), but never past `MAX_DOT_PX` (or the group's own size, if that is more).
+ *
+ * @param size - The group's dot size in CSS pixels.
+ * @param scale - How the Earth's drawn size has changed from the first (0.45 to 2.5).
+ * @returns The width to draw.
+ *
+ * @example
+ * ```ts
+ * import { dotPx } from "@johnmorrisdotca/chikyu-earth/space";
+ *
+ * console.log(dotPx(6, 1), dotPx(6, 2.5), dotPx(6, 0.45), dotPx(10, 2));
+ * ```
+ */
+export function dotPx(size: number, scale: number): number {
+  return Math.min(Math.max(MAX_DOT_PX, size), size * scale);
+}
+
 const POINT_VERT = /* glsl */ `
 uniform float size;
 uniform float groupDim;
@@ -155,9 +188,11 @@ attribute float dim;
 attribute vec3 cls;
 varying float vDim;
 varying vec3 vCls;
+varying float vPx;
 void main() {
   vDim = max(dim, groupDim);
   vCls = cls;
+  vPx = size;
   gl_PointSize = size;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
@@ -166,9 +201,11 @@ uniform vec3 tint;
 uniform float ring;
 uniform float byClass;
 uniform float rim;
+uniform float rimMin;
 uniform float fade;
 varying float vDim;
 varying vec3 vCls;
+varying float vPx;
 void main() {
   float d = length(gl_PointCoord - vec2(0.5));
   if (d > 0.5) discard;
@@ -183,7 +220,9 @@ void main() {
     gl_FragColor = vec4(ink, a * weak);
   } else {
     float rimEdge = smoothstep(0.28, 0.42, d);
-    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rimEdge * rim * (1.0 - 0.6 * estimated));
+    // the dark rim is for dots big enough to carry it: on a small one it would be most of the dot, and thousands of them turn black over the Earth
+    float big = smoothstep(rimMin, rimMin * 1.5, vPx);
+    vec3 colour = mix(ink, vec3(0.04, 0.05, 0.08), rimEdge * rim * big * (1.0 - 0.6 * estimated));
     float a = smoothstep(0.50, 0.40, d);
     gl_FragColor = vec4(colour, a * weak * fade);
   }
@@ -383,7 +422,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
   let basis = 0;
   let lastEarthPx = 0;
 
-  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 }, rim: { value: 1 }, fade: { value: 1 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
+  const selectedMaterial = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: 14 }, tint: { value: new three.Color("#ffffff") }, ring: { value: 1 }, byClass: { value: 0 }, rim: { value: 1 }, rimMin: { value: RIM_MIN_PX }, fade: { value: 1 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
   const selectedPosition = new Float32Array(3);
   const selectedGeometry = new three.BufferGeometry();
   selectedGeometry.setAttribute("position", new three.BufferAttribute(selectedPosition, 3));
@@ -702,7 +741,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       for (const group of state.groups.values()) {
         if (!group.visible) continue;
         marks += group.satellites.count;
-        dotArea += group.satellites.count * (group.size * dotScale) ** 2;
+        dotArea += group.satellites.count * dotPx(group.size, dotScale) ** 2;
       }
       const dotFade = marks > 0 ? crowdFade(marks, dotArea / marks, radius, CROWD_COVER_DOTS) : 1;
       const streakFade = tooFast && capLength > 0 ? crowdFade(marks, Math.max(1, capLength * radius), radius, CROWD_COVER_STREAKS, false) : 1;
@@ -726,7 +765,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
           const dim = new three.BufferAttribute(group.satellites.dimmed, 1);
           geometry.setAttribute("dim", dim);
           geometry.setAttribute("cls", new three.BufferAttribute(group.satellites.classColour, 3));
-          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: group.size * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 }, rim: { value: 1 }, fade: { value: 1 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
+          const material = new three.ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: { size: { value: dotPx(group.size, 1) * ratio() }, tint: { value: new three.Color(group.color) }, ring: { value: 0 }, byClass: { value: 0 }, rim: { value: 1 }, rimMin: { value: RIM_MIN_PX * ratio() }, fade: { value: 1 }, groupDim: { value: 0 } }, transparent: true, depthWrite: false });
           const points = new Points(geometry, material);
           points.frustumCulled = false;
           points.renderOrder = 5;
@@ -751,7 +790,8 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
         const style = `${group.color}|${group.size}|${ratio()}|${dotScale}|${state.orbitTint ? 1 : 0}`;
         if (style !== entry.style) {
           entry.style = style;
-          entry.material.uniforms["size"]!.value = group.size * dotScale * ratio();
+          entry.material.uniforms["size"]!.value = dotPx(group.size, dotScale) * ratio();
+          entry.material.uniforms["rimMin"]!.value = RIM_MIN_PX * ratio();
           entry.material.uniforms["tint"]!.value.set(group.color);
           entry.material.uniforms["byClass"]!.value = state.orbitTint ? 1 : 0;
           ink.set(group.color);
@@ -905,7 +945,7 @@ export function createSatelliteLayer(three: Three, scene: THREE.Object3D, state:
       for (const [name, entry] of drawn) {
         const group = state.groups.get(name);
         if (!group) continue;
-        entry.material.uniforms["size"]!.value = group.size * dotScale * ratio();
+        entry.material.uniforms["size"]!.value = dotPx(group.size, dotScale) * ratio();
       }
     },
 

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSatelliteLayer, CROWD_COVER_DOTS, CROWD_COVER_STREAKS, crowdFade, DEFAULT_STREAK_MAX, markWeight, newSatelliteState, pinSliceSize, readStreakMax, STREAK_REACH } from "../src/space/satellite-layer.ts";
+import { createSatelliteLayer, CROWD_COVER_DOTS, dotPx, MAX_DOT_PX, CROWD_COVER_STREAKS, crowdFade, DEFAULT_STREAK_MAX, markWeight, newSatelliteState, pinSliceSize, readStreakMax, STREAK_REACH } from "../src/space/satellite-layer.ts";
 import { createSatellites, MAX_SATELLITE_SPEED, type ElementSet } from "../src/satellites/index.ts";
 import { madeUp } from "./madeup-elements.ts";
 
@@ -323,6 +323,36 @@ test("the marks lose weight as the Earth is drawn smaller: full from 150 pixels,
   }
   assert.deepEqual(rims, opacities, "the dots' rim follows the same weight");
   assert.ok(rims[0]! === 1 && rims[1]! < 1 && rims[2]! < 0.1, `rim at three sizes: ${rims.map((r) => r.toFixed(2)).join(", ")}`);
+});
+
+test("a dot is never drawn wider than MAX_DOT_PX however far the camera comes in, and the dark rim is for dots wide enough to carry it", () => {
+  assert.equal(dotPx(6, 1), 6);
+  assert.equal(dotPx(6, 2.5), MAX_DOT_PX, "near: no wider than the cap");
+  assert.equal(dotPx(4, 2.5), MAX_DOT_PX);
+  assert.equal(dotPx(6, 0.45), 2.7, "far: smaller, as before");
+  assert.equal(dotPx(10, 1), 10, "a group's own larger size is kept");
+  assert.equal(dotPx(10, 2.5), 10, "and does not grow");
+  assert.equal(dotPx(10, 0.5), 5);
+  const state = newSatelliteState();
+  const round = stations.filter((set) => set.ECCENTRICITY < 0.02);
+  state.groups.set("stations", { satellites: createSatellites(round), color: "#fff", size: 4, orbits: false, visible: true });
+  const layer = createSatelliteLayer(parts(true), scene as never, state, () => 1);
+  const time = Date.parse("2026-11-02T18:00:00Z");
+  const widths: number[] = [];
+  for (const radius of [150, 400, 1200]) {
+    layer.update(time, 1, radius);
+    const entries = scene.children as { material?: { uniforms?: { size?: { value: number }; ring?: { value: number } } } }[];
+    const dots = [...entries].reverse().find((child) => child.material?.uniforms?.size && child.material.uniforms.ring?.value === 0);
+    widths.push(dots!.material!.uniforms!.size!.value);
+  }
+  assert.ok(state.drawn.dotScale > 2, `the dots would have grown ${state.drawn.dotScale.toFixed(2)} times`);
+  assert.ok(widths.every((w) => w <= MAX_DOT_PX), `widths ${widths.join(", ")}`);
+  assert.equal(widths[0], 4, "at the first size a dot is its own size");
+  assert.ok(widths[2]! === MAX_DOT_PX, "and stops at the cap");
+  // the shader: the rim fades in with the dot's width, so a small dot has none
+  const shader = readFileSync(new URL("../src/space/satellite-layer.ts", import.meta.url), "utf8");
+  assert.match(shader, /float big = smoothstep\(rimMin, rimMin \* 1\.5, vPx\)/);
+  assert.match(shader, /rimEdge \* rim \* big/);
 });
 
 test("satellite-streak-max reads a number of pixels, off or 0 for none, and anything else is the default", () => {
