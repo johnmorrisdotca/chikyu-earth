@@ -4,6 +4,8 @@
 
 - **Every demo page says what it is and credits its data** (MODULES-1764). The build writes kazoku-ui's page header and credit line where the page marks `<!--frame:header-->` and `<!--frame:credits-->`. An embed has the credit line only. The family's checker is kazoku-ui's of 2026-11-11b. Tests: `test/page-frame.test.ts`, `test/standard.test.ts`.
 
+- **The CI-image browser run is a script** (MODULES-1763). `pnpm test:e2e:image` runs the demo tests in Microsoft's Playwright image at 4 CPUs. Playwright arguments go after `--`.
+
 ## 0.68.1 - 2026-11-23
 
 - **The package builds in Next.js again** (with Turbopack). `<chikyu-flat>`, the globe and the space view found their own pictures with `new URL("../textures/", import.meta.url)`; Turbopack reads that pattern as a file to bundle, cannot bundle a folder, and stopped the build (spaceprogramx.com's deploy failed on it). The address is now made from `String(import.meta.url)`, which bundlers leave alone; nothing changes in a browser.
