@@ -125,13 +125,13 @@ test.describe("the toggle, the T key and the address", () => {
     await page.getByRole("button", { name: "日本語" }).first().click();
     await expect(page.locator(TOGGLE).getByRole("button")).toContainText("ワイド");
     await page.keyboard.press("t");
-    await expect(page.locator(TOGGLE).getByRole("button")).toContainText("ふつう");
+    await expect(page.locator(TOGGLE).getByRole("button")).toContainText("標準");
     await page.getByRole("button", { name: "English" }).first().click();
     await expect(page.locator(TOGGLE).getByRole("button")).toContainText("Normal");
     // a page opened in Japanese says so from the start (and the device remembered Wide, so the button offers Normal)
     await open(page, "?lang=ja");
     await expect(page.locator("html")).toHaveAttribute("data-wide", "on");
-    await expect(page.locator(TOGGLE).getByRole("button")).toContainText("ふつう");
+    await expect(page.locator(TOGGLE).getByRole("button")).toContainText("標準");
   });
 
   test("Wide at a desk draws the line globe large, as a vector", async ({ page }) => {
