@@ -183,13 +183,13 @@ const CSS = `
 @container (min-width:600px){.chips{flex-wrap:wrap;overflow:visible}}
 .gap{flex:1 1 0}
 .pair{display:inline-flex;gap:0}
-.pair button:first-child{border-radius:999px 0 0 999px}
-.pair button:last-child{border-radius:0 999px 999px 0;margin-left:-1px}
-button{font:inherit;color:inherit;background:transparent;border:1px solid color-mix(in srgb,currentColor 35%,transparent);border-radius:999px;padding:3px 12px;min-height:32px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.pair button:first-child{border-radius:var(--chikyu-flat-button-radius,999px) 0 0 var(--chikyu-flat-button-radius,999px)}
+.pair button:last-child{border-radius:0 var(--chikyu-flat-button-radius,999px) var(--chikyu-flat-button-radius,999px) 0;margin-left:-1px}
+button{font:inherit;color:inherit;background:transparent;border:var(--chikyu-flat-button-border,1px solid color-mix(in srgb,currentColor 35%,transparent));border-radius:var(--chikyu-flat-button-radius,999px);padding:var(--chikyu-flat-button-padding,3px 12px);min-height:var(--chikyu-flat-button-min-height,32px);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 button[aria-pressed="true"]{background:color-mix(in srgb,currentColor 14%,transparent);border-color:currentColor}
 button:disabled{opacity:.45;cursor:default}
 button:focus-visible{outline:3px solid #6cd0ff;outline-offset:2px}
-@media (pointer:coarse){button{min-height:44px;padding:6px 14px}}
+@media (pointer:coarse){button{min-height:var(--chikyu-flat-button-min-height,44px);padding:var(--chikyu-flat-button-padding,6px 14px)}}
 .chip .swatch{width:10px;height:10px;border-radius:50%;background:var(--c,#9aa5b1);flex:none}
 .chip .n{opacity:.7;font-variant-numeric:tabular-nums;font-size:.85em}
 .stage{position:relative;flex:1 1 auto;min-height:0;aspect-ratio:var(--chikyu-flat-aspect,2/1);overflow:hidden;border-radius:var(--chikyu-flat-radius,10px);background:var(--chikyu-flat-sea,#0b1830)}
@@ -201,18 +201,18 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ring{position:absolute;left:0;top:0;width:20px;height:20px;margin:-10px 0 0 -10px;border:2px solid #fff;border-radius:50%;pointer-events:none;box-shadow:0 0 0 1px #000,inset 0 0 0 1px #000}
 .ring.hov{width:14px;height:14px;margin:-7px 0 0 -7px;border-width:1px}
 .ring[hidden],.tip[hidden]{display:none}
-.tip{position:absolute;left:0;top:0;pointer-events:none;background:rgba(8,14,28,.94);color:#fff;padding:4px 8px;border-radius:6px;font-size:.85em;line-height:1.3;white-space:nowrap;border:1px solid rgba(255,255,255,.3)}
-.key{position:absolute;left:8px;bottom:8px;display:flex;flex-wrap:wrap;gap:4px 12px;margin:0;padding:3px 8px;border-radius:6px;background:rgba(8,14,28,.82);color:#fff;font-size:.8em;line-height:1.3;pointer-events:none;max-width:calc(100% - 16px)}
+.tip{position:absolute;left:0;top:0;pointer-events:none;background:rgba(8,14,28,.94);color:#fff;padding:4px 8px;border-radius:6px;font-size:var(--chikyu-flat-tip-font-size,.85em);line-height:1.3;white-space:nowrap;border:1px solid rgba(255,255,255,.3)}
+.key{position:absolute;left:8px;bottom:8px;display:flex;flex-wrap:wrap;gap:4px 12px;margin:0;padding:3px 8px;border-radius:6px;background:rgba(8,14,28,.82);color:#fff;font-size:var(--chikyu-flat-key-font-size,.8em);line-height:1.3;pointer-events:none;max-width:calc(100% - 16px)}
 .key[hidden]{display:none}
 .key span{display:inline-flex;align-items:center;gap:6px}
 .key i{display:inline-block;width:18px;height:0;border-top:3px solid var(--k,#fff);border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
 button.mark{position:absolute;left:0;top:0;width:26px;height:26px;min-height:0;margin:-13px 0 0 -13px;padding:0;border:0;border-radius:50%;background:transparent;pointer-events:none}
 button.mark[hidden]{display:none}
 button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
-.legend{font-size:.85em;line-height:1.3;padding-left:var(--chikyu-flat-key-inset,0)}
+.legend{font-size:var(--chikyu-flat-key-font-size,.85em);line-height:1.3;padding-left:var(--chikyu-flat-key-inset,0)}
 .legend[hidden],.legend ul[hidden]{display:none}
-.legend button{min-height:28px;padding:1px 10px;font-size:inherit}
-@media (pointer:coarse){.legend button{min-height:40px}}
+.legend button{min-height:var(--chikyu-flat-button-min-height,28px);padding:var(--chikyu-flat-button-padding,1px 10px);font-size:inherit}
+@media (pointer:coarse){.legend button{min-height:var(--chikyu-flat-button-min-height,40px)}}
 .legend ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px}
 .legend li{display:inline-flex;align-items:center;gap:6px}
 .g{display:inline-flex;align-items:center;justify-content:center;gap:2px;flex:none;width:30px;height:20px;border-radius:4px;background:var(--chikyu-flat-sea,#0b1830)}
@@ -252,7 +252,7 @@ button.credit[data-open] .full{display:inline}
  *
  * Events: `chikyu-flat-pick` (a satellite under the pointer, tapped, or reached by the keyboard: a `FlatPick`; `detail.id` is null when a tap lands on nothing and clears the choice), `chikyu-flat-filter` (a chip changed which groups or plane are shown: `{ groups, plane }`),
  * `chikyu-flat-planes` (the planes were worked out: `{ planes }`), `chikyu-flat-view` (the reader panned or zoomed: `{ center, zoom }`), `chikyu-flat-look` (the look or how it stands changed: `{ look, state }`), `chikyu-flat-mark` (the Sun's dot or the home diamond was pressed: `{ mark, name, text, lon, lat, place, via }`) and `chikyu-timechange` (`{ time, running }`, at most four a second while time runs).
- * Style it with the custom properties `--chikyu-flat-key-inset` (room kept at the left of the key, for a card lying over the map's left side), `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-day`, `--chikyu-flat-terminator`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
+ * Style it with the shadow parts `button` (every button and chip), `tip`, `key` and `msg` (`chikyu-flat::part(button) { … }`) and the custom properties `--chikyu-flat-button-radius`, `--chikyu-flat-button-padding`, `--chikyu-flat-button-min-height`, `--chikyu-flat-button-border`, `--chikyu-flat-tip-font-size`, `--chikyu-flat-key-font-size`, `--chikyu-flat-key-inset` (room kept at the left of the key, for a card lying over the map's left side), `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-day`, `--chikyu-flat-terminator`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
  *
  * @example
  * ```ts no-run
@@ -1460,6 +1460,7 @@ export class ChikyuFlat extends HTMLElement {
     const d = box.ownerDocument;
     const toggle = d.createElement("button");
     toggle.type = "button";
+    toggle.setAttribute("part", "button");
     toggle.dataset["act"] = "key";
     toggle.setAttribute("aria-expanded", String(open));
     toggle.setAttribute("aria-controls", "legend-list");
@@ -1541,11 +1542,15 @@ export class ChikyuFlat extends HTMLElement {
     const hovRing = Object.assign(d.createElement("div"), { className: "ring hov", hidden: true });
     const tip = Object.assign(d.createElement("div"), { className: "tip", hidden: true });
     tip.setAttribute("aria-hidden", "true");
+    tip.setAttribute("part", "tip");
     const msg = Object.assign(d.createElement("p"), { className: "msg" });
     msg.setAttribute("role", "status");
+    msg.setAttribute("part", "msg");
     const key = Object.assign(d.createElement("p"), { className: "key", hidden: true });
     key.setAttribute("role", "group");
+    key.setAttribute("part", "key");
     const credit = Object.assign(d.createElement("button"), { className: "credit", type: "button", hidden: true });
+    credit.setAttribute("part", "button credit");
     credit.append(d.createElement("span"), d.createElement("span"));
     credit.children[0]!.className = "short";
     credit.children[1]!.className = "full";
@@ -1553,6 +1558,7 @@ export class ChikyuFlat extends HTMLElement {
     credit.addEventListener("click", () => credit.setAttribute("aria-expanded", String(credit.toggleAttribute("data-open"))));
     const legend = Object.assign(d.createElement("div"), { className: "legend", hidden: true });
     legend.setAttribute("role", "group");
+    legend.setAttribute("part", "key");
     legend.addEventListener("click", this.#onLegend);
     const marks = (["sun", "home"] as const).map((mark) => {
       const button = Object.assign(d.createElement("button"), { className: "mark", type: "button", hidden: true });
@@ -1625,7 +1631,7 @@ export class ChikyuFlat extends HTMLElement {
     (this.shadowRoot!.querySelector("#help") as HTMLElement).textContent = say(lang, "help");
     bar.setAttribute("role", "toolbar");
     bar.setAttribute("aria-label", say(lang, "controls"));
-    const button = (act: string, label: string, extra = ""): string => `<button type="button" data-act="${act}"${extra}>${escape(label)}</button>`;
+    const button = (act: string, label: string, extra = ""): string => `<button type="button" part="button" data-act="${act}"${extra}>${escape(label)}</button>`;
     const rows: string[] = [];
     const first: string[] = [];
     if (wants.has("centre")) {
@@ -1645,11 +1651,11 @@ export class ChikyuFlat extends HTMLElement {
       if (groups === "planes" && one.length === 1) {
         const g = one[0]!;
         const chips = [button("plane", say(lang, "all"), ` class="chip" data-plane="" aria-pressed="false"`)];
-        for (const plane of g.clusters.planes) chips.push(`<button type="button" class="chip" data-act="plane" data-plane="${plane.id}" data-i="${plane.index}" aria-pressed="false" aria-label="${escape(say(lang, "planeChip", { id: plane.id, count: plane.count }))}"><span class="swatch"></span>${escape(plane.id)} <span class="n">${plane.count}</span></button>`);
+        for (const plane of g.clusters.planes) chips.push(`<button type="button" part="button" class="chip" data-act="plane" data-plane="${plane.id}" data-i="${plane.index}" aria-pressed="false" aria-label="${escape(say(lang, "planeChip", { id: plane.id, count: plane.count }))}"><span class="swatch"></span>${escape(plane.id)} <span class="n">${plane.count}</span></button>`);
         rows.push(`<div class="row chips" role="group" aria-label="${escape(say(lang, "planesFilter"))}">${chips.join("")}</div>`);
       } else if (groups === "groups") {
-        const chips = [`<button type="button" class="chip" data-act="group" data-group="*" aria-pressed="false">${escape(say(lang, "all"))}</button>`];
-        for (const g of this.#groups.values()) chips.push(`<button type="button" class="chip" data-act="group" data-group="${escape(g.id)}" aria-pressed="false"><span class="swatch"></span>${escape(lang === "ja" ? g.labelJa : g.label)} <span class="n">${g.n.toLocaleString(lang)}</span></button>`);
+        const chips = [`<button type="button" part="button" class="chip" data-act="group" data-group="*" aria-pressed="false">${escape(say(lang, "all"))}</button>`];
+        for (const g of this.#groups.values()) chips.push(`<button type="button" part="button" class="chip" data-act="group" data-group="${escape(g.id)}" aria-pressed="false"><span class="swatch"></span>${escape(lang === "ja" ? g.labelJa : g.label)} <span class="n">${g.n.toLocaleString(lang)}</span></button>`);
         rows.push(`<div class="row chips" role="group" aria-label="${escape(say(lang, "groupsFilter"))}">${chips.join("")}</div>`);
       }
     }
