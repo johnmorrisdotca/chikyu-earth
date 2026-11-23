@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.67.0 - 2026-11-23
+
 - **`<chikyu-flat>`'s marks have names and a key** (MODULES-1768). The yellow dot (the Sun overhead) and the white diamond (My place) were painted into the map and said nothing; nothing on the map was explained.
   - **The key.** Under the map, never over it, a row names every mark drawn now, each beside its picture, in English and Japanese: the Sun overhead, My place, a satellite (its colour is its group or its orbital plane), a faint satellite (old orbit data), the satellite you chose, the footprint, the ground track in sunlight and in the shadow, the night side (in the photo look, darker with city lights). What is not drawn is not listed. Open on a map 600 px wide or more, shut on a narrower one until the Key button is pressed; `keyOpen` sets it; `controls` without `key` leaves it out. While it is open the track's own key over the map steps aside.
   - **They name themselves.** The Sun's dot says "The Sun is overhead here: over the Atlantic Ocean, 23°S 15°W" and the diamond "My place: Japan, 36°N 140°E" (English and Japanese) on hover, on a tap (the name stays beside it until a tap elsewhere or Escape: a finger cannot hover) and on focus: Tab goes from the map to each mark, which has a button over it that takes no pointer, so a drag that starts on a mark still pans. A press sends `chikyu-flat-mark` (`{ mark, name, text, lon, lat, place, via }`).
