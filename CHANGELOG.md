@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.68.1 - 2026-11-23
+
 - **The package builds in Next.js again** (with Turbopack). `<chikyu-flat>`, the globe and the space view found their own pictures with `new URL("../textures/", import.meta.url)`; Turbopack reads that pattern as a file to bundle, cannot bundle a folder, and stopped the build (spaceprogramx.com's deploy failed on it). The address is now made from `String(import.meta.url)`, which bundlers leave alone; nothing changes in a browser.
 
 ## 0.68.0 - 2026-11-23
