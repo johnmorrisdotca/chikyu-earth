@@ -62,7 +62,7 @@ flat.addEventListener("chikyu-flat-pick", (event) => console.log(event.detail.na
 
 ### The map and its centre
 
-The map is plate carree (longitude and latitude to equal widths) with the country outlines, a graticule and the night side drawn from the real Sun. `center` is the longitude in the middle, 0 (Greenwich) by default; any value works, and the map wraps cleanly at the date line. The built-in **Greenwich** button goes back to 0. Give the reader's saved place with `home-lon` and `home-lat` and the map shows a marker there and a **My place** button that centres on it. **The element never asks the browser for a place**: your page reads the one the reader saved and sets the two attributes. A box taller than 2 to 1 (a phone) is filled, and the map wraps round its sides. Zoom with the + and − buttons, Control or Command and the wheel (a trackpad pinch), two fingers, or the + and − keys; drag to pan.
+The map is plate carree (longitude and latitude to equal widths) with the country outlines, a graticule and day and night drawn from the real Sun: the day side a little lighter, the night side darker in four steps from the line of sunrise and sunset towards midnight, and that line itself, drawn in amber, 90 degrees from the point under the Sun (the Sun is on the horizon along it). Over the photo the night is darker too, and the line is drawn over it. The key names day, night and the line. `center` is the longitude in the middle, 0 (Greenwich) by default; any value works, and the map wraps cleanly at the date line. The built-in **Greenwich** button goes back to 0. Give the reader's saved place with `home-lon` and `home-lat` and the map shows a marker there and a **My place** button that centres on it. **The element never asks the browser for a place**: your page reads the one the reader saved and sets the two attributes. A box taller than 2 to 1 (a phone) is filled, and the map wraps round its sides. Zoom with the + and − buttons, Control or Command and the wheel (a trackpad pinch), two fingers, or the + and − keys; drag to pan.
 
 ### What is shown
 
@@ -75,7 +75,7 @@ The map is plate carree (longitude and latitude to equal widths) with the countr
 | `footprint` | Draw the coverage circle of the chosen satellite, or of every one shown when there are 80 or fewer. `footprint-elevation` is the lowest angle above the horizon the circle is drawn for (25, as the 3D beam). |
 | `track` | Draw the ground track of the chosen satellite: one orbit, dashed behind it and solid ahead, **amber where the satellite is in sunlight and blue where it is in the Earth's shadow**, with a key. It follows the clock. |
 | `selected` | The NORAD number of the chosen satellite. |
-| `shade` | `off` for no night side. |
+| `shade` | `off` for no night side, no day tint and no sunrise and sunset line. |
 | `look` | `map` (the default: the drawn map of countries) or `photo`: NASA's picture of the Earth, see below. |
 | `borders` | `off` for no country lines over the photo. Pale, thin lines by default. |
 | `texture-base` | Where the pictures are served from, as on `<chikyu-earth-realistic>`; the package's own `textures/` folder beside the code by default. |
@@ -134,7 +134,7 @@ flat.setAttribute("texture-base", "/textures/"); // where you serve the package'
 
 ### Style
 
-The sea, land, outline and night colours are the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line` and `--chikyu-flat-night`; the track's two colours are `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `--chikyu-flat-key-inset` (0) keeps that much room at the left of the key, for a card that lies over the map's left side; `--chikyu-flat-aspect` (2 / 1) and `--chikyu-flat-aspect-narrow` (4 / 3, under 600 px wide) set the shape of the map, and `--chikyu-flat-radius` its corners. Give the element a height and the map fills it.
+The sea, land, outline and night colours are the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line` and `--chikyu-flat-night` (the shade of each of the four steps of night), `--chikyu-flat-day` (the day side's tint) and `--chikyu-flat-terminator` (the line's colour); the track's two colours are `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `--chikyu-flat-key-inset` (0) keeps that much room at the left of the key, for a card that lies over the map's left side; `--chikyu-flat-aspect` (2 / 1) and `--chikyu-flat-aspect-narrow` (4 / 3, under 600 px wide) set the shape of the map, and `--chikyu-flat-radius` its corners. Give the element a height and the map fills it.
 
 ## Cost
 

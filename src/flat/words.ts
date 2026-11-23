@@ -75,8 +75,10 @@ export const FLAT_WORDS: Readonly<Record<FlatLang, Readonly<Record<string, strin
     keyFaint: "A faint satellite: its orbit data is old, so the place is an estimate",
     keyRing: "The satellite you chose",
     keyFootprint: "Footprint: the area that can see the satellite",
-    keyNight: "The night side",
-    keyNightPhoto: "The night side: darker, with city lights",
+    keyDay: "Day: the Sun is up",
+    keyNight: "Night: the Sun is down",
+    keyTerminator: "Sunrise and sunset: where the Sun is on the horizon",
+    keyNightPhoto: "Night: darker, with city lights",
   },
   ja: {
     map: "世界の平面地図の上の衛星",
@@ -130,8 +132,10 @@ export const FLAT_WORDS: Readonly<Record<FlatLang, Readonly<Record<string, strin
     keyFaint: "うすい衛星：軌道データが古いため、場所は推定です",
     keyRing: "選んだ衛星",
     keyFootprint: "可視範囲：その衛星が見える範囲",
-    keyNight: "夜の側",
-    keyNightPhoto: "夜の側：暗くなり、街の明かりが見えます",
+    keyDay: "昼：太陽が出ている側",
+    keyNight: "夜：太陽が沈んでいる側",
+    keyTerminator: "日の出・日の入りの線：太陽が地平線にある所",
+    keyNightPhoto: "夜：暗くなり、街の明かりが見えます",
   },
 };
 

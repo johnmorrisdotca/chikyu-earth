@@ -47,7 +47,9 @@ test("the key under the map names every mark that is drawn, and never covers the
   await expect(items.filter({ hasText: "The Sun is overhead" })).toHaveCount(1);
   await expect(items.filter({ hasText: "My place" })).toHaveCount(1);
   await expect(items.filter({ hasText: "A satellite: its colour is its orbital plane" })).toHaveCount(1);
-  await expect(items.filter({ hasText: "The night side" })).toHaveCount(1);
+  await expect(items.filter({ hasText: "Day: the Sun is up" })).toHaveCount(1);
+  await expect(items.filter({ hasText: "Night: the Sun is down" })).toHaveCount(1);
+  await expect(items.filter({ hasText: "Sunrise and sunset" })).toHaveCount(1);
   // what is not drawn is not in the key: no ring, footprint or track until a satellite is chosen and they are on
   await expect(items.filter({ hasText: "The satellite you chose" })).toHaveCount(0);
   await expect(items.filter({ hasText: "Footprint" })).toHaveCount(0);
@@ -86,7 +88,8 @@ test("the key under the map names every mark that is drawn, and never covers the
   await legend.getByRole("button", { name: "Show the key to the map" }).click();
   await flat(page).evaluate((el) => el.setAttribute("shade", "off"));
   await expect(items.filter({ hasText: "The Sun is overhead" })).toHaveCount(0);
-  await expect(items.filter({ hasText: "The night side" })).toHaveCount(0);
+  await expect(items.filter({ hasText: "Night:" })).toHaveCount(0);
+  await expect(items.filter({ hasText: "Sunrise and sunset" })).toHaveCount(0);
 });
 
 test("the key is in Japanese when the page is, and in the photo look it says what the night side looks like", async ({ page }, info) => {
@@ -96,7 +99,9 @@ test("the key is in Japanese when the page is, and in the photo look it says wha
   await flat(page).evaluate((el) => el.setAttribute("lang", "ja"));
   await expect(legend.locator("li").filter({ hasText: "太陽が真上にある場所" })).toHaveCount(1);
   await expect(legend.locator("li").filter({ hasText: "自分の場所" })).toHaveCount(1);
-  await expect(legend.locator("li").filter({ hasText: "夜の側" })).toHaveCount(1);
+  await expect(legend.locator("li").filter({ hasText: "昼：太陽が出ている側" })).toHaveCount(1);
+  await expect(legend.locator("li").filter({ hasText: "夜：太陽が沈んでいる側" })).toHaveCount(1);
+  await expect(legend.locator("li").filter({ hasText: "日の出・日の入りの線" })).toHaveCount(1);
   await expect(flat(page).locator('button.mark[data-mark="sun"]')).toHaveAttribute("aria-label", /ここは太陽が真上にある場所です：.*、(南|北)緯\d+° (東|西)経\d+°/);
   await flat(page).evaluate((el) => {
     el.setAttribute("lang", "en");
@@ -104,7 +109,7 @@ test("the key is in Japanese when the page is, and in the photo look it says wha
     el.setAttribute("look", "photo");
   });
   await expect.poll(() => flat(page).evaluate((el) => (el as Flat).lookState)).toBe("photo");
-  await expect(legend.locator("li").filter({ hasText: "The night side: darker, with city lights" })).toHaveCount(1);
+  await expect(legend.locator("li").filter({ hasText: "Night: darker, with city lights" })).toHaveCount(1);
   // the Sun's mark is still found and named over the photo
   await expect(flat(page).locator('button.mark[data-mark="sun"]')).toHaveAttribute("aria-label", /The Sun is overhead here/);
 });

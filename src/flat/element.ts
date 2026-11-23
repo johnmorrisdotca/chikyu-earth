@@ -225,7 +225,8 @@ button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
 .g.footprint::before{content:"";width:16px;height:16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,255,255,.12)}
 .g.line i{width:20px;height:0;border-radius:2px;background:none;border-top:3px solid var(--c)}
 .g.nasa::before{content:"NASA";font-size:.6em;letter-spacing:.04em;color:#fff}
-.g.night{background:linear-gradient(90deg,#2a4a73,#07101f)}
+.g.day{background:linear-gradient(90deg,#4a73a8,#8fb4e6)}
+.g.night{background:linear-gradient(90deg,#1b2f4d,#030812)}
 .g.night-photo{background:radial-gradient(circle at 70% 55%,#ffd98a 0 1px,transparent 2px),radial-gradient(circle at 40% 40%,#ffe9b8 0 1px,transparent 2px),linear-gradient(90deg,#41648f,#02060f)}
 button.credit{position:absolute;right:8px;bottom:8px;display:block;margin:0;padding:2px 8px;min-height:0;border:0;border-radius:6px;background:rgba(8,14,28,.72);color:#fff;font-size:.7em;line-height:1.3;max-width:calc(100% - 16px);text-align:right;cursor:pointer}
 button.credit .full,button.credit[data-open] .short{display:none}
@@ -251,7 +252,7 @@ button.credit[data-open] .full{display:inline}
  *
  * Events: `chikyu-flat-pick` (a satellite under the pointer, tapped, or reached by the keyboard: a `FlatPick`; `detail.id` is null when a tap lands on nothing and clears the choice), `chikyu-flat-filter` (a chip changed which groups or plane are shown: `{ groups, plane }`),
  * `chikyu-flat-planes` (the planes were worked out: `{ planes }`), `chikyu-flat-view` (the reader panned or zoomed: `{ center, zoom }`), `chikyu-flat-look` (the look or how it stands changed: `{ look, state }`), `chikyu-flat-mark` (the Sun's dot or the home diamond was pressed: `{ mark, name, text, lon, lat, place, via }`) and `chikyu-timechange` (`{ time, running }`, at most four a second while time runs).
- * Style it with the custom properties `--chikyu-flat-key-inset` (room kept at the left of the key, for a card lying over the map's left side), `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
+ * Style it with the custom properties `--chikyu-flat-key-inset` (room kept at the left of the key, for a card lying over the map's left side), `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-day`, `--chikyu-flat-terminator`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
  *
  * @example
  * ```ts no-run
@@ -306,6 +307,8 @@ export class ChikyuFlat extends HTMLElement {
   #announced = -Infinity;
   #mapKey = "";
   #look: FlatLook = "map";
+  /** The colour of the line of sunrise and sunset as the last draw of the map read it, for the key. */
+  #terminatorColour = "#ffc46e";
   #photo: PhotoPictures | null = null;
   #photoFailed = false;
   #lookSent = "";
@@ -878,10 +881,10 @@ export class ChikyuFlat extends HTMLElement {
     this.#mapKey = "";
   }
 
-  #colours(): { sea: string; land: string; line: string; night: string; grid: string } {
+  #colours(): { sea: string; land: string; line: string; night: string; day: string; terminator: string; grid: string } {
     const style = getComputedStyle(this);
     const pick = (name: string, fallback: string): string => style.getPropertyValue(name).trim() || fallback;
-    return { sea: pick("--chikyu-flat-sea", "#0b1830"), land: pick("--chikyu-flat-land", "#1d3557"), line: pick("--chikyu-flat-line", "#46628a"), night: pick("--chikyu-flat-night", "rgba(2,6,18,0.16)"), grid: "rgba(150,180,220,0.13)" };
+    return { sea: pick("--chikyu-flat-sea", "#0b1830"), land: pick("--chikyu-flat-land", "#1d3557"), line: pick("--chikyu-flat-line", "#46628a"), night: pick("--chikyu-flat-night", "rgba(1,4,14,0.2)"), day: pick("--chikyu-flat-day", "rgba(170,205,255,0.1)"), terminator: pick("--chikyu-flat-terminator", "#ffc46e"), grid: "rgba(150,180,220,0.13)" };
   }
 
   #projection(): ReturnType<typeof geoEquirectangular> {
@@ -906,8 +909,9 @@ export class ChikyuFlat extends HTMLElement {
     const photo = pictures?.day ? pictures : null;
     // the map is drawn again only when the view, the home or the sun's place (about a quarter of a degree, half a degree over a photo, which costs more) changed
     const c = this.#colours();
+    this.#terminatorColour = c.terminator;
     const per = photo ? 2 : 4;
-    const key = [v.width, v.height, this.#dpr, v.centerLon.toFixed(3), v.centerLat.toFixed(3), v.zoom.toFixed(3), shade ? Math.round(sun.lon * per) : "x", shade ? Math.round(sun.lat * per) : "x", home ? `${home.lon},${home.lat}` : "", c.sea, c.land, c.line, c.night, photo ? `${photo.day!.width}/${photo.night?.width ?? 0}/${this.getAttribute("borders") === "off" ? "x" : "b"}` : "m"].join("|");
+    const key = [v.width, v.height, this.#dpr, v.centerLon.toFixed(3), v.centerLat.toFixed(3), v.zoom.toFixed(3), shade ? Math.round(sun.lon * per) : "x", shade ? Math.round(sun.lat * per) : "x", home ? `${home.lon},${home.lat}` : "", c.sea, c.land, c.line, c.night, c.day, c.terminator, photo ? `${photo.day!.width}/${photo.night?.width ?? 0}/${this.getAttribute("borders") === "off" ? "x" : "b"}` : "m"].join("|");
     if (key === this.#mapKey) return;
     this.#mapKey = key;
     this.#markAt = { sun: null, home: null };
@@ -943,14 +947,33 @@ export class ChikyuFlat extends HTMLElement {
       ctx.stroke();
     }
     if (shade) {
-      // the night side: four bands from the sunset line towards midnight, each a little darker
-      const anti: [number, number] = [wrapLongitude(sun.lon + 180), -sun.lat];
-      ctx.fillStyle = c.night;
-      for (const radius of photo ? [] : [90, 96, 102, 108]) {
+      if (!photo) {
+        // the day side a little lighter, and the night side from the sunset line towards midnight in four bands, each darker
         ctx.beginPath();
-        path(geoCircle().center(anti).radius(radius).precision(2)());
+        path(geoCircle().center([sun.lon, sun.lat]).radius(90).precision(2)());
+        ctx.fillStyle = c.day;
         ctx.fill();
+        const anti: [number, number] = [wrapLongitude(sun.lon + 180), -sun.lat];
+        ctx.fillStyle = c.night;
+        for (const radius of [90, 96, 102, 108]) {
+          ctx.beginPath();
+          path(geoCircle().center(anti).radius(radius).precision(2)());
+          ctx.fill();
+        }
       }
+      // the sunrise and sunset line: 90 degrees from the point under the Sun, drawn as a line (not as the edge of a shape, which would be closed along the map's sides)
+      ctx.beginPath();
+      path({ type: "LineString", coordinates: geoCircle().center([sun.lon, sun.lat]).radius(90).precision(2)().coordinates[0]! });
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 3.4;
+      ctx.strokeStyle = "rgba(0,0,0,.4)";
+      ctx.stroke();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = c.terminator;
+      ctx.globalAlpha = photo ? 0.75 : 0.95;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = c.night;
       const at = projectFlat(v, sun.lon, sun.lat);
       const spot: MarkSpot = { xs: [], y: at.y, lon: sun.lon, lat: sun.lat };
       for (const x of [at.x, at.x - 360 * pixelsPerDegree(v), at.x + 360 * pixelsPerDegree(v)]) {
@@ -1429,7 +1452,7 @@ export class ChikyuFlat extends HTMLElement {
       const colours = this.#trackColours();
       entries.push({ glyph: "line", text: say(lang, "trackSunlit"), colours: [colours.sun] }, { glyph: "line", text: say(lang, "trackShadow"), colours: [colours.shadow] });
     }
-    if (shade) entries.push({ glyph: photo ? "night-photo" : "night", text: say(lang, photo ? "keyNightPhoto" : "keyNight") });
+    if (shade) entries.push({ glyph: "day", text: say(lang, "keyDay") }, { glyph: photo ? "night-photo" : "night", text: say(lang, photo ? "keyNightPhoto" : "keyNight") }, { glyph: "line", text: say(lang, "keyTerminator"), colours: [this.#terminatorColour] });
     if (photo) entries.push({ glyph: "nasa", text: this.#creditText() });
     const key = JSON.stringify([lang, open, entries]);
     if (key === this.#legendKey) return;
