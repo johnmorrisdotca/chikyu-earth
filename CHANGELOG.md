@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Day and night are plain at a glance on `<chikyu-flat>`** (MODULES-1784). The night shade (a 16 percent navy over a navy map, under thousands of dots) could hardly be seen, and nothing marked where it is day.
+  - **The drawn map.** The night is now four steps of a darker shade (20 percent each, 59 percent at midnight), the day side has a light tint, and the line of sunrise and sunset (90 degrees from the point under the Sun, where the Sun is on the horizon) is drawn in amber with a dark edge. Over the photo the night was already dark; the line is drawn over it as well.
+  - **The key** names day, night (over the photo, "darker, with city lights") and the line, in English and Japanese. `shade="off"` leaves all of it out.
+  - **Style.** `--chikyu-flat-day` (the day tint) and `--chikyu-flat-terminator` (the line's colour); `--chikyu-flat-night` (now `rgba(1,4,14,0.2)`) is the shade of each of the four night steps. The cost is the same: the map is drawn again only when the Sun has moved a step, and the line is one more stroke.
+  - **Tests.** `e2e/flat-day-night.demo.ts` reads the map's pixels: the night's middle is clearly darker than the same ground without the night, the day is not, and the line's amber is where the line should be, in both looks.
+
 ## 0.67.0 - 2026-11-23
 
 - **`<chikyu-flat>`'s marks have names and a key** (MODULES-1768). The yellow dot (the Sun overhead) and the white diamond (My place) were painted into the map and said nothing; nothing on the map was explained.
