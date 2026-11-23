@@ -134,7 +134,7 @@ flat.setAttribute("texture-base", "/textures/"); // where you serve the package'
 
 ### Style
 
-The sea, land, outline and night colours are the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line` and `--chikyu-flat-night`; the track's two colours are `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `--chikyu-flat-aspect` (2 / 1) and `--chikyu-flat-aspect-narrow` (4 / 3, under 600 px wide) set the shape of the map, and `--chikyu-flat-radius` its corners. Give the element a height and the map fills it.
+The sea, land, outline and night colours are the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line` and `--chikyu-flat-night`; the track's two colours are `--chikyu-flat-track-sun` and `--chikyu-flat-track-shadow`. `--chikyu-flat-key-inset` (0) keeps that much room at the left of the key, for a card that lies over the map's left side; `--chikyu-flat-aspect` (2 / 1) and `--chikyu-flat-aspect-narrow` (4 / 3, under 600 px wide) set the shape of the map, and `--chikyu-flat-radius` its corners. Give the element a height and the map fills it.
 
 ## Cost
 

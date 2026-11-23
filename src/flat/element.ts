@@ -209,7 +209,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 button.mark{position:absolute;left:0;top:0;width:26px;height:26px;min-height:0;margin:-13px 0 0 -13px;padding:0;border:0;border-radius:50%;background:transparent;pointer-events:none}
 button.mark[hidden]{display:none}
 button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
-.legend{font-size:.85em;line-height:1.3}
+.legend{font-size:.85em;line-height:1.3;padding-left:var(--chikyu-flat-key-inset,0)}
 .legend[hidden],.legend ul[hidden]{display:none}
 .legend button{min-height:28px;padding:1px 10px;font-size:inherit}
 @media (pointer:coarse){.legend button{min-height:40px}}
@@ -251,7 +251,7 @@ button.credit[data-open] .full{display:inline}
  *
  * Events: `chikyu-flat-pick` (a satellite under the pointer, tapped, or reached by the keyboard: a `FlatPick`; `detail.id` is null when a tap lands on nothing and clears the choice), `chikyu-flat-filter` (a chip changed which groups or plane are shown: `{ groups, plane }`),
  * `chikyu-flat-planes` (the planes were worked out: `{ planes }`), `chikyu-flat-view` (the reader panned or zoomed: `{ center, zoom }`), `chikyu-flat-look` (the look or how it stands changed: `{ look, state }`), `chikyu-flat-mark` (the Sun's dot or the home diamond was pressed: `{ mark, name, text, lon, lat, place, via }`) and `chikyu-timechange` (`{ time, running }`, at most four a second while time runs).
- * Style it with the custom properties `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
+ * Style it with the custom properties `--chikyu-flat-key-inset` (room kept at the left of the key, for a card lying over the map's left side), `--chikyu-flat-sea`, `--chikyu-flat-land`, `--chikyu-flat-line`, `--chikyu-flat-night`, `--chikyu-flat-aspect`, `--chikyu-flat-aspect-narrow` and `--chikyu-flat-radius`.
  *
  * @example
  * ```ts no-run

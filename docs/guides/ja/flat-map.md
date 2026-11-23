@@ -134,7 +134,7 @@ flat.setAttribute("texture-base", "/textures/"); // このパッケージの tex
 
 ### 見た目
 
-海、陸、輪郭、夜の色は、カスタムプロパティ `--chikyu-flat-sea`、`--chikyu-flat-land`、`--chikyu-flat-line`、`--chikyu-flat-night` で決めます。軌跡の2色は `--chikyu-flat-track-sun` と `--chikyu-flat-track-shadow` です。`--chikyu-flat-aspect` (2 / 1) と `--chikyu-flat-aspect-narrow` (幅 600 px 未満では 4 / 3) で地図の形、`--chikyu-flat-radius` で角の丸みを決めます。要素に高さを与えると、地図はそれいっぱいに広がります。
+海、陸、輪郭、夜の色は、カスタムプロパティ `--chikyu-flat-sea`、`--chikyu-flat-land`、`--chikyu-flat-line`、`--chikyu-flat-night` で決めます。軌跡の2色は `--chikyu-flat-track-sun` と `--chikyu-flat-track-shadow` です。`--chikyu-flat-key-inset` (0) は凡例の左側にあける余白で、地図の左側にかぶさるカードがあるときに使います。`--chikyu-flat-aspect` (2 / 1) と `--chikyu-flat-aspect-narrow` (幅 600 px 未満では 4 / 3) で地図の形、`--chikyu-flat-radius` で角の丸みを決めます。要素に高さを与えると、地図はそれいっぱいに広がります。
 
 ## 処理の負荷
 
