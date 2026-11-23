@@ -669,7 +669,7 @@ export class ChikyuFlat extends HTMLElement {
 
   /** Where the pictures are served from: the `texture-base` attribute, else the package's own `textures/` folder beside this file, as for the realistic Earth. */
   #textureBase(): string {
-    const base = this.getAttribute("texture-base") ?? new URL("../textures/", import.meta.url).href;
+    const base = this.getAttribute("texture-base") ?? new URL("../textures/", String(import.meta.url)).href;
     return base.endsWith("/") ? base : `${base}/`;
   }
 

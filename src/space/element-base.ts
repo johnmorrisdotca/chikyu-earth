@@ -3344,7 +3344,7 @@ export class ChikyuSpace extends HTMLElement {
   // --- the rest --------------------------------------------------------------------------------------------------------------------------------------
   #textureBase(): string {
     const given = this.getAttribute("texture-base");
-    const base = given ?? new URL("../textures/", import.meta.url).href;
+    const base = given ?? new URL("../textures/", String(import.meta.url)).href;
     return base.endsWith("/") ? base : `${base}/`;
   }
 
