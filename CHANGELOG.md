@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The CI-image browser run is a script** (MODULES-1763). `pnpm test:e2e:image` runs the demo tests in Microsoft's Playwright image at 4 CPUs. Playwright arguments go after `--`.
+
 ## 0.68.0 - 2026-11-23
 
 - **Day and night are plain at a glance on `<chikyu-flat>`** (MODULES-1784). The night shade (a 16 percent navy over a navy map, under thousands of dots) could hardly be seen, and nothing marked where it is day.

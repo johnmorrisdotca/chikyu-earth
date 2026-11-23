@@ -36,6 +36,12 @@ pnpm test:usage   # every way to use the package, built or run from the package 
 pnpm test:readme  # the README's ts blocks, type-checked and run against the packed package
 ```
 
+The same tests in CI's Playwright image, when a run on this Mac is not the one that failed:
+
+```sh
+pnpm test:e2e:image   # 4 CPUs. Playwright arguments go after --: pnpm test:e2e:image -- --project=chromium-desk
+```
+
 **The docs.** Every export has a TSDoc summary, `@param`, `@returns` and an `@example` that imports the package by its name (`pnpm docs:check` runs them). Guides are Markdown in `docs/guides/` with their Japanese twins in `docs/guides/ja/`: one language to a page. A way of using the package is a file in `examples/`, listed in `scripts/check-usage.ts`, and the guides hold its text word for word. `scripts/docs-site.mjs`, `scripts/family-*.mjs` and `demo/family.css` are the family's shared files: never edit them here.
 
 The demo runs at `pnpm dev` → http://127.0.0.1:8200/chikyu-earth/. If you change what a person sees, look at it:

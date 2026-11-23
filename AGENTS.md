@@ -46,6 +46,7 @@ This repo is one of the family of John Morris's npm packages. The rules every pa
 | Title prefix and `--area` | `chikyu-earth` |
 | Ports | 8200 to 8299: 8200 the demo and dev, 8201 the tests, 8202 the picture scripts, 8203 and up anything else |
 | Checks before a push | `pnpm check`, `pnpm test:demo`, `pnpm test:usage` (every way to use the package, and the README) |
+| CI image | `pnpm test:e2e:image` runs those browser tests in CI's Playwright image at 4 CPUs. Playwright arguments go after `--`. Not a push check. |
 | Release | `release.yml` → `reusable-release.yml`; trusted publisher entry: `release.yml` |
 | Hand-off project | `chikyu-earth` |
 
