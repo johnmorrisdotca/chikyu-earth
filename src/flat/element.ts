@@ -224,9 +224,14 @@ button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
 .g.chosen::before{content:"";width:12px;height:12px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000}
 .g.footprint::before{content:"";width:16px;height:16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,255,255,.12)}
 .g.line i{width:20px;height:0;border-radius:2px;background:none;border-top:3px solid var(--c)}
+.g.nasa::before{content:"NASA";font-size:.6em;letter-spacing:.04em;color:#fff}
 .g.night{background:linear-gradient(90deg,#2a4a73,#07101f)}
 .g.night-photo{background:radial-gradient(circle at 70% 55%,#ffd98a 0 1px,transparent 2px),radial-gradient(circle at 40% 40%,#ffe9b8 0 1px,transparent 2px),linear-gradient(90deg,#41648f,#02060f)}
-.credit{position:absolute;right:8px;bottom:8px;margin:0;padding:2px 8px;border-radius:6px;background:rgba(8,14,28,.72);color:#fff;font-size:.7em;line-height:1.3;pointer-events:none;max-width:min(60%,calc(100% - 16px));text-align:right}
+button.credit{position:absolute;right:8px;bottom:8px;display:block;margin:0;padding:2px 8px;min-height:0;border:0;border-radius:6px;background:rgba(8,14,28,.72);color:#fff;font-size:.7em;line-height:1.3;max-width:calc(100% - 16px);text-align:right;cursor:pointer}
+button.credit .full,button.credit[data-open] .short{display:none}
+button.credit[data-open] .full{display:inline}
+@container (min-width:600px){button.credit{cursor:default}button.credit .short{display:none}button.credit .full{display:inline}}
+@media (pointer:coarse){button.credit{min-height:28px;padding:4px 10px}}
 .credit[hidden]{display:none}
 .msg{position:absolute;inset:0;display:grid;place-items:center;margin:0;padding:12px;text-align:center;color:#cfe0f5;pointer-events:none}
 .msg:empty{display:none}
@@ -703,7 +708,7 @@ export class ChikyuFlat extends HTMLElement {
     if (!first) this.dispatchEvent(new CustomEvent("chikyu-flat-look", { detail: { look: this.#look, state }, bubbles: true, composed: true }));
   }
 
-  /** NASA's credit line, over the corner of the map while the photo is shown. */
+  /** NASA's credit, at the map's bottom edge while the photo is shown: the whole line on a wide map, "Earth: NASA" on a narrow one with the whole line a tap away (and in the key). */
   #showCredit(): void {
     const credit = this.#credit;
     if (!credit) return;
@@ -711,9 +716,18 @@ export class ChikyuFlat extends HTMLElement {
     credit.hidden = !on;
     if (!on) return;
     const lang = this.language;
-    const line = creditLine([ownCredit("chikyu-pictures", 1)], lang);
-    if (credit.textContent !== line) credit.textContent = line;
+    const line = this.#creditText();
+    const [short, full] = credit.children as unknown as [HTMLElement, HTMLElement];
+    if (full.textContent !== line) full.textContent = line;
+    short.textContent = say(lang, "creditShort");
+    credit.setAttribute("aria-label", line);
+    credit.title = line;
     credit.lang = lang;
+  }
+
+  /** The whole credit line of the pictures, in the page's language. */
+  #creditText(): string {
+    return creditLine([ownCredit("chikyu-pictures", 1)], this.language);
   }
 
   #readClock(): void {
@@ -1416,6 +1430,7 @@ export class ChikyuFlat extends HTMLElement {
       entries.push({ glyph: "line", text: say(lang, "trackSunlit"), colours: [colours.sun] }, { glyph: "line", text: say(lang, "trackShadow"), colours: [colours.shadow] });
     }
     if (shade) entries.push({ glyph: photo ? "night-photo" : "night", text: say(lang, photo ? "keyNightPhoto" : "keyNight") });
+    if (photo) entries.push({ glyph: "nasa", text: this.#creditText() });
     const key = JSON.stringify([lang, open, entries]);
     if (key === this.#legendKey) return;
     this.#legendKey = key;
@@ -1507,7 +1522,12 @@ export class ChikyuFlat extends HTMLElement {
     msg.setAttribute("role", "status");
     const key = Object.assign(d.createElement("p"), { className: "key", hidden: true });
     key.setAttribute("role", "group");
-    const credit = Object.assign(d.createElement("p"), { className: "credit", hidden: true });
+    const credit = Object.assign(d.createElement("button"), { className: "credit", type: "button", hidden: true });
+    credit.append(d.createElement("span"), d.createElement("span"));
+    credit.children[0]!.className = "short";
+    credit.children[1]!.className = "full";
+    credit.setAttribute("aria-expanded", "false");
+    credit.addEventListener("click", () => credit.setAttribute("aria-expanded", String(credit.toggleAttribute("data-open"))));
     const legend = Object.assign(d.createElement("div"), { className: "legend", hidden: true });
     legend.setAttribute("role", "group");
     legend.addEventListener("click", this.#onLegend);

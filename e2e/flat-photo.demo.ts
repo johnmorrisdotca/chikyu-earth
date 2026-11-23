@@ -65,6 +65,32 @@ async function colours(page: Page, spots: { lon: number; lat: number; r?: number
   }, spots);
 }
 
+test("the credit is one small line at the map's edge: the whole line on a wide map, \"Earth: NASA\" on a narrow one with the whole line a tap away", async ({ page }, info) => {
+  await open(page);
+  await photo(page, { "texture-base": "textures/" });
+  const credit = flat(page).locator(".credit");
+  const read = () => credit.evaluate((el) => ({ text: (el as HTMLElement).innerText, box: el.getBoundingClientRect().toJSON(), stage: el.parentElement!.getBoundingClientRect().toJSON() }));
+  const closed = await read();
+  // at the bottom edge, and never over the middle of the map
+  expect(closed.box.bottom).toBeGreaterThan(closed.stage.bottom - 12);
+  expect(closed.box.height).toBeLessThan(34);
+  if (info.project.name.endsWith("phone")) {
+    expect(closed.text).toBe("Earth: NASA");
+    expect(closed.box.width * closed.box.height, "a small part of the map").toBeLessThan(closed.stage.width * closed.stage.height * 0.06);
+    await credit.click();
+    await expect(credit).toHaveAttribute("aria-expanded", "true");
+    expect(await credit.evaluate((el) => (el as HTMLElement).innerText)).toContain("NASA Earth Observatory");
+    await credit.click();
+    expect((await read()).text).toBe("Earth: NASA");
+  } else {
+    expect(closed.text).toContain("NASA Earth Observatory");
+    expect(closed.box.height, "one line").toBeLessThan(24);
+  }
+  // the whole credit is in the key as well
+  await flat(page).evaluate((el) => { (el as Flat & { keyOpen: boolean }).keyOpen = true; });
+  await expect(flat(page).locator(".legend li").filter({ hasText: "NASA Earth Observatory" })).toHaveCount(1);
+});
+
 test("the drawn map is the default: no picture is asked for until the photo look is chosen, and none is held once it is left", async ({ page }) => {
   const asked: string[] = [];
   page.on("request", (request) => {
