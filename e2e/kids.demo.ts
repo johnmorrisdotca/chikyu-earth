@@ -142,7 +142,7 @@ test("Print / save PDF opens a print-only copy, calls window.print, and removes 
 test("the sheet speaks Japanese in plain words", async ({ page }) => {
   await open(page, "kind=country&c=JP&lang=ja");
   const sheet = page.locator("#paper-inner .kazoku-sheet");
-  await expect(sheet.locator(".kazoku-namelabel").first()).toHaveText("なまえ:");
+  await expect(sheet.locator(".kazoku-namelabel").first()).toHaveText("なまえ：");
   await expect(sheet.locator(".kazoku-title").first()).toContainText("わたしの くに");
   await expect(sheet.locator("svg [data-flag-say]").first()).toContainText("はた");
   await expect(page.locator("#print")).toHaveText("いんさつ / PDFで ほぞん");
