@@ -1589,12 +1589,12 @@ export class ChikyuFlat extends HTMLElement {
       first.push(button("greenwich", say(lang, "greenwich"), ` aria-label="${escape(say(lang, "centreGreenwich"))}" aria-pressed="false"`));
       if (Number.isFinite(finite(this.getAttribute("home-lon"), Number.NaN))) first.push(button("home", say(lang, "myPlace"), ` aria-label="${escape(say(lang, "centreHome"))}" aria-pressed="false"`));
     }
+    // the look's own pair of buttons, beside the centre buttons and not at the far end of the row (a page's own buttons often sit there): not among the defaults, so a page that has not asked for it sees no new button
+    if (wants.has("look")) first.push(`<span class="pair" role="group" aria-label="${escape(say(lang, "lookGroup"))}">${button("look-map", say(lang, "lookMap"), ` aria-pressed="false"`)}${button("look-photo", say(lang, "lookPhoto"), ` aria-pressed="false"`)}</span>`);
     if (wants.has("zoom")) first.push(`<span class="gap"></span>`, button("zoomout", "−", ` aria-label="${escape(say(lang, "zoomOut"))}"`), button("zoomin", "+", ` aria-label="${escape(say(lang, "zoomIn"))}"`));
     else first.push(`<span class="gap"></span>`);
     if (wants.has("footprint")) first.push(button("footprint", say(lang, "footprint"), ` aria-pressed="false"`));
     if (wants.has("track")) first.push(button("track", say(lang, "groundTrack"), ` aria-pressed="false"`));
-    // the look's own pair of buttons: not among the defaults, so a page that has not asked for it sees no new button
-    if (wants.has("look")) first.push(`<span class="pair" role="group" aria-label="${escape(say(lang, "lookGroup"))}">${button("look-map", say(lang, "lookMap"), ` aria-pressed="false"`)}${button("look-photo", say(lang, "lookPhoto"), ` aria-pressed="false"`)}</span>`);
     if (first.length > 1) rows.push(`<div class="row">${first.join("")}</div>`);
     if (wants.has("chips")) {
       const groups = this.#shownGroupsForChips();
