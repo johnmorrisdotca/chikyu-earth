@@ -18,7 +18,8 @@ async function open(page: Page): Promise<{ lon: number; lat: number }> {
   }, AT);
   await flat(page).evaluate((el) => el.scrollIntoView({ block: "start" }));
   const label = flat(page).locator('button.mark[data-mark="sun"]');
-  await expect(label).toHaveAttribute("aria-label", /Sun is overhead/);
+  // the Sun's mark names the place under the Sun at the moment held (about 15 degrees south, 176 east on 4 November at midnight UTC): wait for that moment, not the clock's own now that the first draws show
+  await expect(label).toHaveAttribute("aria-label", /Sun is overhead.*\b15°S 17\d°E/);
   const text = (await label.getAttribute("aria-label"))!;
   const m = /(\d+)°([NS]) (\d+)°([EW])?/.exec(text)!;
   return { lat: Number(m[1]) * (m[2] === "S" ? -1 : 1), lon: Number(m[3]) * (m[4] === "W" ? -1 : 1) };
@@ -46,15 +47,26 @@ async function look(page: Page, spots: { lon: number; lat: number }[]): Promise<
       let amber = false;
       for (let i = 0; i < data.length; i += 4) {
         sum += data[i]! + data[i + 1]! + data[i + 2]!;
-        if (data[i]! > 190 && data[i]! - data[i + 2]! > 50 && data[i + 1]! > 120) amber = true;
+        // the line is a thin stroke that may half-cover the two rows of pixels it crosses (amber (255, 196, 110) at 95 percent, 75 over the photo): still well red of blue; the sea, the sea's shade and the photo's sea here are blue of red
+        if (data[i]! > 100 && data[i]! - data[i + 2]! > 30 && data[i + 1]! > 70) amber = true;
       }
       return { luma: sum / (data.length / 4) / 3, amber };
     });
   }, spots);
 }
 
-const wait = async (page: Page, ms = 700): Promise<void> => {
-  await page.waitForTimeout(ms);
+/** Change the element, then wait until the map has been drawn for it and has stopped being drawn (no new draw in half a second): a slow machine draws a change a good while after it is asked. */
+const drawn = async (page: Page, change: (el: HTMLElement) => void): Promise<void> => {
+  const before = await flat(page).evaluate((el) => (el as Flat).stats.mapDraws);
+  await flat(page).evaluate(change);
+  await expect.poll(() => flat(page).evaluate((el) => (el as Flat).stats.mapDraws), { timeout: 15_000 }).toBeGreaterThan(before);
+  let last = -1;
+  for (let i = 0; i < 40; i += 1) {
+    await page.waitForTimeout(250);
+    const now = await flat(page).evaluate((el) => (el as Flat).stats.mapDraws);
+    if (now === last) return;
+    last = now;
+  }
 };
 
 for (const photo of [false, true]) {
@@ -67,14 +79,12 @@ for (const photo of [false, true]) {
       await flat(page).evaluate((el) => el.setAttribute("look", "photo"));
       await expect.poll(() => flat(page).evaluate((el) => (el as Flat).lookState), { timeout: 60_000 }).toBe("photo");
     }
-    await flat(page).evaluate((el) => {
+    await drawn(page, (el) => {
       el.setAttribute("shade", "off");
       el.setAttribute("borders", "off");
     });
-    await wait(page, 900);
     const plain = await look(page, [day, night, line]);
-    await flat(page).evaluate((el) => el.setAttribute("shade", "on"));
-    await wait(page, 900);
+    await drawn(page, (el) => el.setAttribute("shade", "on"));
     const shown = await look(page, [day, night, line]);
     // the night's middle is much darker than the same ground without the night
     expect(shown[1]!.luma, `night ${JSON.stringify(shown[1])} against plain ${JSON.stringify(plain[1])}`).toBeLessThan(plain[1]!.luma * (photo ? 0.5 : 0.75));

@@ -134,7 +134,7 @@ flat.setAttribute("texture-base", "/textures/"); // このパッケージの tex
 
 ### 見た目
 
-海、陸、輪郭、夜の色は、カスタムプロパティ `--chikyu-flat-sea`、`--chikyu-flat-land`、`--chikyu-flat-line`、`--chikyu-flat-night` (夜の4段階それぞれの濃さ)、`--chikyu-flat-day` (昼の側の色づけ)、`--chikyu-flat-terminator` (日の出・日の入りの線の色) で決めます。軌跡の2色は `--chikyu-flat-track-sun` と `--chikyu-flat-track-shadow` です。`--chikyu-flat-key-inset` (0) は凡例の左側にあける余白で、地図の左側にかぶさるカードがあるときに使います。`--chikyu-flat-aspect` (2 / 1) と `--chikyu-flat-aspect-narrow` (幅 600 px 未満では 4 / 3) で地図の形、`--chikyu-flat-radius` で角の丸みを決めます。要素に高さを与えると、地図はそれいっぱいに広がります。
+海、陸、輪郭、夜の色は、カスタムプロパティ `--chikyu-flat-sea`、`--chikyu-flat-land`、`--chikyu-flat-line`、`--chikyu-flat-night` (夜の4段階それぞれの濃さ)、`--chikyu-flat-day` (昼の側の色づけ)、`--chikyu-flat-terminator` (日の出・日の入りの線の色) で決めます。軌跡の2色は `--chikyu-flat-track-sun` と `--chikyu-flat-track-shadow` です。`--chikyu-flat-button-radius` (999px、丸いカプセル型)、`--chikyu-flat-button-padding` (3px 12px)、`--chikyu-flat-button-min-height` (32px、指で操作する端末では 44px)、`--chikyu-flat-button-border` (枠線の値まるごと。初期値は文字色の 35 パーセントの `1px solid`) で、すべてのボタンとチップが決まります。`--chikyu-flat-tip-font-size` と `--chikyu-flat-key-font-size` (.85em) は、衛星や印の横に出る名前と凡例の文字の大きさです。ページ自身の規則で次の部分 (part) も指定できます: `button` (すべてのボタンとチップ)、`tip` (衛星や印の横の名前)、`key` (地図の下の凡例と、その上の軌跡の凡例)、`msg` (地図が空のときに真ん中に出る文)。たとえば `chikyu-flat::part(button) { border-radius: 4px; }` です。何も指定しなければ変わりません。`--chikyu-flat-key-inset` (0) は凡例の左側にあける余白で、地図の左側にかぶさるカードがあるときに使います。`--chikyu-flat-aspect` (2 / 1) と `--chikyu-flat-aspect-narrow` (幅 600 px 未満では 4 / 3) で地図の形、`--chikyu-flat-radius` で角の丸みを決めます。要素に高さを与えると、地図はそれいっぱいに広がります。
 
 ## 処理の負荷
 
