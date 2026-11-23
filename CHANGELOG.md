@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Airports on the flat map** (MODULES-1789). `<chikyu-flat airports>` marks the world's large and medium airports with scheduled service and an IATA code (3,245), from OurAirports' open data (the data repository carries The Unlicense; NOTICE.md has the terms, what was read and what could not be). The greater ones show when the whole world is in sight (about 300 at 1000 px wide), more as the map is zoomed in (the medium ones from zoom 3), never two in one small cell, and from zoom 4 each has its IATA code beside it.
+  - **Named.** A pointer over one, or a tap, says `Tokyo Haneda International Airport (HND), Japan` (the country's name in English or Japanese; the airport's is OurAirports', in English), and a tap sends `chikyu-flat-airport`. The key names airports.
+  - **Cheap.** The rows (about 200 kB) are a chunk of their own that is fetched only the first time a map asks for airports; they are drawn with the map's own picture, so they cost a frame only when the view or the Sun's place moved. `controls` can add an Airports button (`airports`; not among the defaults).
+  - **Pure parts** in `/flat`: `placeAirports`, `airportLine`, `CODES_FROM_ZOOM`, `MEDIUM_FROM_ZOOM` and the types `Airport` and `PlacedAirport`, with `test/airports.test.ts` (the data, the thinning, the place, the line) and `e2e/flat-airports.demo.ts`. `scripts/make-airports.py` makes the data from OurAirports' files.
+
 ## 0.67.0 - 2026-11-23
 
 - **`<chikyu-flat>`'s marks have names and a key** (MODULES-1768). The yellow dot (the Sun overhead) and the white diamond (My place) were painted into the map and said nothing; nothing on the map was explained.

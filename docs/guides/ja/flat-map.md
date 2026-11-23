@@ -75,13 +75,14 @@ flat.addEventListener("chikyu-flat-pick", (event) => console.log(event.detail.na
 | `footprint` | 選んだ衛星の可視範囲 (カバーする円) を描きます。表示中の衛星が80機以下なら、そのすべてを描きます。`footprint-elevation` は円を求める最低仰角で、初期値は25度 (3D のビームと同じ) です。 |
 | `track` | 選んだ衛星の地上軌跡を描きます。1周分で、後ろは破線、前は実線で、**衛星に日が当たっているところは琥珀色、地球の影に入っているところは青**で描き、色の凡例が付きます。時計に合わせて動きます。 |
 | `selected` | 選んだ衛星の NORAD 番号。 |
+| `airports` | 世界の空港に印をつけます。定期便のある大きな空港と中くらいの空港 (3,245 か所、OurAirports のデータでパブリックドメイン) で、世界全体が見えているときは大きな空港だけ、拡大するほど増え、拡大率 4 からは IATA コードも出ます。初期値はオフで、オンにしたときだけデータ (約 200 kB) を読み込みます。ポインターを重ねるかタップすると名前 (`Tokyo Haneda International Airport（HND）、日本`) が出て、タップすると `chikyu-flat-airport` が `{ iata, name, country, lon, lat, tier, text, via }` つきで送られます。凡例にも出ます。 |
 | `shade` | `off` で夜の側を描きません。 |
 | `look` | `map` (初期値: 描いた国の地図) または `photo` (NASAの地球の写真。下を参照)。 |
 | `borders` | `off` で写真の上の国境線を描きません。初期値は薄くて細い線です。 |
 | `texture-base` | 画像を配信する場所。`<chikyu-earth-realistic>` と同じです。初期値はコードの隣にあるこのパッケージの `textures/` フォルダです。 |
 | `max-texture` | 読み込む画像の最大の幅。4096まで (メモリ 2 GB 以下と報告する端末では 2048)。 |
 | `dot-size` | 点の幅 (ピクセル)。 |
-| `controls` | `none`、または `centre zoom footprint track chips key` のいくつか。組み込みのボタン、絞り込みチップ、凡例です。初期値はすべて。ページが自分で操作部を作るときは `none` にして属性を操作します。 |
+| `controls` | `none`、または `centre zoom footprint track chips key airports` のいくつか。組み込みのボタン、絞り込みチップ、凡例と、空港ボタン (`airports`。初期値には入っていないので、指定しないページにボタンは増えません) です。ほかは初期値ではすべて。ページが自分で操作部を作るときは `none` にして属性を操作します。 |
 | `lang` | `en` または `ja`。初期値はページの言語です。 |
 
 絞り込みチップは凡例も兼ねます。2つ以上のグループを読み込んでいるときはグループのチップ (衛星の数つき、それぞれ切り替え式)、1つのグループを軌道面で色分けして表示しているときは軌道面のチップ (`すべて`、`A`、`B`…と数) です。チップを押すと `chikyu-flat-filter` が `{ groups, plane }` つきで送られるので、読者が求めたグループをページが読み込めます。`planes` プロパティは読み込んだすべてのグループの軌道面 (`group`、`id`、`count`、`raanDeg`、`colour`) の一覧で、変わるたびに `chikyu-flat-planes` が送られます。`facts(id)` は読み込んだグループの `groupFacts`、`groups` は読み込んだものの一覧です。
