@@ -75,13 +75,15 @@ The map is plate carree (longitude and latitude to equal widths) with the countr
 | `footprint` | Draw the coverage circle of the chosen satellite, or of every one shown when there are 80 or fewer. `footprint-elevation` is the lowest angle above the horizon the circle is drawn for (25, as the 3D beam). |
 | `track` | Draw the ground track of the chosen satellite: one orbit, dashed behind it and solid ahead, **amber where the satellite is in sunlight and blue where it is in the Earth's shadow**, with a key. It follows the clock. |
 | `selected` | The NORAD number of the chosen satellite. |
+| `airports` | Mark the world's airports: the large and medium airports with scheduled service (3,245, from OurAirports, public domain), the greater ones when the whole world is in sight, more as the map is zoomed in, and from zoom 4 their IATA codes. Off by default; the rows (about 200 kB) are loaded only when it is on. A pointer or a tap names one (`Tokyo Haneda International Airport (HND), Japan`) and a tap sends `chikyu-flat-airport` (`{ iata, name, country, lon, lat, tier, text, via }`). The key names them. |
+| `shade` | `off` for no night side. |
 | `shade` | `off` for no night side, no day tint and no sunrise and sunset line. |
 | `look` | `map` (the default: the drawn map of countries) or `photo`: NASA's picture of the Earth, see below. |
 | `borders` | `off` for no country lines over the photo. Pale, thin lines by default. |
 | `texture-base` | Where the pictures are served from, as on `<chikyu-earth-realistic>`; the package's own `textures/` folder beside the code by default. |
 | `max-texture` | The widest picture to hold, 4096 at most (2048 on a device that reports 2 GB of memory or less). |
 | `dot-size` | The dot's width in pixels. |
-| `controls` | `none`, or any of `centre zoom footprint track chips key`: the built-in buttons, filter chips and key. All by default. A page that draws its own controls sets `none` and drives the attributes. |
+| `controls` | `none`, or any of `centre zoom footprint track chips key airports`: the built-in buttons, filter chips and key, and an Airports button (`airports`, which is not among the defaults: a page that has not asked for it gets no new button). All the others by default. A page that draws its own controls sets `none` and drives the attributes. |
 | `lang` | `en` or `ja`; the page's language by default. |
 
 The filter chips are the legend too: group chips (with the number of satellites; each one a toggle) when two or more groups are loaded, plane chips (`All`, `A`, `B`... with their counts) when one group is on show and coloured by plane. A tap on a chip sends `chikyu-flat-filter` with `{ groups, plane }`, so a page can load a group the reader asked for. The property `planes` lists the planes of every loaded group (`group`, `id`, `count`, `raanDeg`, `colour`) and `chikyu-flat-planes` is sent when they change. `facts(id)` is `groupFacts` of a loaded group, and `groups` lists what is loaded.

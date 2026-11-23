@@ -19,6 +19,7 @@ import { GROUP_COLOURS, PLANE_COLOURS, SPARE_COLOUR, TRACK_SHADOW, TRACK_SUNLIT 
 import { clusterPlanes, groupFacts, type GroupFacts, type Plane, type PlaneClusters } from "./facts.ts";
 import { FLATTENED, MAX_ZOOM, clampView, pixelsPerDegree, projectFlat, wrapLongitude, zoomAbout, type FlatView } from "./geometry.ts";
 import { trackStateOfScene, type GroundTrackState } from "./track-state.ts";
+import { airportLine, placeAirports, type Airport, type PlacedAirport } from "./airports.ts";
 import { pointText, placeOver } from "./marks.ts";
 import { PhotoPictures, paintPhoto, readLook, type FlatLook } from "./photo.ts";
 import { say, type FlatLang } from "./words.ts";
@@ -220,6 +221,7 @@ button.mark:focus-visible{outline:3px solid #6cd0ff;outline-offset:0}
 .g.sun::before{content:"";width:10px;height:10px;border-radius:50%;background:#ffd54f;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
 .g.home::before{content:"";width:8px;height:8px;background:#fff;box-shadow:0 0 0 2px #0b1830;transform:rotate(45deg)}
 .g.sat i{width:6px;height:6px}
+.g.airport::before{content:"";width:8px;height:8px;box-sizing:border-box;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px #040812}
 .g.faint::before{content:"";width:7px;height:7px;border-radius:50%;background:#9aa5b1;opacity:.45}
 .g.chosen::before{content:"";width:12px;height:12px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000}
 .g.footprint::before{content:"";width:16px;height:16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,255,255,.12)}
@@ -270,7 +272,7 @@ button.credit[data-open] .full{display:inline}
  * ```
  */
 export class ChikyuFlat extends HTMLElement {
-  static observedAttributes = ["paused", "trails", "off", "center", "home-lon", "home-lat", "group", "colour-by", "color-by", "plane", "footprint", "track", "footprint-elevation", "selected", "time", "speed", "estimate-far", "shade", "dot-size", "controls", "lang", "elements-src", "look", "borders", "texture-base", "max-texture"];
+  static observedAttributes = ["paused", "trails", "off", "center", "home-lon", "home-lat", "group", "colour-by", "color-by", "plane", "footprint", "track", "footprint-elevation", "selected", "time", "speed", "estimate-far", "shade", "dot-size", "controls", "lang", "elements-src", "look", "borders", "texture-base", "max-texture", "airports"];
 
   #groups = new Map<string, Group>();
   #index = new Map<number, Ref>();
@@ -321,6 +323,12 @@ export class ChikyuFlat extends HTMLElement {
   #legendKey = "";
   #legendOpen: boolean | null = null;
   #faint = false;
+  /** The airports are asked for (`airports`), the rows once they are loaded (a chunk fetched only then), the ones drawn at the last draw of the map, and the one pointed at or pressed. */
+  #airports = false;
+  #airportRows: Airport[] | null = null;
+  #airportAt: PlacedAirport[] = [];
+  #airportHover: PlacedAirport | null = null;
+  #airportShown: PlacedAirport | null = null;
   #credit: HTMLElement | undefined;
   #trackKey = "";
   #trackLines: { past: TrackRun[]; future: TrackRun[] } | null = null;
@@ -641,6 +649,7 @@ export class ChikyuFlat extends HTMLElement {
     } else if (name === "off") this.#off = new Set((value ?? "").split(/[\s,]+/).filter((one) => one !== ""));
     else if (name === "plane") this.#plane = (value ?? "").trim().toUpperCase();
     else if (name === "footprint") this.#footprint = flag(value);
+    else if (name === "airports") this.#setAirports(flag(value));
     else if (name === "track") this.#track = flag(value);
     else if (name === "selected") {
       const id = value === null || value.trim() === "" ? null : Number(value);
@@ -998,6 +1007,7 @@ export class ChikyuFlat extends HTMLElement {
       }
       if (spot.xs.length > 0) this.#markAt.sun = spot;
     }
+    this.#drawAirports(ctx, v);
     if (home) {
       const at = projectFlat(v, home.lon, home.lat);
       const wrap = 360 * pixelsPerDegree(v);
@@ -1019,6 +1029,88 @@ export class ChikyuFlat extends HTMLElement {
     }
     this.#placeMarkButtons();
     this.#syncLegend();
+  }
+
+  /** Ask for the airports, or put them away. The rows are in a chunk of their own, fetched the first time they are asked for. */
+  #setAirports(on: boolean): void {
+    if (on === this.#airports) return;
+    this.#airports = on;
+    this.#airportAt = [];
+    this.#airportHover = this.#airportShown = null;
+    this.#mapKey = "";
+    if (on && this.#airportRows === null) {
+      void import("./airports-data.ts").then(
+        (data) => {
+          this.#airportRows = data.AIRPORT_ROWS.map(([lon, lat, iata, name, country, tier]) => ({ lon, lat, iata, name, country, tier }));
+          this.#mapKey = "";
+          this.#request();
+        },
+        () => {
+          this.#airportRows = [];
+        },
+      );
+    }
+  }
+
+  /** The airports on the map's own picture: a small white mark with a dark edge, and from zoom 4 the IATA code beside it. The greater airports first, so a world in sight shows the greater ones. */
+  #drawAirports(ctx: CanvasRenderingContext2D, v: FlatView): void {
+    this.#airportAt = [];
+    if (!this.#airports || !this.#airportRows) return;
+    const placed = placeAirports(v, this.#airportRows);
+    this.#airportAt = placed;
+    const codes = v.zoom >= 4;
+    const dark = this.#look === "photo" && this.#photo?.day != null;
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.font = "600 10px system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+    for (const one of placed) {
+      ctx.beginPath();
+      ctx.arc(one.x, one.y, one.airport.tier === 1 ? 3 : 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = dark ? "rgba(0,0,0,.85)" : "rgba(4,8,18,.9)";
+      ctx.stroke();
+      if (codes) {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(4,8,18,.8)";
+        ctx.strokeText(one.airport.iata, one.x + 6, one.y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(one.airport.iata, one.x + 6, one.y);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** The airport drawn nearest to a point, within `reach` pixels. */
+  #airportNear(x: number, y: number, reach: number): PlacedAirport | null {
+    let best: PlacedAirport | null = null;
+    let gap = reach * reach;
+    for (const one of this.#airportAt) {
+      const d = (one.x - x) ** 2 + (one.y - y) ** 2;
+      if (d <= gap) {
+        gap = d;
+        best = one;
+      }
+    }
+    return best;
+  }
+
+  /** The name of an airport: its name, code and country, in the page's language. */
+  #airportText(one: PlacedAirport): string {
+    const country = COUNTRIES.features.find((feature) => feature.properties.alpha2 === one.airport.country)?.properties;
+    return airportLine(one.airport, this.language === "ja" ? (country?.ja ?? country?.name ?? null) : (country?.name ?? null), this.language);
+  }
+
+  /** A press on an airport: its name stays beside it (a finger cannot hover), is read aloud, and the page is told with `chikyu-flat-airport`. */
+  #pressAirport(one: PlacedAirport): void {
+    this.#airportShown = one;
+    this.#placeMarks();
+    const text = this.#airportText(one);
+    if (this.#live) this.#live.textContent = text;
+    const a = one.airport;
+    this.dispatchEvent(new CustomEvent("chikyu-flat-airport", { detail: { iata: a.iata, name: a.name, country: a.country, lon: a.lon, lat: a.lat, tier: a.tier, text, via: "tap" }, bubbles: true, composed: true }));
   }
 
   #home(): { lon: number; lat: number } | null {
@@ -1346,13 +1438,14 @@ export class ChikyuFlat extends HTMLElement {
     const named = this.#hover ? null : (this.#markHover ?? this.#markShown);
     const spot = named ? this.#markAt[named] : null;
     const ref = this.#hover ?? picked;
-    const where = spot && named ? { x: spot.xs[0]!, y: spot.y } : this.#hover ? (over ?? at) : at;
-    if (!where || (!spot && (!ref || ref.g.on[ref.i] !== 1))) {
+    const airport = this.#hover || named ? null : (this.#airportHover ?? this.#airportShown);
+    const where = airport ? { x: airport.x, y: airport.y } : spot && named ? { x: spot.xs[0]!, y: spot.y } : this.#hover ? (over ?? at) : at;
+    if (!where || (!airport && !spot && (!ref || ref.g.on[ref.i] !== 1))) {
       tip.hidden = true;
       return;
     }
     tip.hidden = false;
-    tip.textContent = spot && named ? this.#markText(named) : this.#describe(ref!);
+    tip.textContent = airport ? this.#airportText(airport) : spot && named ? this.#markText(named) : this.#describe(ref!);
     const wide = tip.offsetWidth;
     const left = where.x + 14 + wide > this.#view.width ? Math.max(0, where.x - 14 - wide) : where.x + 14;
     const top = Math.max(0, Math.min(this.#view.height - tip.offsetHeight, where.y - 10));
@@ -1444,6 +1537,7 @@ export class ChikyuFlat extends HTMLElement {
     const entries: { glyph: string; text: string; colours?: string[] }[] = [];
     if (shade) entries.push({ glyph: "sun", text: say(lang, "keySun") });
     if (this.#home()) entries.push({ glyph: "home", text: say(lang, "keyHome") });
+    if (this.#airports) entries.push({ glyph: "airport", text: say(lang, "keyAirport") });
     if (shown.length > 0) entries.push({ glyph: "sat", text: say(lang, byPlane ? "keySatPlane" : "keySatGroup"), colours: byPlane ? PLANE_COLOURS.slice(0, 3) : shown.slice(0, 3).map((g) => g.colour) });
     if (this.#faint) entries.push({ glyph: "faint", text: say(lang, "keyFaint") });
     if (chosen) entries.push({ glyph: "chosen", text: say(lang, "keyRing") });
@@ -1638,6 +1732,7 @@ export class ChikyuFlat extends HTMLElement {
       first.push(button("greenwich", say(lang, "greenwich"), ` aria-label="${escape(say(lang, "centreGreenwich"))}" aria-pressed="false"`));
       if (Number.isFinite(finite(this.getAttribute("home-lon"), Number.NaN))) first.push(button("home", say(lang, "myPlace"), ` aria-label="${escape(say(lang, "centreHome"))}" aria-pressed="false"`));
     }
+    if (wants.has("airports")) first.push(button("airports", say(lang, "airports"), ` aria-pressed="false"`));
     // the look's own pair of buttons, beside the centre buttons and not at the far end of the row (a page's own buttons often sit there): not among the defaults, so a page that has not asked for it sees no new button
     if (wants.has("look")) first.push(`<span class="pair" role="group" aria-label="${escape(say(lang, "lookGroup"))}">${button("look-map", say(lang, "lookMap"), ` aria-pressed="false"`)}${button("look-photo", say(lang, "lookPhoto"), ` aria-pressed="false"`)}</span>`);
     if (wants.has("zoom")) first.push(`<span class="gap"></span>`, button("zoomout", "−", ` aria-label="${escape(say(lang, "zoomOut"))}"`), button("zoomin", "+", ` aria-label="${escape(say(lang, "zoomIn"))}"`));
@@ -1690,6 +1785,7 @@ export class ChikyuFlat extends HTMLElement {
     set('[data-act="home"]', Number.isFinite(home.lon) && Math.abs(wrapLongitude(this.#view.centerLon - home.lon)) < 0.5);
     set('[data-act="footprint"]', this.#footprint);
     set('[data-act="track"]', this.#track);
+    set('[data-act="airports"]', this.#airports);
     set('[data-act="look-map"]', this.#look === "map");
     set('[data-act="look-photo"]', this.#look === "photo");
     const shown = this.#shownGroups();
@@ -1736,6 +1832,8 @@ export class ChikyuFlat extends HTMLElement {
     } else if (act === "look-map" || act === "look-photo") {
       // the attribute is the look: the page that set the controls sees the change as it sees any other
       this.setAttribute("look", act === "look-photo" ? "photo" : "map");
+    } else if (act === "airports") {
+      this.toggleAttribute("airports");
     } else if (act === "track") {
       this.#track = !this.#track;
       this.#trackKey = "";
@@ -1922,9 +2020,17 @@ export class ChikyuFlat extends HTMLElement {
           this.#pressMark(mark, "tap");
           return;
         }
-        // a tap anywhere else puts a pressed mark's name away
+        const airport = hit ? null : this.#airportNear(at.x, at.y, event.pointerType === "touch" ? 20 : 9);
+        if (airport) {
+          this.#markShown = null;
+          this.#pressAirport(airport);
+          return;
+        }
+        // a tap anywhere else puts a pressed mark's or airport's name away
         this.#markShown = null;
         this.#markHover = null;
+        this.#airportShown = null;
+        this.#airportHover = null;
         this.#placeMarks();
         this.#choose(hit, "tap");
       }
@@ -1940,9 +2046,10 @@ export class ChikyuFlat extends HTMLElement {
   };
 
   #onLeave = (event: PointerEvent): void => {
-    if (event.pointerType !== "mouse" || (this.#hover === null && this.#markHover === null)) return;
+    if (event.pointerType !== "mouse" || (this.#hover === null && this.#markHover === null && this.#airportHover === null)) return;
     this.#hover = null;
     this.#markHover = null;
+    this.#airportHover = null;
     if (this.#dotCanvas) this.#dotCanvas.style.cursor = "";
     this.#placeMarks();
   };
@@ -1951,10 +2058,12 @@ export class ChikyuFlat extends HTMLElement {
     const near = this.#hit(x, y, 8);
     const mark = this.#markOver(near, x, y, 11);
     const hit = mark ? null : near;
-    if (this.#dotCanvas) this.#dotCanvas.style.cursor = mark ? "pointer" : "";
-    if (sameRef(hit, this.#hover) && mark === this.#markHover) return;
+    const airport = hit || mark ? null : this.#airportNear(x, y, 8);
+    if (this.#dotCanvas) this.#dotCanvas.style.cursor = mark || airport ? "pointer" : "";
+    if (sameRef(hit, this.#hover) && mark === this.#markHover && airport?.airport === this.#airportHover?.airport) return;
     this.#hover = hit;
     this.#markHover = mark;
+    this.#airportHover = airport;
     this.#placeMarks();
     if (hit) this.#pick(hit, "hover");
   }
@@ -1980,8 +2089,9 @@ export class ChikyuFlat extends HTMLElement {
       return;
     }
     if (key === "Escape") {
-      if (this.#markShown) {
+      if (this.#markShown || this.#airportShown) {
         this.#markShown = null;
+        this.#airportShown = null;
         this.#placeMarks();
       }
       if (this.#cursor || this.#selected) {
