@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.70.0 - 2026-11-25
+
 - **A page's own list of marks on the Earth** (MODULES-1807). The site's fireballs (888, each with a place, an energy and a date) need the page to hand the Earth a list of marks. The places layer of `<chikyu-space>` and `<chikyu-earth-realistic>` already took a page's list (`places`: off until set, a ring in one draw call for every place past the first 32, hidden on the far side, `chikyu-place-click` with the `id`, nothing drawn at rest), so no new layer was made; three gaps were closed.
   - **A size in pixels.** A place's `size` may be a number: the ring's radius in CSS pixels, kept between `MIN_PLACE_RING` (1.5) and `MAX_PLACE_RING` (14), so a page sizes each mark by its own figure (an energy). `"small"` and no size are as before. `ringOf` gives the radius of a place.
   - **Names are kept for the marks that have one.** The 32 places that stand up with a name were `here` first and then the list's order, so a few named marks late in a long list of unnamed ones were rings with no name. They are now `here` first, then the places with a `label`, then the rest in the order given.
