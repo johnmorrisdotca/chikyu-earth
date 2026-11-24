@@ -1044,6 +1044,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#keepOut = readKeepOut(value);
     this.#keepOutBoxes = keepOutBoxes(this.#keepOut);
     this.#cities?.setKeepOut(this.#keepOut);
+    if (this.#placeList.length > 0) this.#gate?.request();
   }
 
   /**
@@ -1061,11 +1062,11 @@ export class ChikyuSpace extends HTMLElement {
 
   /**
    * Places marked on the Earth (the attribute `places`, a JSON array): each `{ id, lon, lat, label, kind, color }`, `kind` being `here` (where the reader is: drawn bright and taller, with a quiet pulse) or `favourite`
-   * (the default: quieter), and `color` an optional CSS colour of its own. The first `PLACE_MARKS` in sight (`here` first, then in the order given) stand up out of the ground with their names; every other place
+   * (the default: quieter), and `color` an optional CSS colour of its own. The first `PLACE_MARKS` in sight (`here` first, then the places that have a `label`, then the rest in the order given) stand up out of the ground with their names; every other place
    * is a ring on the ground, all of them one draw call, and places that crowd are gathered into one ring with their count. They turn with the Earth, are hidden on its far side, are dimmer on its night side
    * and keep their size in pixels at any zoom. Names never overlap one another or the bodies' names; one with no room is left out. The element stores nothing and sends nothing: the page hands the places
    * over and keeps them where it likes. Setting the property writes the attribute; at most `MAX_PLACES` are drawn. Nothing is drawn again at rest: the pulse is the page's own animation, stopped out of sight
-   * and for a reader who asked for less motion. A place may also have a `layer` (shown or hidden with `place-layers`), a `size` (`small`), a `look` of its own (over `places-look`) and a `namePriority` (`low` lays
+   * and for a reader who asked for less motion. A place may also have a `layer` (shown or hidden with `place-layers`), a `size` (`small`, or a number: the ring's radius in CSS pixels, 1.5 to 14), a `look` of its own (over `places-look`) and a `namePriority` (`low` lays
    * its name after the cities' names). A press on a place sends `chikyu-place-click` with `detail: { id, kind, layer, label, lon, lat, x, y }`. With the element focused, `P` and `Shift`+`P` move between the places in the picture from the left (a ring shows which, and its name is said in a live region, in English or Japanese), `Enter` sends the same event and `Escape` lets go.
    */
   get places(): Place[] {
@@ -1413,7 +1414,7 @@ export class ChikyuSpace extends HTMLElement {
   #drawPlaces(view: PlaceView): void {
     const layer = this.#placeLayer;
     if (!layer || (this.#placeList.length === 0 && this.#marks.length === 0 && layer.stats.shown === 0 && layer.stats.rings === 0 && layer.stats.satelliteNames === 0)) return;
-    layer.frame(view, this.#bodyNameBoxes(), this.#marks, this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
+    layer.frame(view, [...this.#bodyNameBoxes(), ...this.#keepOutBoxes], this.#marks, this.#model.light === "lit" ? null : subsolarPoint(this.#model.time));
     this.#notePlacesLost();
   }
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanPlaces, groupCell, groupPlaces, layoutPlaces, MAX_PLACES, nearby, orthoView, placeLabels, readPlaceLayers, readPlaces, shownPlaces, type Place } from "../src/markers/index.ts";
+import { cleanPlaces, groupCell, groupPlaces, layoutPlaces, MAX_PLACE_RING, MAX_PLACES, MIN_PLACE_RING, nearby, orthoView, placeLabels, readPlaceLayers, readPlaces, ringOf, shownPlaces, type Place } from "../src/markers/index.ts";
 import { aimAt, findPlace, glideView } from "../src/markers/go-to-place.ts";
 
 const view = (lon: number, lat: number) => orthoView({ lon, lat, radius: 200, cx: 210, cy: 210, width: 420, height: 420 });
@@ -199,4 +199,44 @@ test("the switches of the layers: read from JSON, a layer not named is shown, an
   assert.deepEqual(shownPlaces(places, { harbours: false }).map((place) => place.id), ["a", "me"]);
   assert.deepEqual(shownPlaces(places, { harbours: false, airports: false }).map((place) => place.id), ["me"]);
   assert.equal(shownPlaces(places, {}), places, "nothing left out, the same list");
+});
+
+test("a page's list of marks (id, lat, lon, a size in pixels, a name, a colour) is read, cleaned, and a size is kept between the least and the most", () => {
+  const read = readPlaces(JSON.stringify([
+    { id: "f1", lat: 12.5, lon: -45.25, size: 9, label: "Chelyabinsk", color: "#ff6b8a" },
+    { id: "tiny", lat: 0, lon: 0, size: 0.2 },
+    { id: "huge", lat: 0, lon: 1, size: 400 },
+    { id: "nan", lat: 0, lon: 2, size: "big" },
+    { id: "off", lat: 91, lon: 0, size: 5 },
+    { id: "far", lat: 0, lon: 181, size: 5 },
+    { lat: 3, lon: 3, size: 4.26 },
+  ]));
+  assert.deepEqual(read.map((p) => p.id), ["f1", "tiny", "huge", "nan", "6"], "a mark off the globe is left out and one with no id gets its place in the list");
+  assert.deepEqual(read[0], { id: "f1", lat: 12.5, lon: -45.25, kind: "favourite", size: 9, label: "Chelyabinsk", color: "#ff6b8a" });
+  assert.equal(read[1]!.size, MIN_PLACE_RING);
+  assert.equal(read[2]!.size, MAX_PLACE_RING);
+  assert.equal(read[3]!.size, undefined, "a size that is neither small nor a number is as if none was given");
+  assert.equal(read[4]!.size, 4.3, "kept to a tenth of a pixel");
+  assert.deepEqual(readPlaces(null), [], "no list, no marks");
+  assert.deepEqual(readPlaces("[]"), []);
+});
+
+test("a number is the ring's radius: it reaches the marker, leaves the kind's size alone without it, and the stick keeps the kind's length", () => {
+  assert.equal(ringOf({ id: "a", lon: 0, lat: 0, size: 11 }), 11);
+  assert.equal(ringOf({ id: "a", lon: 0, lat: 0 }), 6);
+  assert.equal(ringOf({ id: "a", lon: 0, lat: 0, kind: "here" }), 9);
+  assert.ok(Math.abs(ringOf({ id: "a", lon: 0, lat: 0, size: "small" }) - 4.2) < 1e-9);
+  const [plain, big, tiny] = layoutPlaces([{ id: "p", lon: 0, lat: 0 }, { id: "b", lon: 0.001, lat: 0, size: 13 }, { id: "t", lon: 0.002, lat: 0, size: 2, look: "ring" }], view(0, 30), "beam").shapes;
+  assert.equal(big!.ring, 13);
+  assert.equal(tiny!.ring, 2);
+  assert.equal(tiny!.length, 0, "a ring look has no stick, whatever its size");
+  assert.ok(Math.abs(big!.length - plain!.length) < 0.01, "the number sizes the ring and not the stick");
+});
+
+test("a mark on the far side of the Earth is left out of the layout, one at the edge fades, one in sight is drawn", () => {
+  const marks = cleanPlaces([{ id: "near", lat: 10, lon: 10, size: 6 }, { id: "behind", lat: 10, lon: 190, size: 6 }, { id: "edge", lat: 0, lon: 84, size: 6 }]);
+  const shapes = layoutPlaces(marks, view(0, 0), "ring").shapes;
+  assert.deepEqual(shapes.map((s) => marks[s.index]!.id), ["near", "edge"]);
+  assert.equal(shapes[0]!.opacity, 1);
+  assert.ok(shapes[1]!.opacity < 1, "faded at the limb");
 });

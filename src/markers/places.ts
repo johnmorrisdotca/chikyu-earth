@@ -45,8 +45,8 @@ export interface Place {
   color?: string;
   /** A set of places (spaceports, harbours) the page shows or hides together with `place-layers`; left out, the place is always shown. */
   layer?: string;
-  /** `small` draws a shorter, narrower mark; left out, the kind's own size. */
-  size?: PlaceSize;
+  /** `small` draws a shorter, narrower mark; a number is the radius of the ring on the ground in CSS pixels ({@link MIN_PLACE_RING} to {@link MAX_PLACE_RING}), so a page can draw a mark as large as its own figure (an energy, a count) asks; left out, the kind's own size. */
+  size?: PlaceSize | number;
   /** How this place is drawn, over `places-look`; left out, `places-look`. */
   look?: PlaceLook;
   /** `low` lays this place's name after the cities' names, so it is shown only where it lies over none of them; left out (`high`), it is laid before them. */
@@ -115,6 +115,30 @@ export type PlaceNamePriority = "high" | "low";
  * ```
  */
 export const MAX_PLACES = 5000;
+
+/**
+ * The smallest ring a place's numeric `size` gives, in CSS pixels; a smaller number is raised to it.
+ *
+ * @example
+ * ```ts
+ * import { MIN_PLACE_RING } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(MIN_PLACE_RING); // 1.5
+ * ```
+ */
+export const MIN_PLACE_RING = 1.5;
+
+/**
+ * The largest ring a place's numeric `size` gives, in CSS pixels (the size a gathered group tops out at); a larger number is cut to it.
+ *
+ * @example
+ * ```ts
+ * import { MAX_PLACE_RING } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(MAX_PLACE_RING); // 14
+ * ```
+ */
+export const MAX_PLACE_RING = 14;
 
 /**
  * A point of the Earth's surface as one picture shows it: where it falls (CSS pixels in the box), which way is straight up from the ground there on the screen (`upX`, `upY`: a direction whose
@@ -256,6 +280,24 @@ const SIZES: Record<PlaceKind, { length: number; ring: number }> = { here: { len
 export const SMALL_LENGTH = 0.55;
 export const SMALL_RING = 0.7;
 
+/**
+ * The radius of a place's ring on the ground in CSS pixels: its numeric `size` when it has one, else the kind's own (`here` 9, favourite 6), smaller for a `small` place.
+ *
+ * @param place - The place, as {@link cleanPlaces} makes it.
+ * @returns The ring's radius.
+ *
+ * @example
+ * ```ts
+ * import { ringOf } from "@johnmorrisdotca/chikyu-earth/markers";
+ *
+ * console.log(ringOf({ id: "a", lon: 0, lat: 0, size: 10 }), ringOf({ id: "b", lon: 0, lat: 0 }), ringOf({ id: "c", lon: 0, lat: 0, size: "small" }).toFixed(1)); // 10 6 4.2
+ * ```
+ */
+export const ringOf = (place: Place): number => {
+  if (typeof place.size === "number") return place.size;
+  return SIZES[place.kind === "here" ? "here" : "favourite"].ring * (place.size === "small" ? SMALL_RING : 1);
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 /** A colour a page may give a place: a hex colour, `rgb()`/`hsl()` with numbers only, or a colour's name. Anything else is left out, so no other CSS gets in. */
 const COLOR = /^(?:#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|(?:rgb|hsl)a?\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,24})$/i;
@@ -274,7 +316,7 @@ const nightOf = (cosine: number): number => {
 /**
  * The places of a list a page handed over, made safe to draw: each needs a longitude from -180 to 180 and a latitude from -90 to 90; one without an `id` is given its place in the list, a
  * label is cut to 80 letters, a kind that is not `here` is `favourite`, and a colour is kept only when it is a hex colour, `rgb()` or `hsl()` with numbers, or a colour's name. A `layer` is cut to 40 letters,
- * a `size` is kept only when it is `small`, a `look` only when it is one of {@link PLACE_LOOKS} and a `namePriority` only when it is `low`. Anything else is left out, and at most {@link MAX_PLACES} are kept.
+ * a `size` is kept only when it is `small` or a number (the ring's radius in pixels, kept between {@link MIN_PLACE_RING} and {@link MAX_PLACE_RING}), a `look` only when it is one of {@link PLACE_LOOKS} and a `namePriority` only when it is `low`. Anything else is left out, and at most {@link MAX_PLACES} are kept.
  *
  * @param list - What the page gave: an array of places, or anything.
  * @returns The places to draw.
@@ -300,6 +342,7 @@ export function cleanPlaces(list: unknown): Place[] {
     if (typeof item["color"] === "string" && COLOR.test(item["color"].trim())) place.color = item["color"].trim();
     if (typeof item["layer"] === "string" && item["layer"].trim()) place.layer = item["layer"].trim().slice(0, 40);
     if (item["size"] === "small") place.size = "small";
+    else if (typeof item["size"] === "number" && Number.isFinite(item["size"])) place.size = Math.round(Math.max(MIN_PLACE_RING, Math.min(MAX_PLACE_RING, item["size"])) * 10) / 10;
     if ((PLACE_LOOKS as readonly unknown[]).includes(item["look"])) place.look = item["look"] as PlaceLook;
     if (item["namePriority"] === "low") place.namePriority = "low";
     out.push(place);
@@ -443,7 +486,7 @@ export function layoutPlaces(places: readonly Place[], view: PlaceView, look: Pl
       length,
       ringAngle: side > 1e-4 ? Math.atan2(point.upX, -point.upY) / RAD : 0,
       squash: Math.max(0.08, Math.min(1, point.facing)),
-      ring: size.ring * (small ? SMALL_RING : 1),
+      ring: ringOf(place),
       opacity: Math.min(1, (point.facing - EDGE) / FADE),
       night: sun ? nightOf(dotUnit(place.lon, place.lat, sun)) : 0,
     };

@@ -377,3 +377,67 @@ test("chikyu-place-click carries the id and the kind, and the layer and name whe
   assert.deepEqual(placeClick({ id: "cavan", lon: -123.1, lat: 49.29, label: "Vancouver", layer: "harbours" }, 10, 20), { id: "cavan", kind: "favourite", lon: -123.1, lat: 49.29, x: 10, y: 20, layer: "harbours", label: "Vancouver" });
   assert.deepEqual(placeClick({ id: "me", lon: 1, lat: 2, kind: "here" }, 0, 0), { id: "me", kind: "here", lon: 1, lat: 2, x: 0, y: 0 });
 });
+
+test("a page's marks: a ring of the size asked for, names for the marks that have one even past the first 32, and a name keeps out of a keepOut box", () => {
+  const v = view();
+  const at = (lon: number, lat: number): { x: number; y: number } => {
+    const out = { x: 0, y: 0, upX: 0, upY: 0, facing: 0 };
+    v.at(lon, lat, out);
+    return out;
+  };
+  // 40 unnamed marks come first in the list; the named one is last. It still gets a marker of its own and its name.
+  const list: { id: string; lon: number; lat: number; size: number; label?: string }[] = Array.from({ length: PLACE_MARKS + 8 }, (_, i) => ({ id: `u${i}`, lon: TOKYO.lon - 20 + (i % 10) * 4, lat: TOKYO.lat - 14 + Math.floor(i / 5) * 3, size: 3 + (i % 5) * 2 }));
+  list.push({ id: "named", lon: TOKYO.lon + 1, lat: TOKYO.lat + 20, size: 12, label: "Named fireball" });
+  const places = cleanPlaces(list);
+  const box = fakeBox();
+  const layer = createPlaceLayer(box as unknown as HTMLElement);
+  layer.grouping = false;
+  layer.set(places);
+  layer.frame(v);
+  const names = box.children.filter((child) => child.className === "pl-name" && !child.hidden).map((child) => child.textContent);
+  assert.deepEqual(names, ["Named fireball"], "the one name is shown");
+  assert.equal(layer.stats.marks, PLACE_MARKS);
+  assert.equal(layer.stats.marks + layer.stats.sprites, layer.stats.shown, "every mark in sight is a marker or a ring");
+  // a ring that is not a marker of its own has the size asked for, in the rings' data the picture reads
+  const sprites = layer.sprites!;
+  const radii = new Set(Array.from({ length: sprites.count }, (_, g) => sprites.shapes[g * 2]!).filter((r) => r > 0));
+  assert.ok(radii.size >= 2, "several sizes are drawn in the one call");
+  assert.ok([...radii].every((r) => r >= 3 && r <= 11), "each is one asked for");
+  const named = at(TOKYO.lon + 1, TOKYO.lat + 20);
+  assert.equal(layer.pick(named.x, named.y)?.id, "named");
+
+  // a box of the page over the name: the name moves clear of it (it is never under it); a box over the whole view leaves no name, the mark stays and can still be pressed
+  const name = layer.boxes[0]!;
+  const small = [{ left: name.left - 2, top: name.top - 2, width: name.width + 4, height: name.height + 4 }];
+  const moved = fakeBox();
+  const shifted = createPlaceLayer(moved as unknown as HTMLElement);
+  shifted.grouping = false;
+  shifted.set(places);
+  shifted.frame(v, small);
+  const clear = shifted.boxes.filter((b) => b.width === name.width && b.height === name.height);
+  assert.ok(clear.every((b) => b.left + b.width <= small[0]!.left || b.left >= small[0]!.left + small[0]!.width || b.top + b.height <= small[0]!.top || b.top >= small[0]!.top + small[0]!.height), "a name that is shown is clear of the box");
+  const keep = [{ left: 0, top: 0, width: 420, height: 420 }];
+  const kept = fakeBox();
+  const held = createPlaceLayer(kept as unknown as HTMLElement);
+  held.grouping = false;
+  held.set(places);
+  held.frame(v, keep);
+  assert.equal(kept.children.filter((child) => child.className === "pl-name" && !child.hidden).length, 0, "no name under the box");
+  assert.equal(held.pick(named.x, named.y)?.id, "named", "the mark is still there");
+  assert.equal(held.stats.marks, PLACE_MARKS);
+
+  // no list: nothing drawn, and a frame with nothing to show draws nothing
+  const none = fakeBox();
+  const empty = createPlaceLayer(none as unknown as HTMLElement);
+  empty.frame(v);
+  assert.equal(empty.stats.shown + empty.stats.marks + empty.stats.sprites, 0);
+  assert.equal(none.children.length, 0, "not one node");
+  assert.equal(empty.stats.renders, 0, "and not a render counted");
+  // a mark on the far side is neither drawn nor pressed
+  const far = createPlaceLayer(fakeBox() as unknown as HTMLElement);
+  far.set(cleanPlaces([{ id: "behind", lon: TOKYO.lon + 180, lat: -TOKYO.lat, size: 8 }]));
+  far.frame(v);
+  assert.equal(far.stats.shown, 0);
+  const behind = at(TOKYO.lon + 180, -TOKYO.lat);
+  assert.equal(far.pick(behind.x, behind.y), null);
+});

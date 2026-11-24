@@ -4,7 +4,7 @@
 import type { GeoPoint } from "../types.ts";
 import { placeLabels, type LabelItem } from "./labels.ts";
 import type { PlaceSpriteData } from "./place-sprites.ts";
-import { groupCell, groupPlaces, layoutPlaces, PLACE_LOOKS, shownPlaces, SMALL_RING, type Place, type PlaceGroup, type PlaceKind, type PlaceLook, type PlaceView, type SurfacePoint } from "./places.ts";
+import { groupCell, groupPlaces, layoutPlaces, PLACE_LOOKS, ringOf, shownPlaces, type Place, type PlaceGroup, type PlaceKind, type PlaceLook, type PlaceView, type SurfacePoint } from "./places.ts";
 
 /** A `places-look` attribute: one of `PLACE_LOOKS`, else `beam`. */
 export const readPlaceLook = (value: string | null): PlaceLook => (PLACE_LOOKS as readonly string[]).includes(value ?? "") ? (value as PlaceLook) : "beam";
@@ -61,7 +61,7 @@ export interface SatelliteMark {
 const SATELLITE_RING = 8;
 
 /**
- * The most places in sight drawn as markers of their own (a beam, a pin or a ring standing out of the ground, and a name): `here` first, then the rest in the order given. Every other place is a ring on the ground, all of them one draw call.
+ * The most places in sight drawn as markers of their own (a beam, a pin or a ring standing out of the ground, and a name): `here` first, then the places that have a `label`, then the rest in the order given. Every other place is a ring on the ground, all of them one draw call.
  *
  * @example
  * ```ts
@@ -98,7 +98,6 @@ const EDGE = 0.02;
 /** How far past the edge a ring fades in, the same span the picture's rings use. */
 const LIMB = 0.12;
 const MARGIN = 60;
-const RING: Record<"here" | "favourite", number> = { here: 9, favourite: 6 };
 const FALLBACK = { here: "#7df9ff", favourite: "#ffd27a" };
 type Box = { left: number; top: number; width: number; height: number };
 
@@ -588,7 +587,12 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
         shown += group.members.length;
       }
       const singles = inSight.filter((g) => groups[g]!.members.length === 1);
-      const chosen = [...singles.filter((g) => places[groups[g]!.members[0]!]!.kind === "here"), ...singles.filter((g) => places[groups[g]!.members[0]!]!.kind !== "here")].slice(0, PLACE_MARKS);
+      // `here` first, then the places that have a name (so a name is never lost to a crowd of unnamed places that came before it), then the rest, each in the order given
+      const rank = (g: number): number => {
+        const place = places[groups[g]!.members[0]!]!;
+        return place.kind === "here" ? 0 : place.label ? 1 : 2;
+      };
+      const chosen = [0, 1, 2].flatMap((r) => singles.filter((g) => rank(g) === r)).slice(0, PLACE_MARKS);
       const own = chosen.map((g) => places[groups[g]!.members[0]!]!);
       measureAll(own);
       const layout = layoutPlaces(own, view, look, { size: (place) => (place.namePriority === "low" ? null : size(place)), taken, sun });
@@ -671,7 +675,7 @@ export function createPlaceLayer(box: HTMLElement): PlaceLayer {
           const group = groups[g]!;
           const n = group.members.length;
           const first = places[group.members[0]!]!;
-          const ring = n > 1 ? Math.min(14, 6 + 2.2 * Math.log2(n)) : RING[first.kind === "here" ? "here" : "favourite"] * (first.size === "small" ? SMALL_RING : 1);
+          const ring = n > 1 ? Math.min(14, 6 + 2.2 * Math.log2(n)) : ringOf(first);
           shapes[g * 2] = ring;
           shapes[g * 2 + 1] = n > 1 ? 0.3 : 0;
           if (fallback) {
