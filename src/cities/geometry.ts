@@ -1,5 +1,6 @@
 // Which cities are named on the Earth, and where: tiers by how large the Earth is on the screen, the most populous first, each name beside its dot where nothing is in the way. Pure.
 import { placeLabels, type LabelItem } from "../markers/labels.ts";
+import { keepOutBoxes, touchesKeepOut, type KeepOut } from "./keep-out.ts";
 
 /**
  * The kuni tiers a view needs, in the order they are loaded: the capitals, the other cities of a million, and the others of 100,000.
@@ -78,6 +79,8 @@ export interface CityLayoutOptions {
   measure?: (text: string) => number;
   /** Boxes another layer's names, rings and marks already take (left, top, width and height from the picture's top left): no name is put over one. */
   taken?: readonly { left: number; top: number; width: number; height: number }[];
+  /** Rectangles of the view (`{ x, y, w, h }`, the page's bar and cards) no name goes under: a city whose dot is under one is left out, and a name that would touch one moves round its dot or is left out (the page's `keepOut`). */
+  keepOut?: readonly KeepOut[];
 }
 
 /**
@@ -216,17 +219,20 @@ export function layoutCities(cities: readonly NamedCity[], frame: CityFrame, lan
   const facing = options.facing ?? 0.12;
   const out = { x: 0, y: 0 };
   const margin = options.dot + 2;
+  const keepOut = options.keepOut ?? [];
+  const taken = keepOut.length > 0 ? [...(options.taken ?? []), ...keepOutBoxes(keepOut)] : options.taken;
   const seen: { city: NamedCity; x: number; y: number }[] = [];
   for (const city of cities) {
     if (seen.length >= CANDIDATES) break;
     if (frame.project(city.lon, city.lat, out) < facing) continue;
     if (out.x < margin || out.y < margin || out.x > frame.width - margin || out.y > frame.height - margin) continue;
+    if (keepOut.length > 0 && touchesKeepOut(keepOut, out.x, out.y, options.dot)) continue;
     seen.push({ city, x: out.x, y: out.y });
   }
   const height = Math.ceil(options.size * 1.35);
   const texts = seen.map((one) => cityNameText(one.city, lang));
   const items: LabelItem[] = seen.map((one, index) => ({ x: one.x, y: one.y, r: options.dot, w: Math.max(nameWidth(texts[index]!, options.size), options.measure ? Math.ceil(options.measure(texts[index]!)) + 4 : 0), h: height, priority: seen.length - index }));
-  return placeLabels(items, frame.width, frame.height, options.max, 64, options.taken).map((place) => {
+  return placeLabels(items, frame.width, frame.height, options.max, 64, taken).map((place) => {
     const one = seen[place.item]!;
     return { city: one.city, text: texts[place.item]!, x: one.x, y: one.y, left: place.left, top: place.top, width: items[place.item]!.w, height };
   });

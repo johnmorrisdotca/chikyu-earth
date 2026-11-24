@@ -1,6 +1,7 @@
 // The names of cities on the Earth, over the picture of an element (kuni's `cities`, loaded only when `city-names` is set, a tier at a time as the Earth grows on the screen). The element tells this where the Earth is at each draw (`frame`);
 // it lays the names out, draws the dots on a canvas and the names as a few labels, and draws nothing at rest.
 import { canvasRatio } from "../markers/project.ts";
+import { readKeepOut, type KeepOut } from "./keep-out.ts";
 import { CITY_NAMES_MAX, cityRank, cityTiersFor, layoutCities, readCityNames, type CityFrame, type CityName, type CityNameTier, type NamedCity } from "./geometry.ts";
 
 /**
@@ -58,6 +59,8 @@ export interface CityHost {
   refresh(): void;
   /** The look of the names (the property `cityNamesStyle`). */
   setStyle(style: CityNamesStyle): void;
+  /** The rectangles no name goes under (the property `keepOut`); the names are laid out again, and `onLayout` is told. */
+  setKeepOut(areas: readonly KeepOut[]): void;
   readonly stats: { on: boolean; max: number; radius: number; tiers: CityNameTier[]; cities: number; names: number; renders: number };
   /** The boxes the names and their dots take in the picture just drawn, for other names to keep clear of. */
   readonly boxes: { left: number; top: number; width: number; height: number }[];
@@ -99,6 +102,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
   let shown: CityName[] = [];
   let renders = 0;
   let style: CityNamesStyle = {};
+  let keepOut: KeepOut[] = [];
   let canvas: HTMLCanvasElement | undefined;
   let box: HTMLElement | undefined;
   const pool: HTMLElement[] = [];
@@ -210,7 +214,7 @@ export function createCityHost(options: CityHostOptions): CityHost {
     const size = style.size ?? DEFAULTS.size;
     const dot = style.dotSize ?? DEFAULTS.dot;
     usedLang = options.language();
-    shown = layoutCities(citiesFor(tiers), frame, usedLang, { max, size, dot, measure: measurer(size), ...(lastTaken ? { taken: lastTaken } : {}) });
+    shown = layoutCities(citiesFor(tiers), frame, usedLang, { max, size, dot, measure: measurer(size), ...(lastTaken ? { taken: lastTaken } : {}), keepOut });
     place(frame, dot);
   }
 
@@ -303,6 +307,12 @@ export function createCityHost(options: CityHostOptions): CityHost {
       style = { ...next };
       vars();
       compute();
+    },
+    setKeepOut(areas) {
+      if (gone) return;
+      keepOut = readKeepOut(areas);
+      compute();
+      options.onLayout?.();
     },
     get boxes() {
       const dot = (style.dotSize ?? DEFAULTS.dot) + 1;

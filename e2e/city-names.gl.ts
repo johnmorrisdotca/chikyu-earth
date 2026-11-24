@@ -195,6 +195,40 @@ for (const [name, tag, look] of [
       await page.locator(tag).evaluate((el) => el.setAttribute("speed", "0"));
     });
 
+    test("keepOut: a name that would touch a page box is left out, comes back when the box is removed or moved away, and an empty list changes nothing", async ({ page }) => {
+      await go(page, "&city-names=40&sea-names");
+      const setKeep = (areas: unknown): Promise<void> => page.locator(tag).evaluate((el, value) => void Reflect.set(el, "keepOut", value), areas);
+      await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo"), { timeout: 30_000, message: "Tokyo is named" }).toBe(true);
+      const own = (await page.locator(tag).boundingBox())!;
+      const before = (await shown(page, tag)).map((n) => n.text).sort();
+      await setKeep([]);
+      await expect.poll(async () => (await shown(page, tag)).map((n) => n.text).sort(), { message: "an empty list changes nothing" }).toEqual(before);
+      // a box over Tokyo's dot and name, in the element's own pixels
+      const tokyo = (await shown(page, tag)).find((n) => n.text === "Tokyo")!;
+      const area = { x: tokyo.l - own.x - 60, y: tokyo.t - own.y - 40, w: tokyo.r - tokyo.l + 120, h: tokyo.b - tokyo.t + 80 };
+      await setKeep([area]);
+      await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo"), { message: "Tokyo is left out under the box" }).toBe(false);
+      for (const n of await shown(page, tag)) {
+        const clear = n.r - own.x <= area.x || n.l - own.x >= area.x + area.w || n.b - own.y <= area.y || n.t - own.y >= area.y + area.h;
+        expect(clear, `${n.text} is clear of the box`).toBe(true);
+      }
+      expect((await shown(page, tag)).length, "the other names stay").toBeGreaterThan(2);
+      expect(await page.locator(tag).evaluate((el) => Reflect.get(el, "keepOut"))).toEqual([area]);
+      await setKeep([{ ...area, y: own.height - 20, h: 20 }]);
+      await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo"), { message: "Tokyo is named again when the box moves away" }).toBe(true);
+      await setKeep([area]);
+      await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo")).toBe(false);
+      await setKeep(null);
+      await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo"), { message: "Tokyo is named again when the box is removed" }).toBe(true);
+      // the seas' and oceans' names keep out of it too: a box over the whole element leaves none
+      await expect.poll(() => page.locator(tag).evaluate((el) => el.shadowRoot!.querySelectorAll("#sea-names .sea-name:not([hidden])").length), { timeout: 30_000, message: "a sea or ocean is named" }).toBeGreaterThan(0);
+      await setKeep([{ x: 0, y: 0, w: own.width, h: own.height }]);
+      await expect.poll(() => page.locator(tag).evaluate((el) => el.shadowRoot!.querySelectorAll("#sea-names .sea-name:not([hidden])").length), { message: "no sea is named under the box" }).toBe(0);
+      expect((await shown(page, tag)).length, "nor a city").toBe(0);
+      await setKeep([]);
+      await expect.poll(async () => (await shown(page, tag)).some((n) => n.text === "Tokyo")).toBe(true);
+    });
+
     test("the property restyles the names", async ({ page }) => {
       await go(page, "&city-names=20");
       await expect.poll(async () => (await shown(page, tag)).length, { timeout: 30_000 }).toBeGreaterThan(0);

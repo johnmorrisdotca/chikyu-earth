@@ -28,6 +28,7 @@ import { ownCredit } from "../door/own.ts";
 import { BODY_LABEL_ATTRIBUTES, bodyLabelText, loadMichroma, readBodyLabel, type BodyLabelSettings } from "./body-label.ts";
 import { createSkyHost, SKY_ATTRIBUTES, SKY_STYLE, type SkyHost } from "../sky/host.ts";
 import type { SkyKeepClear } from "../sky/keep-clear.ts";
+import { keepOutBoxes, readKeepOut, type KeepOut, type NameBox } from "../cities/keep-out.ts";
 import type { SkyLabelStyle } from "../sky/style.ts";
 import { cleanPlaces, orthoView, readPlaceGroups, readPlaceLayers, readPlaces, type Place, type PlaceLook } from "../markers/places.ts";
 import { readHereCity } from "../markers/here-city.ts";
@@ -272,6 +273,9 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #sky: SkyHost | undefined;
   #skyStyle: Partial<SkyLabelStyle> = {};
   #keepClear: SkyKeepClear[] = [];
+  /** The rectangles the Earth's own names are kept out of (`keepOut`), and the same as boxes for the layers. */
+  #keepOut: KeepOut[] = [];
+  #keepOutBoxes: NameBox[] = [];
   #airNote: HTMLElement | undefined;
   #onContext = (state: "lost" | "restored" | "unavailable"): void => {
     if (state === "unavailable") this.#fail("WebGL is not available");
@@ -339,6 +343,7 @@ export class ChikyuEarthRealistic extends HTMLElement {
       onLayout: () => this.#relayNames(false, true),
     });
     this.#cities.setStyle(this.#citiesStyle);
+    if (this.#keepOut.length > 0) this.#cities.setKeepOut(this.#keepOut);
     Object.assign(this.#model.borders, readBorders(this.getAttribute("borders")));
     this.#model.borders.onError = (error) => this.dispatchEvent(new CustomEvent("chikyu-borders-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } }));
     this.#model.grid.on = readGrid(this.getAttribute("grid"));
@@ -703,6 +708,28 @@ export class ChikyuEarthRealistic extends HTMLElement {
   }
 
   /**
+   * Rectangles of the view the Earth's own names (the cities', the countries' and the seas' and oceans') are kept out of: the page's bar, its cards, its notices laid over the element. Each is `{ x, y, w, h }` in the element's own box, in CSS pixels from its top left
+   * (the shape `<wakusei-space>`'s `keepOut` takes). A name whose box would touch one moves round its dot or its place if there is room, and is left out if there is not; a city whose dot is under one is not named at all. An empty list (the default) keeps nothing out. It is a property only
+   * (a list of rectangles is not an attribute); the rectangles are used at every layout, as they were set, so a page whose boxes move or resize sets the property again, and nothing is redrawn at rest. Not the sky's names, which have `keepClear`.
+   *
+   * @example
+   * ```ts
+   * import "@johnmorrisdotca/chikyu-earth/realistic/element";
+   *
+   * const earth = document.querySelector("chikyu-earth-realistic")!;
+   * earth.keepOut = [{ x: 0, y: 270, w: 400, h: 30 }];
+   * ```
+   */
+  get keepOut(): KeepOut[] {
+    return this.#keepOut.map((one) => ({ ...one }));
+  }
+  set keepOut(value: readonly KeepOut[] | null) {
+    this.#keepOut = readKeepOut(value);
+    this.#keepOutBoxes = keepOutBoxes(this.#keepOut);
+    this.#cities?.setKeepOut(this.#keepOut);
+  }
+
+  /**
    * Places on the picture where the sky's names must not go: a page's own text laid over the element, say. Each is a rectangle in the element's own CSS pixels from its top left (`{ x, y, width, height }`), or an element of the page whose box is read. A star name whose box touches
    * one is left out, and so is a star whose point is in one (the next star is named instead); the picked constellation's name is moved clear of it. The lines are still drawn. The boxes are read when the list changes, when the page or an element is resized or scrolled, and not at each frame: a
    * page that moves its text without resizing it sets the property again. The attribute `keep-clear` takes a CSS selector for the same (`keep-clear=".hero h1, .hero .lead"`). Nothing is redrawn at rest.
@@ -1053,14 +1080,14 @@ export class ChikyuEarthRealistic extends HTMLElement {
   #seaFrame(): void {
     const seas = this.#seas;
     if (!seas || !this.#nameFrame) return;
-    seas.frame(this.#nameFrame, seas.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...[...this.#claims.values()].flat()] : []);
+    seas.frame(this.#nameFrame, seas.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...[...this.#claims.values()].flat(), ...this.#keepOutBoxes] : []);
   }
 
   /** Lays the countries' names out on the last frame, clear of the places', the cities' and the sea names as they are now. */
   #countryFrame(): void {
     const countries = this.#countries;
     if (!countries || !this.#nameFrame) return;
-    countries.frame(this.#nameFrame, countries.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? []), ...[...this.#claims.values()].flat()] : []);
+    countries.frame(this.#nameFrame, countries.stats.on ? [...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? []), ...[...this.#claims.values()].flat(), ...this.#keepOutBoxes] : []);
   }
 
   /** Puts the name's settings and text right from the attributes (`body-label` and its family, `lang`). */
