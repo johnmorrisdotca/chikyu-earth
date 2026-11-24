@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.68.2 - 2026-11-23
+
 - **Every demo page says what it is and credits its data** (MODULES-1764). The build writes kazoku-ui's page header and credit line where the page marks `<!--frame:header-->` and `<!--frame:credits-->`. An embed has the credit line only. The family's checker is kazoku-ui's of 2026-11-11b. Tests: `test/page-frame.test.ts`, `test/standard.test.ts`.
 
 - **The CI-image browser run is a script** (MODULES-1763). `pnpm test:e2e:image` runs the demo tests in Microsoft's Playwright image at 4 CPUs. Playwright arguments go after `--`.
