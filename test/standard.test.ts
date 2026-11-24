@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 const standard = (await import(new URL("../scripts/check-standard.mjs", import.meta.url).href)) as { STANDARD_VERSION: string; standardProblems(root: string): string[] };
 
-const RECORDED = { version: "2026-11-03", sha256: "f9197b71745fc6598e8bfb70c7265814b910a775fdf96c5b1b7ab2129772859f" };
+const RECORDED = { version: "2026-11-11b", sha256: "ecf0627e155de2b2c148e89d0722cac3b55f7d4a76e1fbfe1b52a008e50896bb" };
 
 test("the check is kazoku-ui's, byte for byte", () => {
   assert.equal(standard.STANDARD_VERSION, RECORDED.version);
