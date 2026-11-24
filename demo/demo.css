@@ -63,6 +63,8 @@ kazoku-view-controls, kazoku-speed-buttons, #replay { --kazoku-ink: var(--ink); 
 @media (max-width: 640px) {
   .kazoku-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .kazoku-stage > .kazoku-view, .kazoku-stage > kazoku-view-controls, .kazoku-stage > .kazoku-side { grid-column: 1; grid-row: auto; }
+  /* The family's header and the page header take the top of a phone. The line globe gives up width so it, and the bar's first row, stay in the first screen, with room for a taller font. */
+  .globe-view { width: min(420px, 100%, calc(100dvh - 670px)); }
 }
 @media (min-width: 641px) {
   [data-wide="on"] .kazoku-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
@@ -81,6 +83,11 @@ kazoku-view-controls, kazoku-speed-buttons, #replay { --kazoku-ink: var(--ink); 
   [data-wide="on"] .controls .box { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); padding: 14px; }
 }
 @media (max-width: 640px) { .stage-tools { display: none; } }
+/* A short window still has the family's header and the page header above the view. The tools row gives up its place so the view keeps its height and its middle stays on screen, where a drag can reach it. */
+@media (max-height: 700px) {
+  .stage-tools { display: none; }
+  kazoku-page-header::part(link) { min-height: 0; padding: 0 8px; border-width: 0; }
+}
 
 /* the passes page: the places and choices on the left, the map beside them, then the passes (the element's own list, sky dome and facts, with the ground track on a globe) */
 .passes { display: grid; gap: 10px; padding: 8px 0 16px; }

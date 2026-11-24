@@ -4,7 +4,7 @@
 
 ## 0.68.2 - 2026-11-23
 
-- **Every demo page says what it is and credits its data** (MODULES-1764). The build writes kazoku-ui's page header and credit line where the page marks `<!--frame:header-->` and `<!--frame:credits-->`. An embed has the credit line only. The family's checker is kazoku-ui's of 2026-11-11b. Tests: `test/page-frame.test.ts`, `test/standard.test.ts`.
+- **Every demo page says what it is and credits its data** (MODULES-1764). The build writes kazoku-ui's page header and credit line where the page marks `<!--frame:header-->` and `<!--frame:credits-->`. An embed has the credit line only, fixed in the corner so the picture still fills the frame, and the corner link stays the one control. On a phone the line globe draws smaller, so the globe and the bar's first row stay in the first screen under that header. In a short window the tools row steps aside, so the space view keeps its height and its middle stays on screen, where a drag can reach it. The family's checker is kazoku-ui's of 2026-11-11b. Tests: `test/page-frame.test.ts`, `test/standard.test.ts`.
 
 - **The CI-image browser run is a script** (MODULES-1763). `pnpm test:e2e:image` runs the demo tests in Microsoft's Playwright image at 4 CPUs. Playwright arguments go after `--`.
 

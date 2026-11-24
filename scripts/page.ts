@@ -25,13 +25,16 @@ const scripts = (script: string): string =>
 const said = WORDS as { en: Record<string, string>; ja: Record<string, string> };
 
 /** The family's page frame, in place of `<!--frame:header-->` and `<!--frame:credits-->`. A Japanese title is one the page already has. */
-function frame(html: string, title: string, description: string, ja?: { title: string; description: string }, embed = false): string {
+function frame(html: string, title: string, description: string, ja?: { title: string; description: string }, embed = false, creditLine?: { en: string; ja: string }): string {
   const name = "Chikyu Earth 地球";
   const jaName = "地球 Chikyu Earth";
   const rest = (value: string, prefix: string): string => (value.startsWith(prefix) ? value.slice(prefix.length).replace(/^[:\s]+/, "") || value : value);
   const texts: PageTexts = { en: { name, what: rest(title, name), description } };
   if (ja) texts.ja = { name: jaName, what: rest(ja.title, jaName), description: ja.description };
-  const credits = pageCreditsHtml({ en: said.en.credits!, ja: said.ja.credits! }, { href: NOTICE, embed });
+  // An embed already names its sources with the corner link. The page-frame line is that same short credit and has no second link, so it does not sit on the picture or count as another control.
+  const credits = embed && creditLine !== undefined
+    ? pageCreditsHtml(creditLine, { embed: true })
+    : pageCreditsHtml({ en: said.en.credits!, ja: said.ja.credits! }, { href: NOTICE, embed });
   const header = embed ? "" : pageHeaderHtml(texts, { meta: true, sheets: "kids.html" });
   return html.replace("<!--frame:header-->", header).replace("<!--frame:credits-->", credits);
 }
@@ -89,7 +92,7 @@ export function renderPassesEmbed(): string {
 /** demo/embed.html, the frame a page puts in an iframe: the credit line, and no family header. */
 export function renderEmbed(): string {
   const html = readFileSync(new URL("../demo/embed.html", import.meta.url), "utf8");
-  return frame(html, "Chikyu Earth 地球: embed", "A globe in a frame for another page.", undefined, true);
+  return frame(html, "Chikyu Earth 地球: embed", "A globe in a frame for another page.", undefined, true, { en: "Outlines: Natural Earth.", ja: "輪郭：Natural Earth。" });
 }
 
 /** The code builder, which is its own page and still gets the family's page frame. */

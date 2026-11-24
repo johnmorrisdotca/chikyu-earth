@@ -9,6 +9,9 @@
       :root { color-scheme: light dark; }
       html, body { margin: 0; height: 100%; background: transparent; }
       body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      /* The credit line is a fixed corner note. In the flow it would share the row with the frame and shrink the picture. */
+      kazoku-page-credits { position: fixed; left: 8px; right: 8px; bottom: 6px; z-index: 4; margin: 0; pointer-events: none; font: 0.75rem/1.35 system-ui, sans-serif; color: #d6e0f0; }
+      kazoku-page-credits p { margin: 0; }
       #frame { width: min(100vw, 100vh); height: min(100vw, 100vh); }
       #frame :focus-visible { outline: 3px solid #6cd0ff; outline-offset: -3px; }
       chikyu-earth, chikyu-earth-realistic, chikyu-space { display: block; width: 100%; aspect-ratio: 1; }
@@ -21,6 +24,7 @@
   </head>
   <body>
     <div id="frame" data-testid="frame"></div>
+    <script type="module" src="kazoku-parts.js"></script>
     <script type="module" src="embed.js"></script>
       <!--frame:credits-->
   </body>
