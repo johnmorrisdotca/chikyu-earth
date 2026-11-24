@@ -28,6 +28,30 @@ The names are the most populous first, with a capital of a country counted for 2
 
 The pure parts need no browser: `layoutCities`, `cityTiersFor`, `cityRank`, `cityNameText` and `readCityNames` in `@johnmorrisdotca/chikyu-earth/realistic` lay the names out for any view that can say where a place falls on the screen.
 
+## Keeping names out of the page's boxes
+
+A page that lays its own bar, cards or notices over the Earth can keep the Earth's own names clear of them. The property `keepOut` of `<chikyu-earth-realistic>` and `<chikyu-space>` is a list of rectangles, `[{ x, y, w, h }]`, in the element's own box in CSS pixels from its top left (`x` and `y` the top left corner, `w` and `h` the size). It is the name and the shape `<wakusei-space>` takes for its own `keepOut`, so one list of boxes serves both views.
+
+```html
+<chikyu-space city-names></chikyu-space>
+<script>
+  document.querySelector("chikyu-space").keepOut = [{ x: 0, y: 270, w: 400, h: 30 }];
+</script>
+```
+
+- **What it keeps clear.** The names of cities (`city-names`), of countries (`country-names`) and of oceans, seas and continents (`sea-names`). The sky's names (`star-names`, `constellation-names`) have `keepClear`, which takes elements as well.
+- **What happens to a name.** A name whose box would touch a rectangle moves round its place if there is room (a city's name tries the right of its dot, then the left, above and below, as always) and is left out if there is not. A city whose dot lies under a rectangle is not named at all, and its dot is not drawn. The name comes back as soon as the rectangle is taken away or moved off it.
+- **When it is read.** The list is copied when it is set, and the names are laid out again at once; after that the same rectangles are used at every layout (a new frame, a language, a tier arriving), so a view that moves keeps clear of the boxes without being told again. The package does not watch the page: a page whose boxes move or change size sets the property again. Nothing is redrawn at rest.
+- **Property only.** A list of rectangles is not an attribute. An entry that is not an object with four finite numbers is dropped, `null` or a list that is not a list is none, and an empty list (the default) changes nothing.
+- **Pure parts.** `readKeepOut`, `keepOutBoxes` and `touchesKeepOut` in `@johnmorrisdotca/chikyu-earth/realistic`, and the option `keepOut` of `layoutCities`, work without a browser.
+
+```ts
+import { readKeepOut, touchesKeepOut } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+const bar = readKeepOut([{ x: 0, y: 270, w: 400, h: 30 }]);
+console.log(touchesKeepOut(bar, 100, 280, 3));
+```
+
 ## Oceans, seas and continents
 
 `sea-names` on `<chikyu-earth>`, `<chikyu-earth-realistic>` and `<chikyu-space>` names the oceans and the continents while the Earth is small on the screen, and the seas, gulfs and bays once its radius is at least 280 pixels. It is off unless set, because a name on open water is a mark a page should ask for. A bare attribute is on. The property is `seaNames`. Water is written with space between the letters. A city name is placed first and keeps the space where only one name fits. Nothing is drawn at rest.

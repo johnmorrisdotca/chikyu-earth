@@ -28,6 +28,30 @@ description: "リアルな地球と宇宙の見た目の上に、kuni の都市�
 
 純粋な計算の部分は、ブラウザーがなくても使えます。`@johnmorrisdotca/chikyu-earth/realistic` の `layoutCities`、`cityTiersFor`、`cityRank`、`cityNameText`、`readCityNames` を使うと、場所が画面のどこに来るかを答えられる視点であれば、どんなものにも名前を配置できます。
 
+## ページの箱に名前をかけない
+
+ページが独自の帯、カード、お知らせを地球の上に重ねるとき、地球自身の名前をそれらから離しておけます。`<chikyu-earth-realistic>` と `<chikyu-space>` のプロパティ `keepOut` は、長方形の一覧 `[{ x, y, w, h }]` です。要素自身の箱の中の座標で、左上からの CSS ピクセル (`x` と `y` は左上の角、`w` と `h` は大きさ) で指定します。`<wakusei-space>` の `keepOut` と同じ名前と形なので、1つの一覧を両方の画面に使えます。
+
+```html
+<chikyu-space city-names></chikyu-space>
+<script>
+  document.querySelector("chikyu-space").keepOut = [{ x: 0, y: 270, w: 400, h: 30 }];
+</script>
+```
+
+- **離すもの。** 都市の名前 (`city-names`)、国の名前 (`country-names`)、大洋・海・大陸の名前 (`sea-names`) です。空の名前 (`star-names`、`constellation-names`) には `keepClear` があり、要素も渡せます。
+- **名前はどうなるか。** 長方形に触れる名前は、場所のまわりに空きがあればそこへ動き (都市の名前はこれまでどおり、点の右、左、上、下の順に試します)、なければ出しません。点が長方形の下にある都市は名前を出さず、点も描きません。長方形を外すか、そこから動かすと、名前はすぐ戻ります。
+- **いつ読むか。** 一覧は設定したときに写し取り、すぐに名前を配置し直します。その後は、新しい絵、言語、段の読み込みなど配置のたびに同じ長方形を使うので、視点が動いても改めて渡す必要はありません。パッケージはページを見張りません。箱が動いたり大きさが変わったりするページは、プロパティをもう一度設定してください。止まっているときは描き直しません。
+- **プロパティのみ。** 長方形の一覧は属性にできません。有限の数4つを持つオブジェクトでない要素は捨て、`null` や一覧でないものは空として扱い、空の一覧 (初期値) は何も変えません。
+- **純粋な部分。** `@johnmorrisdotca/chikyu-earth/realistic` の `readKeepOut`、`keepOutBoxes`、`touchesKeepOut` と、`layoutCities` のオプション `keepOut` は、ブラウザーなしで使えます。
+
+```ts
+import { readKeepOut, touchesKeepOut } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+const bar = readKeepOut([{ x: 0, y: 270, w: 400, h: 30 }]);
+console.log(touchesKeepOut(bar, 100, 280, 3));
+```
+
 ## 海と大陸の名前
 
 `sea-names` を `<chikyu-earth>`、`<chikyu-earth-realistic>`、`<chikyu-space>` に付けると、画面の地球が小さいあいだは大洋と大陸の名前を出し、半径が 280 ピクセル以上になると海や湾も出します。付けない限り出ません。開いた水面の名前は、ページが求めたときだけ出すためです。属性だけを書くと付きます。プロパティは `seaNames` です。水の名前は文字のあいだを空けて書きます。都市の名前が先に置かれ、1つしか入らない場所は都市が使います。止まっているあいだは描き直しません。

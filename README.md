@@ -232,6 +232,15 @@ console.log(bodyLabelText("en"), bodyLabelText("ja"), BODY_LABEL_ATTRIBUTES.leng
 <chikyu-earth-realistic city-names="24"></chikyu-earth-realistic>
 ```
 
+A page's own boxes laid over the Earth (its bar, a card, a notice) can be kept clear of the Earth's names: the property `keepOut` takes a list of rectangles `{ x, y, w, h }` in the element's own box, in CSS pixels from its top left, the same shape and name as `<wakusei-space>`'s. A city, country, sea or ocean name that would touch one moves round its place if there is room and is left out if there is not; a city whose dot is under one is not named. It is a property only, and an empty list (the default) changes nothing: [guide](docs/guides/city-names.md#keeping-names-out-of-the-pages-boxes).
+
+```ts
+import { keepOutBoxes, readKeepOut } from "@johnmorrisdotca/chikyu-earth/realistic";
+
+const bar = readKeepOut([{ x: 0, y: 270, w: 400, h: 30 }]);
+console.log(keepOutBoxes(bar)[0]!.top);
+```
+
 ## Borders
 
 `borders` on `<chikyu-earth-realistic>` and `<chikyu-space>` draws the borders between countries on the land, as thin lines that turn with the Earth, by day and by night, from chizu's `world-geo` (Natural Earth 1:110m, public domain), loaded only when it is set (44 kB gzipped). `borders="regions"` adds a page's own provinces and states (`borderData.regions`) once the Earth is large enough to tell them apart. Each set is one batch of lines; nothing is drawn at rest: [guide](docs/guides/borders.md).
