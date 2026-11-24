@@ -1,7 +1,7 @@
 // The names of cities on the Earth (kuni's cities), in a real browser (Chromium, drawn in software), on the realistic Earth and on the space view: off unless `city-names` is set, the right cities in the right
 // place, in the page's language, none on the far side, never overlapping, more tiers as the Earth grows on the screen, and nothing drawn at rest.
 import { expect, test, type Page } from "@playwright/test";
-import { cityTiersFor } from "../src/cities/geometry.ts";
+import { cityTiersFor, TIER_RADIUS } from "../src/cities/geometry.ts";
 import { untilArrived } from "./gl.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -113,6 +113,27 @@ for (const [name, tag, look] of [
       // and when it is small again, none of the tiers it no longer shows is named
       await zoom(page, tag, 0.1);
       await expect.poll(async () => (await statsOf(page, tag)).radius).toBeLessThan(big.radius / 4);
+    });
+
+    test("each city is named once: no text is drawn twice beside the same dot, on Africa and on Europe (MODULES-1826)", async ({ page }) => {
+      for (const centre of ["20,5", "15,50"]) {
+        await page.goto(`/chikyu-earth/?look=${look}&time=2026-11-02T14:00Z&speed=0&center=${centre}&city-names=80`);
+        await page.locator(`${tag}[data-state=live]`).waitFor({ timeout: 60_000 });
+        await zoom(page, tag, 3);
+        await expect.poll(async () => (await statsOf(page, tag)).radius).toBeGreaterThan(TIER_RADIUS["1m"]);
+        for (const tier of ["capitals", "1m"]) await expect.poll(async () => (await statsOf(page, tag)).tiers, { timeout: 60_000 }).toContain(tier);
+        await expect.poll(async () => (await shown(page, tag)).length, { timeout: 30_000 }).toBeGreaterThan(10);
+        const names = await shown(page, tag);
+        for (let i = 0; i < names.length; i += 1) {
+          for (let j = i + 1; j < names.length; j += 1) {
+            const a = names[i]!;
+            const b = names[j]!;
+            // two labels of one city sit on either side of its dot, so their boxes are no further apart than a name is wide
+            const apart = Math.hypot((a.l + a.r) / 2 - (b.l + b.r) / 2, (a.t + a.b) / 2 - (b.t + b.b) / 2);
+            expect(a.text === b.text && apart < (a.r - a.l) * 2 + 30, `${a.text} is named once (centre ${centre})`).toBe(false);
+          }
+        }
+      }
     });
 
     test("nothing is drawn at rest, with the names on and the clock held", async ({ page }) => {
