@@ -6,7 +6,7 @@ import { build } from "esbuild";
 import { wideCss } from "@johnmorrisdotca/kazoku-ui/wide-layout";
 import { publishThumbnails, thumbnailHead } from "./family-thumbnail.mjs";
 import { publishedManifest, type TileManifest } from "./tiles-gate.ts";
-import { renderEmbed, renderIndex, renderFlat, renderKids, renderPasses, renderPassesEmbed } from "./page.ts";
+import { renderBuilder, renderEmbed, renderFullscreen, renderIndex, renderFlat, renderKids, renderPasses, renderPassesEmbed } from "./page.ts";
 
 const at = (path: string) => new URL(`../${path}`, import.meta.url).pathname;
 
@@ -25,7 +25,7 @@ await build({
   logLevel: "silent",
 });
 // The family header's language picker and theme switch: one small module for every page of the site.
-await writeFile(at("site/kazoku-parts.src.js"), `import "@johnmorrisdotca/kazoku-ui/language-picker/define";\nimport "@johnmorrisdotca/kazoku-ui/theme-switch/define";\n`);
+await writeFile(at("site/kazoku-parts.src.js"), `import "@johnmorrisdotca/kazoku-ui/language-picker/define";\nimport "@johnmorrisdotca/kazoku-ui/theme-switch/define";\nimport "@johnmorrisdotca/kazoku-ui/page-frame/define";\n`);
 await build({ entryPoints: [at("site/kazoku-parts.src.js")], outfile: at("site/kazoku-parts.js"), bundle: true, format: "esm", minify: true, logLevel: "silent", absWorkingDir: at("") });
 await rm(at("site/kazoku-parts.src.js"));
 await cp(at("demo/demo.css"), at("site/demo.css"));
@@ -64,6 +64,6 @@ await writeFile(at("site/kids.html"), renderKids(), "utf8");
 await writeFile(at("site/passes.html"), renderPasses(), "utf8");
 await writeFile(at("site/passes-embed.html"), renderPassesEmbed(), "utf8");
 await writeFile(at("site/flat.html"), renderFlat(), "utf8");
-await cp(at("demo/builder.html"), at("site/builder.html"));
-await cp(at("demo/fullscreen.html"), at("site/fullscreen.html"));
+await writeFile(at("site/builder.html"), renderBuilder(), "utf8");
+await writeFile(at("site/fullscreen.html"), renderFullscreen(), "utf8");
 console.log("site built: index.html, embed.html, kids.html, passes.html, flat.html, passes-embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/, missions/");
