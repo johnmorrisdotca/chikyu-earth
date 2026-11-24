@@ -39,7 +39,7 @@ const places = shops.map((shop) => ({ id: shop.id, lon: shop.lon, lat: shop.lat,
 space.places = [...(here ? [here] : []), ...places];
 ```
 
-- **Markers of their own for the first few.** The first `PLACE_MARKS` (32) places in sight, `here` first and then in the order given, stand up out of the ground with their names. Put the places that matter most first.
+- **Markers of their own for the first few.** The first `PLACE_MARKS` (32) places in sight, `here` first, then the places that have a `label`, then the rest in the order given, stand up out of the ground with their names. A named place is never left without its name because unnamed ones came before it; among the rest, put the places that matter most first.
 - **One draw call for the rest.** Every other place is a ring lying on the ground, all of them drawn together in one draw call, however many there are. The rings keep their size in pixels, turn with the Earth, fade at its edge, are left out on its far side and are dimmer on its night side, as the markers are.
 - **Crowds are gathered.** Places closer than about `PLACE_GROUP_PX` (24) pixels on the screen become one larger ring with their count beside it. The ground is cut into cells fixed to it, so the groups turn with the Earth and change only when the zoom changes by about half or double. Zoom in and they come apart. The reader's own place is never gathered. `groupPlaces` and `groupCell` are the same rule for a page or a server. Gathering is on by default; `place-groups="off"` (or `placeGroups = false`) leaves every place its own ring.
 - **What it costs.** `stats.places` has `places` (handed over), `hidden` (of those, left out because their layer is off), `shown` (in sight, those in groups counted), `marks` (standing on their own), `labels` (named), `sprites` (rings in the picture's one draw call; 0 when the picture cannot draw them), `dots` (those rings drawn instead as small circles in the page), `groups` (of the rings, the groups), `omitted` (places in sight that had no room) and `renders` (times laid out). Without three.js's `Points` (a subset of three.js that leaves it out) the picture cannot draw the rings, so the element draws them itself as small circles in the page, at most `PLACE_DOTS` (600). Those circles fade at the Earth's edge and are dimmer at night, as the rings in the picture are. Places in sight beyond that room are counted in `omitted`, and the element sends `chikyu-places-unavailable` once when that happens (`detail.reason` says why, `detail.omitted` how many): not merely because `Points` is missing, and not again. No place is left out without a count.
@@ -79,7 +79,7 @@ space.places = [
 ];
 ```
 
-- **`size: "small"`** is a stick about half as long and a ring about 30 per cent smaller than the kind's own. The default is the kind's size.
+- **`size: "small"`** is a stick about half as long and a ring about 30 per cent smaller than the kind's own. A number is the ring's radius in CSS pixels, from 1.5 to 14 (`MIN_PLACE_RING`, `MAX_PLACE_RING`), for a page that sizes each place by a figure of its own: see [marks from a list your page hands in](page-marks.md). The default is the kind's size.
 - **`look`** is `beam`, `pin` or `ring`, and wins over `places-look` for this place. Left out, the place takes `places-look`.
 
 ## Layers of places
