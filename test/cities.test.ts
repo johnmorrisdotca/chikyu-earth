@@ -121,3 +121,27 @@ test("a name is as wide as the browser draws it where that is wider than the est
   const narrow = layoutCities(cities, frameAt(0, 0, 160), "en", { max: 10, size: 12, dot: 3, measure: () => 1 });
   assert.deepEqual(narrow.map((one) => one.width), estimate.map((one) => one.width));
 });
+
+test("a city listed in two tiers is named once, from its first entry (MODULES-1826)", () => {
+  const cairo = city("Q85", "Cairo", 31.24, 30.04, 9_800_000, "national");
+  const named = layoutCities([cairo, { ...cairo }], frameAt(31.24, 30.04), "en", { max: 10, size: 12, dot: 3 });
+  assert.deepEqual(named.map((one) => one.text), ["Cairo"]);
+  assert.equal(new Set(named.map((one) => one.city.id)).size, named.length, "no id is named twice");
+});
+
+test("two different cities that share a name are both named (by id, not by name)", () => {
+  const named = layoutCities([city("Q1", "Springfield", 10, 10, 900_000), city("Q2", "Springfield", 30, 40, 800_000)], frameAt(20, 25), "en", { max: 10, size: 12, dot: 3 });
+  assert.deepEqual(named.map((one) => one.city.id).sort(), ["Q1", "Q2"]);
+});
+
+test("with kuni's tiers merged as the host merges them, no city is named twice, in Africa or in Europe", async () => {
+  const [capitals, millions] = await Promise.all([loadCities("capitals"), loadCities("1m")]);
+  const merged = [...capitals.cities, ...millions.cities].sort((a, b) => cityRank(b) - cityRank(a));
+  assert.ok(new Set(merged.map((one) => one.id)).size < merged.length, "kuni's capitals and cities of a million share cities: the doubles this guards against");
+  for (const [lon, lat] of [[20, 5], [15, 50]] as const) {
+    const named = layoutCities(merged, frameAt(lon, lat, 200), "en", { max: 80, size: 12, dot: 3 });
+    assert.ok(named.length > 10);
+    assert.equal(new Set(named.map((one) => one.city.id)).size, named.length, `no id twice at ${lon}, ${lat}`);
+    assert.equal(new Set(named.map((one) => one.text)).size, named.length, `no name twice at ${lon}, ${lat}`);
+  }
+});

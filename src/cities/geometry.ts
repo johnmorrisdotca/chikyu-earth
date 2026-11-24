@@ -197,7 +197,7 @@ export function nameWidth(text: string, size: number): number {
 }
 
 /**
- * Lays the names out for one draw: the cities in sight, the most important first, each named beside its dot (right, then left, above, below) where no earlier name is in the way; a city with no room is left out.
+ * Lays the names out for one draw: the cities in sight, the most important first, each named beside its dot (right, then left, above, below) where no earlier name is in the way; a city with no room is left out, and a city listed twice (the same `id` in two tiers) is named once, from its first entry.
  *
  * @param cities - The cities of the tiers shown, the highest rank first (see {@link cityRank}).
  * @param frame - Where the Earth is on the screen.
@@ -222,8 +222,12 @@ export function layoutCities(cities: readonly NamedCity[], frame: CityFrame, lan
   const keepOut = options.keepOut ?? [];
   const taken = keepOut.length > 0 ? [...(options.taken ?? []), ...keepOutBoxes(keepOut)] : options.taken;
   const seen: { city: NamedCity; x: number; y: number }[] = [];
+  // kuni's tiers overlap (a capital of a million people is in both `capitals` and `1m`), so a city can come twice: it is named once, by its id, the first (highest-ranked) entry kept
+  const ids = new Set<string>();
   for (const city of cities) {
     if (seen.length >= CANDIDATES) break;
+    if (ids.has(city.id)) continue;
+    ids.add(city.id);
     if (frame.project(city.lon, city.lat, out) < facing) continue;
     if (out.x < margin || out.y < margin || out.x > frame.width - margin || out.y > frame.height - margin) continue;
     if (keepOut.length > 0 && touchesKeepOut(keepOut, out.x, out.y, options.dot)) continue;
