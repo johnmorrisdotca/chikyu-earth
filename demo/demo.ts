@@ -894,6 +894,7 @@ if (flat && controls && stage) {
       if (address.get("borders") === "on") element.setAttribute("borders", "");
       if (address.get("grid") === "on") element.setAttribute("grid", "");
       if (address.get("country-names") === "on") element.setAttribute("country-names", "");
+      if (address.get("region-names") === "on") element.setAttribute("region-names", "");
       if (address.get("orbits") === "off") element.setAttribute("orbits", "off");
       if (address.get("labels") === "off") element.setAttribute("labels", "off");
       if (startTime && Number.isFinite(Date.parse(startTime))) element.setAttribute("time", startTime);
@@ -984,6 +985,7 @@ if (flat && controls && stage) {
       if (address.get("borders") === "on") element.setAttribute("borders", "");
       if (address.get("grid") === "on") element.setAttribute("grid", "");
       if (address.get("country-names") === "on") element.setAttribute("country-names", "");
+      if (address.get("region-names") === "on") element.setAttribute("region-names", "");
       if (lightMode !== "sun") element.setAttribute("light", lightMode);
       element.setAttribute("camera", cameraMode);
       turnFor(true);
@@ -1332,6 +1334,7 @@ if (flat && controls && stage) {
   for (const [id, name] of [
     ["grid", "grid"],
     ["country-names", "country-names"],
+    ["region-names", "region-names"],
   ] as const) {
     const button = document.querySelector<HTMLButtonElement>(`#${id}`);
     button?.addEventListener("click", () => {
@@ -1540,6 +1543,7 @@ if (flat && controls && stage) {
   if (opened["borders"] === "on") borders?.setAttribute("aria-pressed", "true");
   if (opened["grid"] === "on") document.querySelector("#grid")?.setAttribute("aria-pressed", "true");
   if (opened["country-names"] === "on") document.querySelector("#country-names")?.setAttribute("aria-pressed", "true");
+  if (opened["region-names"] === "on") document.querySelector("#region-names")?.setAttribute("aria-pressed", "true");
   const opening = opened["time"] && Number.isFinite(Date.parse(opened["time"])) ? Date.parse(opened["time"]) : null;
   if (when) when.value = localValue(opening ?? Date.now());
   if (opening !== null) now?.setAttribute("aria-pressed", "false");

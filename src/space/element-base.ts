@@ -20,7 +20,7 @@ import { aimAt, findPlace, PLACE_GLIDE_MS } from "../markers/go-to-place.ts";
 import { subsolarPoint } from "../realistic/sun.ts";
 import { SHORT_NAMES } from "../satellites/names.ts";
 import { CITY_NAMES_ATTRIBUTES, CITY_NAMES_STYLE, createCityHost, type CityHost, type CityNamesStyle } from "../cities/host.ts";
-import { BORDER_ATTRIBUTES, readBorders, type BorderSets } from "../borders/lines.ts";
+import { BORDER_ATTRIBUTES, BORDER_REGIONS_RADIUS, readBorders, type BorderSets } from "../borders/lines.ts";
 import type { BorderData, BorderStats } from "../borders/layer.ts";
 import { GRID_ATTRIBUTES, readGrid } from "../grid/lines.ts";
 import { readRoute, routeLeg, routeText, type RouteLeg } from "../route.ts";
@@ -30,6 +30,7 @@ import { BEAM_ATTRIBUTES, readBeam } from "../beam/geometry.ts";
 import type { BeamStats } from "../beam/layer.ts";
 import { COUNTRY_NAMES_ATTRIBUTES, type CountryFrame } from "../country-names/geometry.ts";
 import { COUNTRY_NAMES_STYLE, createCountryHost, type CountryHost, type CountryNamesStats, type CountryNamesStyle } from "../country-names/host.ts";
+import { REGION_LAYER, REGION_NAMES_ATTRIBUTES, REGION_NAMES_STYLE, regionShapes } from "../region-names/host.ts";
 import { SEA_NAMES_ATTRIBUTES, readSeaNames } from "../sea-names/geometry.ts";
 import { SEA_NAMES_STYLE, createSeaHost, type SeaHost, type SeaNamesStats } from "../sea-names/host.ts";
 
@@ -370,7 +371,7 @@ const readTime = (value: string | null): number | "now" => {
   return Number.isFinite(ms) ? ms : "now";
 };
 
-const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}:host([data-state="lost"]) #stage~*{visibility:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${SEA_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}${COMPASS_STYLE}`;
+const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:hidden;isolation:isolate}${IMMERSIVE_STYLE}#stage,#labels{position:absolute;inset:0}#labels{pointer-events:none;overflow:hidden}:host([data-state="lost"]) #stage~*{visibility:hidden}.sp-label{position:absolute;left:0;top:0;margin:0;padding:0;border:0;background:none;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-label:focus-visible{outline:2px solid #6cd0ff;outline-offset:2px;border-radius:4px}.sp-label::before{content:"";display:inline-block;width:5px;height:5px;margin:0 5px 1px -2px;border-radius:50%;background:#fff}.sp-label[hidden]{display:none}.sp-sat{position:absolute;left:0;top:0;font:12px/16px system-ui,-apple-system,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;will-change:transform;pointer-events:none}.sp-sat[hidden]{display:none}.sp-sat[data-hover]{transition:opacity 180ms linear}@media (prefers-reduced-motion: reduce){.sp-sat[data-hover]{transition:none}}${PLACE_STYLE}${SKY_STYLE}${COUNTRY_NAMES_STYLE}${REGION_NAMES_STYLE}${SEA_NAMES_STYLE}${CITY_NAMES_STYLE}${METEOR_NOTE_STYLE}${NOTES_STYLE}${COMPASS_STYLE}`;
 
 /**
  * The `<chikyu-space>` custom element: the Earth, the Moon, the Sun and the planets where they are at a date and time, drawn with three.js through the shared renderer. It takes `center`, `time` (`now` or an ISO date), `speed` (1 is real time, 0 holds, 86400 is a day a second, negative runs backwards), `scale` (`compressed` or `true`), `labels` and `orbits` (`off` hides them); positions are computed in the browser by astronomy-engine, an optional peer dependency. It draws only when something changes, and nothing while it is out of sight.
@@ -416,7 +417,7 @@ const STYLE = `:host{display:block;aspect-ratio:1/1;position:relative;overflow:h
  * ```
  */
 export class ChikyuSpace extends HTMLElement {
-  static observedAttributes = ["cloud-drift", "cloud-fade", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "compass-place", "compass-offset", "smooth-fps"];
+  static observedAttributes = ["cloud-drift", "cloud-fade", "camera", "earth-size", "earth-x", "earth-y", "center", "time", "speed", "scale", "labels", "orbits", "bodies", "light", "meteors", "meteors-label", "meteors-strength", ...BODY_LABEL_ATTRIBUTES, ...SKY_ATTRIBUTES, ...CITY_NAMES_ATTRIBUTES, ...BORDER_ATTRIBUTES, ...GRID_ATTRIBUTES, ...BEAM_ATTRIBUTES, ...COUNTRY_NAMES_ATTRIBUTES, ...REGION_NAMES_ATTRIBUTES, ...SEA_NAMES_ATTRIBUTES, "air-thickness", "air-label", "lang", "places", "places-look", "place-groups", "place-layers", "here-city", "route", "bodies-credit", "satellite-tint", "satellite-streak-max", "tiles", "tiles-finer", "tiles-finer-layer", "tiles-finer-date", "tiles-finer-timeout", "ride-viewpoint", "ride-outside-km", "ride-model-size", "ride-drag", "hover-path", "names-on-hover", "selected-path", "path-light", "path-hit", "path-priority", "estimate-far", "follow", "follow-ease", "dim-occluded", "ride-model-share", "ride-model-seat", "ride-zoom", "ride-up", "compass", "compass-place", "compass-offset", "smooth-fps"];
 
   #model: SpaceModel = newSpaceModel();
   /** The finer imagery (NASA's tile service), one source while the attributes stay the same. Off unless `tiles-finer="gibs"`. */
@@ -441,6 +442,8 @@ export class ChikyuSpace extends HTMLElement {
   #citiesStyle: CityNamesStyle = {};
   /** The names of the countries on the Earth (`country-names`), and the look of the names. */
   #countries: CountryHost | undefined;
+  /** The names of the regions on the Earth (`region-names`), shown while the regions are. */
+  #regions: CountryHost | undefined;
   #seas: SeaHost | undefined;
   #countriesStyle: CountryNamesStyle = {};
   #satNames: Record<number, string> = {};
@@ -593,6 +596,14 @@ export class ChikyuSpace extends HTMLElement {
       onError: (error) => this.dispatchEvent(new CustomEvent("chikyu-country-names-unavailable", { detail: { reason: error instanceof Error ? error.message : String(error) } })),
     });
     this.#countries.setStyle(this.#countriesStyle);
+    this.#regions = createCountryHost({
+      root,
+      attribute: (name) => this.getAttribute(name),
+      language: () => ((this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en"),
+      onError: () => undefined,
+      layer: REGION_LAYER,
+    });
+    this.#model.borders.onRegions = (_code, shapes) => this.#regions?.add(regionShapes(shapes));
     this.#seas = createSeaHost({
       root,
       attribute: (name) => this.getAttribute(name),
@@ -752,6 +763,8 @@ export class ChikyuSpace extends HTMLElement {
     this.#cities?.dispose();
     this.#countries?.dispose();
     this.#countries = undefined;
+    this.#regions?.dispose();
+    this.#regions = undefined;
     this.#seas?.dispose();
     this.#seas = undefined;
     this.#cities = undefined;
@@ -809,6 +822,7 @@ export class ChikyuSpace extends HTMLElement {
         this.#cities?.refresh();
         this.#seas?.refresh();
         this.#countries?.refresh();
+        this.#regions?.refresh();
         this.#here?.refresh();
       }
     } else if ((BODY_LABEL_ATTRIBUTES as readonly string[]).includes(name)) this.#applyBodyLabel();
@@ -836,6 +850,7 @@ export class ChikyuSpace extends HTMLElement {
       this.#seas?.refresh();
       this.#seaFrame();
       this.#countryFrame();
+      this.#regionFrame();
     }
     else if (name === "borders") {
       Object.assign(this.#model.borders, readBorders(value));
@@ -847,6 +862,10 @@ export class ChikyuSpace extends HTMLElement {
       this.#applyBeam();
       this.#gate?.request();
     } else if ((COUNTRY_NAMES_ATTRIBUTES as readonly string[]).includes(name)) this.#countries?.refresh();
+    else if ((REGION_NAMES_ATTRIBUTES as readonly string[]).includes(name)) {
+      this.#regions?.refresh();
+      this.#regionFrame();
+    }
     else if (name === "satellite-tint") {
       this.#model.satellites.orbitTint = value === "orbit";
       this.#gate?.request();
@@ -1439,6 +1458,7 @@ export class ChikyuSpace extends HTMLElement {
     this.#placeLayer?.late(() => [...this.#bodyNameBoxes(), ...(this.#cities?.boxes ?? [])]);
     this.#seaFrame();
     this.#countryFrame();
+    this.#regionFrame();
     if (sky) this.#sky?.relayout();
   }
 
@@ -1478,6 +1498,16 @@ export class ChikyuSpace extends HTMLElement {
     if (!countries) return;
     const frame = this.#lastNameFrame;
     countries.frame(frame, countries.stats.on && frame ? [...this.#bodyNameBoxes(), ...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? []), ...this.#keepOutBoxes] : []);
+  }
+
+  /** Lays the regions' names out on the last frame, while the regions' borders are drawn, clear of the bodies', the places', the cities', the seas' and the countries' names as they are now. */
+  #regionFrame(): void {
+    const regions = this.#regions;
+    if (!regions) return;
+    // the regions are showing when they are switched on and the Earth is large enough: read here, not from what the last draw reported, which the layer sets after the names are laid out
+    const last = this.#lastNameFrame;
+    const frame = last && this.#model.borders.regions && last.radius >= BORDER_REGIONS_RADIUS ? last : null;
+    regions.frame(frame, regions.stats.on && frame ? [...this.#bodyNameBoxes(), ...(this.#placeLayer?.boxes ?? []), ...(this.#cities?.boxes ?? []), ...(this.#seas?.boxes ?? []), ...(this.#countries?.boxes ?? []), ...this.#keepOutBoxes] : []);
   }
 
   /** The box of the ridden satellite's model as last told to the page (`chikyu-ride-model`), or null when none was told or it has gone. */
@@ -3141,6 +3171,8 @@ export class ChikyuSpace extends HTMLElement {
     route: { on: boolean; kilometres: number; greatCircleKm: number; flightHours: number };
     /** The names of countries: whether `country-names` is set and the most it asks for, the countries loaded, the names shown at the last draw, how many times they were laid out, and whether the outlines could not be loaded. */
     countryNames: CountryNamesStats;
+    /** The names of regions: whether `region-names` is set and the most it asks for, the regions handed in, the names shown at the last draw, and how many times they were laid out. Nothing is shown while the regions are not. */
+    regionNames: CountryNamesStats;
     /** The names of oceans, seas and continents: whether `sea-names` is on, the Earth's radius on the screen, the names shown at the last draw, and how many times the layer was laid out. */
     seaNames: SeaNamesStats;
     /**
@@ -3181,6 +3213,7 @@ export class ChikyuSpace extends HTMLElement {
       beam: { ...this.#model.beam.stats },
       route: { ...this.#model.route.stats },
       countryNames: this.#countries?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
+      regionNames: this.#regions?.stats ?? { on: false, max: 0, countries: 0, names: 0, renders: 0, failed: false },
       seaNames: this.#seas?.stats ?? { on: false, radius: 0, names: 0, renders: 0 },
       fly: {
         flying: this.#flight !== null,

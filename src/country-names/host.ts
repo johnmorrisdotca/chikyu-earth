@@ -23,14 +23,41 @@ export interface CountryNamesStyle {
   largest?: number;
 }
 
-/** The styles of the layer, for an element to add to its own (`#co-names` and the names in its shadow root). */
-export const COUNTRY_NAMES_STYLE =
-  "#co-names{position:absolute;inset:0;overflow:hidden;pointer-events:none}" +
-  `.co-name{position:absolute;left:0;top:0;margin:0;white-space:nowrap;text-align:center;pointer-events:none;will-change:transform;letter-spacing:${COUNTRY_LETTER_SPACING}em;` +
-  "font-family:var(--chikyu-country-font,system-ui,-apple-system,'Segoe UI',sans-serif);font-weight:var(--chikyu-country-weight,600);color:var(--chikyu-country-colour,rgba(255,244,214,.92));" +
-  "text-shadow:0 0 calc(var(--chikyu-country-halo-width,3) * 1px) var(--chikyu-country-halo,#140c00),0 0 calc(var(--chikyu-country-halo-width,3) * 1px) var(--chikyu-country-halo,#140c00)}.co-name[hidden]{display:none}";
+/** Which layer a host is: the countries' names, or the regions' (`region-names`), whose shapes arrive a country at a time from the borders. */
+export interface NamesLayer {
+  /** The attribute that switches the layer on. */
+  attribute: string;
+  /** The id of the layer's box in the shadow root. */
+  id: string;
+  /** The class of each name. */
+  className: string;
+  /** The word in the style variables, `--chikyu-<word>-font` and the rest. */
+  word: string;
+  /** Whether English names are written in capitals. */
+  capitals: boolean;
+  /** The names' smallest and largest size in pixels when the page gives none. */
+  sizes: { smallest: number; largest: number };
+  /** The shapes are handed in with `add`, a few at a time, and nothing is loaded here. */
+  incremental: boolean;
+}
 
-const DEFAULTS = { smallest: 10, largest: 16 } as const;
+const COUNTRY_LAYER: NamesLayer = { attribute: "country-names", id: "co-names", className: "co-name", word: "country", capitals: true, sizes: { smallest: 10, largest: 16 }, incremental: false };
+
+/** The styles of one layer: its own variables first, the countries' after them where it has none of its own. */
+export const namesStyle = (layer: NamesLayer, weight: number): string => {
+  const own = (name: string, fallback: string): string => (layer.word === "country" ? `var(--chikyu-country-${name},${fallback})` : `var(--chikyu-${layer.word}-${name},var(--chikyu-country-${name},${fallback}))`);
+  const halo = own("halo", "#140c00");
+  const width = `calc(${own("halo-width", "3")} * 1px)`;
+  return (
+    `#${layer.id}{position:absolute;inset:0;overflow:hidden;pointer-events:none}` +
+    `.${layer.className}{position:absolute;left:0;top:0;margin:0;white-space:nowrap;text-align:center;pointer-events:none;will-change:transform;letter-spacing:${COUNTRY_LETTER_SPACING}em;` +
+    `font-family:${own("font", "system-ui,-apple-system,'Segoe UI',sans-serif")};font-weight:${own("weight", String(weight))};color:${own("colour", "rgba(255,244,214,.92)")};` +
+    `text-shadow:0 0 ${width} ${halo},0 0 ${width} ${halo}}.${layer.className}[hidden]{display:none}`
+  );
+};
+
+/** The styles of the layer, for an element to add to its own (`#co-names` and the names in its shadow root). */
+export const COUNTRY_NAMES_STYLE = namesStyle(COUNTRY_LAYER, 600);
 
 /** What an element tells the layer about the page. */
 export interface CountryHostOptions {
@@ -44,6 +71,8 @@ export interface CountryHostOptions {
   onError(error: unknown): void;
   /** Loads the outlines with their names: chizu's `world-geo` by default. */
   load?(): Promise<{ features: readonly NamedShape[] }>;
+  /** Which layer this is: the countries' when left out. */
+  layer?: NamesLayer;
 }
 
 /**
@@ -68,6 +97,8 @@ export interface CountryNamesStats {
 }
 
 export interface CountryHost {
+  /** Hands in more shapes to name (an incremental layer's): the layer is laid out again. */
+  add(shapes: readonly NamedShape[]): void;
   /** Tells where the Earth is in the picture just drawn (or `null` when there is no Earth to name), and the boxes other names use there. */
   frame(frame: CountryFrame | null, taken?: readonly { left: number; top: number; width: number; height: number }[]): void;
   /** Reads the attribute and the language again after either changed. */
@@ -76,6 +107,8 @@ export interface CountryHost {
   setStyle(style: CountryNamesStyle): void;
   /** The names shown at the last draw. */
   readonly shown: readonly CountryName[];
+  /** The boxes the names shown take (the same names, for the layers laid out after this one to keep clear of). */
+  readonly boxes: readonly { left: number; top: number; width: number; height: number }[];
   readonly stats: CountryNamesStats;
   dispose(): void;
 }
@@ -91,7 +124,8 @@ const worldGeo = async (): Promise<{ features: readonly NamedShape[] }> => (awai
 export function createCountryHost(options: CountryHostOptions): CountryHost {
   const { root } = options;
   const doc = root.ownerDocument;
-  let spots: CountrySpots | null = null;
+  const layer = options.layer ?? COUNTRY_LAYER;
+  let spots: CountrySpots | null = layer.incremental ? { countries: [] } : null;
   let asked = false;
   let failed = false;
   let last: CountryFrame | null = null;
@@ -101,7 +135,7 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
   let style: CountryNamesStyle = {};
   let box: HTMLElement | undefined;
   const pool: HTMLElement[] = [];
-  let max = readCountryNames(options.attribute("country-names"));
+  let max = readCountryNames(options.attribute(layer.attribute));
   let usedLang: "en" | "ja" | undefined;
   // set by `dispose`: an outline load that finishes after it is ignored, so it makes no box and tells no one
   let disposed = false;
@@ -109,11 +143,11 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
   const attach = (): void => {
     if (box) return;
     box = doc.createElement("div");
-    box.id = "co-names";
+    box.id = layer.id;
     box.setAttribute("aria-hidden", "true");
-    // under the other names: the city names' box, when it is there, comes after this one
-    const cities = root.getElementById("cn-canvas");
-    if (cities) root.insertBefore(box, cities);
+    // under the other names: the city names' box, when it is there, comes after this one (and the regions' under the countries')
+    const after = (layer.word === "country" ? null : root.getElementById("co-names")) ?? root.getElementById("cn-canvas");
+    if (after) root.insertBefore(box, after);
     else root.append(box);
     vars();
   };
@@ -129,11 +163,11 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
       if (value === undefined) box!.style.removeProperty(name);
       else box!.style.setProperty(name, String(value));
     };
-    set("--chikyu-country-font", style.font);
-    set("--chikyu-country-weight", style.weight);
-    set("--chikyu-country-colour", style.colour);
-    set("--chikyu-country-halo", style.halo);
-    set("--chikyu-country-halo-width", style.haloWidth);
+    set(`--chikyu-${layer.word}-font`, style.font);
+    set(`--chikyu-${layer.word}-weight`, style.weight);
+    set(`--chikyu-${layer.word}-colour`, style.colour);
+    set(`--chikyu-${layer.word}-halo`, style.halo);
+    set(`--chikyu-${layer.word}-halo-width`, style.haloWidth);
   }
 
   /** The width and height of a name in the font it is drawn in: a canvas set to the layer's own font and weight, so a fallback font with wider letters or taller lines is measured as it is. */
@@ -143,8 +177,9 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
     const context = ruler;
     if (!context || typeof context.measureText !== "function") return undefined;
     const host = root.host ? getComputedStyle(root.host) : undefined;
-    const family = style.font ?? (host?.getPropertyValue("--chikyu-country-font").trim() || "system-ui, -apple-system, 'Segoe UI', sans-serif");
-    const weight = style.weight ?? (host?.getPropertyValue("--chikyu-country-weight").trim() || 600);
+    const read = (name: string): string => host?.getPropertyValue(`--chikyu-${layer.word}-${name}`).trim() || host?.getPropertyValue(`--chikyu-country-${name}`).trim() || "";
+    const family = style.font ?? (read("font") || "system-ui, -apple-system, 'Segoe UI', sans-serif");
+    const weight = style.weight ?? (read("weight") || (layer.word === "country" ? 600 : 500));
     return (text, size) => {
       context.font = `${weight} ${size}px ${family}`;
       const metrics = context.measureText(text);
@@ -155,7 +190,7 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
   };
 
   const ensure = (): void => {
-    if (asked) return;
+    if (asked || layer.incremental) return;
     asked = true;
     let loading: Promise<{ features: readonly NamedShape[] }>;
     try {
@@ -186,7 +221,7 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
     if (!spots) return;
     attach();
     usedLang = options.language();
-    shown = layoutCountryNames(spots, frame, usedLang, { max, smallest: style.smallest ?? DEFAULTS.smallest, largest: style.largest ?? DEFAULTS.largest, taken, measure: measurer() });
+    shown = layoutCountryNames(spots, frame, usedLang, { max, smallest: style.smallest ?? layer.sizes.smallest, largest: style.largest ?? layer.sizes.largest, taken, measure: measurer(), capitals: layer.capitals });
     place();
   }
 
@@ -195,7 +230,7 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
     renders += 1;
     while (pool.length < Math.min(COUNTRY_NAMES_MAX, shown.length)) {
       const name = doc.createElement("span");
-      name.className = "co-name";
+      name.className = layer.className;
       box.append(name);
       pool.push(name);
     }
@@ -234,6 +269,11 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
   doc.fonts?.addEventListener?.("loadingdone", onFonts);
 
   return {
+    add(shapes) {
+      if (disposed) return;
+      spots = { countries: [...(spots?.countries ?? []), ...countrySpots({ features: shapes }).countries] };
+      compute();
+    },
     frame(next, boxes = []) {
       last = next;
       taken = boxes;
@@ -245,7 +285,7 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
       compute();
     },
     refresh() {
-      max = readCountryNames(options.attribute("country-names"));
+      max = readCountryNames(options.attribute(layer.attribute));
       if (max === null) {
         clear();
         return;
@@ -258,6 +298,9 @@ export function createCountryHost(options: CountryHostOptions): CountryHost {
       compute();
     },
     get shown() {
+      return shown;
+    },
+    get boxes() {
       return shown;
     },
     get stats() {

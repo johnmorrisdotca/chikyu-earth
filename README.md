@@ -243,7 +243,7 @@ console.log(keepOutBoxes(bar)[0]!.top);
 
 ## Borders
 
-`borders` on `<chikyu-earth-realistic>` and `<chikyu-space>` draws the borders between countries on the land, as thin lines that turn with the Earth, by day and by night, from chizu's `world-geo` (Natural Earth 1:110m, public domain), loaded only when it is set (44 kB gzipped). `borders="regions"` adds a page's own provinces and states (`borderData.regions`) once the Earth is large enough to tell them apart. Each set is one batch of lines; nothing is drawn at rest: [guide](docs/guides/borders.md).
+`borders` on `<chikyu-earth-realistic>` and `<chikyu-space>` draws the borders between countries on the land, as thin lines that turn with the Earth, by day and by night, from chizu's `world-geo` (Natural Earth 1:110m, public domain), loaded only when it is set (44 kB gzipped), and from its finer `world-geo-detail` (1:50m) once the Earth is large. `borders="regions"` adds chizu's provinces and states (or a page's own, `borderData.regions`) once the Earth is large enough to tell them apart, and `region-names` names them. Each set is one batch of lines; nothing is drawn at rest: [guide](docs/guides/borders.md).
 
 ```html
 <chikyu-earth-realistic borders="countries"></chikyu-earth-realistic>
@@ -589,7 +589,7 @@ Each guide has a Japanese twin in [docs/guides/ja](docs/guides/ja/getting-starte
 | [The date follows the clock, and Play](docs/guides/time-and-play.md) | The `chikyu-timechange` event, a `speed` for the space view and the realistic Earth, Play, Pause and Back |
 | [Names on the stars and faint constellation lines](docs/guides/sky-names.md) | The brightest stars named and the constellations as faint lines over the sky, in hoshi-stars' attribute names |
 | [City names on the Earth](docs/guides/city-names.md) | Cities named from kuni's list, more as the Earth grows on the screen, in the page's language |
-| [Borders on the Earth](docs/guides/borders.md) | The borders between countries, and a page's own regions once the Earth is large enough |
+| [Borders on the Earth](docs/guides/borders.md) | The borders between countries (finer when the Earth is large), chizu's regions and their names once it is larger still |
 | [The grid and country names on the Earth](docs/guides/grid-and-country-names.md) | Meridians and parallels with the special lines picked out, and the countries in sight named in the page's language |
 | [A beam from a satellite to the ground](docs/guides/beam.md) | A soft cone of light from the chosen satellite to a lit footprint, true to its height, with optional spot cells, in a ride too |
 | [A name on the Earth](docs/guides/body-label.md) | The Earth's name written on the globe, in the family's plain attribute names |

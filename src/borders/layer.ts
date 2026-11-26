@@ -57,6 +57,8 @@ export interface BorderState {
   regions: boolean;
   data: BorderData;
   onError?: (error: unknown) => void;
+  /** Told of each country's regions as they arrive (the element hands them to the region names). */
+  onRegions?: (code: string, shapes: BorderShapes) => void;
   stats: BorderStats;
 }
 
@@ -179,6 +181,7 @@ export function createBorderLayer(three: ThreeParts, parent: THREE.Object3D, sta
       loading.then((shapes) => {
         if (disposed || !shapes) return;
         regionLines.set(code, sharedEdges(shapes));
+        state.onRegions?.(code, shapes);
         // one batch for every country's regions that has arrived
         let total = 0;
         for (const one of regionLines.values()) total += one.length;

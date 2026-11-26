@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Regions by default, finer countries, and the regions' names** (MODULES-1143). Built on chizu 1.12's longitude-and-latitude regions and 1:50m world (the dependency is `^1.12.0`).
+  - **The regions are chizu's.** With no `borderData.regions` of the page's, the regions of the countries in view come from chizu's `divisions-geo` (32 countries, one country's file at a time, each asked for once), so the demo's Borders button shows provinces and states close in. A page's `borderData.regions` takes their place, as before.
+  - **Finer country borders when the Earth is large.** From a radius of 600 CSS pixels on the screen (`BORDER_DETAIL_RADIUS`) the countries' borders are drawn from chizu's `world-geo-detail` (1:50m), loaded the first time and never before; the 1:110m lines are put away while the fine ones show, so no border is drawn twice. `borderData.detail` replaces the source. `stats.borders` has `detail` (segments) and `shown.detail`.
+  - **`region-names`** names the regions while they are drawn: the countries' names' layer for the regions, handed the shapes by the borders as they arrive, in the page's language (English as Natural Earth spells it, not in capitals), at most 40 (or the number given), kept off the places', cities', seas' and countries' names and the page's `keepOut` boxes. The look is `--chikyu-region-*`, falling back to `--chikyu-country-*`. `stats.regionNames`; the demo has a Region names button (`region-names=on`). `regionShapes` and `REGION_NAMES_ATTRIBUTES` are exported from `/realistic`; `layoutCountryNames` takes `capitals: false`.
+  - Guide: Borders on the Earth (English and Japanese) with the sizes and draw cost. Tests: `test/border-layer.test.ts`, `test/region-names.test.ts`, `e2e/region-names.gl.ts` (both elements), and the freeze test's regions case (nothing drawn or laid out at rest, one context, nothing left when zoomed out).
 - **The demo no longer zooms on a quick double tap on an iPhone** (MODULES-1827). kazoku-ui 0.54.5's page frame sets `touch-action: manipulation` on the document; the dependency is `^0.54.5`. `e2e/credits.demo.ts` reads it on the globe, kids and passes pages. The package itself is unchanged.
 
 ## 0.70.1 - 2026-11-25

@@ -16,7 +16,7 @@ const RAD = Math.PI / 180;
  * ```
  */
 export interface BorderFeature {
-  properties?: { code?: string | null } | null;
+  properties?: { code?: string | null; iso?: string | null; name?: string | null; nameJa?: string | null } | null;
   geometry: { type: string; coordinates: unknown } | null;
 }
 

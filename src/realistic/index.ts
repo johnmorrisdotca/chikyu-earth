@@ -23,3 +23,4 @@ export type { GridStats } from "../grid/layer.ts";
 export { COUNTRY_LETTER_SPACING, COUNTRY_NAMES_ATTRIBUTES, COUNTRY_NAMES_DEFAULT, COUNTRY_NAMES_MAX, countryNameBox, countryNameText, countrySpots, layoutCountryNames, readCountryNames, type CountryFrame, type CountryLayoutOptions, type CountryName, type CountrySpots, type NamedShape } from "../country-names/geometry.ts";
 export { SEA_FEATURES, SEA_RADIUS, layoutSeaNames, readSeaNames, seaNamesFor, type SeaFeature, type SeaName } from "../sea-names/geometry.ts";
 export type { CountryNamesStats, CountryNamesStyle } from "../country-names/host.ts";
+export { REGION_NAMES_ATTRIBUTES, regionShapes } from "../region-names/host.ts";

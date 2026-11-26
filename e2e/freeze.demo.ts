@@ -396,6 +396,39 @@ test("the borders: nothing drawn at rest with them on, and switching the look ov
   expect(Math.max(...settled.slice(1)), "no more GPU objects after four rounds than after the first").toBeLessThanOrEqual(settled[0]! + 8);
 });
 
+test("the regions and their names, close in: nothing drawn at rest, the names not laid out again, and zoomed out again the regions' lines and names are gone", async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, "realistic", "&borders=on&region-names=on&country-names=on");
+  const statsIn = () =>
+    page.locator("chikyu-earth-realistic").evaluate((el) => {
+      const stats = Reflect.get(el, "stats") as { borders: { shown: { regions: boolean } }; regionNames: { names: number; renders: number } };
+      return { regions: stats.borders.shown.regions, names: stats.regionNames.names, renders: stats.regionNames.renders };
+    });
+  const zoom = (radius: number) =>
+    page.locator("chikyu-earth-realistic").evaluate(async (el, r) => {
+      const box = el.getBoundingClientRect();
+      (el as unknown as { setView(v: unknown, final: boolean): void }).setView({ yaw: 0, tilt: 0, zoom: r / (Math.min(box.width, box.height) / 2 / 1.08 - 1), panX: 0, panY: 0 }, true);
+    }, radius);
+  expect((await statsIn()).regions, "the whole Earth is too small for regions").toBe(false);
+  // over Germany, where the regions are many
+  await page.locator("chikyu-earth-realistic").evaluate((el) => el.setAttribute("center", "10,50"));
+  await zoom(1600);
+  await expect.poll(async () => (await statsIn()).names, { timeout: 60_000, message: "the regions are drawn and named" }).toBeGreaterThan(0);
+  expect((await statsIn()).regions).toBe(true);
+  await untilStill(page);
+  const before = await statsIn();
+  const rest = await bounded(page, 2000);
+  expect(rest.draws, "no GL draws at rest with the regions and their names on").toBe(0);
+  expect(rest.frames).toBe(0);
+  expect((await statsIn()).renders, "nor are the region names laid out again").toBe(before.renders);
+  const counted = await readCounts(page);
+  expect(counted.contexts, "one WebGL context").toBe(1);
+  console.log(`live GPU objects with the regions on, close in: ${gpuObjects(counted)}`);
+  await zoom(1);
+  await expect.poll(async () => (await statsIn()).regions, { timeout: 30_000 }).toBe(false);
+  await expect.poll(async () => (await statsIn()).names, { timeout: 30_000 }).toBe(0);
+});
+
 test("the grid and the country names: nothing drawn at rest with them on, and switching the look over and over with them on gives back what it took", async ({ page }) => {
   test.setTimeout(180_000);
   await open(page, "realistic", "&grid=on&country-names=on");

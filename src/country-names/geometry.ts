@@ -104,6 +104,8 @@ export interface CountryLayoutOptions {
    * fallback font with wider letters or taller lines is measured as it is. Left out, the estimate alone is used, as in Node.
    */
   measure?: (text: string, size: number) => { width: number; height: number };
+  /** Whether English names are written in capitals: true when left out (a country's), false for a region's. */
+  capitals?: boolean;
 }
 
 /** How many of a country's points, the nearest to the middle of the part in view first, its name is tried at. */
@@ -243,6 +245,7 @@ export function countrySpots(shapes: { features: readonly NamedShape[] }): Count
  *
  * @param country - The country's names.
  * @param lang - The page's language, `en` or `ja`.
+ * @param capitals - Whether the English name is written in capitals (a country's is, a region's is not). True when left out.
  * @returns The text.
  *
  * @example
@@ -253,8 +256,8 @@ export function countrySpots(shapes: { features: readonly NamedShape[] }): Count
  * console.log(countryNameText(japan, "en"), countryNameText(japan, "ja"));
  * ```
  */
-export function countryNameText(country: { name: { en: string; ja?: string } }, lang: "en" | "ja"): string {
-  return lang === "ja" && country.name.ja ? country.name.ja : country.name.en.toUpperCase();
+export function countryNameText(country: { name: { en: string; ja?: string } }, lang: "en" | "ja", capitals = true): string {
+  return lang === "ja" && country.name.ja ? country.name.ja : capitals ? country.name.en.toUpperCase() : country.name.en;
 }
 
 /**
@@ -364,7 +367,7 @@ export function layoutCountryNames(spots: CountrySpots, frame: CountryFrame, lan
       near.push({ x: xs[k]!, y: ys[k]!, d: (xs[k]! - cx) ** 2 + (ys[k]! - cy) ** 2 });
     }
     near.sort((a, b) => a.d - b.d);
-    seen.push({ code: country.code, text: countryNameText(country, lang), spots: near.slice(0, SPOTS_TRIED), area: most * pixelsPerArea });
+    seen.push({ code: country.code, text: countryNameText(country, lang, options.capitals), spots: near.slice(0, SPOTS_TRIED), area: most * pixelsPerArea });
   }
   seen.sort((a, b) => b.area - a.area);
   const placed: { l: number; t: number; r: number; b: number }[] = [];

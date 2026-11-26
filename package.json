@@ -238,7 +238,7 @@
     "test:freeze": "pnpm site && playwright test e2e/freeze.demo.ts --project=chromium-desk"
   },
   "dependencies": {
-    "@johnmorrisdotca/chizu": "^1.6.0",
+    "@johnmorrisdotca/chizu": "^1.17.1",
     "@johnmorrisdotca/kazoku-ui": "^0.54.5",
     "d3-geo": "^3.1.1"
   },
