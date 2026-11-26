@@ -764,7 +764,11 @@ export class ChikyuSpace extends HTMLElement {
     else if (name === "ride-drag") this.#applyDrag();
     else if (name === "ride-up") this.#applyUp();
     else if (name === "compass") this.#showCompass();
-    else if (name === "compass-place" || name === "compass-offset") this.#placeCompass();
+    else if (name === "compass-place" || name === "compass-offset") {
+      this.#placeCompass();
+      // the names keep clear of where the compass is now: a draw lays them out again
+      this.#gate?.request();
+    }
     else if (name === "ride-model-share" || name === "ride-model-seat") this.#applyFrame();
     else if (name === "ride-zoom") this.#applyRideZoom();
     else if (name === "center") this.centre = readCentre(value) ?? { lon: 0, lat: 0 };
@@ -1493,11 +1497,12 @@ export class ChikyuSpace extends HTMLElement {
     this.dispatchEvent(new CustomEvent("chikyu-ride-model", { detail: { box, radiusPx: now?.radiusPx ?? 0, x: now?.x ?? 0, y: now?.y ?? 0 } }));
   }
 
-  /** The boxes the bodies' names take beside them in the picture just drawn, and the box of the ridden satellite's model, which is nearer than anything on the ground and so keeps the names clear of it. */
+  /** The boxes the bodies' names take beside them in the picture just drawn, the ride's compass (the dial and its heading label, which sit in the shadow root where the page's `keepOut` cannot reach them), and the box of the ridden satellite's model, which is nearer than anything on the ground and so keeps the names clear of it. */
   #bodyNameBoxes(): { left: number; top: number; width: number; height: number }[] {
     const taken: { left: number; top: number; width: number; height: number }[] = [];
     const modelBox = this.#model.followModel?.box;
     if (modelBox) taken.push({ left: modelBox.left, top: modelBox.top, width: modelBox.right - modelBox.left, height: modelBox.bottom - modelBox.top });
+    if (this.#compassBox) taken.push({ ...this.#compassBox });
     if (this.#model.labels && this.#places) {
       for (const name of BODY_NAMES) {
         const at = this.#places[name];
@@ -2337,13 +2342,18 @@ export class ChikyuSpace extends HTMLElement {
 
   #placeCompass(): void {
     this.#compass?.place(this.compassPlace, this.compassOffset);
+    this.#compassBox = this.#compass?.box ?? null;
   }
+
+  /** The compass's box (the dial and the heading label) as the last draw found it, which every layer of names keeps clear of; `null` when no compass is shown. */
+  #compassBox: { left: number; top: number; width: number; height: number } | null = null;
 
   /** Shows the compass for the last draw (the language, the mode of the attribute `compass`), and tells the page when the heading changed by a whole degree, or the satellite went into or out of the Earth's shadow. Called with the draw. */
   #showCompass(): void {
     const track = this.#model.rideTrack;
     const lang = (this.closest("[lang]")?.getAttribute("lang") ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
     this.#compass?.update(track, lang, readCompass(this.getAttribute("compass")));
+    this.#compassBox = this.#compass?.box ?? null;
     const key = track ? `${Math.round(track.bearingDeg) % 360}|${track.ascending}|${track.sunlit}` : "";
     if (key === this.#toldTrack) return;
     this.#toldTrack = key;

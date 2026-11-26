@@ -126,6 +126,8 @@ export interface Compass {
   update(track: RideTrack | null, lang: "en" | "ja", mode: CompassMode): void;
   /** What the compass shows now, for a test: the angle of the arrow, the angle of the dot and the words; `null` when it is hidden. */
   readonly shown: { northDeg: number; travelDeg: number | null; text: string } | null;
+  /** The compass's own box (the dial and the heading label) in the element's own pixels from its top left, for the names that keep clear of it; `null` when it is hidden. Reads the page's layout, so it is asked once a draw, not more. */
+  readonly box: { left: number; top: number; width: number; height: number } | null;
 }
 
 /** Take the markup the element put in its shadow root and make the compass of it. */
@@ -182,6 +184,13 @@ export function createCompass(root: ShadowRoot): Compass {
     },
     get shown() {
       return shown;
+    },
+    get box() {
+      if (box.hidden) return null;
+      const at = box.getBoundingClientRect();
+      if (at.width === 0 || at.height === 0) return null;
+      const over = slot.getBoundingClientRect();
+      return { left: at.left - over.left, top: at.top - over.top, width: at.width, height: at.height };
     },
   };
 }

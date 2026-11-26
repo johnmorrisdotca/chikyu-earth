@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The Earth's names keep clear of the ride's compass** (MODULES-1828). The compass of a ride, its dial and its heading label ("Heading SE 128°"), sits in the shadow root of `<chikyu-space>`, where the page's `keepOut` boxes cannot reach it, so a city's name (Lubango's, on the site's phone ride) could be drawn under it. The compass's own box, read from the page's layout once a draw, now joins the boxes the cities', places', seas', oceans' and countries' names keep out of, in every corner and at any `compass-offset`; a name that would touch it moves round its dot or is left out, and setting `compass-place` or `compass-offset` lays the names out again. Nothing changes with no compass (no ride, or `compass="off"`). Test: `e2e/compass-names.gl.ts` (the compass moved over a named city, then into each corner, at a desktop and a phone size: no name of a city, sea or country touches it).
+
 ## 0.70.0 - 2026-11-25
 
 - **A page's own list of marks on the Earth** (MODULES-1807). The site's fireballs (888, each with a place, an energy and a date) need the page to hand the Earth a list of marks. The places layer of `<chikyu-space>` and `<chikyu-earth-realistic>` already took a page's list (`places`: off until set, a ring in one draw call for every place past the first 32, hidden on the far side, `chikyu-place-click` with the `id`, nothing drawn at rest), so no new layer was made; three gaps were closed.
