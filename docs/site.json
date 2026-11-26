@@ -75,6 +75,16 @@
       "ja": "<chikyu-flat> 要素: 世界の平面地図の上の衛星",
       "platform": "browser"
     },
+    "./track": {
+      "en": "One satellite's ground track and the night side: the numbers",
+      "ja": "衛星1機の地上軌跡と夜の側: 計算部分",
+      "platform": "node"
+    },
+    "./track/define": {
+      "en": "The <chikyu-track> element: one satellite on a small flat map",
+      "ja": "<chikyu-track> 要素: 小さな平面地図の上の衛星1機",
+      "platform": "browser"
+    },
     "./sheets": {
       "en": "Printable sheets: the globe and a world map to colour, my country, day and night, the seasons",
       "ja": "印刷できるシート: 色をぬる地球と世界地図、わたしの国、昼と夜、季節",

@@ -224,6 +224,11 @@ await step("node-flat", () => {
   if (out !== "6 satellites, 20189 km up, 55 degrees, 3 planes (A:2 B:2 C:2)") throw new Error(`unexpected output: ${out}`);
 });
 
+await step("node-track", () => {
+  const out = execFileSync(process.execPath, [join(examples("node"), "track.mjs")], { cwd: usage, encoding: "utf8" }).trim();
+  if (out !== "mark night") throw new Error(`unexpected output: ${out}`);
+});
+
 await step("node-missions", () => {
   const out = execFileSync(process.execPath, [join(examples("node"), "missions.mjs")], { cwd: usage, encoding: "utf8" }).trim();
   if (!/^135 flights; STS-1 Columbia, 2 crew: \d+ km up over -?\d+ degrees$/.test(out)) throw new Error(`unexpected output: ${out}`);
@@ -513,9 +518,10 @@ await step("together", async () => {
 await step("earth-only", async () => {
   // Every entry point of chikyu-earth bundles with wakusei-planets missing: nothing in the package imports it.
   const refuse = { name: "no-wakusei", setup: (build: import("esbuild").PluginBuild) => build.onResolve({ filter: /wakusei-planets/ }, (args) => ({ errors: [{ text: `${args.importer} imports ${args.path}` }] })) };
-  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "passes/index.js", "passes/element.js", "flat/index.js", "flat/define.js", "space/element.js", "catalogue/index.js"]) {
+  for (const entry of ["index.js", "element.js", "realistic/element.js", "markers/index.js", "satellites/index.js", "passes/index.js", "passes/element.js", "flat/index.js", "flat/define.js", "space/element.js", "catalogue/index.js", "track/index.js"]) {
     await esbuild({ entryPoints: [modules(entry)], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [refuse], external: ["three", "astronomy-engine", "satellite.js", "@johnmorrisdotca/kazoku-ui", "@johnmorrisdotca/kazoku-ui/*", "three/*"] });
   }
+  await esbuild({ entryPoints: [modules("track/define.js")], bundle: true, format: "esm", write: false, absWorkingDir: root, logLevel: "silent", plugins: [refuse], external: ["three", "astronomy-engine", "satellite.js", "@johnmorrisdotca/kazoku-ui", "@johnmorrisdotca/kazoku-ui/*", "three/*", "@johnmorrisdotca/chizu", "@johnmorrisdotca/chizu/*"] });
 });
 
 await step("no-cultures", async () => {
@@ -614,6 +620,7 @@ const FILES: Record<string, string[]> = {
   "history/index.html": ["docs/guides/satellite-history.md", "docs/guides/ja/satellite-history.md"],
   "history/main.ts": ["docs/guides/satellite-history.md", "docs/guides/ja/satellite-history.md"],
   "node/flat.mjs": ["docs/guides/flat-map.md", "docs/guides/ja/flat-map.md"],
+  "node/track.mjs": ["docs/guides/ground-track.md", "docs/guides/ja/ground-track.md"],
   "flat.html": ["docs/guides/flat-map.md", "docs/guides/ja/flat-map.md"],
   "node/missions.mjs": ["docs/guides/missions.md", "docs/guides/ja/missions.md"],
   "node/sheets.mjs": ["docs/guides/printable-sheets.md", "docs/guides/ja/printable-sheets.md"],

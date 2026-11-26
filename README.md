@@ -566,6 +566,7 @@ The reference is a site, made from the source's own doc comments: every export h
 | `.../door` | The data door: sources of your own maps and orbit data with their licence and credit, `creditLine`, the package's own sources. No DOM, no dependency. |
 | `.../passes`, `.../passes/element` | Passes of a satellite over a place, the sky dome, `<chikyu-passes>`; `satellite.js`. |
 | `.../flat`, `.../flat/define` | The facts and orbital planes of a group of satellites (no dependency), and `<chikyu-flat>`, satellites on a flat world map; `satellite.js` for the element. |
+| `.../track`, `.../track/define` | One satellite's ground track and the night side, as numbers, and `<chikyu-track>`, a small flat map drawn by chizu; `satellite.js` for the element. [Guide](docs/guides/ground-track.md). |
 | `.../catalogue` | The Earth-orbit catalogue's pure parts: the class of an orbit from its elements, the kind of an object, colours, legend, fleets, and the packed file of up to 200,000 objects. No data, no DOM, no dependency. |
 
 ## Guides

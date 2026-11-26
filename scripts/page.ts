@@ -72,6 +72,17 @@ export function renderPasses(): string {
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
 }
 
+/** The page for one satellite's ground track on chizu's world map. */
+export function renderTrack(): string {
+  const html = readFileSync(new URL("../demo/track.html", import.meta.url), "utf8");
+  return frame(html, WORDS.en.tr_title, WORDS.en.tr_description, { title: WORDS.ja.tr_title, description: WORDS.ja.tr_description })
+    .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.tr_title, description: WORDS.en.tr_description }))
+    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
+    .replace("<!--family:footer-->", footer())
+    .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
+}
+
 /** The page for the flat map of the satellites, made like the demo's, with the family's blocks and its own script. */
 export function renderFlat(): string {
   const html = readFileSync(new URL("../demo/flat.html", import.meta.url), "utf8");

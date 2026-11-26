@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **One satellite on a small flat map** (MODULES-1024). `<chikyu-track>` (import `@johnmorrisdotca/chikyu-earth/track/define`) draws chizu's world map, 240 pixels wide, with no country names and no WebGL: the point under the chosen satellite, its ground track for one orbit (the part just flown and the part still to come, in two tones, each split at the date line) and the night side. `time`, `satellite` (a catalogue number; the elements go to the `satellite` property), `span` (minutes, one orbit when omitted) and `theme`. A live clock steps every ten seconds, and only while the element is on screen. The numbers are `trackPicture` and `nightSide` from `/track`, with no map. chizu was already a dependency and does not depend on this package. Guide: Ground track (English and Japanese). Tests: `test/track.test.ts`, `e2e/track.demo.ts`.
+
 ## 0.71.0 - 2026-11-26
 
 - **Regions by default, finer countries, and the regions' names** (MODULES-1143). Built on chizu 1.12's longitude-and-latitude regions and 1:50m world (the dependency is `^1.12.0`).

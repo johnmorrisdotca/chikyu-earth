@@ -6,7 +6,7 @@ import { build } from "esbuild";
 import { wideCss } from "@johnmorrisdotca/kazoku-ui/wide-layout";
 import { publishThumbnails, thumbnailHead } from "./family-thumbnail.mjs";
 import { publishedManifest, type TileManifest } from "./tiles-gate.ts";
-import { renderBuilder, renderEmbed, renderFullscreen, renderIndex, renderFlat, renderKids, renderPasses, renderPassesEmbed } from "./page.ts";
+import { renderBuilder, renderEmbed, renderFullscreen, renderIndex, renderFlat, renderKids, renderPasses, renderPassesEmbed, renderTrack } from "./page.ts";
 
 const at = (path: string) => new URL(`../${path}`, import.meta.url).pathname;
 
@@ -14,7 +14,7 @@ const pkg = JSON.parse(readFileSync(at("package.json"), "utf8"));
 await rm(at("site/"), { recursive: true, force: true });
 await mkdir(at("site/"), { recursive: true });
 await build({
-  entryPoints: [at("demo/demo.ts"), at("demo/fullscreen.ts"), at("demo/embed.ts"), at("demo/builder.ts"), at("demo/kids.ts"), at("demo/passes.ts"), at("demo/passes-embed.ts"), at("demo/flat.ts")],
+  entryPoints: [at("demo/demo.ts"), at("demo/fullscreen.ts"), at("demo/embed.ts"), at("demo/builder.ts"), at("demo/kids.ts"), at("demo/passes.ts"), at("demo/passes-embed.ts"), at("demo/flat.ts"), at("demo/track.ts")],
   bundle: true,
   splitting: true,
   format: "esm",
@@ -64,6 +64,7 @@ await writeFile(at("site/kids.html"), renderKids(), "utf8");
 await writeFile(at("site/passes.html"), renderPasses(), "utf8");
 await writeFile(at("site/passes-embed.html"), renderPassesEmbed(), "utf8");
 await writeFile(at("site/flat.html"), renderFlat(), "utf8");
+await writeFile(at("site/track.html"), renderTrack(), "utf8");
 await writeFile(at("site/builder.html"), renderBuilder(), "utf8");
 await writeFile(at("site/fullscreen.html"), renderFullscreen(), "utf8");
-console.log("site built: index.html, embed.html, kids.html, passes.html, flat.html, passes-embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/, missions/");
+console.log("site built: index.html, embed.html, kids.html, passes.html, flat.html, track.html, passes-embed.html, builder.html, demo.js, embed.js, kazoku-parts.js, demo.css, family.css, textures/, elements/, missions/");
