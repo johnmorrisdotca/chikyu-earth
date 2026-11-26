@@ -12,8 +12,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       '@johnmorrisdotca/kazoku-ui':
-        specifier: ^0.54.1
-        version: 0.54.1(three@0.186.1)
+        specifier: ^0.54.5
+        version: 0.54.5(three@0.186.1)
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1
@@ -411,8 +411,8 @@ packages:
     resolution: {integrity: sha512-8N2tvfUr9wUf41rcA0+QjOVLCsSiS2tSvMixXKsWDs5+cUzVBJCyst5Qk8Nd8vDGWuVz6mOUMcTgbiaIE/FL9A==}
     engines: {node: '>=22'}
 
-  '@johnmorrisdotca/kazoku-ui@0.41.0':
-    resolution: {integrity: sha512-Zp/iTun5jgsXMPAJ9qCoIpr6Oc6O/kBSwAeEw4MdNRwwmALHtAwAuALXewecxhQ2j5HUEXamu5HKTA8OFOz+HA==}
+  '@johnmorrisdotca/kazoku-ui@0.41.1':
+    resolution: {integrity: sha512-PFqO5/G8A6npgOgwrBVe+Ii8yBMUg7bHabwhJRNl0CYYLKBPE7mUglLPm+C8c3S6YWxqepZz5Rf4zhWfI5pJzg==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -421,8 +421,8 @@ packages:
       three:
         optional: true
 
-  '@johnmorrisdotca/kazoku-ui@0.54.1':
-    resolution: {integrity: sha512-eOOifIoQfOWL9QxxXULNr0au08aZRS4tYrCUANJxJXgljMoXeyQQuuiZlSoMybAD5taC+AtvIFLzXkzjMhZ3pw==}
+  '@johnmorrisdotca/kazoku-ui@0.54.5':
+    resolution: {integrity: sha512-jbDcBlO1trRUT1Z08a/XOoY+ybsfQTKQRLMiXCnkVfGnkOf3q0s0+wUv6FFSkTO35vWKMp/fQjKNRktN4ZY/jg==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -1877,11 +1877,11 @@ snapshots:
 
   '@johnmorrisdotca/hoshi-stars@0.30.0': {}
 
-  '@johnmorrisdotca/kazoku-ui@0.41.0(three@0.186.1)':
+  '@johnmorrisdotca/kazoku-ui@0.41.1(three@0.186.1)':
     optionalDependencies:
       three: 0.186.1
 
-  '@johnmorrisdotca/kazoku-ui@0.54.1(three@0.186.1)':
+  '@johnmorrisdotca/kazoku-ui@0.54.5(three@0.186.1)':
     optionalDependencies:
       three: 0.186.1
 
@@ -1889,7 +1889,7 @@ snapshots:
 
   '@johnmorrisdotca/wakusei-planets@0.39.0(three@0.186.1)':
     dependencies:
-      '@johnmorrisdotca/kazoku-ui': 0.41.0(three@0.186.1)
+      '@johnmorrisdotca/kazoku-ui': 0.41.1(three@0.186.1)
     optionalDependencies:
       three: 0.186.1
 

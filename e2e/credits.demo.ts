@@ -62,3 +62,12 @@ test("the code builder shows its sources and a link to every credit", async ({ p
   await expect(page.locator("footer")).toContainText("Natural Earth");
   await fits(page, `footer a[href="${NOTICE}"]`);
 });
+
+// MODULES-1827: a quick double tap on a button zooms an iPhone's page unless the page asks for presses only; the page frame (kazoku-ui 0.54.5) sets `touch-action: manipulation` on the document.
+for (const path of PAGES) {
+  test(`the ${path || "globe"} page asks for presses, not zooms, on a double tap`, async ({ page }) => {
+    await page.goto(`/chikyu-earth/${path}`);
+    await expect(page.locator("kazoku-page-credits, kazoku-page-header").first()).toBeVisible();
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("manipulation");
+  });
+}

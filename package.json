@@ -239,7 +239,7 @@
   },
   "dependencies": {
     "@johnmorrisdotca/chizu": "^1.6.0",
-    "@johnmorrisdotca/kazoku-ui": "^0.54.1",
+    "@johnmorrisdotca/kazoku-ui": "^0.54.5",
     "d3-geo": "^3.1.1"
   },
   "peerDependencies": {
