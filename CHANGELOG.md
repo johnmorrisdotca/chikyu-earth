@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.71.0 - 2026-11-26
+
 - **Regions by default, finer countries, and the regions' names** (MODULES-1143). Built on chizu 1.12's longitude-and-latitude regions and 1:50m world (the dependency is `^1.12.0`).
   - **The regions are chizu's.** With no `borderData.regions` of the page's, the regions of the countries in view come from chizu's `divisions-geo` (32 countries, one country's file at a time, each asked for once), so the demo's Borders button shows provinces and states close in. A page's `borderData.regions` takes their place, as before.
   - **Finer country borders when the Earth is large.** From a radius of 600 CSS pixels on the screen (`BORDER_DETAIL_RADIUS`) the countries' borders are drawn from chizu's `world-geo-detail` (1:50m), loaded the first time and never before; the 1:110m lines are put away while the fine ones show, so no border is drawn twice. `borderData.detail` replaces the source. `stats.borders` has `detail` (segments) and `shown.detail`.
