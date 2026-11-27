@@ -12,6 +12,7 @@ import { globeSheetSvg, worldMapSvg } from "../src/sheets/earth.ts";
 import { hatchPath } from "../src/sheets/hatch.ts";
 import { continentLines, countryCodes, countryShape, landShares } from "../src/sheets/land.ts";
 import { thickPath } from "../src/sheets/outline.ts";
+import { dayLengthHours, noonAltitude } from "../src/sheets/daylight.ts";
 import { dayNightSvg, dayNightView, seasonsSvg, terminator } from "../src/sheets/sun.ts";
 import { GLOBE_VIEWS, PLACES, TILT_DEGREES, VIEW_LABELS, countryFacts, dayNightFacts, earthFacts, seasonsFacts } from "../src/sheets/text.ts";
 
@@ -269,6 +270,26 @@ test("the seasons: the axis is tilted by the Earth's tilt and leans the same way
   assert.ok(Math.abs(most - TILT_DEGREES) < 0.05, `the Sun strays ${most} degrees`);
   // the Earth at the right is in December: hatched on the side away from the Sun (the right), the one at the left in June (the left)
   assert.ok(svg.includes("data-orbit") && texts(svg).some((t) => t.body === "Summer") && texts(svg).some((t) => t.body === "Winter"));
+  assert.ok(texts(svg).some((t) => t.body === "June solstice") && texts(svg).some((t) => t.body === "March equinox"));
+});
+
+test("the length of the day and the noon Sun come from the latitude and the Sun's declination", () => {
+  assert.equal(dayLengthHours(0, 0), 12);
+  assert.equal(dayLengthHours(45, 0), 12);
+  assert.equal(dayLengthHours(90, TILT_DEGREES), 24);
+  assert.equal(dayLengthHours(90, -TILT_DEGREES), 0);
+  assert.ok(Math.abs(noonAltitude(45, 0) - 45) < 1e-6);
+  const hours = dayLengthHours(45, TILT_DEGREES);
+  assert.ok(hours > 15 && hours < 16, String(hours));
+  const june = String(Math.round(noonAltitude(45, TILT_DEGREES)));
+  const longest = (Math.round(hours * 10) / 10).toFixed(1);
+  const fact = seasonsFacts("en")[2]!;
+  assert.ok(fact.includes(`${june} degrees up at the June solstice`) && fact.includes(`${longest} hours`), fact);
+  const jaFact = seasonsFacts("ja")[2]!;
+  assert.ok(jaFact.includes(`げしに ひるの たいようが ${june}ど`) && jaFact.includes(`${longest}じかん`), jaFact);
+  assert.match(seasonsFacts("ja")[2]!, /しゅんぶん/);
+  const ja = seasonsSvg({ widthMm: 184.6, heightMm: 182, lang: "ja" });
+  assert.ok(ja.includes("げし") && ja.includes("しゅんぶん") && ja.includes("しゅうぶん") && ja.includes("とうじ"));
 });
 
 test("wrap breaks the words and the Japanese to fit", () => {

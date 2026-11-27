@@ -11,7 +11,7 @@ description: The globe and a world map to colour, a "my country" sheet, day and 
 - **A world map** (`worldMapSvg`): all the land on one flat map (Natural Earth projection), the seven continents and five oceans named.
 - **My country** (`countrySheetSvg`): the country's outline as big as the room allows, its capital as a star with its name when you give it, a box to draw the flag in (the sheet carries no flag) and three facts: its continent, the countries it touches (counted on the land that is drawn, so French Guiana's neighbours are not France's here), and the capital.
 - **Day and night** (`dayNightSvg`): the Earth with the Sun's light coming from the right, the lit half white and the dark half hatched, for the date and time you give. The place where the Sun is straight overhead is the package's own (`subsolarPoint`, the same one the realistic Earth lights itself by), and the line between day and night is the great circle 90 degrees from it (`terminator`).
-- **The seasons** (`seasonsSvg`): the Earth at four points round the Sun (March, June, September, December, one way round), the axis tilted by 23.4 degrees and leaning the same way at all four, so in June the north leans toward the Sun and in December away from it. The dark half of each Earth is hatched.
+- **The seasons** (`seasonsSvg`): the Earth at four points round the Sun (the March and September equinoxes, the June and December solstices), the axis tilted by 23.4 degrees and leaning the same way at all four, so in June the north leans toward the Sun and in December away from it. The dark half of each Earth is hatched. One fact gives the noon Sun's height and the length of the longest day at 45 degrees north. `dayLengthHours` and `noonAltitude` answer the same for any latitude.
 
 ```js
 import { countrySheetSvg, dayNightSvg, globeSheetSvg, seasonsSvg, terminator, worldMapSvg } from "@johnmorrisdotca/chikyu-earth/sheets";
@@ -40,6 +40,7 @@ console.log(terminator(Date.UTC(2026, 5, 21, 12), 6).map(([lon, lat]) => `${lon.
 | `countrySheetSvg(code, options)`, `countryShape(code)`, `countryCodes()` | the "my country" sheet (`undefined` for a code with no outline), the shape behind it (land, continent, neighbours) and the codes that have one |
 | `dayNightSvg(ms, options)`, `terminator(ms)`, `dayNightView(ms)` | the day and night sheet, the line between day and night as longitude and latitude, and the turn of the globe on the sheet |
 | `seasonsSvg(options)`, `TILT_DEGREES` | the seasons sheet and the tilt it draws |
+| `dayLengthHours(latitude, declination)`, `noonAltitude(latitude, declination)` | hours of daylight, and how high the Sun stands at noon, for a latitude |
 | `continentLines()`, `landShares()` | the coasts of the continents as lines, and how much of the Earth is land and of the land each continent has (Asia 30%, Africa 20%, Europe 7%, from the outlines) |
 | `earthFacts`, `dayNightFacts`, `seasonsFacts`, `countryFacts`, `TITLES`, `SAY`, `PLACES` | the words: each sheet's three facts and title, the brand and credits, and the continents and oceans with their Japanese names |
 | `thickPath`, `hatchPath` | the two helpers behind the lines: a path made simpler for a thick line, and hatching cut to a shape |

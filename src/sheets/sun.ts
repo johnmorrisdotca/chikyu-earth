@@ -154,7 +154,7 @@ function earth(x: number, y: number, radius: number, towardSun: [number, number]
 }
 
 /**
- * The seasons sheet: the Sun in the middle, the Earth's orbit as a ring, and the Earth at four points of it (March, June, September and December), each with its tilt, the dark half hatched, the season of the northern half named, and three facts.
+ * The seasons sheet: the Sun in the middle, the Earth's orbit as a ring, and the Earth at four points of it (the March and September equinoxes, the June and December solstices), each with its tilt, the dark half hatched, the season of the northern half named, and three facts.
  * The axis leans the same way at all four, so in June the north leans toward the Sun and in December away from it.
  * @param options - The room, the language and the type.
  * @returns The `<svg>` markup.
@@ -176,20 +176,21 @@ export function seasonsSvg(options: SheetOptions): string {
   const free = h - facts.height - GAP;
   const size = labelMm(type);
   const month = TYPES[type].bodyMm;
+  const say = SAY[lang];
+  // the Earth at the right is December, at the top March, at the left June, at the bottom September, one way round
+  const stops = [
+    { angle: 0, season: say.winter, month: `${say.months[3]} ${say.marks[3]}` },
+    { angle: 90, season: say.spring, month: `${say.months[0]} ${say.marks[0]}` },
+    { angle: 180, season: say.summer, month: `${say.months[1]} ${say.marks[1]}` },
+    { angle: 270, season: say.autumn, month: `${say.months[2]} ${say.marks[2]}` },
+  ];
+  const side = Math.max(...stops.map((stop) => textWidth(stop.month, month) / 2)) + 1;
   const radius = Math.max(6, Math.min(type === "kid" ? 13 : 8, free * 0.1));
   const cx = w / 2;
   const cy = free / 2;
   const ry = Math.max(radius * 2, free / 2 - radius - 4 - size * 1.15 - 2);
-  const rx = Math.min(cx - radius - (type === "kid" ? 22 : 14), ry * 2.8);
+  const rx = Math.min(cx - radius - side, ry * 2.8);
   const sunRadius = Math.max(4, Math.min(type === "kid" ? 10 : 6, ry - radius - inner * 1.6 - 6));
-  const say = SAY[lang];
-  // the Earth at the right is December, at the top March, at the left June, at the bottom September, one way round
-  const stops = [
-    { angle: 0, season: say.winter, month: say.months[3] },
-    { angle: 90, season: say.spring, month: say.months[0] },
-    { angle: 180, season: say.summer, month: say.months[1] },
-    { angle: 270, season: say.autumn, month: say.months[2] },
-  ];
   const at = (angle: number): [number, number] => [cx + rx * Math.cos(angle * RAD), cy - ry * Math.sin(angle * RAD)];
   const parts: string[] = [];
   parts.push(`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="#000" stroke-width="${inner}" stroke-dasharray="${inner * 2.4} ${inner * 1.6}" data-orbit=""/>`);

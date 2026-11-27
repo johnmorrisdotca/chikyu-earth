@@ -1,6 +1,7 @@
 // What the sheets say, in English and Japanese: the names of the continents and oceans (the Japanese with its reading, for a child), the three facts of each sheet and the titles. Every number in a fact is worked out from the package's own
 // outlines and sun, or is one of the few figures of the Earth written below with its source. Pure.
 import { subsolarPoint } from "../realistic/sun.ts";
+import { dayLengthHours, noonAltitude } from "./daylight.ts";
 import { landShares, type ContinentId } from "./land.ts";
 import type { Lang } from "./common.ts";
 
@@ -102,6 +103,7 @@ export const SAY = {
     autumn: "Autumn",
     winter: "Winter",
     months: ["March", "June", "September", "December"],
+    marks: ["equinox", "solstice", "equinox", "solstice"],
     colour: "Colour the continents, then the oceans.",
   },
   ja: {
@@ -118,6 +120,7 @@ export const SAY = {
     autumn: "あき",
     winter: "ふゆ",
     months: ["3がつ", "6がつ", "9がつ", "12がつ"],
+    marks: ["しゅんぶん", "げし", "しゅうぶん", "とうじ"],
     colour: "たいりくと うみに いろを ぬろう。",
   },
 } as const;
@@ -256,9 +259,17 @@ export function dayNightFacts(ms: number, lang: Lang): string[] {
  */
 export function seasonsFacts(lang: Lang): string[] {
   const tilt = TILT_DEGREES.toFixed(1);
+  const place = 45;
+  const juneUp = Math.round(noonAltitude(place, TILT_DEGREES));
+  const decemberUp = Math.round(noonAltitude(place, -TILT_DEGREES));
+  const longest = (Math.round(dayLengthHours(place, TILT_DEGREES) * 10) / 10).toFixed(1);
+  const year =
+    lang === "ja"
+      ? `ちきゅうは 365にちで たいようを 1しゅう します。きた ${place}どでは、6がつの げしに ひるの たいようが ${juneUp}ど、12がつの とうじに ${decemberUp}ど の たかさで、いちばん ながい ひるは ${longest}じかんです。しゅんぶんと しゅうぶんの ひは ひると よるが おなじ ながさです。`
+      : `The Earth goes round the Sun in about 365 days. At ${place} degrees north the noon Sun is ${juneUp} degrees up at the June solstice and ${decemberUp} degrees up at the December solstice, and the longest day is ${longest} hours. At an equinox, day and night are the same length.`;
   return lang === "ja"
-    ? [`●は きたきょく。ちきゅうは 1ねんじゅう ${tilt}ど かたむいています。`, "6がつは きたが たいように かたむき、きたは なつです。", "ちきゅうは 365にちで たいようを 1しゅう します。"]
-    : [`The dot is the North Pole. The Earth stays tilted ${tilt} degrees.`, "In June the north leans to the Sun, so it is summer in the north.", "The Earth goes round the Sun in about 365 days."];
+    ? [`●は きたきょく。ちきゅうは 1ねんじゅう ${tilt}ど かたむいています。`, "6がつは きたが たいように かたむき、きたは なつです。", year]
+    : [`The dot is the North Pole. The Earth stays tilted ${tilt} degrees.`, "In June the north leans to the Sun, so it is summer in the north.", year];
 }
 
 /** Up to three names in a sentence: `A, B and C`, or `A, B, C and 2 more`. */

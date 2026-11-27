@@ -11,7 +11,7 @@ description: 色をぬる地球と世界地図、「わたしの国」のシー�
 - **世界地図** (`worldMapSvg`): すべての陸地を1枚の平らな地図 (ナチュラルアース図法) に描き、7つの大陸と5つの海の名前を書きます。
 - **わたしの国** (`countrySheetSvg`): 国の輪郭を、場所が許すかぎり大きく描きます。首都を渡すと、首都に星と名前を付けます。旗をかく箱もあります (シートに旗は載りません)。事実は3つで、大陸、接している国 (描いてある陸地だけで数えるので、フランスのギアナの隣の国は入りません)、首都です。
 - **昼と夜** (`dayNightSvg`): 右から太陽の光が来る地球です。光が当たる半分は白、暗い半分は斜めの線で塗ります。日にちと時間は自分で決められます。太陽が真上に来る場所はパッケージ自身のもの (リアルな地球が光を決めるのと同じ `subsolarPoint`) で、昼と夜の境の線は、そこから90度はなれた大円 (`terminator`) です。
-- **季節** (`seasonsSvg`): 太陽のまわりの4か所 (3月、6月、9月、12月。1方向にまわる) の地球です。軸は23.4度かたむいて、4か所とも同じ向きです。だから6月は北が太陽のほうに、12月は太陽と反対にかたむきます。それぞれの地球の暗い半分は斜めの線です。
+- **季節** (`seasonsSvg`): 太陽のまわりの4か所 (3月と9月の分点、6月と12月の至) の地球です。軸は23.4度かたむいて、4か所とも同じ向きです。だから6月は北が太陽のほうに、12月は太陽と反対にかたむきます。それぞれの地球の暗い半分は斜めの線です。事実の一つは、北緯45度での正午の太陽の高さと、いちばん長い昼の長さです。`dayLengthHours` と `noonAltitude` は、どの緯度でも同じことを答えます。
 
 ```js
 import { countrySheetSvg, dayNightSvg, globeSheetSvg, seasonsSvg, terminator, worldMapSvg } from "@johnmorrisdotca/chikyu-earth/sheets";
@@ -40,6 +40,7 @@ console.log(terminator(Date.UTC(2026, 5, 21, 12), 6).map(([lon, lat]) => `${lon.
 | `countrySheetSvg(code, options)`、`countryShape(code)`、`countryCodes()` | 「わたしの国」のシート (輪郭がない国コードは `undefined`)、その元になる形 (陸地、大陸、となりの国)、輪郭がある国コード |
 | `dayNightSvg(ms, options)`、`terminator(ms)`、`dayNightView(ms)` | 昼と夜のシート、昼と夜の境の線 (経度と緯度)、シートの上の地球の向き |
 | `seasonsSvg(options)`、`TILT_DEGREES` | 季節のシートと、そこに描く地軸のかたむき |
+| `dayLengthHours(latitude, declination)`、`noonAltitude(latitude, declination)` | ある緯度での昼の長さと、正午の太陽の高さ |
 | `continentLines()`、`landShares()` | 大陸の海岸の線と、地球のうち陸地がどれだけか、陸地のうち各大陸がどれだけか (輪郭から計算: アジア30%、アフリカ20%、ヨーロッパ7%) |
 | `earthFacts`、`dayNightFacts`、`seasonsFacts`、`countryFacts`、`TITLES`、`SAY`、`PLACES` | 言葉: 各シートの3つの事実とタイトル、ブランドと出典、大陸と海の名前 (日本語つき) |
 | `thickPath`、`hatchPath` | 線の下ごしらえ: 太い線のために単純にした線と、形の中だけの斜線 |

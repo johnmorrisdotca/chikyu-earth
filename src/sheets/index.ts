@@ -2,6 +2,7 @@
 // so the page's header, footer and QR code are not made here and the sheets need no browser.
 export { globeSheetSvg, worldMapSvg, type SheetOptions } from "./earth.ts";
 export { countrySheetSvg, type Capital, type CountryOptions } from "./country.ts";
+export { dayLengthHours, noonAltitude } from "./daylight.ts";
 export { dayNightSvg, dayNightView, seasonsSvg, terminator } from "./sun.ts";
 export { continentLines, countryCodes, countryShape, landShares, type CountryShape } from "./land.ts";
 export { thickPath } from "./outline.ts";
