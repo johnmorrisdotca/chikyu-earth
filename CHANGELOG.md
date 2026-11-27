@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The Japanese meteors guide uses the reviewer's wording** (MODULES-883). The line-drawn globe is named as the other guides name it, the out-of-sight heading is no longer easy to read as a held clock, and the limits heading matches the other guides. Four shower names (the Daytime Arietids, the Aurigids, the Daytime Sextantids and the Puppid-Velids) are marked as usual names, not yet confirmed against a Japanese meteor society's list. The zenithal hourly rate's Japanese term and the calendar's fuller Japanese name stay until that source is read.
+
 - **The shown time is checked in two time zones** (MODULES-955). One browser test opens a known date in Vancouver and in Tokyo and reads the date box against the page's own `Date`. The runner never parses that time: its zone data can disagree with the browser's.
 
 - **The demo no longer sets the Wide view's width itself** (MODULES-1503). kazoku-ui keeps that view at the full width of the page, so the demo's own `width: 100%` on it is gone. The globe's own sizing stays.

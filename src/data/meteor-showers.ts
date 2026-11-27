@@ -7,7 +7,7 @@
 // the IMO table's were further off than the IAU's own solutions are from each other (April Lyrids' speed, alpha-Monocerotids'
 // speed, eta-Eridanids' radiant). The parent bodies are the ones the IAU MDC's origin column names; the Calendar's own text
 // and NASA's pages on the shower (Quadrantids, eta Aquariids, Orionids, Geminids) name the same ones where they name any.
-// The Japanese names are the ones used in Japan. See NOTICE.md.
+// The Japanese names are the names in use in Japan, except four usual names that a Japanese meteor society's list has not confirmed: the Daytime Arietids (ARI), the Aurigids (AUR), the Daytime Sextantids (DSX) and the Puppid-Velids (PUP). See NOTICE.md.
 // No imports: this file is data only, so another package can read it without taking anything else.
 
 /**
@@ -27,7 +27,7 @@ export interface MeteorShower {
   /** The IAU's number for the shower. */
   iau: number;
   name: string;
-  /** The name used in Japan. */
+  /** The Japanese name. ARI, AUR, DSX and PUP are usual names, not yet confirmed as the form used in Japan. */
   nameJa: string;
   /** The first day of activity, as month (1 to 12) and day. A shower may run over the new year. */
   start: readonly [month: number, day: number];
