@@ -72,6 +72,15 @@ test.describe("the layout", () => {
     expect((await rect(page, "#globe")).width).toBeLessThanOrEqual(420);
   });
 
+  test("Wide at 1440 by 700 keeps the view the full width of the page", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await open(page, "?wide=on");
+    const view = await rect(page, ".kazoku-view");
+    const wideMain = await rect(page, "main");
+    const pad = await page.locator("main").evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    expect(view.width, "the view takes the page's own column").toBeCloseTo(wideMain.width - 2 * pad, 0);
+  });
+
   test("the view and the bar stay inside the page at the smaller desk size, Normal and Wide", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     for (const query of ["", "?wide=on"]) {
