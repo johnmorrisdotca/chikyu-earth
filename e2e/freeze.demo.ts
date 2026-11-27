@@ -39,8 +39,16 @@ async function open(page: Page, look: (typeof LOOKS)[number], query = "", size: 
   if ((look === "above" || look === "north") && size === "fixed") await page.locator("chikyu-space").evaluate((el) => el.setAttribute("ride-model-size", "fixed"));
   if (look === "satellites") await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => (Reflect.get(el, "stats") as { satellites: { groups: number } }).satellites.groups), { timeout: 20_000 }).toBe(2);
   await expect.poll(async () => (await readCounts(page)).draws).toBeGreaterThan(0);
-  // 800 ms for the pictures to arrive, and the second in which a reader who asked for reduced motion has the draws they ask for gathered (MODULES-1195)
-  await page.waitForTimeout(look === "ride" || look === "above" || look === "north" ? 8000 : 800 + 1000);
+  if (look === "ride" || look === "above" || look === "north") {
+    // the large pictures arrive, and the ones the ride no longer needs are let go, before anything is asked. A fixed wait counted too early on a slow machine and too late on a quiet one (MODULES-703).
+    await expect.poll(async () => page.locator("chikyu-space").evaluate((el) => {
+      const s = Reflect.get(el, "stats") as { tiles: { loading: number }; bodies: { pending: number }; ride: { gliding: boolean; riding: boolean }; assets: { entries: number; refs: number } };
+      return s.ride.riding && !s.ride.gliding && s.tiles.loading === 0 && s.bodies.pending === 0 && s.assets.entries === s.assets.refs;
+    }), { timeout: 30_000, message: "the ride's pictures have arrived and the ones it no longer needs are let go" }).toBe(true);
+  } else {
+    // 800 ms for the pictures to arrive, and the second in which a reader who asked for reduced motion has the draws they ask for gathered (MODULES-1195)
+    await page.waitForTimeout(800 + 1000);
+  }
 }
 
 /**
