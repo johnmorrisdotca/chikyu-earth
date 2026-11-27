@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The plain wheel at Fit waits until the page can scroll** (MODULES-845). The usage check sent that wheel while a runner was still only a few pixels taller than the window, so the scroll stayed put. The page is made tall again once it has loaded, and the wheel is sent once there is room below the fold.
+
 ## 0.72.0 - 2026-11-26
 
 - **One satellite on a small flat map** (MODULES-1024). `<chikyu-track>` (import `@johnmorrisdotca/chikyu-earth/track/define`) draws chizu's world map, 240 pixels wide, with no country names and no WebGL: the point under the chosen satellite, its ground track for one orbit (the part just flown and the part still to come, in two tones, each split at the date line) and the night side. `time`, `satellite` (a catalogue number; the elements go to the `satellite` property), `span` (minutes, one orbit when omitted) and `theme`. A live clock steps every ten seconds, and only while the element is on screen. The numbers are `trackPicture` and `nightSide` from `/track`, with no map. chizu was already a dependency and does not depend on this package. Guide: Ground track (English and Japanese). Tests: `test/track.test.ts`, `e2e/track.demo.ts`.

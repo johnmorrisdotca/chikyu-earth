@@ -129,6 +129,14 @@ export async function checkHands(page: Page, options: HandsOptions): Promise<{ z
     });
     if (taken) fail("the plain wheel at Fit was taken by the view: the page cannot scroll past it");
   } else {
+    // A runner can still be only a few pixels taller than the window (the Angular example left the scroll at 8). A wheel then does nothing. Wait until the loaded page has room below the fold, then send one wheel.
+    if (options.tall) {
+      await page.evaluate(() => (document.body.style.paddingBottom = "3000px"));
+      await page.waitForFunction(() => {
+        const scrolling = document.scrollingElement ?? document.documentElement;
+        return scrolling.scrollHeight - window.innerHeight - window.scrollY >= 400;
+      }, undefined, { timeout: 5000 }).catch(() => fail("the loaded page had no room below the fold to scroll"));
+    }
     const scrolledFrom = await page.evaluate(() => window.scrollY);
     await page.mouse.move(at.x, at.y);
     await page.mouse.wheel(0, 240);
