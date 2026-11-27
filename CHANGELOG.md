@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The shown time is checked in two time zones** (MODULES-955). One browser test opens a known date in Vancouver and in Tokyo and reads the date box against the page's own `Date`. The runner never parses that time: its zone data can disagree with the browser's.
+
 - **The demo no longer sets the Wide view's width itself** (MODULES-1503). kazoku-ui keeps that view at the full width of the page, so the demo's own `width: 100%` on it is gone. The globe's own sizing stays.
 
 - **The satellite cost budgets are CPU time** (MODULES-703). A batch of 6,000 satellites, and one frame of them at a fast clock, are timed with the processor's own time. The wall clock counts time the machine spent on other work, so a busy machine failed a budget the work itself had met. The browser test still checks that the page does the work. The freeze test's ride no longer waits a fixed eight seconds: it waits until the pictures have arrived and the ones the ride no longer needs are let go.
