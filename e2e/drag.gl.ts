@@ -2,9 +2,15 @@
 // (the ground moves left to right, as the Earth turns west to east), and a ride can be dragged too. Real pointer events, real key presses, and the pictures compared: the ground's move
 // is found by sliding the middle of the first picture over the second (e2e/ground.ts). The flat globes, the realistic Earth and the space view are in follows.gl.ts, with the family's shared helper.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT, settle, untilArrived } from "./gl.ts";
+import { COUNT_SCRIPT, payForDrawing, settle, untilArrived } from "./gl.ts";
 import { changedShare, dragBy, groundShift } from "./ground.ts";
 import { routeElements } from "./recorded.ts";
+
+test.describe.configure({ timeout: 120_000 });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await payForDrawing(page);
+});
 
 const FIXED = "time=2026-11-03T07:30Z&speed=0&center=25,-31";
 const GLOBE = "#globe";

@@ -1,10 +1,16 @@
 // The embed page on the realistic look: one WebGL context, a canvas inside its budget, nothing drawn once it rests.
 import { fitDistance } from "../src/space/scene.ts";
 import { expect, test } from "@playwright/test";
-import { COUNT_SCRIPT, counts, EARTH, NOON, ownClock, settle, statsOf, timed, untilArrived } from "./gl.ts";
+import { COUNT_SCRIPT, counts, EARTH, NOON, ownClock, payForDrawing, settle, statsOf, timed, untilArrived, untilStill } from "./gl.ts";
 import { routeElements } from "./recorded.ts";
 
+test.describe.configure({ timeout: 120_000 });
+
 test.beforeEach(({ page }) => routeElements(page));
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await payForDrawing(page);
+});
 
 test("the realistic embed is one context, a capped canvas, and rests", async ({ page }) => {
   await page.addInitScript(COUNT_SCRIPT);
@@ -118,9 +124,9 @@ test("the space embed can ride along with the ISS: one context, the camera at th
   await page.goto(`/chikyu-earth/embed.html?look=space&time=2026-11-02T18:00Z&ride=iss&rlook=horizon`);
   await page.locator(`${SPACE}[data-state=live]`).waitFor();
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { riding: boolean } }).ride.riding), { timeout: 30_000 }).toBe(true);
-  // the glide to the ISS ends; the pictures its view needs arrive, and the ones it lets go are let go four seconds after
+  // the glide to the ISS ends; wait until the pictures it needs have arrived and the frame that lets the old ones go has been drawn
   await expect.poll(async () => page.locator(SPACE).evaluate((el) => (Reflect.get(el, "stats") as { ride: { gliding: boolean } }).ride.gliding), { timeout: 30_000 }).toBe(false);
-  await settle(page, 6000);
+  await untilStill(page);
   const stats = (await page.locator(SPACE).evaluate((el) => Reflect.get(el, "stats"))) as { contexts: number; canvas: { pixels: number }; camera: { position: number[] } };
   expect(stats.contexts).toBe(1);
   expect(stats.canvas.pixels).toBeLessThanOrEqual(6_000_000);

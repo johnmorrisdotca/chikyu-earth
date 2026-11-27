@@ -2,9 +2,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DOWNGRADE_AFTER_MS } from "../src/realistic/textures.ts";
 import { MOON_KEEP_MS } from "../src/space/scene.ts";
-import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, pixelAt, settle, timed, untilArrived, untilStill } from "./gl.ts";
+import { COUNT_SCRIPT, readCounts, alive, counts, ownClock, payForDrawing, pixelAt, settle, timed, untilArrived, untilStill } from "./gl.ts";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await payForDrawing(page);
+});
 
 const SPACE = "chikyu-space";
 interface SpaceStats {

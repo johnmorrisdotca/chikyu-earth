@@ -212,6 +212,15 @@ export async function drainGpu(page: Page): Promise<number> {
   });
 }
 
+/**
+ * A test that drew for seconds on the wall clock pays for those frames before it ends, so the next test's minute is its own (MODULES-806).
+ * A wait of a second or less is left unlogged: the processor was not behind.
+ */
+export async function payForDrawing(page: Page): Promise<void> {
+  const ms = await drainGpu(page);
+  if (ms > 1000) console.log(`the GPU took ${Math.round(ms)} ms to finish this test's frames`);
+}
+
 export async function counts(page: Page): Promise<GlCounts> {
   return readCounts(page);
 }

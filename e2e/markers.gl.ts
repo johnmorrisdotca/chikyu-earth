@@ -1,8 +1,12 @@
 // Markers on the realistic Earth: aligned with it, and inside its performance budget with thousands of them.
 import { expect, test, type Page } from "@playwright/test";
-import { counts, EARTH, NOON, openEarth, settle, statsOf } from "./gl.ts";
+import { counts, EARTH, NOON, openEarth, payForDrawing, settle, statsOf } from "./gl.ts";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await payForDrawing(page);
+});
 
 interface Stats {
   markers: number;

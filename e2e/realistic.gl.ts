@@ -3,9 +3,13 @@
 // grow with the zoom and are freed after it, nothing drawn out of sight, everything freed on removal, a lost context recovered.
 import { canvasSize, gpuObjects, withinPixelBudget } from "@johnmorrisdotca/kazoku-ui/testing";
 import { expect, test, type Page } from "@playwright/test";
-import { alive, counts, EARTH, NOON, openEarth, pixelAt, settle, statsOf } from "./gl.ts";
+import { alive, counts, EARTH, NOON, openEarth, payForDrawing, pixelAt, settle, statsOf } from "./gl.ts";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await payForDrawing(page);
+});
 
 const view = (zoom: number, yaw = 0, tilt = 0) => ({ yaw, tilt, zoom, panX: 0, panY: 0 });
 const setView = (page: Page, zoom: number, yaw = 0, tilt = 0, final = true): Promise<void> =>
@@ -120,6 +124,7 @@ test("an Auto-turn at the Earth's own rate costs almost nothing", async ({ brows
   const after = await counts(page);
   console.log(`auto-turn: ${after.draws - before.draws} GL draw calls, ${after.rafRequests - before.rafRequests} frame requests in 6 s`);
   expect(after.draws - before.draws, "draw calls: at most one scene drawn").toBeLessThanOrEqual(8);
+  await payForDrawing(page);
   await context.close();
 });
 

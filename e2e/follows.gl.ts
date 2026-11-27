@@ -3,10 +3,14 @@
 // Each rule is its own test: every check takes a few pictures of the view, and one test holding all of them used most of its minute on a quiet machine.
 // The view is centred on the equator: the pointer turns the globe by its radius, so a point at latitude 31 moves only cos(31) of the drag (25 of 29 pixels), which sat within a pixel of the 20% tolerance.
 import { expect, test, type Page } from "@playwright/test";
-import { COUNT_SCRIPT } from "./gl.ts";
+import { COUNT_SCRIPT, payForDrawing } from "./gl.ts";
 import { checkExactGrab, checkFollowsTheHand, movedBy } from "./ground.mjs";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await payForDrawing(page);
+});
 
 const CONTROLS = "kazoku-view-controls";
 const LOOKS = [
