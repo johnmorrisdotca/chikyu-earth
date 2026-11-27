@@ -265,7 +265,7 @@ export function seasonsFacts(lang: Lang): string[] {
   const longest = (Math.round(dayLengthHours(place, TILT_DEGREES) * 10) / 10).toFixed(1);
   const year =
     lang === "ja"
-      ? `ちきゅうは 365にちで たいようを 1しゅう します。きた ${place}どでは、6がつの げしに ひるの たいようが ${juneUp}ど、12がつの とうじに ${decemberUp}ど の たかさで、いちばん ながい ひるは ${longest}じかんです。しゅんぶんと しゅうぶんの ひは ひると よるが おなじ ながさです。`
+      ? `ちきゅうは 365にちで たいようを 1しゅう します。きた ${place}どでは、ひるの たいようの たかさは、6がつの げしに ${juneUp}ど、12がつの とうじに ${decemberUp}どです。いちばん ながい ひるは ${longest}じかんです。しゅんぶんと しゅうぶんの ひは ひると よるが おなじ ながさです。`
       : `The Earth goes round the Sun in about 365 days. At ${place} degrees north the noon Sun is ${juneUp} degrees up at the June solstice and ${decemberUp} degrees up at the December solstice, and the longest day is ${longest} hours. At an equinox, day and night are the same length.`;
   return lang === "ja"
     ? [`●は きたきょく。ちきゅうは 1ねんじゅう ${tilt}ど かたむいています。`, "6がつは きたが たいように かたむき、きたは なつです。", year]

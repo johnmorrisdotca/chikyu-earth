@@ -286,7 +286,7 @@ test("the length of the day and the noon Sun come from the latitude and the Sun'
   const fact = seasonsFacts("en")[2]!;
   assert.ok(fact.includes(`${june} degrees up at the June solstice`) && fact.includes(`${longest} hours`), fact);
   const jaFact = seasonsFacts("ja")[2]!;
-  assert.ok(jaFact.includes(`げしに ひるの たいようが ${june}ど`) && jaFact.includes(`${longest}じかん`), jaFact);
+  assert.ok(jaFact.includes(`げしに ${june}ど`) && jaFact.includes(`${longest}じかん`), jaFact);
   assert.match(seasonsFacts("ja")[2]!, /しゅんぶん/);
   const ja = seasonsSvg({ widthMm: 184.6, heightMm: 182, lang: "ja" });
   assert.ok(ja.includes("げし") && ja.includes("しゅんぶん") && ja.includes("しゅうぶん") && ja.includes("とうじ"));
