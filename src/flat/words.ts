@@ -97,7 +97,7 @@ export const FLAT_WORDS: Readonly<Record<FlatLang, Readonly<Record<string, strin
     groupsFilter: "表示するグループ",
     planesFilter: "表示する軌道面",
     airports: "空港",
-    keyAirport: "空港 (世界全体では大きな空港だけ、拡大すると増えます)",
+    keyAirport: "空港：世界全体では大きな空港だけを表示します。拡大すると増えます",
     footprint: "可視範囲",
     groundTrack: "地上軌跡",
     zoomIn: "拡大",
