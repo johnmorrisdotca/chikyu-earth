@@ -8,6 +8,6 @@ export const FAMILY_CLOTHS: Readonly<Record<string, { felt: string; deep: string
 export const FAMILY_WORDS: Readonly<Record<"en" | "ja", Readonly<Record<string, string>>>>;
 export const FAMILY_SCRIPT: string;
 export function familyHead(options: { id: string; title: string; description: string; ogTitle?: string; ogDescription?: string }): string;
-export function familyHeader(options: { id: string; links?: readonly { href: string; say: string }[] }): string;
+export function familyHeader(options: { id: string; links?: readonly { href: string; say: string; group?: "resources"; also?: readonly string[] }[]; current?: string }): string;
 export function familyUnreviewed(options: { id: string }): string;
 export function familyFooter(options: { id: string }): string;

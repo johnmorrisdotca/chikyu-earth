@@ -16,7 +16,18 @@ const NOTICE = "https://github.com/johnmorrisdotca/chikyu-earth/blob/main/NOTICE
 /** The family's footer, with a link to every credit beside the one-line credit, so a reader need not open anything to find the sources. */
 const footer = (): string => familyFooter({ id }).replace('<span data-say="foot"></span>', `<span><span data-say="foot"></span> <a href="${NOTICE}" data-say="creditsAll"></a></span>`);
 
-const LINKS = [{ href: "docs/index.html", say: "pageDocs" }, { href: "embed.html", say: "pageEmbed" }];
+const LINKS = [
+  { href: "index.html", say: "pageMap" },
+  { href: "flat.html", say: "pageFlat" },
+  { href: "track.html", say: "pageTrack" },
+  { href: "passes.html", say: "pagePasses" },
+  { href: "kids.html", say: "pageKids", group: "resources" as const },
+  { href: "docs/index.html", say: "pageDocs" },
+  { href: "embed.html", say: "pageEmbed" },
+];
+
+/** The family's header for one built page. */
+const header = (current: string): string => familyHeader({ id, links: LINKS, current });
 
 /** The family's script and the language chooser, then the page's own module. */
 const scripts = (script: string): string =>
@@ -44,7 +55,7 @@ export function renderIndex(): string {
   const html = readFileSync(new URL("../demo/index.html", import.meta.url), "utf8");
   return frame(html, TITLE, DESCRIPTION)
     .replace("<!--family:head-->", familyHead({ id, title: TITLE, description: DESCRIPTION }))
-    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:header-->", header("index.html"))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
     .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
@@ -55,7 +66,7 @@ export function renderKids(): string {
   const html = readFileSync(new URL("../demo/kids.html", import.meta.url), "utf8");
   return frame(html, WORDS.en.kd_title, WORDS.en.kd_description, { title: WORDS.ja.kd_title, description: WORDS.ja.kd_description })
     .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.kd_title, description: WORDS.en.kd_description }))
-    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:header-->", header("kids.html"))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
     .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
@@ -66,7 +77,7 @@ export function renderPasses(): string {
   const html = readFileSync(new URL("../demo/passes.html", import.meta.url), "utf8");
   return frame(html, WORDS.en.ps_title, WORDS.en.ps_description, { title: WORDS.ja.ps_title, description: WORDS.ja.ps_description })
     .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.ps_title, description: WORDS.en.ps_description }))
-    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:header-->", header("passes.html"))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
     .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
@@ -77,7 +88,7 @@ export function renderTrack(): string {
   const html = readFileSync(new URL("../demo/track.html", import.meta.url), "utf8");
   return frame(html, WORDS.en.tr_title, WORDS.en.tr_description, { title: WORDS.ja.tr_title, description: WORDS.ja.tr_description })
     .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.tr_title, description: WORDS.en.tr_description }))
-    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:header-->", header("track.html"))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
     .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));
@@ -88,7 +99,7 @@ export function renderFlat(): string {
   const html = readFileSync(new URL("../demo/flat.html", import.meta.url), "utf8");
   return frame(html, WORDS.en.fl_title, WORDS.en.fl_description, { title: WORDS.ja.fl_title, description: WORDS.ja.fl_description })
     .replace("<!--family:head-->", familyHead({ id, title: WORDS.en.fl_title, description: WORDS.en.fl_description }))
-    .replace("<!--family:header-->", familyHeader({ id, links: LINKS }))
+    .replace("<!--family:header-->", header("flat.html"))
     .replace("<!--family:unreviewed-->", familyUnreviewed({ id }))
     .replace("<!--family:footer-->", footer())
     .replace(/<!--family:scripts ([\w.-]+)-->/, (_, script: string) => scripts(script));

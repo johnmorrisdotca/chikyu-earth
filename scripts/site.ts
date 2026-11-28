@@ -25,7 +25,7 @@ await build({
   logLevel: "silent",
 });
 // The family header's language picker and theme switch: one small module for every page of the site.
-await writeFile(at("site/kazoku-parts.src.js"), `import "@johnmorrisdotca/kazoku-ui/language-picker/define";\nimport "@johnmorrisdotca/kazoku-ui/theme-switch/define";\nimport "@johnmorrisdotca/kazoku-ui/page-frame/define";\n`);
+await writeFile(at("site/kazoku-parts.src.js"), `import "@johnmorrisdotca/kazoku-ui/language-picker/define";\nimport "@johnmorrisdotca/kazoku-ui/theme-switch/define";\nimport "@johnmorrisdotca/kazoku-ui/page-frame/define";\nimport "@johnmorrisdotca/kazoku-ui/menu/define";\n`);
 await build({ entryPoints: [at("site/kazoku-parts.src.js")], outfile: at("site/kazoku-parts.js"), bundle: true, format: "esm", minify: true, logLevel: "silent", absWorkingDir: at("") });
 await rm(at("site/kazoku-parts.src.js"));
 await cp(at("demo/demo.css"), at("site/demo.css"));

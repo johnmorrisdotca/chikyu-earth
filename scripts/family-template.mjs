@@ -46,7 +46,7 @@
 const OWNER = "johnmorrisdotca";
 
 /** The day this file was last changed, in every repository at once. A test records the file's hash beside it. */
-export const FAMILY_TEMPLATE_VERSION = "2026-11-09";
+export const FAMILY_TEMPLATE_VERSION = "2026-11-27";
 
 /** The packages, in the order the footer lists them. `kana` is the name as it is written in Japanese. */
 export const FAMILY = [
@@ -221,15 +221,44 @@ export function familyHead({ id, title, description, ogTitle, ogDescription }) {
   ].join("\n    ");
 }
 
+/** The path a header link names, without a query or a hash, so `docs/index.html` is not the same page as `index.html`. */
+const linkPath = (href) => String(href).split("?")[0].split("#")[0].replace(/^\.\//, "");
+
+/** Whether this link is the page being read: its own href, or a file named in `also` (a constellation page is the Constellations link). */
+const linkIsCurrent = (link, current) => current !== "" && (linkPath(link.href) === current || (Array.isArray(link.also) && link.also.includes(current)));
+
+/**
+ * One header pill. `aria-current="page"` is the page being read, and the stylesheet gives it the pressed look of the family's buttons.
+ * @param { { href: string, say: string, also?: readonly string[] } } link
+ * @param { string } current
+ */
+const headerAnchor = (link, current) => `<a href="${escape(link.href)}" data-say="${escape(link.say)}"${linkIsCurrent(link, current) ? ` aria-current="page"` : ""}></a>`;
+
 /**
  * The header: the name with its kana, the pitch (data-say="pitch"), a line on the name
  * (data-say="name", and a link to the README's "The name", data-say="nameLink"), the
- * kazoku-ui language picker, the cloth patches, the Help switch, the kazoku-ui theme switch (the page imports the `define` modules of both from kazoku-ui), and the GitHub and npm pills. `links` adds pills before those
- * two: [{ href, say }] where `say` is a key in the page's words.
+ * kazoku-ui language picker, the page links, the cloth patches, the Help switch, the kazoku-ui theme switch (the page imports the `define` modules from kazoku-ui), and the GitHub and npm pills.
+ * `links` adds pills after the language picker: [{ href, say, group?, also? }]. `say` is a key in the page's words.
+ * `group: "resources"` puts that link in kazoku-ui's Resources menu (`<kazoku-menu which="resources">`); the menu's button is the current page when one of its links is.
+ * `current` is the file being built (`kids.html`, `constellation.html`, `docs/index.html`).
  */
-export function familyHeader({ id, links = [] }) {
+export function familyHeader({ id, links = [], current = "" }) {
   const { name, kana } = member(id);
   const onNpm = !FAMILY_NOT_ON_NPM.includes(id);
+  const resources = links.filter((link) => link.group === "resources");
+  const resourceOn = resources.some((link) => linkIsCurrent(link, current));
+  let menuPlaced = false;
+  const pills = [];
+  for (const link of links) {
+    if (link.group === "resources") {
+      if (!menuPlaced) {
+        pills.push(`<kazoku-menu which="resources"${resourceOn ? ` aria-current="page"` : ""}>${resources.map((one) => headerAnchor(one, current)).join("")}</kazoku-menu>`);
+        menuPlaced = true;
+      }
+      continue;
+    }
+    pills.push(headerAnchor(link, current));
+  }
   return `<header>
         <div class="intro">
           <h1>${name}<span lang="ja">${kana}</span></h1>
@@ -237,7 +266,8 @@ export function familyHeader({ id, links = [] }) {
           <p class="name"><span data-say="name"></span> <a href="${repo(id)}#the-name" data-say="nameLink"></a></p>
         </div>
         <nav>
-          <kazoku-language-picker languages="en ja" address storage="${id}.page.lang"></kazoku-language-picker>${links.map((link) => `\n          <a href="${escape(link.href)}" data-say="${escape(link.say)}"></a>`).join("")}
+          <kazoku-language-picker languages="en ja" address storage="${id}.page.lang"></kazoku-language-picker>
+          ${pills.join("\n          ")}
           <div class="cloth" role="radiogroup" data-say-label="cloth" style="display:inline-flex;gap:0;align-items:center">${Object.entries(FAMILY_CLOTHS)
             .map(([name, cloth]) => `<button type="button" role="radio" data-cloth="${name}" data-say-label="cloth_${name}" style="width:44px;height:44px;min-width:44px;padding:8px;border:0;border-radius:12px;cursor:pointer;background:radial-gradient(120% 90% at 30% 20%, ${cloth.felt} 0%, ${cloth.deep} 100%) content-box;box-shadow:inset 0 0 0 8px transparent"></button>`)
             .join("")}</div>
@@ -417,6 +447,19 @@ function familyLanguage(options) {
     familyHelp.refresh();
     var note = document.getElementById("unreviewed");
     if (note !== null) note.hidden = state.lang !== "ja";
+    // The Resources button is in the menu's shadow: the page marks it when this page is one of the menu's links, with the same pressed colours as a header pill.
+    document.querySelectorAll("kazoku-menu[aria-current='page']").forEach(function (menu) {
+      var root = menu.shadowRoot;
+      if (!root) return;
+      if (root.getElementById("family-current") === null) {
+        var style = document.createElement("style");
+        style.id = "family-current";
+        style.textContent = ".opener[aria-current=page]{background:var(--ink);color:var(--surface);border-color:var(--ink)}";
+        root.appendChild(style);
+      }
+      var opener = root.querySelector(".opener");
+      if (opener) opener.setAttribute("aria-current", "page");
+    });
   };
   var follow = function (lang) {
     state.lang = lang === "ja" ? "ja" : "en";
@@ -433,6 +476,7 @@ function familyLanguage(options) {
     if (event.detail.lang !== state.lang && (event.detail.lang === "ja" || event.detail.lang === "en")) follow(event.detail.lang);
   });
   state.say();
+  if (typeof customElements === "object" && typeof customElements.whenDefined === "function") customElements.whenDefined("kazoku-menu").then(function () { state.say(); });
   return state;
 }`;
 

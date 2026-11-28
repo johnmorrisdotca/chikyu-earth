@@ -1,4 +1,4 @@
-/* sha256 of every line after this one: cbbb1efab9ff5f56b07623c244c194f827e286cdc82def61abc0d13599a340b8 */
+/* sha256 of every line after this one: 70480b42febe12a7e816c0948c4c7418b389d12c76af7fef7be35c27f1d9d489 */
 /*
  * family.css: the one look of the johnmorrisdotca packages' demo sites
  * (korokoro, kyuubu, hitotsu, toranpu, tane, narabe, tenka, kumimoji).
@@ -71,6 +71,8 @@ nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 /* 44px inside a 1px border: 46px under border-box. */
 nav a { text-decoration: none; color: inherit; border: 1px solid var(--rule); border-radius: 999px; padding: 0 14px; min-height: 46px; display: inline-flex; align-items: center; font-size: .9rem; font-weight: 600; }
 nav a:hover { border-color: var(--ink); }
+nav a[aria-current="page"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+nav kazoku-menu { display: inline-flex; align-items: center; }
 
 /* 4. The language picker and the theme switch (kazoku-ui parts), in the page's colours. */
 kazoku-language-picker, kazoku-theme-switch { --kazoku-ink: var(--ink); --kazoku-surface: var(--surface); --kazoku-line: var(--rule); --kazoku-accent: var(--felt); }
@@ -144,6 +146,7 @@ textarea.fam-field { padding: 8px 10px; resize: vertical; }
 .fam-felt > * { position: relative; z-index: 3; }
 .fam-felt .fam-button { background: rgba(0,0,0,.28); color: var(--felt-ink); border-color: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
 .fam-felt .fam-button[aria-pressed="true"], .fam-felt .fam-button[data-primary="true"] { background: var(--felt-ink); color: var(--felt-deep); box-shadow: none; }
+.fam-felt nav a[aria-current="page"] { background: var(--felt-ink); color: var(--felt-deep); border-color: transparent; }
 .fam-hint { font-size: .85rem; opacity: .85; letter-spacing: .02em; text-align: center; min-height: 1.3em; }
 
 /* 12. Code and notation. */
