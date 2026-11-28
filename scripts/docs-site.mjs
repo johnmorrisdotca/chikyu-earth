@@ -72,7 +72,7 @@ const ts = tsModule.default?.createProgram ? tsModule.default : tsModule.createP
 import { FAMILY, FAMILY_PITCH, FAMILY_SCRIPT, FAMILY_WORDS, familyFooter, familyHead, familyHeader, familyUnreviewed } from "./family-template.mjs";
 
 /** The day this file was last changed, in every repository at once. A test records the file's hash beside it. */
-export const DOCS_SITE_VERSION = "2026-11-10-strict-front-matter";
+export const DOCS_SITE_VERSION = "2026-11-27-sidebar-names";
 
 const OWNER = "johnmorrisdotca";
 /** The kinds of guide, in the order the contents list them (Diátaxis, with troubleshooting and upgrading of their own). */
@@ -313,7 +313,7 @@ export function referenceOf(site) {
       item.page = `api/${entry.slug}/${file}.html`;
     }
   }
-  return { entries: entries.sort((a, b) => (a.key === "." ? 1 : b.key === "." ? -1 : 0)), items: [...items.values()], unread: found.filter((entry) => entry.file === undefined) };
+  return { entries: entries.sort(byShortLabel), items: [...items.values()], unread: found.filter((entry) => entry.file === undefined) };
 }
 
 /** One export, described from its declaration and its doc comment. */
@@ -828,7 +828,7 @@ header p.docs-brand { color: var(--ink); margin: 0; }
 header .lang a { font-size: .9rem; font-weight: 600; color: var(--muted); border: 0; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; text-decoration: none; }
 header .lang a[aria-current="true"] { background: var(--ink); color: var(--page); }
 .docs-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (min-width: 960px) { .docs-layout { grid-template-columns: 270px minmax(0, 1fr); gap: 36px; } }
+@media (min-width: 960px) { .docs-layout { grid-template-columns: 320px minmax(0, 1fr); gap: 36px; } }
 .docs-menu > summary { min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; border: 1px solid var(--rule); border-radius: 12px; padding: 0 14px; background: var(--surface); list-style: none; }
 .docs-menu > summary::-webkit-details-marker { display: none; }
 .docs-menu > summary::before { content: "☰"; }
@@ -837,7 +837,7 @@ header .lang a[aria-current="true"] { background: var(--ink); color: var(--page)
   .docs-menu > summary { display: none; }
 }
 nav.docs-side { display: block; font-size: .92rem; padding: 10px 2px 4px; }
-nav.docs-side a { display: flex; align-items: center; min-height: 36px; border: 0; border-radius: 8px; padding: 4px 10px; font-weight: 400; font-size: inherit; text-decoration: none; color: inherit; overflow-wrap: anywhere; }
+nav.docs-side a { display: flex; align-items: center; min-height: 36px; border: 0; border-radius: 8px; padding: 4px 10px; font-weight: 400; font-size: inherit; text-decoration: none; color: inherit; overflow-wrap: normal; }
 nav.docs-side a:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); border: 0; }
 nav.docs-side a[aria-current="page"] { background: var(--felt); color: var(--felt-ink); font-weight: 600; }
 nav.docs-side h2 { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 18px 10px 4px; font-weight: 600; }
@@ -1056,21 +1056,47 @@ export function navigationEntries(entries, currentPath) {
   return entries.filter((entry) => (counts.get(parentOf(entry)) ?? 0) < 50 || currentPath.startsWith(`api/${entry.slug}/`));
 }
 
+/** A short name from an export path: `./deep-sky/shape` is "Deep Sky Shape". Used when the title is still a sentence. */
+function pathLabel(key) {
+  const parts = String(key ?? "").split("/").filter((bit) => bit && bit !== ".");
+  return parts.slice(-2).flatMap((part) => part.split("-")).filter(Boolean)
+    .map((word) => (word === "ngc" || word === "ic" ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(" ");
+}
+
+/** A sidebar name fits on one line: a few words for spaced text, or 18 characters when the title has no spaces. */
+function labelFits(head, wordsMax = 6) {
+  if (!head) return false;
+  if (/\s/.test(head)) return head.split(/\s+/).filter(Boolean).length <= wordsMax && [...head].length <= 36;
+  return [...head].length <= 18;
+}
+
+/**
+ * The sidebar name (MODULES-1718). A short clause, before a colon, a parenthesis or a comma, is kept.
+ * A sentence that is still long becomes the export's path name. The full title stays on the entry page and in the list.
+ */
+export function shortLabel(title, key = "") {
+  const raw = String(title ?? "").trim();
+  const colon = raw.split(/[:：]/)[0].trim();
+  let head = (colon.length < raw.length ? colon : raw).split(/[（(]/)[0].trim();
+  if (!labelFits(head)) {
+    const piece = head.split(/,\s+|、|，/)[0].trim();
+    if (piece && piece.length < head.length && labelFits(piece, 4) && !/[とのをにへでやか]$/.test(piece)) head = piece;
+  }
+  return labelFits(head) ? head : pathLabel(key) || head;
+}
+
+function byShortLabel(a, b) {
+  return shortLabel(a.title?.en ?? "", a.key).localeCompare(shortLabel(b.title?.en ?? "", b.key), "en", { sensitivity: "base" });
+}
+
 function sidebar(model, page, words) {
   const lang = page.lang;
   const from = pagePath(lang, page.path);
   const link = (path, label, extra = "") => `<a href="${escapeHtml(hrefFrom(from, pagePath(lang, path)))}"${path === page.path ? ` aria-current="page"` : ""}>${label}${extra}</a>`;
   const visible = navigationEntries(model.reference.entries, page.path);
   const catalogue = visible.length < model.reference.entries.length ? `<li>${link("index.html#reference", escapeHtml(words.entryPoints))}</li>` : "";
-  const entries = visible.map((entry) => {
-    const items = model.reference.items.filter((item) => item.entry === entry.key).sort((a, b) => a.name.localeCompare(b.name, "en"));
-    const open = page.path.startsWith(`api/${entry.slug}/`);
-    const code = entry.key === "." ? "" : `<span class="docs-entry-code">${escapeHtml(`/${entry.key.slice(2)}`)}</span>`;
-    return `<li><details${open ? " open" : ""}><summary>${escapeHtml(entry.title[lang])}${code}</summary><ul>
-            <li>${link(`api/${entry.slug}/index.html`, escapeHtml(words.home))}</li>
-            ${items.map((item) => `<li>${link(item.page, `<code>${escapeHtml(item.name)}</code>`)}</li>`).join("\n            ")}
-          </ul></details></li>`;
-  }).join("\n          ");
+  const entries = visible.map((entry) => `<li>${link(`api/${entry.slug}/index.html`, escapeHtml(shortLabel(entry.title[lang], entry.key)))}</li>`).join("\n          ");
   const guides = GUIDE_SECTIONS.map((section) => {
     const list = model.english.filter((guide) => guide.section === section);
     if (list.length === 0) return "";

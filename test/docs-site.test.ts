@@ -11,6 +11,7 @@ import { test } from "node:test";
 interface FrontMatter { data: Record<string, string> | null; body: string; problems: { line: number; text: string }[] }
 interface DocsSite {
   DOCS_SITE_VERSION: string;
+  shortLabel(title: string, key?: string): string;
   parseFrontMatter(text: string): FrontMatter;
   guidesOf(site: { repositoryRoot: string }): { file: string; title: string; frontMatterProblems: { line: number; text: string }[] }[];
   docsProblems(root: string): string[];
@@ -23,10 +24,22 @@ const sha = (path: string) => createHash("sha256").update(readFileSync(path)).di
 const pkg = JSON.parse(read("package.json")) as { description: string; scripts: Record<string, string>; devDependencies?: Record<string, string>; dependencies?: Record<string, string> };
 
 const RECORDED = {
-  version: "2026-11-10-strict-front-matter",
-  "scripts/docs-site.mjs": "c5d77d0020e2ba01e5b36cbbcf782ae1dafad7f5192bfc9cd2ca43143cd28846",
+  version: "2026-11-27-sidebar-names",
+  "scripts/docs-site.mjs": "2cf5a9d746225d456175aa219d878c709f2eeb3c82a1df41fa6aa9e6e2e917cd",
   "e2e/docs-site.demo.mjs": "4e5120792d4808f9785b333ae4b8a77c995bc0b3f2b57686f931adacf1ae3a5e",
 };
+
+test("a sidebar name keeps a short clause and uses the export path when the title is still a sentence", () => {
+  assert.equal(docs.shortLabel("Printable sheets: connect-the-dots constellations", "./sheets"), "Printable sheets");
+  assert.equal(docs.shortLabel("Stars: names, positions, distance and colour", "."), "Stars");
+  assert.equal(docs.shortLabel("The 88 constellations, in English and Japanese", "./constellations"), "The 88 constellations");
+  assert.equal(docs.shortLabel("A star drawn from its numbers as SVG, and next to the Sun", "./portrait"), "Portrait");
+  assert.equal(docs.shortLabel("The sky seen from another star, with the nearby stars moved too", "./sky-from/nearby"), "Sky From Nearby");
+  assert.equal(docs.shortLabel("Who found each of the 11,898 Messier, NGC and IC objects and when", "./provenance/ngc-ic"), "Provenance NGC IC");
+  assert.equal(docs.shortLabel("印刷するシート: 星座の点つなぎ", "./sheets"), "印刷するシート");
+  assert.equal(docs.shortLabel("88星座 (英語と日本語)", "./constellations"), "88星座");
+  assert.equal(docs.shortLabel("数値から描いた星のSVGの絵と、太陽との大きさくらべ", "./portrait"), "Portrait");
+});
 
 test("the generator and its browser test are the recorded files, byte for byte", () => {
   assert.equal(docs.DOCS_SITE_VERSION, RECORDED.version);
